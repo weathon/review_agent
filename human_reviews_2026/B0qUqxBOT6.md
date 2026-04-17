@@ -1,0 +1,174 @@
+# Decentralized Nonconvex Optimization under Heavy-Tailed Noise: Normalization and Optimal Convergence
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 4, 6
+
+## Abstract
+Heavy-tailed noise in nonconvex stochastic optimization has garnered increasing research interest, as empirical studies, including those on training attention models, suggest it is a more realistic gradient noise condition. This paper studies first-order nonconvex stochastic optimization under heavy-tailed gradient noise in a decentralized setup, where each node can only communicate with its direct neighbors in a predefined graph. Specifically, we consider a class of heavy-tailed gradient noise that is zero-mean and has only $p$-th moment for $p \in (1, 2]$. We propose GT-NSGDm, Gradient Tracking based Normalized Stochastic Gradient Descent with momentum, that utilizes normalization, in conjunction with gradient tracking and momentum, to cope with heavy-tailed noise on distributed nodes. We show that, when the communication graph admits primitive and doubly stochastic weights, GT-NSGDm guarantees, for the first time in the literature, that the expected gradient norm converges at an optimal non-asymptotic rate $O\big(1/T^{(p-1)/(3p-2)}\big)$, which matches the lower bound in the centralized setup. When the tail index $p$ is unknown, GT-NSGDm attains a non-asymptotic rate $O\big( 1/T^{(p-1)/(2p)} \big)$ that is, for $p < 2$, topology independent and has a speedup factor $n^{1-1/p}$ in terms of the number of nodes $n$. Finally, experiments on nonconvex linear regression with tokenized synthetic data and decentralized training of language models on a real-world corpus demonstrate that GT-NSGDm is more robust and efficient than  baselines.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces GT-NSGDm, a novel algorithm for decentralized nonconvex optimization under heavy-tailed gradient noise. By combining normalization, gradient tracking, and momentum, the method is the first to achieve an optimal convergence rate that matches the theoretical lower bound for the centralized setting. The algorithm's effectiveness is demonstrated on synthetic data and in training a transformer model.
+
+### Strengths
+- The paper establishes a groundbreaking optimal convergence rate for this problem setting, a significant theoretical advance.
+
+- It addresses the well-documented issue of heavy-tailed noise in training large models and provides a robust design that works even when noise characteristics are unknown.
+
+- The theoretical results are well-supported by comprehensive experiments on both synthetic and real-world tasks.
+
+### Weaknesses
+- The analysis is limited to communication graphs with "primitive and doubly stochastic weights," which may not hold in all practical scenarios.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors propose a new decentralized optimization algorithm under heavy-tailed noise that achieves the optimal convergence rate in expectation when the tail constant $p$ is known, which matches centralized lower bounds. When $p$ is unknown, they still achieve the SoTA rate. The idea of the algorithm combines gradient tracking with normalization (on the search direction) plus momentum‑based variance reduction.
+
+### Strengths
+1. The paper provides an algorithm achieving the optimal convergence rate $O\left(T^{-(p-1) /(3 p-2)}\right)$ for decentralized nonconvex optimization under heavy-tailed noise when $p$ is known.
+
+2. Incorporating normalization with gradient tracking and momentum is simultaneously seeks to address all three challenges of nonlinearity, heterogeneity, and heavy-tailed noise.
+
+3. The analysis holds for general smooth nonconvex functions, which relaxes assumptions used in some prior work.
+
+### Weaknesses
+1. The analysis is dense, and the presentation of the proofs may be improved for better clarify. For example, more intuitive scaffolding may be added. 
+
+2. In Table 1, why do SClip-EF-Network and DSGD-Clip perform so poorly? Have the hyperparameters been tuned properly? For the latter, if an algorithm with heavy-tailed convergence guarantees perform this poorly, then does it cast doubt on the usefulness of the theoretical bound?
+
+### Questions
+Please see weaknesses. For suggestions, I don't have much; the paper appears solid. One suggestion might be that for the result that training collapses under heavy-tailed noise in distributed (or non-centralized) settings, there is also the work [1] which isn't cited in the paper.
+
+[1] Lee et al., Efficient Adaptive Federated Optimization. Arxiv, 2025.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper studies decentralized nonconvex optimization under heavy-tailed gradient noise, assuming only the $p$-th moment is finite ($p\in(1,2]$). It proposes a method (GT-NSGDm) that combines gradient normalization, momentum-based variance reduction, and gradient tracking. Theoretically, the authors prove an order-optimal non-asymptotic rate $O\big(T^{-(p-1)/(3p-2)}\big)$ when $p$ is known (matching centralized lower bounds), and an adaptive $O\big(T^{-(p-1)/(2p)}\big)$ rate when $p$ is unknown that is topology-independent for $p<2$, yielding an $n^{1-1/p}$ speedup in the number of nodes.
+
+### Strengths
+- Optimal/non-asymptotic theory. Establishes $O\big(T^{-(p-1)/(3p-2)}\big)$ for decentralized nonconvex problems with heavy tails (known $p$), matching centralized lower bounds; for unknown $p$, obtains $O\big(T^{-(p-1)/(2p)}\big)$ that is independent of graph topology for $p<2$, together with an $n^{1-1/p}$ speedup.
+
+- Design justification. A clear negative result demonstrates why gradient tracking + momentum are required beyond vanilla normalization in heterogeneous decentralized settings.
+
+- Unified view of practical ingredients. Normalization, momentum-based variance reduction, and gradient tracking are integrated into a single algorithm with a complete analysis.
+
+### Weaknesses
+- Incremental feel in building blocks. Although the combination achieves new rates, the core components (normalization, gradient tracking, momentum) are mature; algorithmic novelty per se is modest.
+
+- Assumption/tuning burden. Guarantees require primitive, doubly-stochastic mixing and nontrivial step-size/momentum schedules; several constants depend on spectral gap $\lambda$, smoothness $L$, initial gap $\Delta_0$, etc. Practical robustness when these are unknown is under-discussed.
+
+-  Results are stated in expectation, not high-probability guarantees.
+
+### Questions
+The paper offers strong theory (optimal rates, topology independence for unknown $p$) and a convincing negative result, but relies on mature building blocks, has a nontrivial tuning/assumption burden, and could broaden empirical validation.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper presents and analyzes a decentralized normalized SGD with momentum algorithm based on gradient tracking. Crucially, for heavy-tailed gradient noise (observed specially in transformer optimization) with known $p \in (1, 2]$ moment, the paper provides tight convergence rates in the non-convex setting. The paper also gives another bound when $p$ is unknown.
+
+### Strengths
+The heavy-noise gradient problem is very timely specially given the ubiquity of transformers. The decentralized optimization framework is a very well-studied  and classic setup for distributed optimization. The paper is sound and well-written for the most part. The analysis is sound, rigorous and appears to be tight as it matches the rate of centralized optimization. Experiments such as a decentralized GPT training simulation show the convergence and efficacy of the algorithm, although the performance of Clip-based algorithms is comparable.
+
+### Weaknesses
+-The algorithm and analysis benefits greatly from the recent works on the centralized setup (specially (Liu∗and Zhou, 2025)). The adaptations of normalized gradient descent algorithm to the decentralized setup based on gradient tracking, have been done in literature (although in a different context), including discussions on why the naive normalized Decentralized SGD fails (e.g., see section 2.4. in reference [1] below). Can the authors also please highlight the novelties in the proof needed to extend the proof of centralized setup to the decentralized setup?
+
+-How do the hyper-parameter selections compare to the centralized setup? Is the fact that $\beta$ depends on unknown $T$ also the case in the centralized setup?
+
+-The displayed bounds include many additive terms with complex dependencies on $n,\lambda, T,p$ and other parameters. It's not very obvious which term will dominate in practice, for example as $p$ varies. 
+
+
+typo: 
+
+line 589: appendix 5
+
+[1] On Generalization of Decentralized Learning with Separable Data, Taheri et al. AISTATS 2023.
+
+### Questions
+please see previous part.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

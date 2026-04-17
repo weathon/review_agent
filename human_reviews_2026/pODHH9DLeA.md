@@ -1,0 +1,169 @@
+# Readout Representation: Redefining Neural Codes by Input Recovery
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 6, 8
+
+## Abstract
+Sensory representation is typically understood through a hierarchical-causal framework where progressively abstract features are extracted sequentially. However, this causal view fails to explain misrepresentation, a phenomenon better handled by an informational and teleological view based on decodable content and downstream functions. This creates a tension: how does a system that abstracts away details preserve the fine-grained information needed for downstream functions? We propose readout representation to resolve this, defining representation by the information recoverable from features, rather than their causal origin.
+Empirically, we show that inputs can be accurately reconstructed even from heavily perturbed mid-level features, demonstrating that a single input corresponds to a broad, redundant region of feature space, challenging the causal mapping perspective.
+To quantify this property, we introduce representation size, a metric linked to model robustness and representational redundancy. Our framework offers a new lens for analyzing how both biological and artificial neural systems learn complex features while maintaining robust, information-rich representations of the world.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper aims to formalize notions of representation based on decodability of information, a framework which the authors refer to as "readout representation". Within this framework, the authors propose to quantify representations based on some notion of the size of the set of representations from which a given target can be decoded. They present experiments to show how this notion of "representational size" varies across the layers of some example deep neural networks.
+
+### Strengths
+This paper is certainly timely, and the question of how to define and study representations is of broad interest in neuroscience and machine learning. Thus, formalizing definitions and providing novel methods of quantification is certainly valuable.
+
+### Weaknesses
+On the whole, I think the authors overstate the novelty of their "readout representation" framework relative to classic information-theoretic definitions of representation in neuroscience. This is particularly salient given the omnipresence of decoding analyses in contemporary systems neuroscience, which explicitly adopt the idea that a given brain area represents some feature of the world if that feature can be decoded (usually with a linear decoder) from its activity. This is illustrated, for instance, in the language of the [International Brain Laboratory](https://www.nature.com/articles/s41586-025-09226-1). 
+
+Related to this issue is the fact that the authors do not adequately specify the class of decoding maps $\pi$ allowed. This is important both at the level of making the framework practically actionable (in analyzing data one must choose some restricted hypothesis class of decoders) and in terms of conceptual questions around the meaning of hierarchy. Much of the work on disentangling along the visual hierarchy (as in the cited works by Jim DiCarlo and SueYeon Chung) can be phrased as re-formatting of representations such that simple (*i.e.*, restricted linear) decoders can more easily read out high-level category information in deeper layers. This is (a) *not* a necessarily causal perspective and (b) explicitly depends on the class of decoders. From this perspective, it is not necessarily surprising that an extremely powerful decoder could extract low-level information from deep layers of a visual recognition network, as what is relevant for the notion of hierarchy is the performance of very simple decoders. I will return to this under **Questions**. 
+
+I list other, more specific, concerns under **Questions**.
+
+### Questions
+- As mentioned before, can you elaborate on the novelty of your framework relative to common decoding analyses in neuroscience?
+
+- In some sense, the idea of probing notions of "representational size" is quite reminiscent to the cited work of [Feather et al. (2023)](https://www.nature.com/articles/s41593-023-01442-0) on metamers of various neural network layers. However, those authors consider a complementary notion where they probe the size of the set in stimulus space that produces an encoding within a particular distance. It would be useful to provide a more detailed discussion of the relationship of your results to that work. 
+
+- Though the paper makes aims to give a mathematically precise definition of representation, I think as written it falls somewhat short of that goal. For practical purposes, some obvious restrictions on the input and representation spaces are required; as the authors themselves impose indirectly on Line 292, both should be metric spaces, endowed with a metric that defines which representations are indistinguishable. Moreover, some more care is required in how the authors approach noise. In the prose around Line 168, they suggest that noisy representations should be considered just at the level of the expectation, but this is not what they themselves do in Figure 5. To make sense of noise, and to give meaning to the notion of representational "size", everything should be measurable, most likely with probability measures corresponding to the natural noise structure of the problem. These considerations would together allow one to give a precise notion of when two representations or two stimuli are discriminable, and thus of size, capability, and misrepresentation. Moreover, it would help underscore that the choice of distance metric is actually important, which I think the present manuscript does not emphasize enough. 
+
+- In a similar vein to the above, it would be useful to provide some illustration of how the class of decoders allowed affects the representational size. 
+
+- I do not follow how the "Misclassification" case study in Lines 208-215 necessarily challenges the causal view of representations, because the subject could report "snake" rather than "rope" due to factors that are entirely causally downstream of certain areas of visual cortex.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This was a largely simulation-based study in which the authors show that you can introduce large perturbations to the activity of hiddel layers of deep networks and still recover the input (pixels in the case of images; tokens in the case of text).
+
+There was also a philosophical angle to this paper, but, possibly because I never think about philosophy, I couldn't really wrap my head around it. So I'll focus mainly on the results.
+
+### Strengths
+The authors are addressing an interesting problem: how much can you perturb the activity in hidden layers of a network and still recover the input. This was driven by the question (from the intro): "how can a system designed for hierarchical abstraction, which supposedly discards details, simultaneously preserve the fine-grained information required for downstream functions?" I will admit, it's something I've always wondered about with respect to the actual brain, which seems to have access to any fine-grained information it wants (e.g., if asked, I could tell you the color of a small patch in the corner of a room). The methodology was sound, and they answered the question both for vision and for language models.
+
+### Weaknesses
+The main result was that you can perturb activity in the hidden layers by large amounts (to a distance 0.7) and, in the early layers, still recover the input (to a distance of 0.1). However, if you look closely, that's mainly because when recovering the input from the perturbed hidden layer activity, they enforce smoothness. When they don't do that, a plot of distance in pixel space versus size of the perturbation in the hidden layers is not so far from a 45 degree line -- and is actually steeper than 45 degrees for small distances. This is pretty much what I expected. Which doesn't mean it shouldn't be reported, but it reduces somewhat my enthusiasm for the paper. And I really think that paper should be in the main text.
+
+### Questions
+I don't have any specfici questions, but if the authors can convince me that I'm wrong, or if I appear to have missed something, I would be happy to raise my score. I never have a huge amount of confidence that I understand everything.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper defines and operationalizes a definition of "representation" that is defined by decodability. Concretely a feature  of a signal  is said to be represented by  iff . Notably, this formulation allows for many different encodings to represent the same signal. This fact allows for a notion of "representation size" for any  (i.e. the cardinality of the set of 's that represent it). The author's consider the case where  and the readout function is defined by feature inversion (with the use of a prior in the image domain and unconstrained in the language domain). Empirical results demonstrate that the aforementioned representation size varies systematically with relative depth in hierarchical representations, varies according to network input and output characteristics, and is correlated with ambient dimensionality.
+
+### Strengths
+- I think quantifying the region of a representation space that is "occupied" by a single input is interesting and worthwhile.
+- Empirical results are sensible in that they "check-out": i.e. very little space is afforded to images very unlikely to occur in the training distribution (like noise images), and building on these observations is a promising direction for future work.
+- That incorrectly classified images have lower representational size is an interesting observation that was not obvious a priori. 
+- Experiments in two modalities are present and highlight the potential generality of the method.
+- Feature inversion is a reasonable starting point to consider, and using varying strength noise to approximate the maximum function is a reasonable and practical choice.
+
+### Weaknesses
+- I think the central limitation of this work is the lack of a "killer application". I think the experiments here are promising signs that this notion of representation size can be made use of either towards some practical end (i.e. outlier detection, model calibration or confidence estimation, etc.) or towards producing/testing an interpretable hypothesis about a particular neural computation. For example, we can see that the metric discriminates between noise and natural images, but are there other ensembles or image features that the metric indicates are well separated at some stage of a network hierarchy? As the paper stands, as a practitioner, I would describe my feeling about the metric as "intrigued, but its not obvious what I would use this for." 
+- Nit: In Figure 4 the "Miss" Bars in the first two panels are missing the diagonal hashes and this makes the figure confusing.
+
+### Questions
+- Can the author's think of any hypotheses that this metric might enable testing? I am particularly intrigued by the right panel of Figure 4. For example, would it make sense to test the hypothesis that representational size is proportional to the probability of a sample under some prior distribution induced by the training set? What implications might this type of structure in  have?
+- Expanding on this thought, I think diffusion models/denoisers might be the perfect testing ground for hypotheses of this type as they are implicitly encoding a family of prior distributions (over the probability of noisy images across different noise levels). My gut is that this metric may be leveraged to help understand how these prior distributions are encoded on a sample by sample basis, but this is a hazy suggestion. 
+- What do the author's make of the fact that the $\Delta$(Correct, Missed) in rerms of representation size increases along the hierarchy of the the network (Fig 4A)
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper tackles the apparent contradiction of vision networks (both artificial and in the brain) – a hierarchical nature where deeper layers as increasing in abstraction, vs an ability to recover or represent fine details. They do so by providing a particular definition of representation – not "causally" as arising from its inputs, but rather as the information that can be recovered from it. They call this "readout representation".  They also introduce a "representation size" that allows them to show that the representation of an identical or nearly identical stimuli often extends to a broad region in the feature space. This indicates redundancy in neural representations that enable accurate information recovery even from perturbed features.
+
+### Strengths
+* tackles a very interesting question. And perhaps even sheds light on e.g. video generation models can be surprisingly small (e.g. the 11B-parameter-sized Open-Sora 2.0)
+* impressive acknowledgement and placement of the question within the literature – machine learning, neuroscience, and philosophy
+* very interesting formalism of readout representations
+* clear and interesting experiments relating representation size to the main question
+
+### Weaknesses
+A "non-causal" view of representation is commonplace, and therefore the "causal-only" view is a bit of a strawman. The paper should probably be reframed in that light. E.g. in computational neuroscience (Churchland and Sejnowski, 1990; Kriegeskorte et al., 2008; Sucholutsky et al., 2023; Feather et al., 2025), and in machine learning, via linear classifications / "linear probes" (as is mentioned in the paper).
+
+### Questions
+not necessary for the paper – are there any connections to your "representation size" measure and "intrinsic dimensionality" (e.g. as in this paper: https://arxiv.org/abs/2012.13255)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

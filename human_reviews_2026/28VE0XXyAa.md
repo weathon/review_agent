@@ -1,0 +1,204 @@
+# ToonComposer: Streamlining Cartoon Production with Generative Post-Keyframing
+
+- Decision: Accept (Poster)
+- Scores: 8, 2, 6, 4
+
+## Abstract
+Traditional cartoon and anime production involves keyframing, inbetweening, and colorization stages, which require intensive manual effort. Despite recent advances in AI, existing methods often handle these stages separately, leading to error accumulation and artifacts. For instance, inbetweening approaches struggle with large motions, while colorization methods require dense per-frame sketches. To address this, we introduce ToonComposer, a generative model that unifies inbetweening and colorization into a single post-keyframing stage. ToonComposer employs a sparse sketch injection mechanism to provide precise control using keyframe sketches. Additionally, we propose a novel cartoon adaptation method with the spatial low-rank adapter to effectively tailor a modern video foundation model to the cartoon domain while keeping its temporal prior intact. Requiring as few as a single sketch and a colored reference frame, ToonComposer excels with sparse inputs, while also supporting multiple sketches at any temporal location for more precise motion control. This dual capability reduces manual workload and improves flexibility, empowering artists in real-world scenarios. To evaluate our model, we further created PKBench, a benchmark featuring human-drawn sketches that simulate real-world use cases. Our evaluation demonstrates that ToonComposer outperforms existing methods in visual quality, motion consistency, and production efficiency, offering a superior and more flexible solution for AI-assisted cartoon production.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper proposes ToonComposer, a diffusion-transformer (DiT)–based framework targeting the post-keyframing stage of cartoon production. It unifies inbetweening and colorization into a single stage to better handle large motions between keyframes. To adapt a modern video foundation model to the cartoon domain while preserving temporal priors, the authors introduce a Spatial Low-Rank Adapter (SLRA) that constrains adaptation primarily in the spatial pathway. The paper also present PKBench, a benchmark of human-drawn keyframe sketches and corresponding reference color frames intended to reflect real production workflows. On PKData, ToonComposer reportedly outperforms baselines on LPIPS↓, DISTS↓, and a CLIP-based similarity metric.
+
+### Strengths
+1. Addressing the post-keyframing stages (unifying inbetweening and colorization) is highly relevant to real animation pipelines, especially under large motion. The motivation is strong.
+2. PKBench Benchmark is a useful step and notiable contribution toward standardized evaluation, with multiple sketch styles per clip and paired references that resemble real use cases.
+3. Consistent improvements on LPIPS/DISTS/CLIP (on PKData) indicates the approach is competitive with existing baselines. Both qualitative and quantitative results are good.
+
+### Weaknesses
+1. The only concern is single-dataset evaluation. Results are reported only on PKData, which limits claims about generalization (e.g., to different studios, styles, or line quality). But if PKData is sufficiently large and diverse, please document that to support the claim.
+
+2. Data diversity clarity. The breadth and distribution of PKData is important for evaluation, please specify. Provide counts/percentages per category and a few representative examples.
+
+3. Sketch provenance & difficulty. Parts of the paper suggest sketches may be derived with tools such as ControlNet/Anime2Sketch/AnyLine; elsewhere they are described as human-drawn. The exact provenance and the proportion of truly freehand, rough sketches vs. algorithmically derived outlines need clarification. If most inputs are algorithmic edge/sketch maps, robustness to messy, expressive, or incomplete human sketches remains uncertain. Does the model leave any capiblity for such test case?
+
+4. Temporal-prior preservation evidence. While SLRA is motivated to “preserve temporal priors,” the empirical evidence is thin. There’s no direct analysis showing temporal coherence is maintained (or improved) relative to alternatives. A granular ablation would strengthen the methodological claims.
+
+### Questions
+1. PKData diversity. What is the diversity of PKData, could you list some examples or categories numbers?
+
+2. Sketch provenance. What fraction of PKBench sketches are genuinely human-drawn freehand vs. automatically extracted (e.g., ControlNet/Anime2Sketch/AnyLine)? Briefly describe the differences you observe between the two.
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+ToonComposer is a one-stage, sketch-conditioned video diffusion system that unifies inbetweening and colorization for cartoons. It adds (i) sparse sketch injection with a position-aware residual so a few keyframe sketches can control layout/style over long clips, and (ii) a Spatial Low-Rank Adapter (SLRA) inside DiT attention that adapts appearance per-frame (spatial-only) while preserving temporal priors. Trained on a new PKData pipeline and evaluated with synthetic metrics and PKBench, it reports stronger perceptual quality and motion/style consistency than AniDoc, LVCD, and ToonCrafter.
+
+### Strengths
+* Introduces a single-stage post-keyframing formulation that unifies inbetweening and colorization—reducing the error accumulation inherent to two-stage pipelines and enabling control from as little as one sketch + one colored frame.
+
+* Proposes sparse sketch injection with position-aware residual and positional-encoding mapping (sketch tokens appended to the latent token sequence with remapped RoPE to target specific frame indices); this is a clean, DiT-native control mechanism distinct from channel-wise concat.
+
+* On a synthetic benchmark, the method scales control with more sketches and maintains strong perceptual scores, highlighting practical utility for real pipelines.
+
+### Weaknesses
+* **Using DiT is not novel:** Just changing unet-based diffusion with a DiT-based model is not a significant gain, and I can't see any specification. I don't know why the author bolded it. Lines 089-099.
+
+* **SLRA is not novel:** Using a low-rank adapter for temporal or spatial adaptation is not novel, and many studies have used it for domain adaptation.
+
+* **Sketch faithfulness is under-measured:** Current metrics (LPIPS/DISTS/CLIP) correlate with perceptual quality but not how well frames obey the sparse sketches. Add explicit sketch-to-frame alignment metrics.
+
+* **Grounding/attribution gap:** The method claims precise control via position-aware residuals, but there’s no quantitative isolation of which regions are controlled by which sketch tokens.
+
+* **Generality and portability unclear:** Training is tied to a specific high-capacity base model. Demonstrate portability by fine-tuning an open AnimateDiff [1] with SLRA and reporting deltas. Also show results on non-cartoon domains (simple line-art or cel-style outside the training distribution) to define failure boundaries.
+
+
+* **Baselines miss sketch-specific controls:**  Comparisons emphasize two-stage cartoon baselines; fewer controls vs. modern controllable video models (e.g., ControlNet-style adapters on AnimateDiff [1], token-tracking/warping methods, or sketch-to-image extended temporally). Re-implement a sketch-ControlNet (edge/sketch map as conditioning) on a strong open video base and a two-stage ToonCrafter+colorization tuned for this data to ensure apples-to-apples.
+
+
+
+[1] Guo, Yuwei, et al. "Animatediff: Animate your personalized text-to-image diffusion models without specific tuning." arXiv preprint arXiv:2307.04725 (2023).
+
+### Questions
+* **SLRA design choices:** SLRA applies per-frame spatial attention with shared positional embeddings. Have you tested where to place SLRA (early/mid/late layers) and rank-vs-quality-vs-latency trade-offs? A sweep would clarify efficiency claims and when a higher rank stops helping.
+
+* **Region-wise control reliability:** Figure 7 is compelling, but how robust is region-wise control when sketches leave large areas blank or contain contradictory cues across keyframes? 
+
+
+**I am open to changing my score based on the author's responses.**
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces ToonComposer, a novel generative model designed to streamline cartoon and anime production by unifying the inbetweening (interpolation) and colorization stages into a single "post-keyframing" process. Traditional animation workflows often involve these stages separately, leading to intensive manual effort and potential for error accumulation. By taking sparse sketches and color references as input, ToonComposer aims to automate this critical part of the production pipeline.
+
+### Strengths
+- The core contribution is the unification of sketch colorization and interpolation into a single, cohesive task. This approach has the potential to significantly streamline the anime production workflow.
+
+- The curation of the large-scale PKData dataset and the development of the PKBench benchmark, which uniquely includes human-drawn sketches, are valuable resources. They facilitate robust training and a more rigorous evaluation of cartoon generation models than previously possible.
+
+- The paper provides strong experimental results, showing both quantitative and qualitative improvements in animation video generation. The ablation studies are thorough and effectively demonstrate the contribution of key components, such as the SLRA.
+
+### Weaknesses
+- The paper uses sparse sketches and color references as simultaneous control conditions. However, the concept of using multiple controls is not entirely novel and has been explored in prior works (e.g., LayerAnimate[1]). The authors should more explicitly discuss the unique advantages of their specific approach in the animation workflow.
+
+- Temporal Alignment: The VAE in Wan employs a 4x temporal compression, meaning each latent token encapsulates information from multiple frames. The paper states that temporal position embeddings (using RoPE with temporal index $j$) and a "position-aware residual" are used to enforce control at specific keyframe indices. However, these indices ($j$) operate in the compressed latent space. It is unclear how ToonComposer guarantees that the decoded video aligns precisely with the input sketches at the correct corresponding pixel-space frame number. The paper lacks a detailed discussion or, more importantly, a visual analysis (e.g., frame-by-frame comparison at keyframes) to validate this crucial temporal alignment.
+
+- Minor Issues:
+    - The paper does not specify the implementation for the "sketch projection."
+    - The ablation study in Table 6 clearly indicates that the Position-Aware Residual is a critical component for ToonComposer. Given its importance, this component and its analysis should be moved from the appendix to the main body of the paper.
+    - There is an extra parenthesis ')' on page 5, line 234.
+
+[1] LayerAnimate: Layer-level Control for Animation. Yuxue Yang, Lue Fan, Zuzeng Lin, Feng Wang, Zhaoxiang Zhang; Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), 2025, pp. 10865-10874
+
+### Questions
+In Section 3.3 (Region-Wise Control), the model is trained using random masks to remove sketch regions. The description suggests these might be pixel-wise random masks. If this is the case, the training masks would resemble "noise", which is fundamentally different from the semantically coherent masks (e.g., masking the entire "train" in Figure 7) used during inference.
+
+Does this significant discrepancy between the distribution of training masks and inference masks affect the model's practical performance? Why was this training strategy chosen over using more semantic masks during training?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+In this paper, the authors claim that they are the first DiT-based cartoon and anime video production that unifies the traditionally separate inbetweening and colorization stages into a single "post-keyframing" process. They incorporate a sparse sketch injection mechanism for precise temporal and spatial control, and proposes a spatial low-rank adapter (SLRA) for effective domain adaptation to the cartoon style while preserving temporal priors. The system accepts as few as one keyframe sketch and one colored frame, reducing manual effort and allowing for flexible region-wise artist control. The authors curate a new dataset (PKData) for training and introduce PKBench, a benchmark with human-drawn sketches, to demonstrate ToonComposer's effectiveness. Experimental results show state-of-the-art performance compared to leading baselines in both synthetic and real-world sketch settings, with detailed ablations supporting each design choice.
+
+### Strengths
+1. The sparse sketch injection mechanism enables precise temporal motion control with minimal sketch input. The inclusion of region-wise control further increases usability and flexibility, allowing users to input incomplete sketches for targeted generation.
+2. The introduction of the spatial low-rank adapter (SLRA) is a significant technical contribution. Ablation experiments show that SLRA consistently outperforms standard LoRA and other adaptation baselines by effectively tailoring only the spatial representation for the cartoon domain, thus keeping the video model’s temporal prior intact.
+3.  The experiments are compelling: quantitative results on both synthetic and real-human benchmarks, extensive qualitative comparisons,  and in-depth ablations for each module. Meaningful discussions of motion consistency, aesthetics, and robustness to sketch styles are provided in the experiment section.
+
+### Weaknesses
+1. This is not the first DiT-based Anime in-betweening and colorization paper. SketchColour[1] and AnimeColor[2] were also based on DiT-based models. Though they may be concurrent works, the authors should still not claim that they are the first. Moreover, I personally don't recognize transferring a similar technique from UNet to DiT as a contribution.
+2. The idea of only optimize spatial attention is not novel either. ToonCrafter[3] already found the fact that finetuning spatial layers only works well on anime in-betweening. Also, I don't recognize transferring a similar technique from UNet to DiT as a contribution.
+3. From LayerAnimate Figure 1, I can see that they also have sparse sketches. The contribution of proposing sparse sketch seems not new either.
+
+[1] Sadihin, B. C., Wang, M. H., Chua, S. P., & Su, H. (2025). SketchColour: Channel Concat Guided DiT-based Sketch-to-Colour Pipeline for 2D Animation. arXiv preprint arXiv:2507.01586.
+
+[2] Zhang, Y., Wang, L., Wang, H., Wu, D., Lin, Z., Wang, F., & Song, L. (2025). AnimeColor: Reference-based Animation Colorization with Diffusion Transformers. arXiv preprint arXiv:2507.20158.
+
+[3] Xing, J., Liu, H., Xia, M., Zhang, Y., Wang, X., Shan, Y., & Wong, T. T. (2024). Tooncrafter: Generative cartoon interpolation. ACM Transactions on Graphics (TOG), 43(6), 1-11.
+
+[4] Yang, Y., Fan, L., Lin, Z., Wang, F., & Zhang, Z. (2025). LayerAnimate: Layer-level Control for Animation. arXiv preprint arXiv:2501.08295.
+
+### Questions
+The VAE of Wan2.1 has a temporal compression rate of 4. By using a sparse sketch, how do you process when only one or two sketches in successive 4 frames?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

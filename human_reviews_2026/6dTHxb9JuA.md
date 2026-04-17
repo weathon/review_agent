@@ -1,0 +1,178 @@
+# HistoPrism: Unlocking Functional Pathway Analysis from Pan-Cancer Histology via Gene Expression Prediction
+
+- Decision: Accept (Poster)
+- Scores: 4, 2, 6, 2
+
+## Abstract
+Predicting spatial gene expression from H\&E histology offers a scalable and clinically accessible alternative to sequencing, but realizing clinical impact requires models that generalize across cancer types and capture biologically coherent signals. Prior work is often limited to per-cancer settings and variance-based evaluation, leaving functional relevance underexplored. We introduce HistoPrism, an efficient transformer-based architecture for pan-cancer prediction of gene expression from histology. To evaluate biological meaning, we introduce a pathway-level benchmark, shifting assessment from isolated gene-level variance to coherent functional pathways. HistoPrism not only surpasses prior state-of-the-art models on highly variable genes and, but more importantly, achieves substantial gains on pathway-level prediction, demonstrating its ability to recover biologically coherent transcriptomic patterns. With strong pan-cancer generalization and improved efficiency, HistoPrism establishes a new standard for clinically relevant transcriptomic modeling from routinely available histology.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces HistoPrism, a transformer-based model that predicts spatial transcriptomic gene expression from H&E histology images across multiple cancer types. The paper also introduces a novel Gene Pathway Coherence (GPC) evaluation framework that shifts the focus from gene-level variance to pathway-level predictions, to have a more functionally meaningful benchmark for model performance. Using the big HEST1k dataset, the authors claim that HistoPrism achieves better performance than STPath and STEM baselines.
+
+### Strengths
+1. Domain-specific knowledge is leveraged to inform the way the K / V / Q values are used in the architecture, demonstrating originality in adapting known models to a real-world dataset. 
+2. Introduction of a new benchmark metric (GPC) to move beyond gene-wise correlation metrics and focus on the pathway level, thus contributing to the significance of this work.
+3. A good ablation analysis is conducted, indicating important information about the model, though it doesn't bring consistent differences across all cancer types.
+
+### Weaknesses
+1. Overall, I don't think the results are strong. With such a rich body of literature highlighted in section 2, using only 2 baselines limits the confidence of these results. Furthermore, the fact is that in table 1 STPath and HistoPrism have very comparable results and the claims of achieving state-of-the-art performance seem a bit exaggerated given the variable performance across different cancer types. The scalability analysis (section 4.5) could also be improved because is not clear how much hyperparameter optimisation played a role here and how hyperparameters were differently optimised for STPath and HistoPrism (could we simplify STPath without reducing performance?). Figure 3 is also missing the confidence intervals across the 100 runs for each number of patches. Finally, I find a bit unexpected that the paper seems to have criticised the over-reliance on standard correlation (PCC) metrics in previous works, but then conducts the ablation analysis only on those PCC-based metrics, which didn't have consistent results across all cancer types (thus raising the question of whether the GPC metric could bring better insights in this ablation analysis).
+2. Section 3.3 (where the GPC benchmark is introduced) does not seem to include important details to understand how this metric is actually calculated, thus impacting the readability/clarity of this paper given its central role. 
+3. The model architecture explicitly conditions on cancer type through a cross-attention mechanism, which in my opinion introduces a concern that in practice HistoPrism might be leveraging prior knowledge of the tumour’s (averaged) distribution rather than extracting novel histopathological biomarkers. As a result, it would be important to test its performance on a completely unknown cancer type to understand whether it can truly generalise to all types of cancer. I think this point is even more important for this paper given it claims pan-cancer generalisation.
+4.  The clustering analysis in section 4.4 shows that predicted expression profiles cluster by cancer type more accurately for HistoPrism than for STPath. However, since HistoPrism was explicitly given the cancer type as part of the input, it is not surprising that its predictions carry a strong cancer identity. In other words, it seems to me that the model had an easier job clustering by a label it already knew. This means the impressive clustering metrics in table 2 might not purely reflect novel biological structure of the data, but partly the reintroduction of the provided class information. The authors don't discuss this issue while claiming that HistoPrism produces more "biologically coherent" representations.
+
+### Questions
+1. What hyperparameters ranges were used for STPath and HistoPrism, and do we know whether simplifying STPath to a computational power similar to HistoPrism would bring STPath's performance too down, or still get similar results?
+2. Given the multiple datasets in HEST1k, did the authors check whether the models bring better/worse performances for each one of those internal datasets (instead of just focusing on the different cancer types)?
+3. Can the authors please better explain how the GPC is calculated? It would be useful to clarify other confusing points about this metric: (1) what is the variance levels mentioned in section 4.3? (2) From figure 2, it seems that this metric necessarily needs 2 different methods to be calculated, does it mean it cannot be calculated independently for a single method? 
+4. Have the authors analysed ways to interpret the model's predictions? In other words, what explainability mechanisms could be applied in this model?
+5. How well would HistoPrism perform on data outside HEST1k, and what is the strategy for unseen cancer types? Would we have to retrain the model? This is important to understand because the way I understand the model, it seems we need to have cancer information to run inference whereas that doesn't seem to be needed for STPath.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes HistoPrism, a path-level gene expression prediction framework. Given an image patch in a pathology image, the image patch is then passed to a pretrained foundation model like UNI or Gigapath, inference and obtaining patch embeddings. Then given a one-hot vector of the oncology label, the embeddings and the vector are passed into a cross-attention network to associate the cancer-label with each patch. Then the image embeddings are then passed through a self-attention network. The authors claim this step allows the image embeddings to be oncology label aware and context aware. Finally, each embedding is then separately predicting its corresponding gene expression and guided by MSE loss between predicted and measured expression ground truth.
+
+### Strengths
+1. This work is enabled by the release of a large ST dataset like HEST-1K.
+2. This work tries to incorporate oncology labels as a prior to guide the image embeddings to capture information of different cancer types.
+
+### Weaknesses
+1. Figure 1 is not legible when printed out and read in an arms length. The caption of Figure 1 is not informative.
+2. It is great that the authors are trying to make further contributions after the release of HEST-1K but the reviewer thinks that this problem generally lacks the motivation to study. 
+2. This paper’s contribution is quite minimal, the reviewer thinks it does not fit the ICLR standard. The method proposed and experiments conducted in this paper should be more of a workshop exploration.
+3. The results are comparable to STPath. There are a great number of methods in the MIL era when each patch was extracted and then used for some downstream process either together or separately. Only having STPath to compare to is not making the performance or the novelty of HistoPrism trustworthy.
+4. The ablation study is not robust. Instead of ablating, the authors are trying to add more design (positional encoding) into the proposed pipeline. What the reviewer was expecting would be the author ablating/replacing the cancer-aware part with some other jointly learning paradigm, or replacing the context-aware part with some other more basic non-transformer or non-attention setup.
+5. Out of distribution cases were not considered at all. The task or the problem that this paper defines is essentially a supervised learning problem. However, this task would require too many assumptions to hold to obtain a useful learned model in future applications. First, each pathology slide has to have a clear cancer hallmark. Then the PFM applied to construct the image embeddings has to prevent domain shift, which is a great drawback or limitation of current foundation models. Using the embeddings generated from PFM and incorporated with an oncology label and directly regressing on to gene expression contains too much noise and variability between each step and the reviewer is skeptical on how the proposed method is going to transfer to real-world images. Lastly, it is kind of a loop or dilemma for the performance guarantee of this task. To obtain a perfectly working pathology to expression model, one should gather as many as image and expression pairs which means more ST data generated would improve the ability of HistoPrism, however, ST are very expensive to obtain and if you have the ability to obtain ST, the meaning of HistoPrism goes to zero. If one doesn’t have the original ground truth expression, then it would also be impossible to evaluate the accuracy or error of the expression predicted. 
+
+Misc
+Line 133 yi should be y_i
+
+### Questions
+1. The reviewer has questions on training details, it seems that each batch of sites/spots have to come from a single WSI or at least sites with the same type of cancer. How does the implementation work if there are different WSIs with different numbers of spots?
+2. Could the authors please provide more detailed and more straight forward ablation study results?
+
+
+The reviewer recommends rejecting this paper and believes it is an interesting study for ST or computational biology workshops. The reviewer is unlikely to change their thought during the discussion phase.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces HistoPrism, an efficient transformer-based model for predicting pan-cancer gene expression directly from H&E histology slides. The authors make a dual contribution: the model itself, which is computationally efficient and uses cross-attention to condition on cancer type, and a novel evaluation benchmark called Gene Pathway Coherence (GPC).
+
+### Strengths
+- The paper identifies a key weakness in prior work: evaluation is almost exclusively focused on a small number of highly variable genes, which have been used as the de-facto proxy for biological function. By creating a well-curated benchmark based on Hallmark and GO pathways, the authors are pushing the field toward more clinically and biologically meaningful evaluation.
+- The efficiency benchmarks in Figure 3, showing HistoPrism's linear scaling in time, memory, and FLOPs compared to STPath's exponential growth, represent a nice practical advancement for analyzing large-scale WSI datasets.
+- The finding that HistoPrism's gains are largest on low-variance pathways (which high variance genes-focused models miss) is a key insight that strongly supports the authors' approach.
+
+### Weaknesses
+- The paper compares HistoPrism (a regressive model using UNI features) to STPath (a generative masked-autoencoder using GigaPath features). The discussion notes that in the STPath paper itself, an MLP with UNI features outperformed an MLP with GigaPath features. How much of HistoPrism's superior performance, particularly in the holistic clustering task (Table 2), can be attributed to the better pathology foundation models (UNI vs GigaPath) versus the superior architecture (direct-mapping vs. masked-modeling)?
+- The GPC benchmark curation filters GO pathways to a size of 50-100 genes. This seems like a reasonable heuristic, but the justification is not fully explained in the paper. What was the rationale for this specific range, and does it risk biasing the benchmark toward or away from certain types of biological processes (e.g., large, complex signaling networks vs. small, tight functional units)?
+- The model's architecture is surprisingly shallow, using only 1 cross-attention layer and 2 transformer encoder layers. Given the lack of PE, this model is effectively a shallow set function. Did the authors experiment with the depth of the transformer encoder? How does the performance change with 4 or 6 layers, or is it insensitive to this hyperparameter?
+
+### Questions
+- The paper "Modeling dense multimodal interactions between biological pathways and histology for survival prediction" was one of the first papers introducing the relevance of biological pathways over individual gene expression in deep learning pipelines. Is there a reason why this paper was not cited in the background? Especially since this paper uses Hallmark and GO pathways which are shown to be utilized in the mentioned paper as well.
+- Some pathways act tissue-wide vs. some act in very specific regions. This can be inferred because of tumor gene expression heterogeneity known to the field. I am wondering what impact does patch size (at different magnifications as well as sizes, which would capture different amounts of morphological context) will have on the performance?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+This paper proposes a transformer, HistoPrism, to predict pan-cancer gene expression from histology and a new benchmark to evaluate performance. HistoPrism uses cross attention between the (H&E-stained whole-slide) images, after passing through a pre-trained pathology foundation model, and the cancer type, after passing through a trained linear layer. The new metric, called the Gene Pathway Coherence (GPC) benchmark, “assesses a model’s ability to reconstruct the coordinated expression of functionally related genes”. Compared to two baselines, HistoPrism achieves the best performance in 5 of 10 cancer types using a standard metric (correlation between the predictions and observations amoung highly variable genes). In the GPC benchmark, HistoPrism outperforms the baselines in at least 75% of pathways.
+
+### Strengths
+The paper focuses on the application of ML methods to meaningful, real-world datasets, which is typically lacking in the ML field. The architecture is clearly explained and the experimental results are easy to follow. The proposed model shows competitive performance on a standard metric and improved performance on the proposed metric.
+
+### Weaknesses
+- There was not enough explanation of the GPC benchmark (e.g., no math). I would like to see an explanation that shows how it is computed from the data and model formulated in sections 3.1 and 3.2. I appreciate the effort to bridge the gap between standard ML and the computationally biology, but since this is an ML conference I believe more details should be provided. As it’s written I don’t understand how the GPC is computed. Note that I do not have a background in computational biology. 
+- Since the argument is that this metric is more interpretable, I believe we need to see how the interpretation is useful. For example, are there biological insights that can be made from Figure 2? 
+- The paper is quite short, so there is plenty of space to discuss the GPC benchmark. 
+- One of the baselines, STEM, is trained on a subset of the data due to computational constraints. How would STEM look like in Figure 3?
+- As I read it, this seems like a fairly straightforward application of a transformer to the this data. Highlighting any especially challenging methodological choices would be helpful.
+
+### Questions
+- Given that earlier works focused on regression approaches, while more recent work have focused on generative approaches, why were you motivated to switch back to a regression approach? Is the inherently one-to-many mapping from histology to gene expression not a problem for your regression approach? 
+- Can you comment on using an MSE loss on count data? Is this common with spatial transcriptomics data and are there any drawbacks? (e.g., rather than assuming say a Poisson likelihood)
+- Could you expand on how “Histoprism’s direct-mapping architecture effectively captures both high-variance genes and the subtler, coordinated expression patterns that define cellular programs”, while “while STPath primarily leverages the most variable signals”? Since you are minimizing a loss over all training samples, won’t the high variance genes still have the most influence?
+- As mentioned above, I would appreciate a more detailed explanation of how the GPC is computed and how it can be interpreted
+- HistoPrism makes use of a pretrained pathology foundation model. Do the benchmarks also make use of foundation models?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

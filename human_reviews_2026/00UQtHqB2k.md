@@ -1,0 +1,184 @@
+# Toward Unifying Group Fairness Evaluation from a Sparsity Perspective
+
+- Decision: Reject
+- Scores: 2, 6, 2, 4
+
+## Abstract
+Ensuring algorithmic fairness remains a significant challenge in machine learning, particularly as models are increasingly applied across diverse domains. While numerous fairness criteria exist, they often lack generalizability across different machine learning problems. This paper examines the connections and differences among various sparsity measures in promoting fairness and proposes a unified sparsity-based framework for evaluating algorithmic fairness. The framework aligns with existing fairness criteria and demonstrates broad applicability to a wide range of machine learning tasks. We demonstrate the effectiveness of the proposed framework as an evaluation metric through extensive experiments on a variety of datasets and bias mitigation methods. This work provides a novel perspective to algorithmic fairness by framing it through the lens of sparsity and social equity, offering potential for broader impact on fairness research and applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes a unified way to evaluate group fairness through sparsity. It studies links among Maximum Pairwise Difference, the Gini Index, and a PQ Index and argues that higher sparsity means lower fairness. Based on this view, it replaces the pairwise step in common criteria with a sparsity measure and defines S-SP and S-EO for classification and regression, with formulas and properties for PQ. Experiments across several datasets and bias mitigation methods show similar trends to MPD-style metrics and some differences in intersectional settings. The paper positions the work as an evaluation framework rather than a training algorithm.
+
+### Strengths
+1. Clear and unified formulation that maps standard group fairness metrics to a sparsity template and covers classification and regression including multi-class and multi-group cases. Table 1 makes the mapping explicit.
+
+2. Useful theoretical connections between PQ, Gini, and MPD with properties and bounds that help interpret behavior of the proposed metrics. 
+
+3. Broad empirical sweep with classic classification datasets and two regression benchmarks, plus an intersectional study that highlights where sparsity criteria move differently from MPD.
+
+### Weaknesses
+1. The main claim is largely about reparameterizing MPD-style gaps into a norm-based sparsity score. The conceptual novelty relative to prior distributional fairness measures and to existing uses of Gini-type indices is not sharply distinguished. More head-to-head comparisons to recent distribution level metrics would help.
+
+2. Practical stability relies on an exponential transform to handle negative or near-zero entries before applying sparsity, which introduces an extra design choice and can affect scale and sensitivity. The paper acknowledges this issue but does not fully analyze when the transform changes conclusions.
+
+3. The framework depends on selecting the function g for EO-type measures and on the sparsity parameters p and q, yet there is limited guidance on how to choose them or how results vary. Clear sensitivity curves for p and q, and for alternative g choices, are missing.
+
+4. The experiments use simple base models and many post-processing mitigations. Evidence that the conclusions hold for stronger modern models or end-to-end in-processing methods is limited. A study with neural encoders would raise confidence in generality.
+
+5. External validity is not fully assessed. The work argues that sparsity better reflects full distribution equity, yet there is no application level validation, such as calibration checks, threshold sensitivity, or decision utility under policy constraints.
+
+### Questions
+1. How sensitive are S-SP and S-EO to the choice of p and q in the PQ Index. Please report curves for p and q on classification and regression datasets.
+
+2. For S-EO you instantiate $g$ as a mix of TPR and FPR. What happens if $g$ is accuracy, cross entropy, or a proper scoring rule? Do rankings by the sparsity metric change?
+
+3. How often does the exponential transform change the ordering of methods relative to raw MPD or to sparsity computed on untransformed nonnegative surrogates. Can you add a robustness study?
+
+4. In the intersectional study, can you quantify when S-SP diverges from SP and link this to Theorem 3.6 with synthetic controls? A simple simulation that holds max and min fixed while varying the middle components would be helpful.
+
+5. Could you evaluate the framework with stronger base learners and an in-processing algorithm to show that the alignment trends are not an artifact of linear models and post-processing?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper presents a novel framework for fairness evaluation based on sparsity. The authors first propose the use of the PQ index, originally introduced for pruning, as a sparsity measure for fairness evaluation, in a manner similar to the Gini Index. They then describe the properties of this index in comparison to the Gini Index, including differences with respect to the Maximum Pairwise Difference (MPD). The paper further outlines currently used fairness metrics based on MPD and suggests replacing MPD with alternative sparsity measures such as the Gini or PQ index.
+The authors demonstrate that the behavior of the proposed metrics aligns with that of standard fairness metrics when applied to a binary sensitive attribute and bias mitigation algorithms. Moreover, they show that these sparsity-based metrics are better suited for capturing fairness in scenarios where the sensitive attribute consists of multiple groups. This is because both the Gini and PQ indices consider the full vector of group values, rather than just the maximum and minimum, and thus capture disparities more effectively.
+
+### Strengths
+The paper is well-motivated, addressing an important topic in fairness, the need for appropriate metrics that effectively capture the disparity we aim to measure. It is well-written and features extensive experiments that consider multiple datasets and bias mitigation techniques. The motivation for using sparsity-based metrics in the context of intersectional fairness is compelling and well-justified, and the results of that section (5.3) are convincing.
+
+### Weaknesses
+The actual contribution of the proposed metric should be better highlighted from the start. Specifically, from what I understand from the subsequent sections, the main advantages are that the metric can be consistently applied to both binary and multi-class settings, and that it captures disparities across the entire group distribution more effectively than MPD in multi-class scenarios. However, the abstract and introduction make broader claims such as “generalizability across different machine learning problems” and “applicability to a wide range of machine learning tasks.” While these claims may be valid, they should be better supported and clarified in light of the results presented. A dedicated discussion section elaborating on the observed advantages of the proposed framework compared to existing metrics would help strengthen this point.
+Furthermore, from how the introduction is written now, I would understand that the framework is unified for both classification and regression tasks, but Section 4 introduces two distinct metrics for these problem types. This discrepancy should be addressed to clarify the extent of the framework’s unification.
+Lastly, while the idea of repurposing the PQ index, originally designed for pruning, in the context of fairness evaluation is promising, it is not clearly established what advantages it offers over the Gini index, given that the two share many of the same properties. The authors should better describe whether and how, in the fairness context, this measure captures aspects that the Gini index fails to capture. Additionally, the properties of the PQ index described in Section 3 largely mirror those from the original paper and, from my understanding, are not all essential for understanding the framework’s advantages.
+As such, this section could be condensed to improve focus and clarity.
+
+### Questions
+What are the advantages of using the PQ index instead of the Gini Index? Does it capture something that the Gini Index doesn’t capture? In what terms is the framework “unified” and how is it backed up by the experiments?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper experimentally examines the use of the PQ-index [1] in place of max pairwise distances (MPD) in two fairness criteria (statistical parity and equalized odds).   The comparison is performed on 6 datasets used for fair classification and regression.  Experimental results show that the baseline and sparsity-based measures of fairness have similar tradeoff curves between model performance and fairness.  Experiments examining intersectional fairness were done on a single dataset.  Authors claim these results suggest that sparsity-based fairness metrics may be more sensitive to heterogeneity in the groups.
+
+### Strengths
++ Since sparsity measures have been used in studies on social inequality/fairness, the use of these measures in studying algorithmic fairness seems to be warranted.
++ Interesting theoretical results characterizing the properties of sparsity measures.
+
+### Weaknesses
+-	Paper did not clearly state what benefits they found in their examination.  Experimental results on the 6 datasets seemed to indicate both baseline fairness metrics and sparsity-based measures had similar tradeoff curves regarding model performance and fairness.  
+-	While there were results on a single dataset suggesting that sparsity-based metrics were “better” at handling group heterogeneity (sec 5.3).  I felt the experiments were too limiting to draw strong conclusions for or against the use of sparsity-based methods.  Only a single dataset was used.  The assertions made in the text regarding the robustness of the sparsity-based metric were not clearly tied back to the experimental results.
+
+### Questions
+Questions
+
+1)	What is the benefit of using a sparsity-fairness metric over the baseline metrics?
+
+Additional Remarks:
+
+1)	Paper would benefit from a clear declaration of the need, benefits and weaknesses of using sparsity-based fairness metrics.  
+
+2)	I found the experiments in section 5.3 to be too limited to be convincing.  Assertion made in the section 5.3 that baseline metrics exhibit “inconsistent debiasing performance” was not clearly tied back to Fig 4 results.  Perhaps this is true regarding the simulated binary classification data, but I don’t see how you could reach this conclusion on the Adult data in Fig. 4.  I did not understand how one arrived at the assertion at the end of section regarding the greater robustness of sparsity-based metrics.  This section would benefit from more extensive testing with additional datasets as well as clearer explanations of how the section’s conclusions were made.  As it currently reads, the assertions regarding the potential +’s of sparsity-based measure regarding intersectional fairness seem vague and not clearly substantiated by the experiment.  
+
+References:
+
+[1] Diao et al., “Pruning deep neural networks from a sparsity perspective”, arXiv preprent 2301.05601, 2023
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a unified framework for evaluating algorithmic fairness through sparsity measures. The authors theoretically analyze the PQ Index as a sparsity measure, establish its relationships with MPD, and reformulate classical fairness metrics (SP and EO) in terms of sparsity. Experiments on multiple datasets and with several bias mitigation methods demonstrate empirical alignment between sparsity-based and traditional fairness measures.
+
+### Strengths
+1. Using sparsity to connect different group-fairness metrics is an interesting idea that is rarely explored in existing fairness literature.
+2. The theoretical section is well-written and mathematically grounded.
+
+### Weaknesses
+1. Limited novelty beyond reinterpretation. While the sparsity–fairness connection is elegant, the framework largely rephrases existing fairness measures in new mathematical form. The advantage of the proposed framework is more evident in intersectional fairness settings. Nonetheless, beyond these intersectional cases, the contribution remains primarily interpretive rather than methodological. There is little evidence that the proposed sparsity-based metrics yield different conclusions compared to MPD-based ones, apart from minor smoothness or stability differences.
+2. The analysis of PQ Index properties relies heavily on prior results (Diao et al., 2023). The new theorems mostly restate or slightly adapt known properties to fairness interpretation rather than offering fundamentally new mathematical results.
+3. There should be a constraint (\forall) for $j$ in Theorem 3.1 to indicate all elements other than $w_k$ is 0.
+
+### Questions
+Is there a principled way to select the sparsity parameters (p, q) for PQ Index beyond using (1, 2)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

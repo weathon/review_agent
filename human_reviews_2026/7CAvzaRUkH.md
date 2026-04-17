@@ -1,0 +1,236 @@
+# Interpreting Multi-Layer Transformers for In-Context Linear Regression with Varying Covariance
+
+- Decision: Reject
+- Scores: 4, 6, 4, 4
+
+## Abstract
+We study how multi-layer softmax-attention transformers perform in-context linear regression, focusing on the challenging setting where the covariate distribution varies across sequences. We show that multi-layer transformers substantially outperform single-layer models, demonstrating that depth is critical for sufficient expressivity. Through a novel probing methodology using Gaussian test data, we reveal that the transformer approximates linear regression by implementing a variant of the gradient descent algorithm. The parameters of this algorithm are dependent on model depth and data distribution, but insensitive to number of attention heads or sequence length, corresponding to a consistent diagonal structure in the learned weight matrices. Building on this insight, we show that by incorporating a chain-of-thought-style intermediate step, the transformer can solve in-context instrumental variable (IV) regression, achieving performance comparable to a two-stage least squares estimator. Our findings provide new evidence that depth enables transformers to learn sophisticated in-context algorithms, bridging the gap between empirical performance and interpretable algorithmic behavior.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies looped multi-layer softmax attention trained to perform in-context linear regression with the in-context covariance varying across sequences. Mechanistic interpretability analysis is conducted to infer the in-context learning algorithm implemented by the trained transformer.
+
+### Strengths
+- This paper considers in-context linear regression task with varying in-context covariance, which is an interesting and under-explored direction in the literature.
+- This paper studies multi-layer attention, making progress beyond the commonly used single-layer setup.
+
+### Weaknesses
+- The second sentence of the abstract says that
+
+  > "multi-layer transformers substantially outperform single-layer models, demonstrating that depth is critical for robust generalization"
+
+  However, as what I understood and as what the authors elaborate in lines 84 and 213, multi-layer transformers outperforming single-layer ones demonstrates their improved expressivity, rather than improved generalization. Here, the single-layer transformer lacks sufficient expressivity to solve the task, which explains its poorer performance. To demonstrate generalization properties, both single-layer and multi-layer models would need to be expressive enough to fit the training data, with the multi-layer model achieving lower generalization error.
+
+- I am not sure that the setup here should be termed as out-of-distribution (line 48). The training set contains sequences with different in-context covariance matrices, and the test set contains sequences with unseen in-context covariance, but they are still generated according to the same procedure in Section 3.1. This suggests that the test data are in-distribution, not out-of-distribution. The notion of “out-of-distribution” typically refers to a shift in the overall data-generating distribution between training and testing, rather than variation in the in-context token covariance within individual inputs.
+
+- I am confused by the paragraph at lines 301-306: it's unclear whether Algorithm 1 is the algorithm learned by the looped transformer or a standard transformer. From line 196, I understood that Section 4 is about the looped transformer. However, Algorithm 1 has time-varying step sizes, which the authors describe as a feature for standard transformers. 
+
+  More broadly, Section 4 frequently refers to Appendix B.1. While cross-referencing supplementary material is not inherently problematic, in this case it interferes with the self-contained nature of the main body and makes the section hard to read smoothly.
+
+### Questions
+- Could the authors add a discussion on how sensitive the results are to the looped transformer simplification? Tying weights across layers also imposes expressivity constraints. Since expressivity is a key reason why multi-layer transformers outperform single-layer ones in this setup, I wonder how the looped transformer simplification affects the results.
+- Why is the in-context learning algorithm reported to be insensitive to the width? Could the authors clarify the rank of the key and query weight matrices in each attention head? If these matrices are low-rank, the expressivity of an attention layer would presumably depend on the width [1,2].
+- In line 186, it is unclear which optimizer the authors ended up using, mini batch SGD or Adam. It seems the experiments are conducted with Adam (line 205), then the sentence "Optimization proceeds via mini-batch gradient descent" is misleading.
+
+[1] Amsel, N., Yehudai, G., & Bruna, J. "Quality over Quantity in Attention Layers: When Adding More Heads Hurts." ICLR 2025.
+
+[2] Zhang, Y., Singh, A. K., Latham, P. E., & Saxe, A. M. "Training Dynamics of In-Context Learning in Linear Attention." ICML 2025.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper investigates in-context learning (ICL) mechanisms in trained transformers under controlled settings. The observed behaviors align well with existing theoretical constructions.
+
+### Strengths
+The problem is well-motivated and important. Prior theoretical work largely studies what ICL mechanisms could exist and how to construct them; this paper advances that line by probing trained transformers directly. Although the experiments are conducted in highly controlled settings (which is reasonable), the observations are fairly comprehensive.
+
+### Weaknesses
+(1) The relationship between the looped transformer and the "original" transformer (without weight tying) is unclear. The preliminary states "We mainly use looped multi-layer transformers with residual links in our study", yet Observations 2, 3, 4 and Section 4.2 appear to concern models without weight tying, as the KQ and OV matrices are indexed by layer t and head h. If the observations are intended to apply to both variants, this should be stated more clearly.
+
+(2) The discussion following Observation 4 seems inconsistent with Claim 2. If each model is trained only for its own depth, then neither the looped nor the standard transformer can implement the purported algorithm.
+
+(3) Given the "divergent" behavior in Figure 4, the statement of Observation 1 may be misleading. The "marginal gains" are not negligible if increasing the number of layers actually increases error. Moreover, Figure 4 seems to show a 4-step TF performing worse than a 3-step TF, which is not the case in Figure 1.
+
+### Questions
+See above. If these questions are resolved satisfactorily, I'm willing to adjust my score accordingly.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper investigates how multi-layer softmax-attention transformers perform in-context linear regression under the challenging setting where the covariate distribution (specifically, the covariance matrix) varies across sequences. The authors demonstrate that depth is critical for robust performance, with multi-layer models substantially outperforming single-layer ones. Through a novel probing methodology, they show that the transformer learns to implement a specific variant of gradient descent, characterized by consistent diagonal structures in the model's weight matrices. The authors further extend their findings to show that with a chain-of-thought-style intermediate step, the transformer can solve in-context instrumental variable (IV) regression.
+
+### Strengths
+1. The paper moves beyond the common assumption of a fixed covariate distribution, studying a more realistic and challenging scenario with varying covariance across sequences. This directly addresses the critical issue of out-of-distribution generalization in ICL.
+
+2. The paper provides a clear, empirical mechanistic interpretation of the transformer's operation. The identification of consistent diagonal patterns in the Key-Query (KQ) and Output-Value (OV) circuits across layers and heads is a strong contribution, offering a simplified and interpretable view of the learned algorithm.
+
+3. The study is thorough, with extensive experiments and ablations (e.g., varying depth, width, sequence length). The successful application of the interpreted mechanism to the more complex IV regression task strengthens the generalizability and practical relevance of the findings.
+
+### Weaknesses
+1. The contribution may be perceived as incremental. The paper focuses on softmax transformers but relies on a large-sequence-length regime, which simplifies the analysis and makes the behavior analogous to that of linear attention transformers. A more direct discussion of the necessity and advantages of softmax attention in this specific setting would strengthen the claim of novelty.
+
+2. The parameters in Algorithm 1, such as ηx and ηy, are central to the interpretation. It is unclear whether these are precisely extracted from a trained transformer's weights, and whether the learning rates used in standard gradient descent is optimal for each step/layer in fig3.
+
+3. The algorithm is noted to be non-convergent when applied beyond the trained depth. While it empirically outperforms standard GD within that depth, the paper lacks a theoretical explanation for whythis specific, divergent algorithm is more effective than a convergent one for the in-context learning task
+
+### Questions
+1. Given the reliance on the large-sequence-length regime for analysis, how do the conclusions hold for very short context lengths where the softmax attention's non-linearity is more critical?
+
+2. How exactly are the step sizes ηx and ηy in Algorithm 1 extracted from the learned model parameters? Are they consistent across layers in the looped transformer, and is there an intuition for why these learned values are effective?
+
+3. Could the authors provide a theoretical intuition for why the non-convergent Algorithm 1 outperforms standard gradient descent within the model's operational depth? Is it effectively performing a form of adaptive preconditioning?
+
+Please refer to the weakness part. If there are any misunderstandings on my part, please point them out, and I will reconsider my evaluation of this work.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+Introduction/Motivation and Overview
+1. Previous works have shown that transformers are doing gradient descent (GD) during in-context learning (ICL), in synthetic linear regression settings.
+2. However, those setups’ learned models are not robust to distribution shifts, because the pre-conditioner matrix is based on the covariance of the data. So they may not work if the data distribution is changed.
+3. This work seeks to answer the question: can the transformer solve linear regression with varying covariances? If so, what is the algorithm the transformer learns?
+4. ICL ability increases with depth, but stops at a certain depth.
+5. This work also finds that in this setting, the transformer learns GD - each layer first performs a linear transformation, then performs a GD step on a linear regression problem using the covariates from the previous layer.
+    1. This work shows that the loss of this interpreted algorithm increases beyond a certain number of iterations.
+6. Next, this work also studies instrumental variable regression and shows that a transformer trained on instrumental variable regression also performs the same interpreted algorithm.
+
+Setup
+1. The x_i are drawn from a Gaussian distribution, where the covariance matrix is fixed within a sequence, and changes across sequences.
+2. The test input x_q, within a sequence, may differ from the training distribution.
+3. The transformer uses multi-head softmax attention. The causal mask, different from standard attention, makes it so that previous positions don’t attend to the very final position.
+4. It is a looped transformer where each attention layer has the same weights.
+
+Interpretability Experiments
+1. Observation 1 - performance improves with depth, but depth doesn’t seem useful beyond 3 layers.
+2. Observation 2 - attention weights are constant across layers/heads, and form a diagonal matrix.
+3. Observation 4 - the transformer, when stacked on top of itself, diverges instead of improving the prediction error.
+
+In section 4.2, the algorithm that the 3-layer looped transformer learns, is determined as follows.
+1. Claim 1 - assumes that the sequence length goes to infinity, and gives an interpretation of each layer as moving the activations from one Gaussian distribution to another.
+2. Claim 2 - gives a form for the update rule, and also specifies the learning rate.
+3. Experimental analysis - they show that the transformer behaves similarly to these update rules.
+    1. They compare the following algorithms, (1) the trained 3-layer 2-head softmax transformer, (2) the interpreted algorithm, (3) three-step GD estimator, and (4) ridge regression estimator
+    2. Figure 3a shows that the transformer behaves similarly to its interpreted algorithms, i.e. (1) and (2) perform similarly, and are both worse than ridge regression.
+    3. Figure 3b shows that, as the length of the sequence increases, the transformer shows more alignment with the interpreted algorithm (measured by the cosine similarity/L2 distance of the input sensitivity vectors, i.e. gradient with respect to input).
+
+They also find that the interpreted algorithm has a divergence in the error as the number of steps increases - this is shown in Figure 4(a) and 4(b).
+- Figure 4(b) shows that the interpreted algorithm of the 3-layer transformer performs worse as the number of steps increases.
+
+IV Regression
+
+The instrumental variable regression setting is as follows.
+1. Now, the covariate is correlated with the label noise.
+2. Thus, the new estimator is as follows. Introduce a new variable z_l that is correlated with x_l, but uncorrelated with the noise.
+3. The z_l are sampled randomly from the Gaussian distribution.
+4. First, x_l is regressed against z_l to obtain some estimated values of x_l. Then, y_l is regressed against the estimated values of x_l.
+
+They guide the transformer to implement the two-stage estimator for IV regression.
+1. The input to the first transformer is (x_i, z_i) for each position.
+2. The input to the second transformer is (x_i_hat, y_i) for each position, where x_i_hat is the output of the first transformer.
+3. The gradient of the prediction of the first transformer is detached from the input to the second transformer.
+
+Section 5.2 - Interpretation of learned algorithm/results
+1. As the sequence length increases, the performance of the transformer converges to that of the 2-stage estimator. Worth noting that at shorter sequences, the 2-stage estimator performs much better. There also still seems to be a slight gap at the end - not sure if they would converge with a further increase in the sequence length, or if there is an asymptotic gap.
+2. The second transformer block is essentially solving linear regression where the covariances differ across sequences. Thus, the results from the previous setting (linear regression with varying covariances) allows for predicting the learned algorithm in this setting.
+
+### Strengths
+- The result on instrumental variable regression shows that the findings of the previous section are relatively robust.
+
+### Weaknesses
+- One weakness is that a looped transformer is used for the linear regression setting. Thus, it seems perhaps intuitive and not surprising that the error would diverge as the layer is applied multiple times, since the layer is optimized in a way that minimizes the error when it is applied exactly 3 times.
+- The architecture seems somewhat hard-coded for the instrumental variable regression setting. There are two transformer blocks, where Block 1 is intended to perform the first stage of the instrumental variable regression estimator, and Block 2 performs the second stage. Additionally, Block 1 does not receive any gradient from Block 2, if I understood correctly.
+
+### Questions
+1. Could you explain the motivation for your particular choice of casual mask?
+2. Regarding observation 1 - in Figure (1a), there actually seems to be a significant improvement from 3 layers to 4 layers, for a large enough prompt length? So this contradicts what is said in the text around lines 212-215.
+3. Observation 2 is also confusing.
+    1. In lines 178-179, it is mentioned that the attention weights are all the same for each layer.
+    2. However, here it is said that the weights are “approximately” the same across layers, in lines 237-239 - this sounds contradictory?
+4. In Claim 1, could you give an intuitive explanation of how the assumption that L goes to infinity comes into play?
+    1. I assume this is relevant because the transformer is actually bi-directional aside from the last position, and therefore the earlier positions are also affected by the sequence length being infinity.
+5. Confusions about the IV regression setting - Section 5.1
+    1. Why use only a single-layer transformer for the first block? It sounds possible that more layers would get a better estimate for the x_hat.
+    2. In line 416, you state that the “gradient of the sequence is detached”, referring to the gradient of the output of the first transformer block, while in line 422, you state “we train two transformer blocks together”. Are these contradictory?
+    3. Is it correct to say that you are heavily enforcing that the transformer should imitate the two-stage estimator for IV regression?
+6. In Figure 5c, is there a typo in the title? It currently says “comparison between GD and TF” but perhaps it is intended to be a comparison between the interpreted algorithm and TF.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

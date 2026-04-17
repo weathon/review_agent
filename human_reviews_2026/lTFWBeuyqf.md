@@ -1,0 +1,220 @@
+# OSCAgent: Closing the Loop in Organic Solar Cell Discovery with LLM Agents
+
+- Decision: Reject
+- Scores: 6, 2, 4, 6
+
+## Abstract
+Organic solar cells (OSCs) hold great promise for sustainable energy, but discovering high-performance materials is time-consuming and costly. Existing molecular generation methods can aid the design of OSC molecules, but they are mostly confined to optimizing known backbones and lack effective use of domain-specific chemical knowledge, often leading to unrealistic candidates. In this paper, we introduce OSCAgent, a multi-agent framework for OSC molecular discovery that unifies retrieval-augmented design, molecular generation, and systematic evaluation into a continuously improving pipeline, without requiring additional human intervention. OSCAgent comprises three collaborative agents. The Planner retrieves knowledge from literature-curated molecules and prior candidates to guide design directions. The Generator proposes new OSC acceptors aligned with these plans. The Experimenter performs comprehensive evaluation of candidate molecules and provides feedback for refinement. Experiments show that OSCAgent produces chemically valid, synthetically accessible OSC molecules and achieves superior predicted performance compared to both traditional and large language model (LLM)-only baselines. Representative results demonstrate that some candidates achieve predicted efficiencies approaching 18\%. The code will be publicly available.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces OSCAgent, a multi-agent system for the discovery of organic solar cells (OSCs).
+
+OSCAgent consists of three agents working in a loop:  (1) the planner, (2) the generator, and (3) the experimenter. The planner analyses existing designs (either from previous iterations of the loop or from external sources) and comes up with a research plan. The generator executes this plan to suggest molecules, which the experimenter then tests and provides the results back to the planner (through a report and updating a candidate database). The agents have access to different external tools (e.g., a power conversion efficiency prediction model, or RDKit) -- see Section 4.2.
+
+In order to score designs in this loop, the authors develop their own power conversion efficiency (PCE) model. This is a multi-modal model, taking in graph, fingerprint, and SMILES representations of molecules and outputting a parameterized Gaussian distribution over the molecule's PCE score. The authors train this model in a two-step process, first on a related LUMO and contrastive learning prediction task, before then adapting the model for PCE regression with an uncertainty-aware loss (see Figure 2).
+
+The experiments evaluate both (a) the OSCAgent (in terms of how well it can discover better OSCs) and (b) the PCE model. OSCAgent is compared against traditional ML and other sampling methods for suggesting better OSCs as well as single-step language models, which it is shown to substantially outperform (Table 1). The PCE model is compared against a series of other GNN, language, and traditional approaches where it also obtains better regression performance on an in-distribution test set. The authors perform some ablations on their model to judge the performance of various design decisions.
+
+### Strengths
+### S1 Overall high-level approach well presented 
+I thought overall the authors did a good job with the presentation of the high-level approach. Figures 1 and 2 are helpful for explaining the different parts, which I might have otherwise found confusing from the text alone (for instance, the PCE model has a somewhat complicated two-step training routine, and Figure 2 is useful in explaining which modules are frozen or trained in each stage of this routine and what loss is used). The method the authors propose is somewhat complicated with several different components, which means not everything can be explained in detail in the main paper due to space constraints. In the main though, I found the appendix useful for filling in these details (e.g., Section A contains detailed equations for each evaluation metric, Algorithm 1 describes how the algorithm for the database retrieval, or RAG, system works, etc).
+
+
+
+### S2 Approach is general and can be applied to multiple domains
+As the authors themselves mention in their conclusion, the approach seems broadly applicable to other molecular design tasks. Also, by creating three agents following the general scientific method of (1) hypothesize, (2) experiment, and (3) analyze results, the approach seems likely to also be relevant to other domains with some small modifications. 
+
+Having said that, to help me judge the approach’s significance here (plus the method's originality), it would have been nice to have seen in the discussion (or experiments) an idea of why this tri-agent approach is a lot better than previous multi-agent, "co-scientist" approaches such as those listed in the related work section. (Currently the related work section mostly just lists other agentic approaches rather than explaining how the presented approach differs from these previous methods, apart from being on a different application domain).
+
+### Weaknesses
+### W1 Some design choices seem somewhat arbitrary
+Some of the design decisions of the multi-agent system seem fairly arbitrary. While the authors do a good job in running ablations on some of these choices (e.g., the retrieval augmentation strategy in Table 2), some of the design choices feel less well explored (e.g., where did the functional form for the candidate database retrieval scorer come from; why pretrain the PCE model on both a contrastive and LUMO loss; why split up the planning and generation agents). This means I find it hard to know which aspects of the approach are actually important.   
+
+
+### W2 The baselines evaluated against often seem quite weak
+Often the baselines compared against seem quite weak, which makes it hard to just the significance of the proposed approach.
+
+For instance, in table 1 my understanding is that no iterative approaches that can collect feedback on their initial suggestions and suggest new molecules (like OSCAgent can) were compared against? How well does a genetic algorithm-like approach work (for instance the Cao et al., 2025 or Greenstein & Hutchison, 2023 methods cited)? How about methods that adapt VAEs to optimization tasks like: Tripp, A., Daxberger, E., and Hernández-Lobato, J. M. Sample-efficient optimization in the latent space of deep generative models via weighted retraining. Advances in Neural Information Processing Systems, 2020.
+
+Likewise in Table 3, it seems that the main improvement of the proposed PCE model comes from the handcrafted features used (which includes MACCS, RDK fingerprints, and others), but these are not provided to the baselines compared against?
+
+
+### W3 Still not clear if the PCE model holds up well when optimized against 
+A common pitfall for optimizing against an ML scorer is that you end up exploiting the ML scorer model, rather than finding solutions to the underlying task that you are trying to solve. The authors mention the reliability of their scorer (line 178, 256), but this does not seem to be experimentally validated (Table 3 seems to be an in-distribution test set?). Is there a way to test how well the proposed model extrapolates? Perhaps by creating an out-of-distribution split or comparing against an independently trained model? (Extensions to integrating more realistic oracles, such as wet-lab experiments that would also solve this problem, are mentioned in the conclusion but are currently unexplored).   
+
+**Review scores above.**
+These issues I mention with the baselines and evaluations are the main reason I have gone with a lower soundness score for now. Although, I still think the other advantages of the paper make me lean towards acceptance, I would like to see this addressed in the rebuttal.
+
+### Questions
+1. Figure 7 in the appendix was helpful to me for understanding what the conversation between the different agents look like. However, I was left uncertain with how the RAG in the planner worked. When does this occur? Is it run on the first step or only on the second and later iterations? Did you try different values of K for the different context sets and how were the values of 3 and 5 that were used for K arrived at?
+
+2. The evaluation of the PCE model in table 3 seems to be mostly focused on how good a predictor the mean of the output Gaussian distribution is (by looking at the R^2 and MAE values). What about the predicted variance -- was this well calibrated? Do you have good evidence of the agents effectively using this model's uncertainty in particular?
+
+3. The molecules suggested in Figure 3 actually seem to have somewhat large SAScores. How do these scores compare to those in the experimental datasets used (which presumably can be synthesized)? It seems that SAscore is treated as a constraint rather than an objective (line 1421). Did you try setting this constraint at a lower value than 8?
+
+4. I'm surprised that the method still works so well without the experimenter and its subsequent feedback about the properties of the molecules suggested (although the molecular quality of this ablation goes down in Table 2, it seems to still perform a lot better than all of the competing approaches in Table 1). Is there any intuition for what allows the method to do so? (i.e., naively I might have expected it to be much more similar to the few-shot approach which as I understand it, also does not have access to feedback on its suggestions).
+
+5. In table 1, how do the baselines compare in terms of just synthetic accessibility?
+
+
+**A note on reproducibility**
+The authors have a detailed appendix that lays out the prompts the different agents use as well as the hyperparameters the PCE model uses (Table 4). However, I would still find it very hard to reproduce the results of this paper on these alone. I hope the authors are able to release code (line 27 suggests this will happen) and provide the snapshots of the LLM models that were used.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper presents OSCAgent, a multi-agent framework for organic solar cell (OSC) molecular discovery. The system integrates three agents (Planner, Generator, and Experimenter) to enable an automated pipeline for OSC molecule design. The Planner retrieves knowledge from literature and past candidates, the Generator proposes new acceptor molecules, and the Experimenter evaluates their predicted properties and provides feedback for model improvement. The authors claim that OSCAgent can autonomously generate chemically valid and synthetically accessible OSC molecules with predicted efficiencies up to 18%, outperforming existing baselines.
+
+### Strengths
+* The concept of using an agentic AI system for accelerating OSC material discovery is timely and relevant, given the growing interest in applying LLMs and autonomous systems in materials science.
+
+* The overall framework combining retrieval, generation, and evaluation in a closed-loop pipeline is an interesting direction that could inspire future developments.
+
+### Weaknesses
+* Technical and conceptual flaws: The fundamental formulation of the problem is questionable. Predicting PCE based solely on the acceptor molecule without specifying or assuming a donor counterpart is scientifically unsound. Since OSC efficiency depends critically on the donor–acceptor pair and their interfacial energy alignment, this limitation invalidates most results and conclusions.
+
+* Molecule quality: Many generated molecules shown in Figure 8 appear chemically unrealistic. While they contain features of non-fullerene acceptors (NFAs), they lack the required symmetry, which is a key characteristic for ensuring proper molecular packing, balanced charge transport, and favorable optical/electronic properties in NFAs.
+
+* PDF quality issues: The submitted PDF file has display errors, with several figure pages blank or unreadable.
+
+Given the flawed problem setup and unconvincing experimental results, I recommend rejection.
+
+***Minor comments:***
+
+* The claim “Our work introduces an LLM-based multiagent framework that enables closed-loop discovery of novel OSC acceptors” is overstated. In-silico evaluation (using the Scharber model or SA score) cannot be considered closed-loop discovery. Real closed-loop discovery requires actual synthesis/testing and iterative improvement based on experimental feedback or human input.
+
+* In Section 2 (Related Work), the discussion of “LLM Agents for Science” is disconnected from the proposed method. The paper would benefit from a clearer positioning of OSCAgent relative to existing LLM-based scientific agent systems.
+
+* In Section 3.1 (Organic Solar Cells), while the focus on acceptor design is stated, the rationale for excluding donor molecules should be elaborated.
+
+* Typographical issue in Figure 1 caption: “com- prehensive” → “comprehensive.”
+
+### Questions
+1. What donor material was assumed for PCE calculations? Since PCE depends on both donor and acceptor energy levels, absorption spectra and their miscibility in a specific solvent, this needs clarification.
+
+2. Were the HOMO–LUMO levels computed using quantum chemistry simulations or taken from experimental data?
+
+3. The paper mentions using the Lopez et al. (2017) dataset from the Harvard Clean Energy Project, which contains donor–π–acceptor (D–π–A) type molecules intended for *donor* design. How was this dataset used to improve acceptor generation, and how was domain mismatch addressed?
+
+4. How does the framework handle conflicting evaluation signals from the Experimenter, e.g., high predicted PCE but poor energy level alignment (HOMO–LUMO mismatch)?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors introduce a multi-agent framework for organic solar cell (OSC) molecule discovery. OSCAgent uses three collaborative agents: a planner, generator, and experimenter. The planner uses prior knowledge, reference databases, and candidate databases to create a generation plan. It also uses previous experiment reports to refine previous plans. The generator takes the generated plans to propose a new candidate. The experimenter uses cheminformatics tools and property prediction models to evaluate the proposed candidate and generate evaluation reports. The authors also present a new model to predict uncertainty-aware power conversion efficiency.
+
+### Strengths
+1. The proposed method is technically sound and provides an interesting pipeline to generate novel molecules 
+2. The retrieval-augmented strategy is novel and provides an interesting methodology to incorporate knowledge into generative models for novel OSC generation 
+3. Ablation studies show that the proposed methods with the RAG component and the experimenter improve the overall capabilities of the model
+
+### Weaknesses
+1. The baselines for both generative pipelines and predictive models and not using SOTA generative methods. BRICS and VAE models have suspiciously low validity. 
+2. Considering the high cost of running GPT-5 and other frontier reasoning models, the scalability of the proposed method may be a concern. What are the wall time/cost per predicted molecule? 
+3. The baseline high-performing OSC models are not detailed, so it is difficult to ascertain whether the proposed method substantially improved known molecules
+
+### Questions
+- How many molecules were generated using OSCAgent to evaluate the generation quality?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposed a framework to use LLM Agent to consolidate and automate the process of planning, generating and validating new organic solar cell molecules. The proposed framework uses RAG to retrieve related information to form a plan, and use that to generate candidate molecules. After that, another agent will supervise the process of validation of these molecules. The result will then return to the planner agent to summarize, preparing for the next loop. This paper also proposed a model to predict the power conversion efficiency of a given molecule graph, SMILES string and molecular fingerprint.
+
+### Strengths
+The PCE prediction model is innovative and peroformative in this setting, and combines the graph and SMILES string and the molecular fingerprint provides a new way to think about evaluation because traditionally we only focus on either side when it comes to predicting molecule properties.
+
+The experiment demonstrates superior performance compared to other models, indicating that LLM agents are capable of using retrieved knowledge and applying it to the generation process. 
+
+The paper is well-written, covering all necessary details. Furthermore, the ablation study is sound and serves as strong proof.
+
+### Weaknesses
+1. Agentic research framework is basically the trend on pretty much every area, and limiting it to only generate organic solar cells seems to be only to testament that the framework is working, not to propose anything entirely new.
+2. There seems to be no discussion on the computation resources and time used for the agent compared to traditional methods. Ideally, they would save time if the model would generate all valid molecules in one shot with the expertise knowledge guided. But the more likely scenario is that many failed generated molecules are discarded during the reflection process, which ultimately give you better results, but at the expense of actual multiple runs of generation. I believe using a script to run a traditional generation method and select with the given predictor would also achieve a relatively good result, without an LLM involvement.
+3. In the experiment, the model used for comparison seems to be quite outdated. Recent research advancement indicates that diffusion models are pretty much capable to generate de-nuovo molecules that satisfy design criteria, and have significantly better performance compared to old models.
+
+### Questions
+What’s the limitation for this model? 
+Did you try any other molecule generation models in comparison with your model?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3

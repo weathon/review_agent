@@ -1,0 +1,183 @@
+# Diagnosing with Insights: Structured Analysis of Agent Failures via Behavioral Abstractions
+
+- Decision: Reject
+- Scores: 6, 6, 4, 4
+
+## Abstract
+With the proliferation of LLM agents, the ability to understand and diagnose failures in agents is essential to achieving superior effectiveness and trustworthiness. As agent failures often manifest via long and complex trajectories, manually finding the needles in the haystack is untenable. However, traditional diagnosis techniques for software bugs can hardly address LLM agent failures, while completely relying on LLMs as the judge yields unreliable diagnosis results. To overcome these challenges, this paper presents AGENTSCOPE, a new neuro-symbolic approach for agent failure mode diagnosis. The key principle of AGENTSCOPE is to abstract agent behavior, based on its trajectories, into structured representations. Furthermore, AGENTSCOPE introduces the concept of neural invariants to specify agent behavior properties. AGENTSCOPE leverages LLM-guided reasoning atop the structured representation against neural invariants to pinpoint both the failure step and its type in the trajectory. We show the effectiveness of AGENTSCOPE on publicly available agent failure datasets (Who&When) and a more comprehensive dataset created by us (AgentErrata), where AGENTSCOPE significantly outperforms the current art in fault localization and attribution accuracy. Our work shows that integrating structured abstractions with LLM-guided reasoning enables effective, reliable, and interpretable diagnosis for agent failures.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces AGENTSCOPE, a neuro-symbolic framework for diagnosing failures in LLM-based agent systems. The core contribution is a two-fold approach: first, abstracting complex, unstructured agent trajectories into a structured Reasoning-Action Graph (ReAG); and second, using LLM-guided reasoning to check this graph for violations of pre-defined "Neural Invariants." These invariants are derived from a comprehensive taxonomy of agent failures. The authors evaluate their method on the existing Who&When benchmark and a new, purpose-built benchmark called AgentErrata. The results demonstrate that AGENTSCOPE significantly outperforms baseline methods in both failure localization (pinpointing the error step) and failure attribution (classifying the error type), a capability that baselines lack.
+
+### Strengths
+1. The challenge of debugging and diagnosing failures in complex, multi-step LLM agent systems is a critical bottleneck for their reliable deployment. This paper addresses a highly relevant and practical problem for the community.
+
+2. The core idea of combining a structured, symbolic representation (the ReAG) with the semantic reasoning capabilities of LLMs (to check Neural Invariants) is powerful. It provides a principled way to move beyond unreliable, holistic "LLM-as-a-judge" approaches by imposing structure on the diagnostic process.
+
+3. This paper proposes a new benchmark called AgentErrata. The authors use the method of using failure-taxonomy-guided fault injection to create a diverse and well-annotated dataset for both localization and attribution. This will be a valuable asset for future research in agent reliability.
+
+4. On AgentErrata, AGENTSCOPE improves SLA for attribution from 5.35% to 30.48% and CA from 4.40% to 19.05% (with IV). These are sizable improvements over LLM-as-judge.
+
+5. AgentErrata spans a wide taxonomy (invalid context, instruction-unfollowing, faulty reasoning, incoherent planning, reward hacking), and the appendix lists categories and abbreviations.
+
+### Weaknesses
+1. The most significant weakness of the paper is that while the concept of Neural Invariants is a core contribution, the paper remains extremely vague about their actual implementation. The appendix provides formal definitions, but these rely on abstract functions like infoLoss(), sim(), relevant(), and isValid().
+
+2. While AGENTSCOPE's relative improvement in Classification Accuracy (CA) is impressive, the absolute accuracy of 19.05% (with the Invariant Verifier) is still quite low for any practical application. This suggests that reliable failure attribution is an extremely challenging task, and while AGENTSCOPE is a step in the right direction, it is far from a complete solution.
+
+3. The paper lacks any evaluation or ablation study on the robustness of the diagnosis pipeline to errors in the ReAG construction phase.
+
+### Questions
+1. The paper needs to clarify:
+(1) Are these "neural functions" implemented as specific, engineered prompts to a general-purpose LLM?
+(2) Are they fine-tuned classifiers?
+(3) How are thresholds determined? Without these details, the method is not reproducible, and it is difficult for the reader to assess the true complexity and novelty of the invariant-checking mechanism versus simple prompting.
+
+2. Regarding the two-stage diagnosis process: Could you further clarify the concrete difference between the invariant checks performed in the "preliminary prediction" stage versus the "secondary verification" stage? For instance, does the first stage use a simpler prompt or a smaller context window to improve efficiency?
+
+3. Regarding ReAG construction: Have you performed any analysis on the accuracy of the LLM-based parser used to generate the ReAG from unstructured logs?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes AGENTSCOPE, a neuro-symbolic framework for diagnosing failure modes in LLM-based agents. The key idea is to abstract agent trajectories into a Reasoning-Action Graph (ReAG), then check failures via a set of neural invariants that formalize different error types (e.g., incorrect context, instruction un-following, faulty reasoning, planning failures). AGENTSCOPE performs both failure localization and failure attribution, while existing works mainly treat LLM as judge and often cannot pinpoint error step or category reliably.
+The authors evaluate on Who&When and a newly created benchmark AgentErrata (generated via failure-taxonomy-guided injection). Results show AGENTSCOPE significantly outperforms previous LLM-as-judge or step-by-step heuristics in both localization and classification accuracy.
+
+### Strengths
+1. The paper addresses agent failure diagnosis, which is extremely important right now. With everyone building agent frameworks (LangChain, AutoGen, OpenManus, etc.), debugging becomes the biggest bottleneck. So the problem choice is high-impact. The idea of combining symbolic invariants + neural semantic checks is novel. Most recent works simply treat GPT-4 as judge or fine-tune a classifier on trajectories.
+2. I like the taxonomy in Table 1. This formulation is also a good contribution. The breakdown is meaningful: real agent failures often mix context issues + planning derail. This taxonomy captures that.
+3. The authors evaluate on two real datasets (Who&When, AgentErrata)  and test on multiple foundation models: GPT-4o, DeepSeek-V3, Qwen-14B. The experiments demonstrate the performance.
+
+### Weaknesses
+1. Some ablations are needed. You may need to show the effect of different components in your method. 
+2. How does AGENTSCOPE handle adversarial agents, e.g., self-masking behavior (LLM intentionally hides chain-of-thought)?
+Paper mentions reward hacking, but no experiments. For example, If the executed tool call returns wrong data on purpose, can system detect?
+
+### Questions
+How does the method handle adversarial agents?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This work proposes a neuro-symbolic approach for agent failure attribution, named AgentScope. The key idea is to leverage LLM-guided reasoning atop the structured representation against the so-called neural invariants. An extra benchmark, AgentErrata, is further introduced which contains failure type annotations and is obtained by fault injection. Experiments on Who&When and AgentErrata show generally improved performance with the proposed method.
+
+### Strengths
+1. Good empirical performance
+
+### Weaknesses
+My major concern is the clarity of technical details of the proposed method. Specifically, I started to get lost in Section 3.2. While "neural invariants" is featured as a novel concept and key point in AgentScope, the definition (either formal or informal) is not given. Furthermore, how exactly the LLM is applied upon neural invariants to localize and classify failures is not discussed either. Lastly, as another example, in line 239-240, "the second stage (secondary verification by Invariant Verifier, or IV) aims to reduce false positives." What is this "Invariant Verifier"? In all, currently I'm afraid the key ideas and components of the proposed method remain unclear.
+
+### Questions
+1. In Table 2, is the base LLM the same for AgentScope and baselines?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents AGENTSCOPE, a neuro-symbolic framework designed to diagnose failures in LLM agents. The authors argue that existing methods, such as traditional software debugging or holistic "LLM-as-a-judge" approaches, are insufficient for pinpointing failures in complex agent trajectories. The core methodology of AGENTSCOPE involves two main steps: (1) Behavioral Abstraction and (2) Invariant Verification. To evaluate this framework, the authors created a new benchmark dataset, AgentErrata, using failure-taxonomy-guided fault injection. Experiments on AgentErrata and the existing Who&When dataset show that AGENTSCOPE outperforms baselines in both failure localization and failure attribution.
+
+### Strengths
+1. The paper tackles a critical and challenging problem. As LLM agents become more autonomous and their interaction trajectories grow longer, the need for scalable, reliable, and interpretable debugging tools is paramount
+
+2. The idea of abstracting complex, unstructured agent trajectories into a formal Reasoning-Action Graph (ReAG) is a strong and well-motivated contribution. This structured representation is more amenable to formal analysis than raw logs.
+
+3. The authors create and contribute the AgentErrata dataset, a new benchmark valuable to the community. This dataset is necessary for developing and evaluating diagnostic tools because, unlike previous datasets, it provides annotations for both the failure steps and their explicit failure types (categories) .
+
+### Weaknesses
+1.  While AGENTSCOPE shows relative improvement over the baselines, its absolute performance is very low, casting doubt on its practical utility. On the new AgentErrata dataset, the framework achieves only 30.48% Step-Level Accuracy (SLA) and 19.05% Classification Accuracy (CA). This means the tool fails to identify the exact failure step 70% of the time and fails to correctly classify the failure type 81% of the time. These low numbers suggest the framework is not yet effective or reliable enough for real-world diagnosis.
+
+2.  The baselines used for comparison seem weak. For attribution (Table 3), the "LLM-as-Judge" baseline achieves only 5.35% SLA and 4.40% CA. This is surprisingly low for a model like GPT-4o, suggesting a potentially poor implementation or prompt. A stronger baseline would be to provide the full ReAG and the failure taxonomy (Table 1) to the LLM judge, which is not tested.
+
+3. Table 2 presents results for "Method w/ GT" and "Method w/o GT" without any explanation in the text or captions as to what with ground truth or without groudtruth means.
+
+4. The Concept of "Neural Invariant" is vague, the paper claims NIs are specified with "neural functions". However, Appendix A reveals these are symbolic logic predicates that rely on sub-functions like sim(), relevant(), consistent(), etc. The paper states that checking these functions often relies on an LLM-as-judge. This seems to contradict the paper's initial premise, which heavily criticizes LLM-as-judge approaches for being unreliable.
+
+### Questions
+1. Could you please provide a precise definition of a "neural function" (e.g., is_valid(), consistent(), relevant())? Are these fine-tuned models, or are they, as the appendix suggests, simply calls to a general-purpose LLM (like GPT-4o) with a specific prompt?
+
+
+2. If these "neural functions" are indeed LLM calls, how do you reconcile this with your core criticism that "relying on LLMs as the judge yields unreliable diagnosis results"? How does AGENTSCOPE fundamentally overcome the unreliability of LLM judges, rather than just applying them at a different granularity?
+
+
+3. Please clarify the distinction between "Method w/ GT" and "Method w/o GT" in Table 2. What "Ground Truth" information is being used, and why does this lead to such different results?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

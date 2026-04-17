@@ -1,0 +1,165 @@
+# Group Think: Collaborative Parallel Reasoning Model
+
+- Decision: Reject
+- Scores: 6, 2, 4, 2
+
+## Abstract
+Large language models (LLMs) increasingly rely on extended inference-time computation, where reasoning is typically realized as a single sequential trajectory. While longer reasoning improves performance, it also increases latency. We introduce the *Group Think* paradigm, a conceptual shift toward collaborative parallel reasoning in which multiple reasoning threads are generated concurrently and adapt dynamically to each other at the token level. We show that even existing LLMs exhibit preliminary Group Think behaviors when run with a modified inference scheme, and that these behaviors can be significantly enhanced through finetuning on a synthetic dataset of token-wise collaborative reasoning traces. These traces capture key dynamics such as high-level planning, adaptation to peers, redundancy avoidance, speculative fast forward, error correction, and divide-and-conquer strategies. Our modeling framework further incorporates attention mask modifications and positional scheduling, paired with an inference engine implementing parallel decoding with shared key–value states. This concurrent nature also enables more efficient utilization of otherwise idle computational resources, making Group Think particularly well suited for edge inference, where small batch sizes often underutilize local GPUs. Evaluation shows that our approach yields models with improved reasoning accuracy and reduced latency compared to inference-only baselines, while exhibiting richer collaborative behaviors. For the benefit of the community, we will release the *GroupThink-4k* dataset and our training and inference frameworks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces "Group Think," a new paradigm for LLMs that shifts from single, sequential reasoning to collaborative parallel reasoning. The core problem it addresses is that while longer sequential reasoning improves performance, it significantly increases latency.
+The proposed solution involves multiple reasoning threads ("thinkers") from the same LLM operating concurrently and adapting to each other at the token level. To make this collaborative behavior trainable, the authors created the GROUPTHINK_4K dataset, which captures dynamics like redundancy avoidance, error correction, and divide-and-conquer strategies. The framework utilizes modified attention masks for training and a parallel decoding engine with shared key-value states for inference. Evaluation shows this approach improves reasoning accuracy and reduces latency, proving especially efficient for edge inference scenarios where computational resources are often underutilized.
+
+### Strengths
+- Novel and Significant Paradigm: The paper introduces "Group Think," a highly novel paradigm that advances LLM reasoning beyond independent parallel generation (like self-consistency) to genuine, token-level collaborative reasoning. This conceptual shift, which allows multiple reasoning threads to dynamically adapt to each other, is a significant step toward mirroring complex human group problem-solving.
+
+- Making Collaboration a Trainable Capability: The paper's most critical contribution is not just proposing the idea, but making this complex collaborative behavior trainable. By meticulously designing the GROUPTHINK_4K dataset with explicit "inner voices" and "Thinking-about-Thinking" (TaT) prompts, it systematically instills crucial group dynamics, such as redundancy avoidance, division of labor, and error correction, as a core model capability rather than an inference-time heuristic.
+
+
+- Practical Efficiency and Latency Reduction: The approach demonstrates clear practical benefits by improving reasoning accuracy while simultaneously reducing latency. The framework is particularly compelling for its hardware efficiency; it is designed to utilize otherwise idle computational resources, making it exceptionally well-suited for improving performance in low-batch-size environments like on-device or edge inference.
+
+### Weaknesses
+- Limited Experimental Baselines: The empirical evaluation is primarily focused on ablating the effect of communication (comparing Group Think against Independent Sampling ) and latency (comparing against standard CoT ). The paper fails to benchmark against other sophisticated parallel reasoning methods mentioned in the related work, such as Tree-of-Thoughts (ToT) or other structured search-based approaches. This omission makes it difficult to assess the method's performance relative to the existing state-of-the-art in parallel inference.
+
+- Significant Inference Implementation Complexity: The claim of enabling Group Think "without architectural changes"  is potentially misleading? (not sure) While the core model architecture is unchanged, the inference engine required to run it is non-standard. It must support parallel decoding with a shared KV cache and a "positional scheduling" scheme. The complexity is further highlighted in Appendix B , which describes a token-interleaving and non-contiguous positional ID assignment strategy  to multiplex Group Think and standard requests. This creates a considerable deployment barrier, as it would likely require customized inference libraries.
+
+
+- Heavy Reliance on Synthetic Data and Scalability Limits: The model's collaborative capability is not an emergent property but is explicitly instilled through fine-tuning on the GROUPTHINK_4K dataset. This introduces a strong dependency on the quality, scale, and diversity of this synthetic data, which is itself complex to generate. The collaborative behaviors are therefore bounded by the specific patterns (e.g., divide-and-conquer, error correction ) captured during data generation. This limitation is empirically suggested in the results, where the authors suspect a performance plateau for 16 thinkers is due to a lack of sufficient training samples, raising questions about how well the approach scales beyond what has been explicitly trained
+
+### Questions
+Same as the weeknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes Group Think, a new reasoning paradigm that allows multiple reasoning threads to run in parallel and communicate with others at the token level. Specifically, with a customized reasoning inference pipeline and fine-tuning with the proposed GroupThink-4K dataset, the model is able to perform enhanced group think. With modified attention masks and position embeddings, Group Think is able to enhance the utilization of hardware resources.
+
+### Strengths
+* The work introduces a new reasoning paradigm that allows cross-thread communication in reasoning, which goes beyond the current parallel reasoning methods that do not communicate with each other at a token level.
+* The work presents a complete framework for group think, with contributions including the dataset, modifications on inference pipelines, model weights, and training recipe.
+
+### Weaknesses
+* Higher GPU utilization (or higher efficiency) is not explicitly justified, despite the authors claim that the method is able to enhance the utilization of hardware resources.
+* DIfferent models are used for different experiments: Qwen2.5-32B-Instruct are used in MMLU-Pro and Explore-TOM, but LLaMA 3.1-8B  are used for Fig 5 (a) (b) but LLaMA 3.1-70B are used for Fig 5 (c). This is not justified. Furthermore, the use of Qwen3-30B-A3B as thinker and Llama-4-Scout-17B-16E as the orchestrator and judge for GroupThink-4K data generation is not justified
+* No compatibility with existing reinforcement learning pipelines is mentioned in the proposed method, which indicates that the method is not able to achieve test-time scaling through incorporating existing RL training recipes.
+* The work does not perform any evaluation on common reasoning datasets such as AIME 24/25 and MATH, which are commonly used for reasoning tasks.
+* The method is built extensively based on Multiverse (e.g., the training dataset s1k and base models Qwen2.5-32B-Instruct), yet there is no comparison with Multiverse. Furthermore, comparisons with baselines in prior parallel reasoning methods are lacking.
+
+### Questions
+* Is Group Think able to improve the hardware utilization? How does it compare to the baseline methods that do not communicate with each other at a token level, such as Multiverse?
+* How does the proposed method perform on common reasoning datasets such as AIME 24/25 and MATH, which are commonly used for reasoning tasks?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces "Group Think," a novel paradigm for LLM reasoning where multiple parallel reasoning threads ("thinkers") are generated concurrently and interact with each other at the token level. This contrasts with existing parallel reasoning methods that typically rely on independent generation followed by a selection or aggregation step. The authors argue that this collaborative, dependent parallelism mirrors human group problem-solving and can lead to improved accuracy and reduced latency.
+
+### Strengths
+The core idea of dependent parallel reasoning at the token level is highly original. While multi-agent systems and parallel decoding exist, they almost exclusively rely on independent generation or sequential, turn-based communication. The concept of multiple threads of a single LLM attending to each other's partial outputs in real-time is a genuine conceptual leap. This moves the field from heuristic-driven, inference-time parallelism (like self-consistency or ToT) towards a learnable, intrinsic parallel reasoning capability. The analogy to human "dialogue" is not just a metaphor; the proposed mechanism directly operationalizes it.
+
+### Weaknesses
+1. The baselines could be stronger. A comparison against more structured parallel reasoning methods like Tree-of-Thoughts (ToT) or Graph-of-Thoughts (GoT) would be highly relevant. These methods also explore multiple reasoning paths in parallel and use an aggregator/evaluator, which can be seen as a weaker form of coordination. Demonstrating superiority over these would make the claims more compelling. Table 2 lacks necessary baselines, such as the accuracy rate of LLMs using prompt methods like CoT or COT-vote.
+2. Each inference uses multiple agents, which will consume a huge number of tokens. Can the CoT ability of multiple synthesized CoT data be combined into one sequence and then trained for a single model? The author can supplement similar experimental comparisons, which can fully prove the effectiveness of the proposed method.
+
+### Questions
+Please refer to Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes Group Think, a collaborative parallel reasoning paradigm where several reasoning threads run at the same time and adapt to each other at the token level. The authors contribute a data pipeline and the GROUPTHINK 4K dataset with inner voice cues and an orchestrator and judge, training masks that allow cross trace visibility, and an inference engine that keeps causality while sharing a KV cache across traces. Results show accuracy gains over a strong base model and faster progress on coverage style tasks at the same latency budget.
+
+### Strengths
+* The paper introduces token level collaboration across parallel traces rather than independent sampling, and the figures and text make the mechanism concrete and reproducible.
+* The training and inference masks are clearly specified, including position blocks for each trace and shared KV usage, with helpful diagrams in Figures 3 and 4.
+
+### Weaknesses
+* The evaluation does not control for equal total token consumption across methods, so it is unclear whether gains come from better coordination or simply more tokens.
+* The main results focus on MMLU Pro and other structured tasks, while more open ended domains such as math and coding, which are both more challenging and practically relevant, are not evaluated. In addition, the experiments are conducted on a single model, and no large scale studies are provided to demonstrate the overall effectiveness of the proposed methodology.
+* The baseline only set as CoT, while other stronger baselines like Tree-of-thought(ToT), Graph-of-thought(GoT) are missing.
+
+### Questions
+* Can you report accuracy and quality at equal total token budgets across all methods and include quality per token and quality versus budget curves.
+* Can you include stronger baselines like Tree of Thoughts, Graph of Thoughts etc under matched token and time budgets?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

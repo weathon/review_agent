@@ -1,0 +1,172 @@
+# Setting the DC: Tool-Grounded D\&D Simulations to Test LLM Agents
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 4, 2, 2
+
+## Abstract
+Dungeons and Dragons (D\&D) has been considered to be an intellectually challenging game for strategy planning and role-playing. Large language models (LLMs) are increasingly deployed as autonomous or semi-autonomous agents, yet most evaluations still target single-turn QA or short-horizon tasks. Assessing agentic performance in rules-constrained, multi-step settings is challenging because style-conforming narration can diverge from task optimality. In this work, we present D\&D Agents, a benchmark built on a multi-agent Dungeons \& Dragons simulator. In our benchmark, LLMs use tools to query and update the game state, assuming the roles of referee ('Dungeon Master', DM), players, and adversarial monsters in tactically rich combat. This benchmarked setting requires long-horizon planning, compliance with game rules, varied agent personas, and grounded interaction with the game state. We evaluate transcripts and tool traces along six axes—Function Usage, Parameter Fidelity, Acting Quality, Tactical Optimality, State Tracking, and Function Efficiency—capturing both capability and reliability in closed-loop play. Our benchmark allows researchers to run identical seeded scenarios with auditable traces, making error analysis and algorithmic improvements (prompting, tool-use policies, memory) straightforward and comparable.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces D&D Agents, a benchmark for evaluating large language models in multi-agent Dungeons & Dragons combat simulations. The authors develop a simulator that enables LLMs to play as Dungeon Master, players, and monsters through structured API calls. The system evaluates model performance across six dimensions: Function Usage, Parameter Fidelity, Acting Quality, Tactical Optimality, State Tracking, and Function Efficiency. Testing seven contemporary models on 27 reproducible combat scenarios, the authors find that models like Claude Haiku 3.5 and GPT-5 demonstrate superior performance in rule adherence and tactical decision-making, while smaller models struggle with long-horizon planning and state tracking.
+
+### Strengths
+The paper makes a genuine attempt to tackle the challenging problem of evaluating LLM agents in long-horizon, rule-governed scenarios. The engineering effort to create a complete D&D combat simulator with proper rule enforcement deserves recognition, as does the attention to reproducibility through fixed seeds and deterministic mechanics. The six-dimensional evaluation framework thoughtfully captures different aspects of agent behavior beyond simple success metrics, and the validation of automated metrics against human judgment demonstrates methodological rigor in that specific component.The benchmark successfully enables fair comparison across multiple models under identical conditions, which has clear practical value for researchers studying tool use and planning. The inclusion of both closed and open-source models in the evaluation provides useful data points about current capabilities. The detailed prompts and function specifications in the appendices genuinely support reproducibility, and researchers could conceivably use this framework to test new models or prompting strategies.
+
+### Weaknesses
+The paper fails to articulate why D&D specifically is valuable as an AI benchmark compared to established alternatives like StarCraft II, Minecraft, or Diplomacy. Each game environment tests distinct capabilities—StarCraft requires real-time strategic planning under partial observability, Minecraft tests open-ended exploration and tool use, Diplomacy emphasizes negotiation and theory of mind. The paper never explains what unique AI challenges D&D poses beyond these existing benchmarks. Moreover, by restricting evaluation to combat only, the paper eliminates precisely the capabilities that would distinguish D&D: creative problem-solving in exploration, improvisation in social encounters, and narrative coherence across diverse scenarios. What remains is essentially a turn-based tactical combat simulator that could be instantiated in many settings beyond D&D.
+The comparison with existing D&D work is inadequate. FIREBALL contains nearly 25,000 real gameplay sessions with complete state tracking from actual human players. CALYPSO was deployed with 71 real players engaging in exploration, social interaction, and combat. The paper claims these are not "closed-loop multi-agent simulations" but provides no substantive technical distinction. Both systems involve LLMs generating structured actions that a game engine executes with state feedback. The authors assert their system is novel because LLMs "execute" mechanics while prior work only "advises," but this distinction collapses when recognizing both approaches use hardcoded game engines processing LLM-generated inputs. The paper needs explicit comparison demonstrating what technical capability exists here that Avrae-based systems fundamentally cannot provide.
+The copilot protocol fatally compromises individual model evaluation. When Model X plays as DM against DeepSeek-controlled players, X's measured performance conflates its own capabilities with DeepSeek's tactical choices. The paper provides no analysis of how copilot identity affects results, no comparison of Model X with different copilot partners, and no justification for why this confounded evaluation is preferable to alternatives like self-play or human-AI collaboration. Table 1 shows interesting failure modes where models check conditions then violate them, but the paper never investigates why. Without mechanistic analysis of what causes these failures—context length limitations, training data gaps, or fundamental issues in tool-use learning—the benchmark becomes merely a leaderboard rather than a research tool advancing our understanding.
+
+### Questions
+Why is D&D superior to existing game-based benchmarks for evaluating LLM agents? What specific AI capabilities does D&D test that StarCraft II, Minecraft, or Diplomacy do not adequately assess? Given that this implementation evaluates only combat, how does the remaining challenge differ from generic turn-based strategy games?
+What technical capabilities does this system provide that existing D&D frameworks like Avrae, FIREBALL, or CALYPSO fundamentally lack? Can you provide a comparison table showing specific features present in your system but absent or impossible in prior work? The claim that previous systems are not "closed-loop multi-agent simulations" requires substantiation with concrete technical distinctions.
+How do results change with different copilot models? If GPT-5 is evaluated with Claude as copilot instead of DeepSeek, do relative rankings remain stable? What analysis justifies the copilot protocol over self-play or human collaboration alternatives?
+Why were the other two pillars of D&D—exploration and social interaction—excluded? Including only combat is like creating a Minecraft benchmark testing only crafting recipes. What prevents extending the framework to scenarios requiring negotiation, puzzle-solving, or improvisation?
+Can you provide ablation studies on prompt components and diagnostic analysis of failure modes? When models check line-of-sight, receive False, then attack anyway, what causes this behavior? These mechanistic insights would distinguish scientific contribution from engineering demonstration.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a benchmark that evaluates how good are LLMs at playing the game Dungeons and Dragons. It first sets up a simulation environment, enabling LLMs to play the game and then use that environment for evaluation. It benchmarks LLMs from different perspectives, including Function Usage, Parameter Fidelity, Acting Quality, Tactical Optimality, State Tracking, and Function Efficiency, trying to evaluate LLMs on strategic gameplay, instruction following and hallucination, etc.
+
+### Strengths
+1. The paper provides an environment which allows identical seeded game run of D&D. This can serve as a good testbed for other following works
+2. It also tries addressing different perspectives of evaluation, not only in strategic gameplay, but also instruction following and hallucination
+3. Experiments are conducted on a few SOTA LLMs, and the results show differentiation among them, and indicate a room for further improvement
+
+### Weaknesses
+1. Lack of examples. Introducing an example that illustrates how a game develops as different players take actions may help.
+2. How this work differs from other benchmarks of strategic gameplay (e.g., Avalon and Werewolf) remains unclear.
+3. The design of Tactical Optimality seems a bit naive. For example, there might be different spells—some of them are optimal while others are not. However, in the current design of Tactical Optimality, it does not appear to differentiate between different scenarios.
+
+### Questions
+1. Based on my understanding, D&D is not only a game about strategic gameplay; the quality of the storyline created by the players is also an important aspect. Is it possible to include that as a perspective for benchmarking? For example, could we benchmark LLMs playing as Dungeon Masters (DMs)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents D&D Agents, a multi-agent D&D 5e combat simulator for testing LLMs as Dungeon Master, players, and monsters. Using a typed tool API for state queries, movement, attacks, and dice rolls, agents plan and act in seeded, auditable scenarios. It evaluates seven LLMs across 27 fixed combat encounters on six metrics—function use, parameter accuracy, acting quality, tactical optimality, state tracking, and efficiency—revealing strengths in top models (Claude Haiku 3.5, GPT-5) and role-specific weaknesses.
+
+### Strengths
+The use of Dungeons & Dragons—a complex, turn-based, and rule-intensive game—as a testbed for LLM agents is interesting.
+
+### Weaknesses
+1. The benchmark focuses solely on combat encounters from a single D&D module (“Lost Mine of Phandelver”), overlooking other core aspects such as exploration, role-playing dialogue, and puzzle-solving that are integral to full D&D campaigns.
+2. The paper does not clearly articulate how this benchmark differs from other text-based simulation environments, such as the Minecraft simulator [1] or the StarCraft II simulator [2].
+3. Although the results tables are extensive, the discussion lacks depth. For instance, Tables 7–8 show Claude Haiku outperforming GPT-5, but the paper does not analyze whether this arises from differences in language style, reasoning approach, or model architecture.
+4. While the paper mentions the possibility of human–AI co-play, no human baseline experiments are actually included.
+5. The writing is somewhat verbose and reads more like an engineering report than an academic paper.
+
+
+
+[1] Voyager: An Open-Ended Embodied Agent with Large Language Models. TMLR
+
+[2] Large language models play starcraft ii: Benchmarks and a chain of summarization approach. NeurIPS 2024
+
+### Questions
+Please refer to Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper introduces a closed-loop D&D combat benchmark where LLMs control all roles via structured function calls, enforcing rule compliance and long-horizon coordination. It assesses tool usage, rule fidelity, role-playing consistency, and tactical soundness. Results show larger models excel in execution and narration, while smaller ones struggle with context-heavy DM duties, highlighting challenges in memory, planning, and multi-agent reliability.
+
+### Strengths
+The paper presents a well-structured multi-dimensional evaluation framework, covering aspects such as Function Usage, Parameter Fidelity, Acting Quality, Tactical Optimality, State Tracking, and Function Efficiency.
+
+### Weaknesses
+1. With only 27 scenarios (a 3×3×3 design of party compositions, stat tiers, and monster sets), the benchmark may risk overfitting to specific configurations and might not fully capture the inherent randomness of the D&D environment.
+
+2. The paper does not clearly differentiate its benchmark from existing baselines such as ALFWorld, WebArena, or ScienceWorld, which also evaluate LLM agents in interactive or embodied settings.
+
+3. While dice rolls introduce stochasticity, the paper does not analyze performance variance across multiple runs per scenario or discuss how rare events (e.g., critical failures) are handled.
+
+4. The writing and presentation lack rigor and professionalism; for instance, the inclusion of eight tables is odd, and they lack clear descriptions.
+ [1] ALFWorld: Aligning Text and Embodied Environments for Interactive Learning.
+ [2] WebArena: A Realistic Web Environment for Building Autonomous Agents.
+ [3] ScienceWorld: Is Your Agent Smarter than a 5th Grader？
+
+### Questions
+Questions: Please refer to Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+1

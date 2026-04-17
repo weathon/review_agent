@@ -1,0 +1,199 @@
+# Optimal and Efficient Link Insertion for Hitting-Time Minimization
+
+- Decision: Reject
+- Scores: 2, 6, 6, 2
+
+## Abstract
+We study the computational problem of strategically adding links to a graph to minimize the hitting-time between two group of nodes. Our problem has various applications in social network analysis, including bridging polarized groups with opposite views in a network. Formally, we are given a graph where the set of nodes is partitioned into two disjoint groups, R and B, and we assume a random-walk process modeling navigation over the graph. Our goal is to add a given number of edges to the graph to minimize the expected number of steps to encounter a node in B starting from nodes in R, via the random walk. While the problem is generally NP-hard, we show that when the random walk follows stationary transitions over the induced subgraph of R, the problem becomes optimally solvable in polynomial-time,  and we present an extremely efficient optimal greedy strategy.  Remarkably, our method applies to both directed and undirected graphs, and many widely-adopted random-walk models, for example, PageRank.
+
+Our experimental evaluation demonstrates that our method outperforms state-of-the-art baselines for similar metrics. Remarkably, our method achieves up to four orders of magnitude of speedup compared to existing methods, scaling to networks with millions of edges, 
+which cannot be processed with current methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper studies the problem of minimizing hitting times between two node groups in a graph via link insertion. The study focuses on a specific case where the objective is a weighted sum of hitting times, with weights given by the random-walk stationary distribution of the source subgraph. For this scenario, the authors theoretically establish that the problem admits a closed-form objective whose optimal solution can be computed efficiently with a simple greedy algorithm. Empirical results demonstrate the proposed method's superior efficiency and solution quality under various metrics.
+
+### Strengths
+1. The problem of minimizing hitting time via link insertion is interesting and meaningful with a clean mathematical formulation. Also, the idea of assigning weights according to the random-walk stationary distribution is intuitive.
+2. The insights behind deriving mathematical properties and an optimal algorithm for the stationary hitting-time minimization problem are clear and elegant in general.
+3. Thorough experiments are conducted, and in particular the quality of the proposed method is evaluated using average and maximum hitting times.
+
+### Weaknesses
+1. A major concern is that this paper may not align closely with the interests of the ICLR community. The studied problem is essentially a combinatorial optimization problem in network science, and the proposed method is a classical greedy algorithm without using deep learning techniques. Thus, it seems that the work is out of scope for ICLR (cf. relevant topics listed in https://iclr.cc/Conferences/2026). Worse still, potential applications and connections to deep learning are not discussed, and none of the references are from machine learning venues. The paper seems more suitable for data mining or network science venues.
+2. The technical depth is relatively limited. The work introduces the special case where the weights in the objective come from the random-walk stationary distribution, which greatly simplifies the problem. It is not surprising that efficient algorithms exist for this special case. Specifically, the analysis in this case seems somewhat trivial given the observations from previous work and the property that the probability distribution in the subgraph remains the stationary distribution before hitting the other subgraph, yielding a closed form of the objective function. Once this is done, the greedy algorithm for minimizing this objective is immediate.
+3. While the experiments show that the proposed algorithm achieves remarkable solution quality in terms of both the average and maximum hitting times, these appear as heuristic results to me and thus limit the overall contribution of the paper. The approach can be interpreted as optimizing the proposed objective $f_{\pi}$​ and hoping that the solution also performs well for $f_{\mathrm{avg}}$​ and $f_{\max}$​. However, no theoretical guarantees or intuitive explanations are provided to justify this transfer of performance. In fact, intuitively, minimizing $f_{\pi}$​ and $f_{\max}$ seem to be two very different tasks, as the former puts more weight on "important" nodes in $R$ and the latter aims at minimizing the hitting time from the "least important" node in $R$, at least in some sense. This intuition is also reflected by the fact that the $f_{\max}$​ value achieved by `PARITY` indeed remains large on the `PolBlog` dataset.
+4. The paper should go through further proofreading to correct several minor issues. See the minor comments below for detailed examples.
+
+Minor comments:
+1. Please correct the hyphenation of "hitting time" for consistency. It should be hyphenated only when used as a compound adjective (e.g., in the title); when used as a noun phrase (e.g., Line 12: "...the hitting time between..."), the hyphen should be omitted.
+2. Lines 18-20: the sentence is confusing to me if I do not read the whole paper. "The problem is generally NP-hard" and "when the random walk follows stationary transitions" seem inexact and hard to understand.
+3. Line 43: I recommend adding a reference after "... is NP-hard"
+4. Line 108: $T_{i}$ -> $T_{i}(\boldsymbol{P})$
+5. Line 123: it is better to introduce the notations $\boldsymbol{e}_{i}$ and $\boldsymbol{1}$
+6. Line 138: $\boldsymbol{x}\_{i} \leq \boldsymbol{c}\_{i}$ -> $\boldsymbol{c}\_{i}$
+7. Line 182: it should be "the random walk on $G_{R}$ follows $\boldsymbol{P}$"?
+8. Line 291: add a comma after "Summarizing"
+9. Lines 456-458: this should be one sentence
+10. Line 459: remove the comma
+11. Line 613: it is somewhat weird to use $\boldsymbol{\pi}\_{R,r}$ to denote the $r$-th entry in $\boldsymbol{\pi}\_{R}$
+
+### Questions
+1. Can you provide discussions and references to show that this work is interesting to the ICLR community?
+2. In Line 252, I think it only holds that $\boldsymbol{\pi}\_{R}^{\top}\boldsymbol{D}(\boldsymbol{x})\boldsymbol{A}\_{R}^{\top}\boldsymbol{1} = \langle \boldsymbol{M},\boldsymbol{D}(\boldsymbol{x}) \rangle\_{F}$. Did I miss something, or should $\boldsymbol{M}$ be defined to involve $\boldsymbol{A}_{R}^{\top}$ instead?
+3. Can you provide intuitive explanations as to why `PARITY` can also achieve small $f_{\mathrm{avg}}$​ and $f_{\max}$ (under some assumptions)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper studies how to efficiently reduce the expected time it takes for a random walk to travel from one group of nodes to another in a network by adding a limited number of new links. The classical version of this problem is known to be computationally hard. To address this, the authors introduce a new formulation that assigns different importance weights to nodes based on their stationary probabilities in the network. This modification makes the problem mathematically tractable and leads to a simple greedy algorithm called PARITY, which the authors prove to be globally optimal under their new setting. Experiments on several real-world and synthetic datasets show that PARITY achieves lower average hitting times and much faster runtime than existing baselines.
+
+### Strengths
+1. The paper provides a clear and correct mathematical reformulation of a known hard problem, turning it into one that can be solved optimally in polynomial time. The reasoning chain is coherent and rigorous.
+
+2. The key idea of introducing node importance through stationary weights is original in this context and central to the proposed method’s efficiency and solvability. The proposed greedy procedure is straightforward to implement, easy to interpret, and mathematically proven to yield the optimal solution for the reformulated problem.
+
+3. Experiments demonstrate very large speedups compared with existing heuristics and confirm that the method scales to networks with millions of edges.
+
+### Weaknesses
+1. The authors solve an easier, modified version of the problem by introducing node weights. This is fine, but the paper sometimes gives the impression that it solved the original NP-hard version. The distinction should be made clearer.
+
+2. For several of the larger datasets, the groups are created by random assignment. Although this is a test for the algorithm's scalability, it divorces the experiment from the paper's core motivation, where groups typically represent pre-existing, meaningful partitions.
+
+3. To fully realize the potential of this work for applications like polarization reduction, it would be valuable to include an analysis that correlates the reduction in hitting time with an established measure of network polarization.
+
+### Questions
+Please see the weaknesses above, and I expect the authors to address them in responses/rebuttals.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces the stationary hitting-time minimization problem (S-HTMP), which aims to reduce the expected steps for a random walk to travel from one node group to another by adding a limited number of edges. Unlike prior work, it weights nodes by their stationary distribution in the source subgraph, reflecting their structural importance.
+
+The key contribution is PARITY, an optimal and efficient greedy algorithm that solves S-HTMP in polynomial time for both directed and undirected graphs. It achieves up to “10,000× speedup” over state-of-the-art methods, scales to million-edge graphs, and performs well even on traditional hitting-time metrics.
+
+### Strengths
+Novelty: This article redefines the established hit time minimization problem (HTMP) by introducing weighted objectives, where node importance is defined by the stationary distribution of random walks on the source subgraph (S-HTMP). This is a conceptual shift towards standardized weighting. Although using a stationary distribution is not a new concept, applying it to finding the optimal solution for a computational problem (HTMP) in polynomial time is a relatively novel idea.
+Quality: The article provides rigorous theoretical arguments, including key lemmas for simplifying the objective function when using stationary distributions and optimality proofs for greedy parity algorithms. The experimental evaluation is comprehensive and convincing, demonstrating tremendous acceleration (up to 10000 times), scalability, and effectiveness.
+Clarity: The paper is well-organized and presented clearly.
+Contribution: From a theoretical perspective, it identifies an optimal point in the problem space - the S-HTMP formula - where previously tricky problems become manageable, providing a new perspective for graph modification problems and a highly scalable and efficient tool for tasks with real-world impact.
+
+### Weaknesses
+1. The paper did not fully discuss and compare why the stationary distribution πR was chosen as the node weighting scheme. It is currently unclear why πR is a more meaningful node importance measure than other impact measures.
+2. Incomplete validation of the core HTMP: Although PARATY performs well on its own S-HTMP goals, there is no final proof of whether its performance on the original HTMP with uniform weights is superior to the dedicated Greedy+ baseline. Lack of a method to directly compare and minimize the standard average hit time under equal computational budgets.
+3. Insufficient exploration of locality: Key business boundaries have not been fully discussed, including whether performance will degrade on non-strongly connected graphs.
+4.  Unsubstantiated claims for directed graphs: The experiments for directed graphs only report PARITY's runtime. The critical claim of effectiveness lacks support, as no results on hitting-time reduction or comparisons to any baseline are provided for the directed setting.
+
+### Questions
+Please refer to the Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper addresses the hitting time minimization problem, which consists of adding a fixed number of edges b to the graph to minimize the hitting time of a random walk process starting at a set of nodes R and ending at a set B. The paper considers a modification of the problem where the nodes in R are weighted by their value in the stationary distribution induced by R. They show that, different from the more general problem, the modified one can be solved in polynomial time using a greedy algorithm (PARITY). The experiments show (using 11 datasets) that PARITY achieves better values of the modified objective and is competitive with the best baselines for previously considered objectives (average and maximum hitting time). The experiments also show that PARITY is more efficient than the alternatives.
+
+### Strengths
+- The proposed problem formulation seems novel
+
+- The proposed solution is simple and efficient
+
+- The experiments consider multiple datasets and baselines
+
+### Weaknesses
+- The problem formulation is not well-motivated: It is not clear why the importance of nodes in R should be measured based on the stationary distribution induced by R (sometimes, the meaning of P_R is confusing, because it can also be the sub-matrix of P). I could see how someone might want to weight nodes in B because some of these nodes could be influential, for example. The paper also fails to provide how solutions to the new problem look compared to the original (uniform) problem using a few examples. In particular, I would be curious to see to what extent high degree nodes in R are favored in the solution of the new problem and how different the solution is from a simple degree heuristic. Some toy and/or small graph examples would be very helpful. Another point that was not clear to me is whether there is any restriction in the set of edges that will be added (sometimes that have to be edges connecting R to B, for example).
+
+
+- The theory in the paper could be clearer for the reader: I did read the paper and checked the proofs but I feel like some of the arguments could be made much clearer. First, Lemma 2 basically claims that you can move the stationary weights inside the matrix inverse (so, I would assume that cannot be done with an arbitrary vector alpha). The proof of Lemma 2 does not state explicitly what is special about the stationary weights (in my opinion, this type of proof is much easier to follow in matrix form). Even the base case for Lemma 2 is not clear to me, because a matrix to the power zero is the identity, so the matrix power would lose information about X_0. Moreover, the proof of Lemma 3 doesn’t seem to use the fact that edges are selected based on Equation 5. More specifically, it not is not clear what property of Equation 5 is being leveraged beyond the fact that it is monotonically decreasing (this should not be sufficient). An example here could also be quite helpful.
+
+- The fit of the paper to this conference is arguable: I don’t see how this paper falls into any of the topics of interest for ICLR. The closest topic I can find is learning on graphs. Looking at the citations, I see data mining, discrete optimization, social network venues but no paper from ICLR or similar conferences (e.g., ICML and NeurIPS).
+
+### Questions
+1) How is the problem formulation motivated by real-world applications?
+
+2) How do solutions to the modified problem differ from those from the original problem in practice?
+
+3) What is special about the stationary weights that makes Lemma 2 hold?
+
+4) How does the proof of optimality in Lemma 3 depend on the specific form in Equation 5?
+
+5) Why is this paper a good fit for ICLR?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+1

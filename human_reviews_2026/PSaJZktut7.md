@@ -1,0 +1,185 @@
+# Subquadratic Algorithms and Hardness for Attention with Any Temperature
+
+- Decision: Accept (Poster)
+- Scores: 4, 8, 8, 4
+
+## Abstract
+Despite the popularity of the Transformer architecture, the standard algorithm for computing Attention suffers from quadratic time complexity in context length $n$. Alman and Song showed that when the head dimension $d = \Theta(\log n)$, subquadratic Attention is possible if and only if the inputs have small entries bounded by $B = o(\sqrt{\log n})$ in absolute values, under the Strong Exponential Time Hypothesis ($\mathsf{SETH}$). Equivalently, subquadratic Attention is possible if and only if the softmax is applied with high temperature for $d=\Theta(\log n)$. Running times of these algorithms depend exponentially on $B$ and thus they do not lead to even a polynomial-time algorithm outside the specific range of $B$. 
+
+This naturally leads to the question: when can Attention be computed efficiently without strong assumptions on temperature? Are there fast attention algorithms that scale polylogarithmically with entry size $B$? In this work, we resolve this question and characterize when fast Attention for arbitrary temperatures is possible. First, for all constant $d = O(1)$, we give the first subquadratic $\tilde{O}(n^{2 - 1/d} \cdot \mathrm{polylog}(B))$ time algorithm for Attention with large $B$. Our result holds even for matrices with large head dimension if they have low rank. Combined with a reduction from Gradient Computation to Attention, we obtain a subquadratic algorithm for the full LLM training process. Furthermore, we show that any substantial improvement on our algorithm is unlikely. In particular, we show that even when $d = 2^{\Theta(\log^* n)}$,  Attention requires $n^{2 - o(1)}$ time under $\mathsf{SETH}$.
+
+Finally, in the regime where $d = \mathrm{poly}(n)$, the standard algorithm requires $O(n^{2} d)$ time while previous lower bounds only ruled out algorithms with truly subquadratic time in $n$. We close this gap and show that the standard algorithm is optimal under popular fine-grained complexity assumptions.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper gives subquadratic algorithms for attention at arbitrary temperature in constant dimension (and low-rank cases), paired with nearly tight conditional lower bounds. The theoretical picture is compelling.
+
+### Strengths
+1.The paper successfully constructs the first true subquadratic algorithm for attention under arbitrary temperature when the dimension is constant, using a combination of relevance pruning, polynomial approximation, and halfspace range queries.
+2. The authors also give matching conditional lower bounds under SETH, making the theoretical landscape nearly complete.
+3. The problem is relevant of pratical and theoretical, understanding when subquadratic attention is theoretically possible has direct implications for scaling large models.
+
+### Weaknesses
+1. Writing quality is poor. Although the theoretical results is sound, exposition is hard to follow: section transitions are abrupt; key intuitions are buried under algebra; notation is very condusing; This substantially reduces accessibility. For example, you write too many theorems in the intro, informal veision, formal version. This is really confusing and make reader hard to find you core contribution,
+2. No experiments or even small numeric demos. Given the practical relevance of attention, the absence of any empirical validation (wall-clock, memory,  comparison to Flash/approximate/low-rank/kernelized attention under the paper’s error metric) makes it impossible to assess implementability. This make the paper not much meaningful to pratical sides.
+
+### Questions
+1. Could the authors provide any empirical or numerical evidence (even synthetic) to confirm that the proposed algorithm exhibits subquadratic scaling for n andwith  constant d? What are the actual constant factors involved in the halfspace data structure?
+2. The presentation is difficult to follow. Can the authors improve the paper writing? This would greatly help readers.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+2
+
+### Summary
+In this work the authors study fast algorithms for approximate attention computation in the transformer architecture. In particular for matrices $Q,K,V \in \mathbb{R}^{n\times d}$, the goal of attention is to compute $Attention(Q,K,V) = D^{-1}AV$ where $A = \exp(QK^T/\sqrt{d})$ and $D = diag(A\mathbb{1})$. The problem formulation they study is that assuming all entries of $Q,K,V$ lie in $[-B,B]$, the goal is to compute an $\epsilon$ entrywise approximation to $Attention(Q,K,V)$. The classical naive algorithm for computing attention approximately runs in time $O(n^2 d)$, and a previous work of Alman and Song [AS2024] showed that for $d=\Theta(\log n)$ attention can be computed in time $n^{1+o(1)}$ whenever $B = o(\sqrt{\log N})$ and required $n^{2-o(1)}$ time whenever $B=\Omega(\sqrt{\log n})$ and $d=\Theta(\log n))$ under the SETH hypothesis. 
+
+The algorithm of [AS2024] scales exponentially in $B$, and their first result makes progress towards improving this by presenting an algorithm that for $d=O(1)$ runs in time $n^{2-1/d}\cdot polylog(B/\epsilon)$. In the case when either $Q$ or $K$ have rank $r$, they show their algorithm generalizes to give a runtime of $nd + n^{2-1/r}\cdot polylog(B/\epsilon)$. Finally they show that when $d=O(1)$ this algorithm can be used to compute the gradient of the query,key and value projection matrices that project the hidden dimension to obtain the respective embeddings in time $n^{2-1/d}\cdot polylog(B/\epsilon)$. Finally they improve the previous lower bound to show that when $d= 2^{\Omega(\log^{*}n}$ and $B=poly(n)$ attention computation requires $n^{2-o(1)}$ time, and also when $d=poly(n)$ they show that matrix multiplication time is necessary for attention computation.
+
+### Strengths
+The paper has many strengths in particular developing an algorithm for approximate attention with a poly logarithmic dependence on $B$ when $d=O(1)$ which is a significant improvement over the previous works, and improving the lower bound for even smaller values of $d$, i.e. $d=2^{\Omega(\log^{*}n)}$.
+
+### Weaknesses
+One mild weakness is that the result appears to be entirely theoretical, and the algorithm not practical. However this is not a big negative as the theoretical contribution is substantial.
+
+### Questions
+One question I have is even though $n^{2-1/d} = n^{2-o(1)}$ for any $d=\omega(1)$ but does the algorithmic result atleast hold in this regime ? Furthermore in the previous paper near the threshold $B=\sqrt{\log n}$ does your approach give a better lower bound than currently stated, i.e. can the results be improved in this regime because the strong lower bound holds for $d=2^{\Omega(\log^{*}n)}$ but $B=poly(n)$ ?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper investigates the computational complexity of the Attention mechanism without temperature restrictions on the softmax operation. While prior work showed that subquadratic attention is possible only for small entry bounds $B=o(\sqrt{\log n})$ when $d=\Theta(\log n)$, this paper provides the first truly subquadratic algorithm with polylogarithmic dependence on $B$. The main contributions include: (1) an $\mathcal{O}!\left(n^{2-1/d},\mathrm{polylog}(B)\right)$ algorithm for constant head dimension $d$ using polynomial approximations and geometric range-searching data structures, (2) extensions to low-rank matrices and gradient computation, and (3) conditional lower bounds showing the algorithm is nearly optimal, with hardness results for $d=2^{\Theta(\log^* n)}$ under SETH and optimality for $d=\mathrm{poly}(n)$ under the Generalized High-Dimensional OV Hypothesis.
+
+### Strengths
+1. Fundamental theoretical breakthrough. The paper resolves a key open question by providing the first subquadratic attention algorithm that scales polylogarithmically (rather than exponentially) with entry size $B$, enabling efficient computation for arbitrary temperature parameters. This represents a significant advance over Alman & Song (2024a), whose algorithms only worked for $B=o(\sqrt{\log n})$.
+
+
+2. Novel technical approach with elegant insights. The combination of polynomial approximation of the exponential function with Matoušek's simplex range-searching data structure is innovative. The key observation that relevant indices (those contributing significantly to softmax probabilities) form a half-space in $\mathbb{R}^d$, enabling efficient geometric queries, demonstrates deep algorithmic insight that may have broader applications.
+
+
+3. Comprehensive complexity characterization. The paper provides nearly tight upper and lower bounds across multiple parameter regimes (Table 1), including a much stronger hardness result for $d=2^{\Theta(\log^* n)}$ compared to previous $d=\Omega(\log n)$, and establishing optimality of the standard algorithm for polynomial head dimensions. The reduction from gradient computation to attention (Theorem B.3) is also a clean theoretical contribution.
+
+### Weaknesses
+1. Limited practical applicability for realistic parameters. The algorithm only achieves subquadratic time for constant d, while practical Transformers commonly use d = 64, 128, or larger. As stated on lines 136–138, “when $d=\omega(1)$, the above algorithms requires $n^{2-o(1)}$ time,” meaning no improvement over the standard $\mathcal{O}(n^{2}d)$ algorithm for most practical settings.
+
+2. (minor) Limited experimental validation. Without experiments, it is unclear whether the algorithm is practical even for d = 2 or d = 3, or whether the overhead from the geometric data structures outweighs the asymptotic improvements.
+
+3. (minor) Missing relevant works. Despite the soundness and high impact of the theoretical results in this paper, there are still some works on efficient attention computation that require proper discussion [1,2,3,4,5,6]. 
+
+### References
+
+[1] Josh Alman, Zhao Song. "How to Capture Higher-order Correlations? Generalizing Matrix Softmax Attention to Kronecker Computation". ICLR 2024.
+
+[2] Josh Alman, Zhao Song. “Fast RoPE Attention: Combining the Polynomial Method and Fast Fourier Transform”. arXiv 2505.11892.
+
+[3] Josh Alman, Zhao Song. “Only Large Weights (And Not Skip Connections) Can Prevent the Perils of Rank Collapse”. arXiv 2505.16284. 
+
+[4] Jerry Yao-Chieh Hu, Weimin Wu, Zhuoru Li, Sophia Pi, Zhao Song, Han Liu. “On Statistical Rates and Provably Efficient Criteria of Latent Diffusion Transformers (DiTs)”. NeurIPS 2024. 
+
+[5] Jerry Yao-Chieh Hu, Maojiang Su, En-Jui Kuo, Zhao Song, Han Liu. “Computational Limits of Low-Rank Adaptation (LoRA) Fine-Tuning for Transformer Models”. ICLR 2025.  
+
+[6] Yekun Ke, Xiaoyu Li, Yingyu Liang, Zhizhou Sha, Zhenmei Shi, Zhao Song. “On Computational Limits and Provably Efficient Criteria of Visual Autoregressive Models: A Fine-Grained Complexity Analysis”. arXiv 2501.04377.
+
+### Questions
+1. The algorithm achieves subquadratic time only for constant $d$, yet practical Transformers use $d=64, 128,$ or even $512$ for head dimensions. Given that your hardness results show $n^{2-o(1)}$ lower bounds for $d = 2^{\Theta(\log^* n)}$, could you comment on whether any algorithmic improvements are possible for the intermediate regime where $d$ ranges from $10$ to $100$?
+
+2. Your algorithm provides exact attention computation up to polynomial precision with $\mathcal{O}(n^{2-1/d})$ time for constant $d$, while many existing works achieve $\mathcal{O}(n)$ time using approximate attention with weaker guarantees as mentioned in lines 317-323. When would your approach be preferable to linear-time approximations?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This work analyzes the computational complexity of approximating attention calculations. Authors propose a subquadratic algorithm particularly handling constant head dimensions with polylogarithmic scaling in input sizes, and establish matching conditional lower bounds under SETH. This work connects polynomial approximation methods with fine-grained complexity theory to clarify the efficiency limits of fast attention computation.
+
+### Strengths
+1. This paper proposes a sub-quadratic algorithm for fast attention calculation with arbitrary temperatures within $\tilde{O}(n^{2-1/d})$ runtime.
+2. There are complete complexity characterizations from constant to polynomial head dimensions.
+3. The technical approach is elegant, combining polynomial approximation with range searching.
+
+### Weaknesses
+1. The presentation and paper structure are not quite clear, making it hard to identify which parts are original. The technical overview could focus more on main insights or intuitions, deferring technical details to appendices.    
+2. The main concern of this work is lacking empirical comparisons between the proposed algorithm and existing methods (as baselines), making it difficult to evaluate their practical performance and efficiency.  
+3. Following 2, although the theoretical contributions are thorough, this work does not clearly explain how the derived theoretical results can be transformed to practical applications for further improvements in Transformer training or inference.
+
+### Questions
+1. The contents in Table 1 are confusing. Are the listed previous results upper bounds or lower bounds? In addition, there are only two citations, despite that four previous results are listed.
+2. The analysis in Line 392 raises concerns on the practical value of Theorem 1.3 when the head dimension $d$ is large, since then the exponent $2 - 1/d$ approaches quadratic complexity, reducing the "sub-quadratic" benefit of the proposed method.  
+3. In Line 452-454, the term $g^{\mathcal{O}(d)}$ depends exponentially on the head dimension $d$, which could significantly affect query time and warrants further discussions.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

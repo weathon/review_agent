@@ -1,0 +1,181 @@
+# Degradation & Restoration: A Low-cost Pipeline for Long-range Single-frame Turbulence Mitigation
+
+- Decision: Reject
+- Scores: 6, 4, 2, 4
+
+## Abstract
+Long-range turbulence mitigation (TM) remains challenging due to complex spatiotemporal distortions along the imaging path. Current approaches face several limitations in long-range TM: (i) traditional model-based image fusion methods fail to restore dynamic scenes, (ii) learning-based approaches demonstrate either inadequate distortion correction or poor deblurring performance, and (iii) simulators and synthetic training sets inadequately capture the characteristic features of long-range atmospheric turbulence. To achieve optimal restoration with minimal computation, we propose a low-cost single-frame TM pipeline featuring two key innovations: (i) a novel physically-grounded degradation simulator that enables rapid data generation while maintaining fidelity, and (ii) a simple yet effective parallel-training two-stage architecture for sequential distortion removal and deblurring. We demonstrate $4.3\times$ acceleration in degradation simulation and a minimum $2\times$ improvement in training efficiency compared to the baseline. Networks trained on our synthetic data consistently outperform those trained on other SOTA simulations. Our pipeline not only achieves state-of-the-art performance in single-frame TM but also surpasses many multi-frame approaches.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper presents a single frame turbulence restoration method along with a physics-inspired method for generating diverse turbulence data. On the restoration end, there is some novelty in the finding that the often-used detilt-deblur scheme can be trained completely independently. There is some analysis of the spatially varying blur, though there is some complementary prior work in this space the authors may be unaware of (more later). Finally, the authors visually compare various combinations of simulation modalities and restoration approaches with ablations and some quantitative comparisons.
+
+### Strengths
+1. The finding that parallely training the de-tilt and de-blur modules retains restoration effectiveness is interesting and, to my knowledge, novel. The training efficiency gained by this is also meaningful.
+
+2. The simulation proposed is well described and reasonably justified. It does not have the same physics-grounding as previous methods, though there is benefit to having the speed and diversity and appears to positively contribute to the image reconstruction.
+
+3. Relative to other single image turbulence restoration methods, this method overall performs better visually. It also performs at or above multi-frame methods, with some caveats I mention in the weaknesses.
+
+### Weaknesses
+1. There is minimal quantitative comparison between methods on simulated data or real-world data that has some semantic metric (e.g., the text dataset by Mao et al.). Even given the limitations of turbulence comparisons, it should still be offered.
+
+2. The method appears to primarily stabilize the tilt and oversmooth regions (because it is single frame, this is expected and reasonable). The issue is that most of the testing shown is on vehicles with mostly flat details, hence the over-smoothing is not visually severe. Balancing these results with a face or text datasets or even within the dataset from Xu et al. on non-vehicles would be more convincing.
+
+3. Following the previous weakness, I anticipate multi-frame methods could recover details impacted by blur especially for static scenes. Having a sense as to the gap in performance would be convincing.
+
+4. While I regard the mask-then-conv discussion as well-written and beneficial to the paper, there is some prior work in this space. A keyword for this would be “product-convolution” versus “convolution-product”. A few papers as recent as 2024: Lauer, Deconvolution with a spatially variant PSF; Hirsh et al, Efficient filter flow for space-variant multiframe blind deconvolution; Sroubek et al., Decomposition of Space-Variant Blur in Image Deconvolution; Chimitt et al., Scattering and Gather for Spatially Varying Blurs. My intention is not to suggest the authors cite all/any of these papers, rather to present a few key references and make their own assessment.
+
+5. The network itself it not novel, though elements of the training scheme are. I do not consider this a significant weakness, but worth noting.
+
+### Questions
+Will appreciate the author's thoughts on the weakness commented above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses long-range atmospheric turbulence mitigation by proposing a physically grounded turbulence degradation simulator. The simulator generates data using tilt and blur. The authors also employ a restoration network to validate the realism of the generated data.
+
+### Strengths
+1. The paper introduces a physics-based turbulence simulation method and validates its effectiveness.  
+2. The proposed simulation method achieves relatively high computational efficiency.
+
+### Weaknesses
+1. The Detilt-then-Deblur network is not fundamentally novel and appears primarily as an engineering contribution.  
+
+2. While the simulator is claimed to capture real turbulence statistics, the paper does not sufficiently quantify how well the simulated tilt and blur distributions match real-world data beyond visual comparisons.  
+
+3. The lack of rigorous statistical comparison or validation on real-world datasets limits the generalizability of the results.  
+
+4. Temporal aspects are underexplored. The simulator only models spatially varying tilt and blur, and single-frame TM cannot inherently capture temporal correlations. The authors’ claim of partial temporal smoothness is a consequence of spatial consistency rather than true temporal learning.
+
+### Questions
+The key contributions could be stated more explicitly.  
+
+Are there statistical metrics, such as the displacement field distribution or PSF energy spectrum, to quantify how well the simulated tilt and blur match real long-range turbulence? Without such metrics, how can the authors ensure the realism of the training data and the generalization of the model?
+
+Can the simulator effectively support restoration of temporally correlated distortions in real dynamic scenes? Have the authors considered extending the simulator to multi-frame or temporal-evolution modeling to improve performance in real-world applications?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes a sophisticated turbulence simulation pipeline, and trains a turbulence removal model based on it. The realistic simulation pipeline also enables a parallel training of the detilt-then-deblur network, to better disentangle the two degradations.
+
+### Strengths
+1. Low computatoinal cost.
+2. Turbulence simulator. This could benefit the field of turbulence removal, if the authors were to open-source the project.
+
+### Weaknesses
+1. No quantitative evaluation. The shown visual comparisons do not necessarily lead to the conclusion of a SOTA performance. Sometimes the proposed method suffers from a loss of details and over-smoothing. Authors should report the PSNR, SSIM, and LPIPS performances on an established dataset.
+
+2. Very few examples. I thought the supplementary may contain maybe ten cases or so, since the paper does not contain many cases. However I only found 2, which is insufficient.
+
+3. The paper puts a lot of emphasis on the tilt and blur simulation, and the deblurring and detilting do not have much novelty. This may be a little different from this conference, which still focuses more on learning than simulation. Perhaps a graphics-related conference may be better for this topic?
+
+### Questions
+1. Would applying the deblurring and detilting network deteriorate the YOLO detection performance, given a clean image as input?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a new simulator for turbulence data, with more realistic and detailed tilts and efficient spatially varying blur. as well as a new and more efficient training scheme for a turbulence mitigation architecture. The authors show that architectures trained on their simulated achieve better performance than when trained on that of other simulations.
+
+### Strengths
+The improvements in the simulation process are well-motivated and sensical. The tilt model attempts to capture the multiscale features seen in turbulence using various amounts of simplex noise, as well as the amount of warping due to turbulence with random warp iterations. Furthermore, the changes to make the spatially varying blur implementable efficiently on GPU, namely, their mask-the-conv scheme, are well explained. 
+
+As for evaluation, the two-stage method seems to perform comparable to the state of the art while taking much less time.
+
+### Weaknesses
+I'm not sure what the authors mean when they say "the displacement (tilt) fields produced by current tilt simulators deviate substantially
+from the spatial statistics of real long-range turbulence" in the introduction. While the limitations in how prior methods simulate blur is discussed in the related works section, I could not find much said about the tilt. 
+
+As for the blur, the authors say they develop their random kernel generator based on measured PSFs, but I could not find any detail on where they come from, whether from the literature or the authors' own experiments. 
+
+The qualitative results are not clear and the examples could be better chosen. For example, in the turbulence literature it is common to see if models can mitigate turbulence that obscures text in images [1].
+
+[1] https://openaccess.thecvf.com/content/CVPR2025/html/Zhang_Learning_Phase_Distortion_with_Selective_State_Space_Models_for_Video_CVPR_2025_paper.html
+
+### Questions
+- How is the current simulation better at modeling tilt than prior simulations? 
+- Where do the measured PSFs that the authors base their blur simulation on come from?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4

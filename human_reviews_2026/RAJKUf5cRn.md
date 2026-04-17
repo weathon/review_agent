@@ -1,0 +1,193 @@
+# Stepwise High-Level Semantic Alignment for Test-Time Adaptation
+
+- Decision: Reject
+- Scores: 6, 4, 4, 6
+
+## Abstract
+Test-Time Adaptation (TTA) aims to adapt a source-trained model to a target domain without access to source data or target labels. Among existing approaches, Source Distribution Estimation (SDE) is valued for its ability to preserve source discriminability and ensure stable adaptation. However, most SDE-based methods rely on aligning low-level features statistics like batch normalization, often resulting in class confusion and unstable decision boundaries under large domain shifts. To address this, we propose **SHLSA**, a *Stepwise High-Level Semantic Alignment* framework that incorporates semantic priors to align features in the high-level space, preserving category structure and enabling more stable, semantically consistent adaptation. Specifically, SHLSA introduces the *pseudo-source domain* as a semantic bridge between the source and target domains, enabling a more stable and effective stepwise domain alignment (**SDA**) from reliable to ambiguous regions. To further enhance semantic feature quality, we design a hierarchical feature aggregation (**HFA**) module that integrates local and global representations via attention, improving local consistency and global convergence. Building on these enriched features, we introduce a confidence-aware complementary learning (**CACL**) strategy to refine EMA-updated pseudo-labels by suppressing noise and improving semantic reliability, thereby enhancing supervision for target domain samples. Extensive experiments on standard TTA benchmarks demonstrate the superior performance and generalizability of SHLSA.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces SHLSA (Stepwise High-Level Semantic Alignment), a framework for Test-Time Adaptation (TTA) that aims to address the challenge of domain adaptation when there is no access to source data or target labels. Unlike traditional methods, which typically focus on aligning low-level features (such as batch normalization statistics), SHLSA proposes the use of a pseudo-source domain as a semantic bridge between the source and target domains. The method relies on a stepwise semantic alignment strategy that ensures category structure stability and improves adaptation under large domain shifts.
+
+### Strengths
+1. Experimental Validation: The paper provides comprehensive experiments on multiple TTA benchmarks (semantic segmentation and image classification). SHLSA outperforms existing methods on these tasks, demonstrating its effectiveness across domain shifts.
+
+2. Clear Methodology: The authors present a well-structured explanation of their approach, including pseudocode, mathematical formulations, and ablation studies, making the method easy to understand and reproduce.
+
+### Weaknesses
+The paper mentions that SHLSA's computational cost is slightly higher than SHOT's (e.g., with a ResNet-50 backbone, SHLSA requires 10.8GB of GPU memory, while SHOT uses 7.6GB), mainly due to the attention fusion in HFA and the MixMatch operation in SDA. However, the paper doesn't explore potential optimization options:
+
+1. **Lightweight Attention Mechanisms**: Could the computational cost of HFA be reduced by using more efficient attention mechanisms, like the local attention in MobileViT?
+
+2. **Simplifying SDA's Two-Step Alignment**: In cases with small domain shifts, could the alignment between the pseudo-source domain and general semantics be skipped, directly aligning the pseudo-source domain with the target domain to boost efficiency?
+
+3. **Computational Cost vs Performance**: A deeper trade-off analysis between computational cost and performance would help clarify SHLSA's applicability in resource-limited environments (e.g., edge devices).
+
+---
+
+The paper also mentions two limitations in the "Conclusion" section: first, the fixed "local-global" context ratio may limit the method's adaptability to tasks with varying semantic granularities; second, the self-entropy threshold tau_pos used for pseudo-source domain construction lacks flexibility. However, these limitations are not fully explored:
+
+1. **Adaptability to Single-Label Classification**: The paper mentions that HFA's improvement in single-label classification is limited (e.g., in the Office-Home task, HFA only increases accuracy from 84.5 to 84.6). But it doesn't analyze why the spatial context has a weak effect in these tasks. Is it because classification tasks rely more on global semantics, or is it because the granularity of local feature extraction in HFA (e.g., grid size) is not well-suited for this task? Additional experiments across different tasks would help clarify this.
+
+2. **Dynamic Thresholding Feasibility**: The paper uses a fixed tau_par value (e.g., 0.8), but datasets with different domain shifts (e.g., VisDA-C with large shifts vs. Office-31 with smaller shifts) might require different thresholds. While 0.8 might work based on *FixMatch*, a dynamic thresholding strategy seems necessary. If dynamic thresholds are not considered, it would be helpful to provide an analysis of performance with other fixed threshold values.
+
+---
+
+The paper presents Theorem 1 in Appendix A.2, which explains how to partition the positive/negative subsets based on low-entropy predictions. However, it doesn't clarify how this theorem guides the practical selection of parameters (such as initializing tau_pos and tau_neg). The real-world application of this theorem is not fully explained, which may create a gap between theory and practice.
+
+1. **Theorem and Experimental Parameters**: It's unclear whether the alpha value in the theorem (α ∈ (0,1)) is linked to the experimental thresholds tau_pos = 0.9 and tau_neg = 0.9. This should be clarified. Understanding how the theorem relates to the experimental parameters would help explain its role in selecting the right parameters.
+
+2. **Handling High-Entropy Samples**: When the entropy H(p) is close to H0 (e.g., when the target domain contains high-entropy samples under large domain shifts), the theorem's constraints may not hold. How does CACL ensure the quality of pseudo-labels in such cases? This should be discussed in more detail, particularly regarding how pseudo-label quality is maintained despite high-entropy, uncertain samples.
+
+### Questions
+See the weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a Test-Time Adaptation framework named SHLSA, designed to address the limitations of existing methods that rely on low-level feature alignment. The core of SHLSA is stepwise high-level semantic alignment, which introduces a "pseudo-source domain" as a semantic bridge. This enables a progressive alignment proceeding from reliable to ambiguous regions. The framework is complemented by hierarchical feature aggregation (HFA) for robust feature extraction and confidence-aware complementary learning (CACL) for pseudo-label refinement. Experiments demonstrate that this method exhibits strong performance on both semantic segmentation and image classification benchmarks.
+
+### Strengths
+1. The paper proposes a fresh perspective on high-level semantic alignment, offering theoretical insights.
+2. The proposed SHLSA achieves outstanding performance on multiple benchmarks for semantic segmentation and image classification tasks.
+3. The paper is well-written, with a logical structure and detailed experimental setup.
+
+### Weaknesses
+1. Numerous hyperparameters require tuning and are sensitive to performance.
+2. Lack of introduction to the baselines.
+3. Both the HFA and SDA modules introduce additional computations, significantly increasing training time and memory consumption.
+4. Ablation experiments indicate that while the proposed module significantly enhances semantic segmentation performance, its improvement for image classification is negligible. This undermines the persuasiveness of SHLSA as a general-purpose TTA framework.
+
+### Questions
+1. Given the complexity of the process and the numerous thresholds that need adjustment, are there any techniques for adjusting these parameters?
+2. While CACL can suppress noise, if the initial pseudo labels have significant bias, could this lead to “error accumulation” during the SDA phase?
+3. The proposed modules demonstrate only marginal improvements in classification tasks. Does this indicate that they are only applicable to tasks with rich spatial structures?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces SHLSA (Stepwise High-Level Semantic Alignment), a framework for TTA that achieves robust and semantically consistent adaptation without access to source data. Unlike prior low-level alignment methods, SHLSA performs high-level semantic alignment through three key components: Hierarchical Feature Aggregation (HFA), which fuses local and global features for richer semantics; Confidence-Aware Complementary Learning (CACL), which refines pseudo-labels by separating confident and uncertain predictions; and Stepwise Domain Alignment (SDA), which progressively adapts from reliable to ambiguous regions using an entropy-based pseudo-source domain. Experiments on both segmentation and classification benchmarks demonstrate that SHLSA improves stability and reduces class confusion, achieving competitive performance across diverse domain shifts.
+
+### Strengths
+- Well-structured presentation with sufficient explanations
+- Provided theoretical grounding
+- Demonstrates methodology with clear modular design (HFA, CACL, SDA)
+- Extensive experiments across segmentation and classification tasks
+
+### Weaknesses
+- The use of ImageNet features in SDA could constrain generalization to non-visual or fine-grained domains; more analysis on cross-task transferability would strengthen their claim.
+- HFA adds nontrivial overhead; a more detailed runtime or memory comparison against lightweight TTA baselines would clarify its practicality for real-time or on-device deployment.
+- SHLSA's components (entropy-based partitioning, pseudo-source construction, feature alignment, and confidence-based pseudo-labeling) largely extend ideas from prior works such as SHOT, Tent, and recent SDE-based TTA methods. The novelty mainly lies in their integration into a stepwise pipeline rather than in fundamentally new algorithmic principles. 
+- While individual module effects are shown, cross-module dependencies (e.g., how CACL behaves under incorrect entropy partitioning or HFA degradation) are not thoroughly analyzed.
+- Experiments mainly use standard benchmarks (GTA5, SYNTHIA, Cityscapes, Office-Home, VisDA-C). More challenging or dynamic scenarios such as continual or online test-time adaptation are not explored, leaving temporal robustness unverified.
+- The paper dose not validate SHLSA’s robustness across diverse architectures such as Vision Transformers (ViT). Broader architectural evaluation would better demonstrate its general applicability.
+
+### Questions
+See Weakness Section
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper introduces a new test-time adaptation method when presented only with a pre-trained source model but no source data and unlabeled target data. To address the limitations of prior work which only look at low-level alignment, the authors present a multi-step alignment approach where they (i) propose a hierarchical feature extractor to fuse local and global signals for structured prediction, (ii) positive and negative psuedo-labels for curriculum learning (iii) stepwise alignment with entropy-based partitioning. The experiment results on both pixel level and image-level prediction problems show the strong gains bought by the method.
+
+### Strengths
+1. The paper addresses a very important and practical problem of source-data free domain adaptation with an effective solution of step-wise alignment.
+
+2. The idea of stepwise alignment by first selecting a pseudo-source domain in the absence of source data is novel and might have wider use-cases beyond test-time adaptation.
+
+### Weaknesses
+1. The paper fails to position or compare against other source-free adaptation works such as [1,2,3] which also share the assumption of no source data with only source-trained model. The authors need to include these in the comparisons, or explain why these might not be relevant. 
+2. For single-image classification setting, the authors also need to include a more challenging dataset such as DomainNet for a better understanding the method's scalability to larger datasets. 
+
+
+
+[1] Liu, Yuang, Wei Zhang, and Jun Wang. "Source-free domain adaptation for semantic segmentation." Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. 2021.
+
+[2] Kundu, Jogendra Nath, et al. "Generalize then adapt: Source-free domain adaptive semantic segmentation." Proceedings of the IEEE/CVF international conference on computer vision. 2021.
+
+[3] Mitsuzumi, Yu, Akisato Kimura, and Hisashi Kashima. "Understanding and improving source-free domain adaptation from a theoretical perspective." Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. 2024.
+
+### Questions
+Questions stated above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

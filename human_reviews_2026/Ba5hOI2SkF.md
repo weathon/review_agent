@@ -1,0 +1,194 @@
+# Learning Deep Modality-Shared Self-Expressiveness for Image Clustering with Textual Information
+
+- Decision: Reject
+- Scores: 4, 4, 6, 6
+
+## Abstract
+Leveraging textual information for image clustering has emerged as a promising direction, driven by the powerful representations of vision-language models. However, existing approaches usually leverage modality alignment, which merely shapes the representations implicitly, failing to preserve and exploit modality-specific structures, and leaving the overall representation distribution unclear. In this paper, we propose a simple but principled approach, termed deep modality-shared self-expressive model (DeepMORSE), which simultaneously learns structured representations that conform to the union of modality-specific subspace structures and, via a modality-shared self-expressive model, discovers structures shared across modalities. We evaluate our DeepMORSE approach on seven widely used image clustering benchmarks and observe performance improvements exceeding 4\% on the UCF-101, DTD-47, and ImageNet-Dogs datasets. In addition, we demonstrate the strong transferability of the learned representations by achieving state-of-the-art performance on downstream tasks such as image retrieval and zero-shot classification—without requiring any task-specific losses or post-processing.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a deep modality-shared self-expressive model for multi-modal image clustering which can simultaneously learns structured representations conforming to the union of modality-specific subspaces and discovers structures shared across modalities. Experiments on image clustering benchmarks and several downstream tasks demonstrate the effectiveness of proposed method.
+
+### Strengths
+1. This paper proposes a simple-yet-effective method for multi-modal image clustering, which relies on a deep modality-shared self-expressive model.
+2. The proposed model can jointly learn representations conforming to a union of modality-specific subspaces and discovers shared structures across modalities.
+3. The learned structured representations can be directly applied to downstream tasks including image retrieval and zero-shot classification.
+
+### Weaknesses
+1. The motivation for this work requires clarification. The paper repeatedly notes that "the distribution of the aligned representation in existing methods remains unclear," but the term "unclear" is not sufficiently defined. It would be helpful to illustrate this limitation more concretely, for instance, by providing visualizations on toy examples. Furthermore, the rationale behind why the proposed deep modality-shared self-expressive model can make sense remains unclear. It’s better to provide intuitive explanations or theoretical/experimental analysis to establish its foundation.
+2. Regarding Table 1, several details require clarification. First, the distinction between "CLIP (k-means)" and "CLIP (zero-shot)" is unclear. Why the former is without textual information and the latter is with textual information? The authors should provide the details about these two settings in the paper. Second, the superscript attached to "PRO-DSC" is undefined—please clarify if this denotes some missing information or is simply a typographical error. 
+3. Regarding the second row of Table 2, the configuration is described as utilizing only the textual modality. However, the corresponding task is image clustering. Does this imply that image clustering is performed directly using the image representations from the pre-trained CLIP model, without any fine-tuning? 
+4. Regarding Figure 4, the analysis of hyperparameter sensitivity, which is currently conducted on only two datasets, may not be sufficient to draw general conclusions about the model's robustness. To provide a more comprehensive evaluation, it is essential to extend this analysis to include all datasets used in the study, as different datasets may exhibit varying sensitivities to hyperparameter changes.
+5. For zero-shot classification, the authors utilize the known categories of the datasets to construct the dictionary, which contains the embeddings of prompts “A photo of class” extracted by a pretrained CLIP text encoder. And the image embeddings are also sourced from pretrained CLIP model. When using Eq. (11) to obtain the textual counterpart for each image embedding, the “zero-shot” scenario seems to be broken since the model gains prior knowledge of the test categories.
+6. How about generating text captions for the images using MLLMs and then encode the image/caption pairs into embedded space using CLIP?
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the challenge of cross-modal retrieval, where the goal is to retrieve relevant samples across different modalities (e.g., retrieving images given text queries, or vice versa). The authors propose a modality-specific deep learning framework that explicitly learns separate but aligned representations for each modality.
+
+### Strengths
+1. Experimental results show consistent improvements over strong baselines (e.g., DCCA, Corr-AE, CCA) across multiple datasets, suggesting the proposed approach generalizes well.
+
+2. The paper clearly identifies the limitations of enforcing overly tight shared embedding spaces. The motivation for learning modality-specific representations is intuitive.
+
+### Weaknesses
+1. While the concept of modality-specific embeddings is valuable, the implementation primarily extends known ideas (e.g., DCCA) rather than introducing a fundamentally new network design.
+
+2. The paper could benefit from a deeper theoretical justification for the chosen balance between intra- and inter-modal losses. The trade-off parameter is empirically chosen without clear reasoning.
+
+3. It’s unclear how much each component (e.g., intra-modal loss, modality-specific subnetworks) contributes to the final performance. A comprehensive ablation table would strengthen the claims.
+
+4. The two-stream modality-specific design likely doubles training cost, but the paper doesn’t quantify this or discuss efficiency trade-offs.
+
+### Questions
+1. How sensitive is the retrieval performance to the weighting between intra- and inter-modal losses? Is there a principled way to select this parameter?
+
+2. Can this approach handle large-scale multimodal datasets (e.g., millions of image–text pairs) without significant computational overhead?
+
+3. Does the method use explicit negative sampling or rely entirely on pairwise constraints? Could incorporating contrastive loss improve robustness?
+
+4. Could the same framework extend naturally to more than two modalities (e.g., audio–video–text)?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+- This paper introduces the DeepMORSE to address the challenge in image clustering with textual information, where existing modality alignment methods often fail to preserve modality-specific structures and leave the overall representation distribution unclear. 
+
+- DeepMORSE operates by simultaneously learning structured representations that conform to the union of modality-specific subspace structures and explicitly discovering patterns shared across modalities via a modality-shared self-expressive model. 
+
+- In practical scenarios where text counterparts are not readily available, the approach generates necessary textual data for each image by solving a cross-modal sparse coding problem to ensure both semantic accuracy and adherence to a union-of-subspaces structure. 
+
+- Extensive experiments demonstrate that DeepMORSE achieves state-of-the-art clustering performance on seven benchmarks, observing performance improvements exceeding 4% on the UCF-101, DTD-47, and ImageNet-Dogs datasets, while also showing strong transferability to image retrieval and zero-shot classification without requiring task-specific optimization.
+
+### Strengths
+This paper's core strength lies in its simplicity. DeepMORSE overcomes limitations of prior alignment methods by simultaneously learning structured representations and explicitly discovering patterns shared across modalities through a modality-shared model. 
+
+The approach achieves descent clustering performance across seven benchmarks, reporting improvements in clustering accuracy, including gains exceeding on the UCF-101, DTD-47, and ImageNet-Dogs datasets. 
+
+Furthermore, the learned structured representations demonstrate transferability and robustness, achieving comparable results on downstream tasks such as image retrieval and zero-shot classification without requiring any additional optimization.
+
+### Weaknesses
+1. One weakness of the current framework is its limitation in scope to vision-language data, and the necessary extension of the method to other modalities, such as acoustics or hyperspectral imagery, has yet to be investigated. 
+
+2. While exhibiting low memory consumption, DeepMORSE requires a slightly longer total training and testing time compared to baselines, such as TAC. Leading to challenges in real-world application deployment.
+
+3. The necessity of leveraging textual information necessitates a crucial pre-processing step, utilizing cross-modal sparse coding and a predefined dictionary to generate textual counterparts when image-text pairs are unavailable, thereby introducing external complexity and dependence on the quality and sparsity of this synthetic data. This unpaired data situation is very common in real-world settings. Furthermore, ablation studies reveal that DeepMORSE suffers a sharp degradation in clustering performance when components relying on the textual modality are removed, demonstrating that the overall effectiveness is highly dependent on the presence and successful integration of both modality expressions.
+
+4. Although generally robust to hyperparameter choices, the model requires task-specific adjustments. Specifically, increasing the output dimensions and balancing the hyperparameter **($\gamma$)** for downstream evaluations on datasets containing more categories suggests that the default configuration is not universally optimal for larger class counts.
+
+### Questions
+1. Please answer the questions in the weakness section.
+
+2.  The paper explicitly lists the limitation that the theoretical underpinnings of modality-shared self-expression remain largely unexplored, leaving the fundamental working mechanism insufficiently understood. Can the authors elaborate on the specific challenges encountered when attempting to derive theoretical guarantees for the shared coefficient matrix $C$ (Equation 4) in the multimodal setting, similar to those established for unimodal sparse subspace clustering? What are the most promising theoretical avenues for future research to address this gap?
+
+3. The authors noted that for datasets with more than 128 categories (StanfordCars, SUN397), it was necessary to increase the output dimension $d$ and enlarge the balancing hyperparameter $\gamma$. Is there a principled rule or heuristic that can guide the selection of $d$ and $\gamma$ based on the number of classes $C$ or the complexity of the dataset to ensure the model maintains optimal performance and avoids convergence issues, instead of relying on manual tuning?
+
+4.  Ablation studies show that DeepMORSE, which uses modality-shared self-expression yields significantly larger improvements than simply combining coefficients derived independently from each modality. Can the authors provide a more detailed, perhaps qualitative, explanation of why the rigid constraint of enforcing the exact same coefficient matrix $C$ across both image and text representations (in Equation 4) is crucial for uncovering robust shared structures, compared to merely integrating two separate affinity matrices?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper aims to leverage textual information for image clustering. Specifically, this work assumes that there is a modality-invariant relationship within both the vision and text subspaces, i.e., each data point can be linearly represented by the same set of other data points using the same coefficients for both vision and text after appropriate transformations. Thereafter, enhanced vision representations can be learned and regularized by the textual information. For each image, the textual information is learned by a sparse coding using the dictionary to cover the image's representation. The proposed method shows better performance on various datasets. Moreover, the contribution of each component from the proposed method is well demonstrated and the proposed combination shows the best performance.
+
+### Strengths
+1) To leverage the textual information for clustering images, this work proposes to learn enhanced image representations constrained by the modality-invariant relationship between data points. Specially, after appropriate transformations, each data point can be represented by a linear combinations of other datapoints using the same coefficients for both the vision and textual representations. The proposed optimization framework is sound accordingly.
+
+2) Compared to the reported baselines, the proposed method provides better performance on various datasets, which demonstrate the effectiveness of the proposal. Moreover, the ablation study shows the contribution of each component well.
+
+3) The paper is well written motivated by sound discussion and easy to follow.
+
+### Weaknesses
+1) The proposed method employs a set of transformations f, g for each modality. It would be interesting to show that this transformation is necessary through the experiments. For example, how about the performance without doing the transformation, while keep all other learning objectives.
+
+2) Given the vision and text representations, it is applicable to treat each as a view for each data point. Showing the state-of-the-art multi-view clustering using both of them would help sufficiently demonstrate that multi-view clustering is not that helpful compared to the proposed method. 
+
+3) Some strong unimodal deep clustering methods are discussed or compared, e.g., CoKe, SeCu. Any reasons for that?
+
+### Questions
+Related questions can be found in the weakness section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

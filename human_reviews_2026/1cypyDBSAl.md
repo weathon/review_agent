@@ -1,0 +1,175 @@
+# Emotion-o1: Adaptive Long Reasoning for Emotion Understanding in LLMs
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 4, 2, 4
+
+## Abstract
+Long chain-of-thought (CoT) reasoning has shown great promise in enhancing the emotion understanding performance of large language models (LLMs). However, current fixed-length CoT methods struggle to balance reasoning depth and efficiency. Simple tasks (e.g., sentiment classification) are over-reasoned, while complex tasks (e.g., sarcasm understanding) lack depth. To fill this gap, we present Emotion-o1, an adaptive CoT framework that dynamically adjusts reasoning length based on task complexity. Emotion-o1 is trained by distilling adaptive CoT patterns from a large reasoning model (LRM), followed by supervised fine-tuning and reinforcement learning with a four-part reward targeting accuracy, brevity, structure, and redundancy. Experimental results on four emotion tasks highlight: (1) Emotion-o1 demonstrates significant improvements over its backbone, with F1 score increases of 11\%↑(Sentiment), 14\%↑(Emotion), 18\%↑(Humor), and 27\%↑(Sarcasm). (2) In sentiment and emotion tasks, our 8B model demonstrates superior performance against SoTA LLMs, outperforming Grok‑3 by 2.1\% in sentiment and within 1\% of OpenAI‑o1 in emotion. (3) The framework maintains accuracy while reducing reasoning length by 83\% compared to OpenAI-o1, demonstrating effective precision-efficiency optimization. From a lower-cost perspective, the framework also empowers SLMs to achieve reasoning capabilities comparable to larger ones.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The authors introduce a methodology to train LLMs to perform affective tasks of varying difficulty using chain of through. They distill reasoning from larger models, filter the generated reasoning depending on whether it predicted correctly or not, and then use those to guide a smaller LLM with fine-tuning, introducing several auxiliary losses controlling the diversity and length of the response. They show that compared to its non-CoT counterpart, the fine-tuned model performs satisfactorily better, and starts to approach bigger models with a much smaller computational budget.
+
+### Strengths
+- The description is very thorough, and the approach very interesting. Using RL for subjective constructs is still an open problem.
+- Results presented across 4 tasks
+- Many baselines models were evaluated.
+
+### Weaknesses
+In constructing their framework and using their datasets, the authors make several assumptions, some of which I think could be lead the affective community down a wrong path:
+- First of all, the authors declare emotions to be a "simple" task, which I find quite inappropriate. Even in their results, emotions seem to be on par with sarcasm and humor. The only justification I see for this claim is that the benchmark they use is simplistic (only one emotion per utterance, only 7 basic emotions), which then calls into question the results.
+- Secondly, questionable practice: the authors retain the rationales that lead to the "correct" answer only. However, it is a well-known phenomenon during data collection in emotion, morality, etc., that annotators disagree, and the setting is usually assumed to be diverse and subjective: multiple correct answers are possible and plausible.
+- This leads me to the next point: how appropriate is using "verifiable" rewards, when in fact the domain is closer to "unverifiable": we do not have a way to verify correct answers, and people disagree on their responses, and might even agree to disagree.
+- Why were base models using instead of fine-tuned? (e.g., Instruct)
+
+Overall, I feel like these assumptions are either wrong or misguided, and I feel that incentivizing the community to follow this paradigm might lead to treating such problems similar to actual verifiable domains, which will ignore the plurality and diversity of human inference and opinion in these settings, suppressing disagreement. Please let me know if I have missed or misunderstood something.
+
+### Questions
+- L38-43: You need to define "fixed-length" CoT strategies, and why they are long for one setting and short for the other. I don't see a citation or a helpful discussion on this anywhere.
+- It is unclear what the non-CoT models are doing: are they models that have been trained with SFT to perform the task, is it zero-shot inference without task-specific training, few-shot prompts, ...? Why/why not?
+- Did you attempt to train bigger models with LoRA (or using LoRA for the current models to avoid overfitting)? I think that a 70b model will be more convincing.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes Emotion-o1, a three-stage framework for emotion tasks (sentiment, emotion recognition, sarcasm, humor): (1) distill variable-length linear/non-linear CoT traces from a large reasoning model (DeepSeek-R1) using prompts that control structure/length; (2) adaptive CoT-augmented SFT conditioned on task type; (3) PPO with a four-part reward (accuracy, task-aware length, structure markers, redundancy penalty). Reported gains over an 8B LLaMA-3.1 backbone and competitive results vs. strong LLMs.
+
+### Strengths
+1. Clear problem framing & method: Adaptive depth for simple vs. complex emotion tasks; the training pipeline and reward components are specified with equations and hyperparameters/intuition.
+2. Empirical signal: On four benchmarks, Emotion-o1 improves over its backbone (up to +27% Weighted-F1 on sarcasm), and short/long ablations align with task complexity (short helps sentiment; long helps sarcasm/humor).
+3. Data-driven length control. The RL length reward sets task-specific length from quantiles/medians of the SFT length distribution, then uses the terms to steer outputs.
+
+### Weaknesses
+1. Missing reward ablations. The paper doesn’t show the effect of removing or reweighting each reward term.
+
+2. Missing standard baselines. No head-to-head comparisons with plain SFT or vanilla RL (e.g., PPO) under the same data/compute.
+
+3. No OOD evaluation. Results are only in-domain; there’s no test on out-of-distribution questions.
+
+### Questions
+1. Reward ablations: Which reward components drive the gains? How sensitive are results to the weights?
+
+
+2. Baselines: How does the method compare to plain SFT and vanilla PPO trained on the same data with equal budgets?
+
+
+3. OOD robustness: How does it perform on out-of-domain datasets, or noisy inputs?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes Emotion-o1, a training framework involving distillation and RL that trains an 8B LLM to vary its chain-of-thought length by task difficulty for emotion understanding tasks.
+
+### Strengths
+1. The framework can dynamically adjust reasoning depth according to task complexity in emotion understanding, moving beyond the fixed-length CoT paradigm.
+2. A carefully constructed reward function jointly optimizes accuracy, brevity, structural coherence, and redundancy control.
+
+### Weaknesses
+1. The method retains only label-consistent CoTs from the teacher model, effectively conditioning training on the gold label. This selection can bias the student toward reproducing “correct answer patterns” rather than learning generalizable reasoning behavior. The paper does not analyze how much of the downstream improvement depends on this filtering or whether it leads to shortcut learning.
+2. It remains unclear why emotion tasks require explicit CoT reasoning. The paper does not convincingly explain or quantify how reasoning supervision contributes to better emotion understanding beyond standard representation learning. 
+3. The biggest concern lies in generalization and data transparency. The paper omits low-level details about training and test splits and does not include any OOD or domain transfer evaluations. The claim that an 8B model outperforms larger systems (e.g., Grok-3, o1) could stem from overfitting or data leakage, especially since teacher models may have seen similar benchmarks.
+
+### Questions
+The combination of distillation SFT and PPO-based RL seems overly complex for this task. Why distillation SFT alone cannot achieve adaptive reasoning behavior? Why is RL necessary beyond fine-tuning on reasoning traces? A clearer analysis of how each stage (distillation vs. RL) contributes to adaptivity and accuracy would be valuable.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes Emotion-o1, an adaptive Chain-of-thought training framework for emotion understanding tasks, including sentiment, emotion, humor, and sarcasm classification. The method includes three stages: (1) structured reasoning distillation from DeepSeek-R1 to collect variable-length, structurally different CoT data, (2) adaptive CoT-augmented SFT with task-conditioned prompts, and (3) PPO-based RL with multi-objective reward (accuracy, length adaptivity, structure diversity, and redundancy suppression). Evaluation on *in-domain* test data of the four tasks shows that the trained 8B model achieves competitive results compared to SoTA LLMs.
+
+### Strengths
+- The paper is motivated by the fact that emotion understanding tasks have various difficulties and different reasoning depth needs, which is a fair argument. 
+- Emotion-o1 demonstrates strong results on the target tasks and effectiveness of the training recipe on a small model (8B)
+- Emotion-o1 has significantly higher token efficiency across the four tasks while maintaining competitive performances compared to SoTA reasoning models like DeepSeek-R1 and OpenAI-o1.
+
+### Weaknesses
+- Emotion-o1 undergoes task-specific training, whereas the baselines appear to be evaluated zero-shot, which favors the proposed model. For a fair comparison, the authors should evaluate the additional finetuned (SFT and RL) baselines to isolate adaptive reasoning from task-specific training.
+- Generalization of Emotion-o1 is unexplored. Improvements with in-domain training are expected and add little new insight for the research community. The authors should evaluate the model on unseen datasets and/or assess its cross-task transferability.
+- The paper only considers emotion classification tasks, which may have limited applicability. Other emotion-related tasks beyond recognition are unexplored, including empathetic conversations, safety alignment, and social reasoning.
+- The reward design lacks per-term ablation. The structure reward checks for the use of keywords and is susceptible to reward hacking. 
+- The authors provide a theoretical analysis to justify that sarcasm detection is intrinsically more difficult than sentiment classification. However, in Table 1, all thinking models, including Emotion-o1, have higher accuracy on sarcasm detection than on sentiment classification tasks. How do the authors explain the discrepancy between the empirical observation and the theoretical analysis?
+- The generated CoT from Emotion-o1 is not manually examined or analyzed for its quality.
+
+### Questions
+- see weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

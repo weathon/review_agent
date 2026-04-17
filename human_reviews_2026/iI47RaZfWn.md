@@ -1,0 +1,254 @@
+# Enhancing LLM Reasoning for Time Series Classification by Tailored Thinking and Fused Decision
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 4, 2, 4
+
+## Abstract
+The reasoning capabilities of large language models (LLMs) have significantly advanced their performance by enabling in-depth understanding of diverse tasks. With growing interest in applying LLMs to the time series domain, this has proven nontrivial, as evidenced by the limited efficacy of straightforwardly adapting text-domain reasoning techniques. Although recent work has shown promise in several time series tasks, further leveraging advancements in LLM reasoning remains under-explored for time series classification (TSC) tasks, despite their prevalence and significance in many real-world applications. In this paper, we propose ReasonTSC, a novel framework designed to effectively leverage LLM reasoning for time series classification through both a multi-turn reasoning and a fused decision-making strategy tailored to TSC. Rather than straightforwardly applying existing reasoning techniques or relying solely on LLMs' built-in reasoning capabilities, ReasonTSC first steers the model to think over the essential characteristics of time series data. Next, it integrates predictions and confidence scores from plug-in classifiers, e.g., domain-specific time series models, as in-context examples. Finally, ReasonTSC guides the LLM through a structured reasoning process: it evaluates the initial assessment, backtracks to consider alternative hypotheses, and compares their merits before arriving at a final classification. Extensive experiments and systematic ablation studies demonstrate that ReasonTSC consistently outperforms both existing time series reasoning baselines and plug-in models, and is even capable of identifying and correcting plug-in models' false predictions.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes ReasonTSC which is a framework to facilitate LLM reasoning on time series classification. The reasoning process is segmented into three stages, time series pattern reasoning, plug-in model decision fusion, and lastly assembling all previous information together with backtrack and final decision. Experiments over three distinct LLMs show that ReasonTSC improve over naive CoT reasoning and establishes the validity of LLM time series reasoning.
+
+### Strengths
+The paper is easy to follow and well presented. The research topic is well positioned among other related works. 
+
+Extensive exp and ablation studies demonstrate the effectiveness of ReasonTSC framework.
+
+### Weaknesses
+Given the multi-turn reasoning setup, I think it's extremely important to provide cost tradeoff experiments and discussions. It's obvious that ReasonTSC framework will be much more expensive then naive CoT inference, but by how much? That we don't know. 
+
+The focus on time series classification is rather narrow because this framework won't be able to extend to other time series tasks such as forecasting because you won't be able to backtrack to alternative answers.
+
+### Questions
+In line 303, it says "we use the first dimension of the multivariate UEA datasets to address the token limit". Does that mean you only used the first channel of multivariate time series? That changes the problem to univariate time series classification problem. And if so, what if the distinguishing pattern is actually not present in the first channel? I might understood it wrong.
+
+In figure 4, it seems like more shots actually hurt the performance (e.g. 5-shot is universally poorer than 2-shot across the three datasets(, any hypothesis on this?
+
+I'm not quite sure what figure 6 is meant to show. 
+
+In figure 8, how is the override rate and override accuracy calculated for w/o plug in model? If without plugin model, then shouldn't there be no overrides?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper proposes a pipeline for time series classification named ReasonTSC that aims to activate large language model reasoning through a three stage prompt design and a fusion step that injects outputs from a plug in time series classifier. Stage one guides the model to analyze canonical time series factors such as trend, periodicity, stationarity, amplitude, rate of change, and outliers. Stage two introduces predictions and confidence scores from a separate classifier and asks the language model to recalibrate its understanding. Stage three performs step by step judgment with explicit backtracking across candidate labels. Experiments on a subset of UCR and UEA datasets report gains over a vanilla chain of thought baseline and show cases where the method corrects errors produced by the external classifier. The paper claims generality across many language models and positions the approach as a training free way to improve time series classification.
+
+### Strengths
+- This paper articulates a clear task formulation for time series classification with an emphasis on structured factor analysis. The prompt design is readable and reproducible. The three stage template can be implemented with minimal engineering.
+
+- Evidence-aware decision protocol that treats external classifier scores as auditable signals and separates evidence from verdict, which enables calibration and error analysis.
+
+- The work highlights interpretability by asking the model to reason about trend and periodicity and related factors rather than returning only a label.
+
+- Training-free use of the language model with a plug-in interface to existing time series models, which lowers integration cost in small pilots.
+
+### Weaknesses
+1. The paper lacks methodological novelty. The approach is a modular composition of known prompting patterns that include structured chain of thought, reflective backtracking, and in context use of external scores. There is no new learning objective, no new model component, and no principled decision module beyond scripted prompts.
+
+2. The method injects predictions and confidence scores from the external classifier, sometimes with accuracy summaries. In a small data context this acts as a strong prior that can dominate the language model. The work does not isolate which information is essential.
+
+3. Most comparisons focus on a vanilla chain of thought or a small number of reflective variants. There is no systematic evaluation against stronger reasoning frameworks such as tree based search, program of thought, retrieval augmentation with time series facts, or tool use with statistical tests and spectral analysis.
+
+4. The claim of broad effectiveness across many language models is not supported by a single consolidated table with matched budgets. The core results highlight only a few models. Cost, latency, and context length are not reported in a comparable way.
+
+5. Presented evidence that the method can overturn external classifier errors does not prove stronger reasoning ability. In most cases the language model reacts to confidence patterns that are already visible in the injected numbers. Without tools that verify time series properties, the mechanism is evidence reweighting rather than genuine reasoning.
+
+6. Conclusions are stronger than the experimental support. Claims of consistent superiority and wide generality appear without comprehensive cost reporting, without strict information bound controls, and without coverage of multivariate and long horizon regimes.
+
+### Questions
+1. Can you provide an information boundary study that isolates what the model truly needs, for example only predictions, predictions with confidence, predictions with dataset level accuracy, and predictions with ground truth, and report the impact of each on accuracy and on overfitting risk?
+
+2. How does the method compare against stronger reasoning and tool use baselines under matched token budgets and matched latency, for example tree based search, program of thought, retrieval augmented prompts with time series facts, or statistical and spectral tool calls?
+
+3. What is the scalability profile on multivariate and long horizon settings, including accuracy versus context length curves, accuracy versus number of channels, and a cost and latency breakdown when you avoid rounding and channel reduction?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes ReasonTSC, a novel framework that enhances Large Language Model (LLM) reasoning for Time Series Classification (TSC) tasks. The key idea is to tailor multi-turn reasoning to the characteristics of time-series data (trend, cyclicity, amplitude, etc.) and fuse decisions with outputs from pretrained time-series foundation models (TSFMs) such as MOMENT and Chronos.
+
+### Strengths
+pros:
+1. The authors provide a convincing argument for why directly transferring NLP-style reasoning to time-series tasks underperforms. The identification of two research questions (steering reasoning and fusing external knowledge) is logically grounded.
+
+2. The evaluation covers 15 UCR/UEA datasets, multiple LLMs, and two foundation models. good job for comprehensive experiments; The experimental design is broad, and the authors include ablations and analysis (Figures 7–9, Tables 1–3) that explore how reasoning rounds, pattern prompts, and fusion impact performance.
+
+3. Readable and structured presentation. The writing is clear and the reasoning process (Figure 1) is well visualized. The inclusion of illustrative rationales (Appendix C.2) makes the framework interpretable.
+
+4. Empirical novelty. The “fused decision” idea of combining plug-in model confidence scores with reasoning traces is practically useful and may inspire further LLM–TSFM hybrid methods.
+
+### Weaknesses
+Cons:
+1. Lack of methodological depth; The framework is mostly prompt-engineering-based, without introducing a new model or learning mechanism. The multi-turn reasoning steps (pattern analysis → plug-in fusion → backtracking) are intuitive but not theoretically justified or derived from a formal reasoning principle.
+
+2. Evaluation setup may inflate improvements. Baselines like TimesNet and FEDformer are fully trained, while ReasonTSC uses few-shot inference, making direct percentage comparisons misleading.
+
+3. The “90% improvement” figure comes from very low-performing vanilla CoT baselines, so relative gains are exaggerated.
+
+
+4. All evaluations are on relatively small-scale UCR/UEA datasets. There is no demonstration on long or noisy industrial time series (e.g., finance, sensor, traffic).
+
+5. The approach depends heavily on token budgets and handcrafted prompts, which limits scalability beyond short sequences (<10 k tokens).
+
+6. Ablation insufficient for causal insight
+- Although Figures 12–15 show performance drops when removing reasoning turns, there is no clear causal analysis of why these stages help (e.g., how much each turn contributes semantically).
+- The distinction between pattern understanding and fusion reasoning remains qualitative.
+
+7. Limited novelty relative to existing reasoning works; Compared to frameworks like Self-Refine, Program-Aided Reasoning, or TS-Reasoner, ReasonTSC mainly reorganizes prompting stages rather than proposing a new reasoning paradigm. It lacks a deeper exploration of reasoning consistency, explainability metrics, or learning-based refinement that would strengthen its contribution.
+
+### Questions
+How much of the improvement comes from the reasoning process itself versus simply using the plug-in model’s logits and confidence scores?
+
+Could you include a fairer baseline where the plug-in model outputs are given to the LLM without multi-turn reasoning?
+
+How scalable is ReasonTSC to long or multivariate time series (e.g., >10 k tokens or >10 variables)?
+
+Have you tested ReasonTSC on any real-world datasets beyond UCR/UEA, such as financial or healthcare data?
+
+How sensitive are the results to prompt wording or model choice?
+
+Can you quantify reasoning quality—e.g., does more reasoning always lead to better accuracy?
+
+Could you show an ablation for each reasoning round separately (1st only, 1 + 2, 1 + 3, etc.)?
+
+How exactly are the plug-in logits fused with the LLM output—is it a weighted average, rule-based, or purely textual reasoning?
+
+Are the identified “time-series patterns” verified to be meaningful or correlated with true features?
+
+How does this approach differ conceptually from existing iterative reasoning methods such as Self-Refine or Program-Aided Reasoning?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper identifies that standard Large Language Model (LLM) reasoning techniques, like simple Chain-of-Thought (CoT), fail to improve performance on time series classification (TSC) tasks. The authors propose ReasonTSC, a novel framework to elicit more effective, domain-specific reasoning from LLMs without retraining them.
+
+### Strengths
+**Excellent Empirical Results:** The primary strength of the paper is its impressive results. Tables 1 and 2 show that ReasonTSC achieves massive performance gains (e.g., +87% to +686% on some datasets) compared to the "Vanilla CoT" baseline.
+
+**Novel Fusion Strategy:** The core idea of "fusing" the logits and predictions of a specialized model into the LLM's reasoning context is a clever and practical way to inject deep domain knowledge without requiring any fine-tuning of the LLM.
+
+**Strong Ablation Studies:** The authors do a commendable job of demonstrating why their framework works. They provide extensive analyses showing:
+
+- That ReasonTSC can successfully identify and correct the plug-in model's false predictions (Table 3).
+
+- That the "backtracking" step of considering alternatives is crucial (Fig 5).
+
+- That the "fused decision" (using the plug-in) is critical to performance (Fig 8).
+
+### Weaknesses
+**Lack of Fundamental Novelty:** The paper's novelty is questionable. The framework is an engineering contribution, not a fundamental one. It skillfully combines several existing techniques:
+
+- Few-shot In-Context Learning (Turn 1)
+
+- Tool-Assisted Reasoning (Turn 2, where the plug-in model is the "tool")
+
+- Multi-step Chain-of-Thought with backtracking/self-refinement (Turn 3)
+
+The "tailored thinking" is essentially just a very specific, well-written set of prompts. While effective, it doesn't introduce a new reasoning mechanism but rather a new, complex application of existing ones.
+
+
+
+**Unverifiable Claims and Over-Attribution:** This is the most significant weakness, which you correctly identified. The paper claims the LLM "evaluates the plug-in model’s confidence" and "adjusts [its] understanding."
+
+- This claim is unfalsifiable. We have no way to verify that the LLM is actually "evaluating confidence" in a human-like sense.
+
+- The LLM is a black-box text generator. It is far more likely that it is not performing this complex meta-reasoning, but is simply using the logits and prediction as powerful new features or "hints" in its context.
+
+- The paper consistently attributes human-like cognition to the model (e.g., "it recognizes," "it tends to present... interpretations") when it is simply generating text that mimics those cognitive processes. The "rationales" it produces (e.g., in Sec C.2) are just plausible-sounding text, not a verifiable trace of its internal reasoning.
+
+**Weak Baseline:** The massive performance gains are made possible by comparing against a "Vanilla CoT" (just adding "please think step by step"). This is a very weak, zero-shot, no-context baseline. It's not surprising that a complex, multi-turn, few-shot framework that also uses a specialized, pre-trained model for hints (ReasonTSC) would win.
+
+**High Complexity and Cost:** The proposed framework is extremely complex and resource-intensive. It requires:
+
+ - A separate, trained plug-in model (MOMENT/Chronos) to be run first.
+
+- Multiple, very long prompts (with 2-shot and 3-shot examples, plus logits) to be fed to the LLM.
+
+- Multiple "turns" or API calls to the LLM.
+
+This makes it far more expensive than a simple classification model.
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1

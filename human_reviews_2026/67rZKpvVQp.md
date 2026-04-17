@@ -1,0 +1,181 @@
+# DriveCamSim: Generalizable Camera Simulation via Explicit Camera Modeling for Autonomous Driving
+
+- Decision: Reject
+- Scores: 0, 6, 4, 6
+
+## Abstract
+Camera sensor simulation serves as a critical role for autonomous driving (AD), e.g. evaluating vision-based AD algorithms. While existing approaches have leveraged generative models for controllable image/video generation, they remain constrained to generating multi-view video sequences with fixed camera viewpoints and video frequency, significantly limiting their downstream applications. To address this, we present a generalizable camera simulation framework DriveCamSim, whose core innovation lies in the proposed Explicit Camera Modeling (ECM) mechanism. Instead of implicit interaction through vanilla attention, ECM establishes explicit pixel-wise correspondences across multi-view and multi-frame dimensions, decoupling the model from overfitting to the specific camera configurations (intrinsic/extrinsic parameters, number of views) and temporal sampling rates presented in the training data. For controllable generation, we identify the issue of information loss inherent in existing conditional encoding and injection pipelines, proposing an information-preserving control mechanism. This control mechanism not only improves conditional controllability, but also can be extended to be identity-aware to enhance temporal consistency in foreground object rendering. With above designs, our model demonstrates superior performance in both visual quality and controllability, as well as generalization capability across spatial-level (camera parameters variations) and temporal-level (video frame rate variations), enabling flexible user-customizable camera simulation tailored to diverse application scenarios.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+5
+
+### Summary
+This paper focuses on generative model-based camera sensor simulation. The authors think that existing generative methods fail to generalize across different camera viewpoints and video frequencies, and thus propose modules like the Explicit Camera Modeling (ECM) mechanism to achieve Generalizable Camera Simulation based on generative models.
+
+### Strengths
+The quality of generated views is acceptable. The experiments employ a variety of metrics, including detection (with multiple detectors), segmentation, planning, and occupancy prediction.
+
+### Weaknesses
+1. I suspect the authors may not fully understand the current problem settings in driving simulation. Generally, current driving simulation problem settings fall into two categories: 1) Imagining a driving scenario (without reference images, e.g., BEVControl); 2) Driving simulation based on one or multiple real images (with reference images, requiring the generated output to align with the real scene, at least for areas visible in the reference frames. This includes most driving world models and Novel View Synthesis (NVS) methods ).
+While this paper adopts the inputs of the second setting (using reference images), it completely fails to meet the respective performance requirements. As clearly shown in Figures 1, 5, 6, and 9, the proposed method cannot recover the real scene faithfully, unlike Bench2Drive-R or NVS methods. Therefore, the experimental comparison with Bench2Drive-R is invalid. The authors use Figures 6-12 to demonstrate the NVS capability of their method, but these figures conversely highlight its lack of NVS capability, particularly for foreground objects, which this method specifically emphasize.
+
+2. The authors did not explain how video generation is performed in the absence of real images: Is the first frame generated based on other conditions except reference images, with subsequent frames generated based on previously generated frames? It is hoped that the authors did not use real images as historical/start frames, as this would violate the input requirements of the first problem setting. How can ground truth images be obtained when imagining a driving scenario from scratch?
+
+3. The authors appear unfamiliar with methods under the second problem setting mentioned above (e.g., driving world models based on first-frame real image; NVS methods like SGD, FreeVS, StreetCrafter; or reconstruction-based methods like FreeSim, DrivingGaussian, StreetGaussian). The absence of references to and discussion of these relevant works is likely a main reason for the paper's misunderstanding of the task requirements.
+
+4. Poor language quality. Some sentences are even grammatically incorrect. For example:
+"To summary, our contributions as summarized as follows"
+“Despite demonstrating impressive performance on standardized benchmarks, critical limitations persist in terms of generalization capability and performance in corner cases.”
+"Among these, two representative technical approaches are rendering-based methods and generative models,"
+“Performance of UniAD’s different tasks on nuScenes validation set”
+The authors may utilize LLMs to improve the language.
+
+### Questions
+See weakness.
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper presents DriveCamSim, a generalizable camera simulation framework for autonomous driving, addressing the limitations of existing methods in fixed camera configurations and video frequencies. Its core innovations include Explicit Camera Modeling (ECM) for cross-view and cross-frame interactions in 3D physical space, an information-preserving control mechanism to enhance controllability and temporal consistency, and supporting strategies like overlap-based view matching and random frame sampling. Extensive experiments on nuScenes and nuPlan datasets demonstrate superior performance in visual quality, controllability, and generalization across spatial and temporal levels.
+
+### Strengths
+1. The proposed ECM mechanism effectively decouples the model from specific camera parameters and temporal sampling rates by establishing explicit pixel-wise correspondences in 3D space, filling the gap of poor generalization in existing implicit modeling methods.
+2. The information-preserving control mechanism, especially the identity-aware extension, successfully mitigates information loss in conditional encoding and injection, improving both controllability and foreground temporal consistency.
+3. The design of overlap-based view matching and random frame sampling strategies complements ECM well, enhancing the model’s ability to utilize relevant context and avoid over-reliance on adjacent frames.
+4. The framework supports flexible user-customizable simulation (e.g., variable frame rates, reverse temporal order), showing strong practical value for downstream autonomous driving algorithm evaluation and data augmentation.
+
+### Weaknesses
+1. Using MagicDrive and DreamForge as baselines is insufficient, as they do not support camera parameter generalization. On the contrary, the paper should conduct a direct comparison with 3D-based generative works like MagicDrive3D[a] to show advantages.
+2. No video-specific evaluation metrics are employed. Benchmarks like W-CODA2024[b], which are tailored for video generation quality and consistency, should be adopted to comprehensively assess temporal performance.
+3. Key components in Figure 4, Table 5, and Section 3.4 lack sufficient references to previous works. For example, "Text Condition" and "3D Bounding Boxes Encoding" draw on MagicDrive, and "Perspective-based control" originates from BEVControl, but these connections are not clearly cited.
+4. The experimental section does not provide training support for downstream perception tasks. It remains unclear how the generated data is integrated into the training pipeline of models like BEVFusion and what advantage this method can bring.
+5. The model struggles with large camera parameter perturbations (e.g., significant translation/rotation in x/z axes) and lags behind rendering-based methods in view consistency, indicating room for improvement in sensor modeling.
+
+[a] https://arxiv.org/abs/2405.14475
+
+[b] https://arxiv.org/abs/2507.01735
+
+### Questions
+1. For the Explicit Camera Modeling (ECM) mechanism, the paper mentions setting several depth anchors to project query view pixels to 3D space. What criteria were used to determine the number (e.g., 10) and range ([1, 60]) of these depth anchors, and how would adjusting these parameters impact the model’s performance in building pixel correspondences?
+2. The model is built upon a pre-trained Stable Diffusion v1.5, and all parameters of the UNet are retrained. Why was Stable Diffusion v1.5 chosen as the base model instead of other better models (e.g., Stable Diffusion XL or Pixart) or video diffusion models (e.g., Wan 2.1), and how does the choice of the base model influence the model’s initial performance and training convergence speed?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+Motivated by the goal of integrating the strengths of both rendering-based techniques and generative models while addressing their respective limitations, this paper proposes a generalizable camera simulation framework, DriveCamSim. The framework uses a novel ECM mechanism to simulate camera sensors. The ECM effectively mitigates overfitting to the specific camera sensors present in the training data. Additionally, for controllable generation, the paper introduces an information-preserving control mechanism that significantly enhances controllability. Through extensive experiments, this work demonstrates state-of-the-art performance across a variety of scenes.
+
+### Strengths
+- A novel and compact explicit camera modeling mechanism is proposed.
+- Detailed visualization results are provided, offering valuable insights.
+
+### Weaknesses
+- In Table 3, the perspective-based and attention-based control mechanisms are presented, but it is unclear which methods these mechanisms correspond to.
+- The novelty of the approach is not immediately apparent in the methods section, as it contains a lot of detailed explanations about handling different conditions.
+
+### Questions
+- Can the FVD score be included in Table 1?
+- From what I understand, the ECM uses intrinsic and extrinsic camera parameters to improve generation robustness. However, how does its performance compare to the native design that directly inputs the camera parameters as conditions?
+- As the core contribution of this work, the explicit camera modeling experiment in Table 3 is somewhat unconvincing. Additionally, based on the images presented in the supplement, the generative effect significantly worsens when the rotation exceeds 10°. Could you provide more generative video examples in the supplementary materials?
+- Regarding the information-preserving control mechanism, could you provide quantitative and visualization comparisons between the current approach and methods that suffer from critical information loss?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents DriveCamSim, a generalizable camera simulation framework for autonomous driving (AD) that aims to overcome the limitations of existing generative models. The core innovation of DriveCamSim is the Explicit Camera Modeling (ECM) mechanism. Instead of relying on standard attention, ECM establishes explicit pixel-wise correspondences across multiple views and frames, effectively decoupling the model from the fixed spatial and temporal parameters of the training set.
+Furthermore, the paper addresses the problem of information loss in conditional generation by proposing an information-preserving control mechanism. This design not only improves the fidelity of controllable generation but is also extended to be identity-aware, enhancing the temporal consistency of foreground objects like vehicles.
+
+### Strengths
+1. The proposed Explicit Camera Modeling (ECM) is a strong technical contribution that directly addresses a major limitation in prior work. Decoupling the model from fixed camera configurations is a well-motivated and crucial step toward creating truly flexible and practical AD simulators. And the qualitative result looks great.
+
+2. Identity-aware embedding is inspiring, maintaining consistency for dynamic objects, which is a common failure point in generative models.
+
+3. The qualitative and quantitative experiment results show that the proposed designs yield good performance.
+
+### Weaknesses
+1. The proposed Explicit Camera Modeling enables the model to generalize to unseen parameters. Although there are qualitative experiments showing that the model outperforms previous methods in the generalization of camera configuration. It would be better if there are quantitative evaluations with modern feed-forward SFM models, showing that the generated image follows the desired camera parameters.
+
+2. Ablation is an important part and should be included in the main paper.
+
+3. The submission doesn't include video results, which makes me a bit concerned about the temporal consistency.
+
+### Questions
+1. What is the number of keypoints per bounding box in the current setting? How are the keypoints sampled? Do the authors think adding the keypoint numbers or doing dense feature matching will improve the generation/identity preserving ability?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

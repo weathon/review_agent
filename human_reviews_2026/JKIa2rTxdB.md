@@ -1,0 +1,169 @@
+# MoSA: Motion-Coherent Human Video Generation via Structure-Appearance Decoupling
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 4, 6
+
+## Abstract
+Existing video generation models predominantly emphasize appearance fidelity while exhibiting limited ability to synthesize complex human motions, such as whole-body movements, long-range dynamics, and fine-grained human–environment interactions. This often leads to unrealistic or physically implausible movements with inadequate structural coherence. To conquer these challenges, we propose MoSA, which decouples the process of human video generation into two components, i.e., structure generation and appearance generation. MoSA first employs a 3D structure transformer to generate a human motion sequence from the text prompt. The remaining video appearance is then synthesized under the guidance of this structural sequence. We achieve fine-grained control over the sparse human structures by introducing Human-Aware Dynamic Control modules with a dense tracking constraint during training. The modeling of human–environment interactions is improved through the proposed contact constraint. Those two components work comprehensively to ensure the structural and appearance fidelity across the generated videos. This paper also contributes a large-scale human video dataset, which features more complex and diverse motions than existing human video datasets. We conduct comprehensive comparisons between MoSA and a variety of approaches, including general video generation models, human video generation models, and human animation models. Experiments demonstrate that MoSA substantially outperforms existing approaches across the majority of evaluation metrics.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposed a motion-coherent human video generation model, called MoSA. Formally, MoSA decouples the structure and appearance generation through a 3D structure generation and an appearance generation branch. The structure generation branch comprises a text-to-motion Transformer, structure-gen blocks, and Human-Aware Dynamic Control (HADC) blocks, while the appearance generation is based on a pretrained video generation model. Mask loss and tracking loss are additionally incorporated to improve the performance. Detailed experiments show that the proposed method enjoys visually coherent results. Moreover, this paper proposed a new human video dataset, called MoVid, including 30K human motion videos exhibiting diverse action categories and complex motions.
+
+### Strengths
+1. This paper proposed an interesting idea for text-to-human generation, unifying both 3D text-to-motion and controllable video generation.   
+2. The writing quality of this paper is good, while qualitative and quantitative experiments are sufficient to cover SOTA video generation and user studies.
+3. The proposed dataset, MoVid, seems to be useful to the community.
+
+### Weaknesses
+1. As detailed in Appendix.D, both the video generation model and text-to-motion transformer are frozen during the training. It would be helpful and interesting to investigate whether the text-to-motion model can also be enhanced with this end-to-end training strategy.
+
+2. Although this paper included detailed experiments, some results are still lacking. For example, a qualitative ablation study for HADC and its visual outcomes can help the readers to understand the effect of HADC better.
+
+3. For the comparison of human animation methods, the authors only compare to Animate Anyone, Champ, and HumanVid with inferior video backbones. More in-depth discussion and comparison are required, such as the Wan-based Uni3C (text-to-smpl can be used to simulate the Uni3C's input conditions as discussed in their paper).
+
+### Questions
+I recommend that the authors further compare their method to the SOTA human animation methods, such as Uni3C, to confirm their performance. Morevoer, an interesting discussion should be included for the unified training of both text-to-motion and controllable video generation.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+MoSA proposes a structure–appearance decoupling pipeline for human video generation: starting from a motion-specific prompt, a pretrained 3D structure transformer predicts 3D keypoint sequences that are projected to 2D skeletons and injected via specialized structure blocks to guide a DiT-based appearance model. To turn sparse skeleton cues into precise motion control, the authors add Human-Aware Dynamic Control (HADC) with a learned mask loss that assigns spatially varying weights over human regions. Motion realism is further enforced with a dense tracking loss for temporal coherence and a 3D human–scene contact constraint that discourages interpenetration. They also curate MoVid, a large-scale human video dataset emphasizing diverse and complex motions. Empirically, MoSA plugs into strong base models (e.g., CogVideoX, Wan 2.1) and shows consistent gains over prior work, and the paper additionally provides an image-to-video (I2V) variant in the appendix.
+
+### Strengths
+1. This paper proposes to use 3D to 2D structure guidance, and HADC integrates cleanly into DiT backbones. Experiments shows that it works with CogVideoX and Wan 2.1. Removing the structure branch or replacing 3D with direct 2D pose generation degrades plausibility (missing/occluded limbs). 
+
+2. To enhance motion coherence and physics, dense-tracking and contact terms are proposed and proved to be effect.
+
+3. Dataset contribution addresses a real gap (full-body, complex motion) and is used in comparisons.
+
+### Weaknesses
+1. Is projected 2D structure necessary for T2V? The authors argue that generating 3D keypoints and projecting to 2D improves plausibility and occlusion handling over directly predicting 2D skeletons. Ablations show failures like missing limbs when using a 2D structure generator, which supports that claim. However, the current metrics (FVD, CLIP similarity, and some VBench dimensions) are not targeted at structural correctness, so they don’t decisively isolate the benefit of 3D to 2D conditioning for T2V. Please complement FVD/CLIP/VBench with motion-centric metrics, e.g., pose detector, self-occlusion correctness, temporal smoothness/jerk on tracked keypoints, foot-sliding/contact-violation rate, and action recognizability via a pretrained classifier, to more directly validate structure quality. FVD, CLIP similarity and VBench-style scores are useful but still loosely connected to human motion fidelity, so they may not fully capture improvements in structure plausibility or contact realism. I recommend adding a small targeted user study (preference on “motion plausibility” and “action correctness”) and reporting standardized, motion-aware metrics as noted above to strengthen claims beyond general perceptual quality.
+
+2. Training–inference structure gap. During training, the 3D structure transformer is excluded and the model conditions on 2D skeletons extracted from the ground-truth video, whereas at inference it conditions on 2D projections of generated 3D structures. This creates a distribution shift that the paper doesn’t directly address. While Table 13 suggests robustness to user-specified fixed or time-varying cameras at inference, it would help to report results when training includes similar view randomization.
+
+3. Representation limits (sparse skeletons & multi-person). The approach is bottlenecked by the sparsity of skeletons: this paper explicitly notes that skeleton guidance lacks expressiveness for fine-grained control, requiring HADC to propagate structure cues into denser motion regions. This leaves open limitations for hands, garments, and challenging multi-person occlusions. The paper shows half-body and multi-person qualitative results, but a more systematic analysis of failure modes (e.g., hand interactions, inter-person contact) would clarify scope. A brief discussion of these limits and whether denser cues (SMPL-X joints, hand keypoints) would slot into the same framework would help readers understand when MoSA may still struggle.
+
+4. The authors do provide an image-to-video (I2V) variant in Appendix H to report an I2V “human animation” setting where the 3D structure transformer is removed. Is the good performance from better pretrained model (CogVideoX and Wan 2.1) or the model design? Because most of the compared methods use a U-net based pretraining model.
+
+### Questions
+Please see the weaknesses. Please correct me if my understanding about some points are wrong.
+
+Overall, it is a good attempt to incorporate human skeleton and motion generation methods into T2V human video generation. However, I still have some concerns about the evaluation part.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper presents a novel framework which decouples the process of human video generation into structure generation and appearance generation.
+
+### Strengths
+The motivation is interesting, and decoupling structure from appearance addresses a long-standing challenge in text-to-human video generation.
+
+Experiments on multiple benchmarks show substantial improvements compared with existing methods.
+
+### Weaknesses
+Does the proposed method ensure physical realism—for example, the deformation of the trampoline shown in Figure 3?
+
+The overall framework just combines known ideas (DiT backbone + structural priors + control modules), thus the innovation is mainly architectural integration.
+
+This paper adopts a mask-based generation approach. How does this method handle problem where the human body is partially occluded?
+
+### Questions
+please refer to weakness
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces a video generation method with finegrained human motion controlled from text prompt. The key idea is to guide the appearance generation on a set of 2D keypoints, projected from 3d keypoints, with the assistant of a spatial variation control weight regions. It also introduces a large scale dataset with 30k diverse and complex human motion. The proposed method shows superior results over prior baselines.
+
+### Strengths
+1. Decoupling of motion and appearance to guide the video generation to more complex human motion makes sense
+2. The Movid dataset is an important contribution to the field
+
+### Weaknesses
+1. The method uses motion corerspondences to constrain video consistency. These correspondences can be noisy, especially for textureless regions. Since these correspondences are only estimated from RGB frames, ie., the final output within a diffusion process, unrolling the gradient from multi-step diffusion is expensive. 
+2. It is unclear how the 3D contract constraint is differentiable.
+
+### Questions
+Please respond to the weekness section
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

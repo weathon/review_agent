@@ -1,0 +1,182 @@
+# Beyond Moment : Rethinking Evaluation para-digm for Timeline Summarization in the era of LLMs
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 2, 6, 6
+
+## Abstract
+Timeline summarization (TLS) aims to condense large collections of temporally ordered documents into concise and coherent narratives of key events.  While recent advances with large language models (LLMs) have improved, progress in TLS cannot be assessed objectively due to the lack of reliable evaluation metrics.  Existing evaluation metrics rely on the assumption that milestones aligned at the same timestamp convey identical semantic meaning. This design choice inherently biases against abstractive or semantically equivalent outputs while emphasizing temporal consistency ( Date F1 and A-ROUGE ). Consequently, such evaluation protocols fail to adequately reflect the genuine improvements brought by LLM and deviate from human judgments when comparing the relative merits of different methods. To more faithfully assess whether the predicted timeline and the reference timeline truly refer to the same events, we propose a new evaluation framework in which all metrics are grounded on semantically aligned sentence pairs rather than merely time-aligned milestones. We leverage LLM to compute semantic similarity, align sentence pairs via maximum-weight bipartite matching, and compute a Pair-Match score. Building on this alignment, Date-F1 and ROUGE metrics are further introduced to jointly evaluate semantic coverage and temporal fidelity, which we term Pair-Date F1 and Pair-ROUGE, respectively. To validate the effectiveness of our proposed metrics, we introduce a full-stage LLM-TLS (FS-LLM-TLS) approach and conduct comparisons against prior methods. Experiments demonstrate that FS-LLM-TLS not only surpasses prior methods on existing evaluation metrics but also that its advantages are more faithfully and effectively reflected under our evaluation framework, which offers a fairer and more reliable assessment of method quality. This evaluation framework establishes a new paradigm for TLS evaluation, laying the foundation for future experimentation and system development.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper revisits evaluation for timeline summarization in the LLM era, proposing a semantic-alignment-based evaluation framework (SA metrics) that uses large language models to align predicted and reference events semantically rather than temporally, providing a more faithful reflection of model quality and human judgment.
+
+### Strengths
+1. Clearly identifies a long-standing flaw in traditional TLS evaluation, overreliance on temporal alignment, and reframes it through semantic alignment.
+
+2. Proposes a concrete and implementable set of metrics (SA Score, SA-Date F1, SA-ROUGE, STA-ROUGE) that effectively capture semantic, temporal, and textual dimensions.
+
+3. Demonstrates strong empirical validation across multiple datasets and LLM architectures, showing the robustness and interpretability of the proposed evaluation paradigm.
+
+### Weaknesses
+1. Missing key literature in timeline summarization (e.g., Timeline Generation through Evolutionary Trans-temporal Summarization, Learning towards Abstractive Timeline Summarization), which weakens the positioning of this work in prior research.
+
+2. Ignores the non-uniqueness of references, which is a central challenge in summarization, where different annotators may emphasize different key events; this limitation is especially critical for an evaluation-focused paper.
+
+3. Lacks qualitative case studies illustrating the practical weaknesses of existing metrics or how SA metrics provide clearer, more human-consistent judgments.
+
+### Questions
+Can you give a representative case study to show the limitations of the current summarization models? The intuitive understanding is that LLM can already perform pretty well on summarization tasks.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a new evaluation framework in which all metrics are grounded on semantically aligned sentence pairs rather than merely time-aligned milestones, followed by four derived metrics: SA Score, SA Date-F1, SA-ROUGE, and STA-ROUGE. Compared with the traditional metrics such as Date F1, A-ROUGE, the proposed metrics can more faithfully assess whether the predicted timeline and the reference timeline truly refer to the same events. To illustrate the benefits, this paper developed FS-LLM-TLS, a refined LLM-based summarizer, and evaluated on three datasets (Entities, Crisis, T17). Results show their semantic metrics align better with human evaluations.
+
+### Strengths
+(1)  The proposed evaluation framework includes four sub-metrics, which can capture the candidate's quality from multiple perspectives such as semantic coverage, temporal fidelity, and textual quality.
+(2)  This paper conducts numerous ablation studies to further validate the effectiveness of the method proposed in the paper.
+
+### Weaknesses
+(1)  The paper tries to validate the effectiveness of the proposed metrics by comparing the performance gains achieved by traditional metrics and the proposed metrics in evaluating the baseline and FS-LLM-TLS, while it is insufficient to verify.
+(2)  This paper lacks a quantitative comparison between the proposed evaluation metrics and the baseline evaluation capability. It would be better to calculate the correlation coefficients between the quality score obtained from evaluation metrics and human evaluators, which can reflect the correlation between metrics and human ratings. The representative correlation coefficients include Kendall-Tau and Spearman, which are typically used to evaluate the generative text metrics, such as BERTSCORE (https://arxiv.org/pdf/1904.09675), G-Eval (https://arxiv.org/abs/2303.16634).
+(3)  The paper lacks detailed descriptions of the method and experiments, which weakens the reproducibility.
+(4)  There are some typos in this paper, such as the extra “Hu et al.” in line 104-105, the missing citation of “Martschat & Markert (2017)” in line 316.
+(5)  This paper focus on proposing a semantic-based timeline summarization equation framework, but in the experimental section, the paper mostly demonstrates and analyzes FS-LLM-TLS, lacking sufficient discussion on the proposed metrics.
+
+### Questions
+(1)  Which exact LLM and prompt were used for the yes/no event-equivalence decision? Was the same LLM used across all datasets and all model-size experiments, or was it tied to the generation model?
+(2)  This paper uses the large language model to evaluate the semantic similarity between predicted and reference, and then according to which calculated F1 and ROUGE scores. Has this paper tried designing a scoring prompt that directly scores the predicted, like a prompt-based evaluator? (such as G-Eval, GEMBA)
+(3)  For CE and DACE, are those your own human annotations, or numbers copied from prior TLS work? If the former, could you provide inter-annotator agreement?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper addresses the problem of objectively evaluating timeline summarization systems, which generate concise event narratives from temporally ordered documents. Current metrics, like Date-F1 and A-ROUGE, assume that events aligned by date share the same meaning, unfairly penalizing abstractive or semantically equivalent summaries. To address this problem, they propose a semantic alignment–based evaluation framework that uses large language models to measure similarity between sentences, align them through bipartite matching, and compute a Semantic-Alignment Score. They introduce Semantic-Alignment Date-F1 and Semantic-Alignment ROUGE to jointly assess semantic coverage and temporal accuracy. They also introduce a new Full-Stage LLM-TLS method, and experiments show that both the approach and the metrics better capture true system performance and align more closely with human judgments.
+
+### Strengths
+Originality:
+- the new metric seems novel and appropriate to update evaluation to the LLM-era
+
+Quality:
+- the metric and proposed method are effective relative to prior approaches
+
+Clarity:
+- helpful figures and clear detailing of the method
+
+Significance:
+- future work can use this evaluation metric to better assess performance improvements
+
+### Weaknesses
+1. Appendix information is not included in this version so I can't assess things like prompt templates.
+
+2. There is not section on ethics and LLM use.
+
+3. It is not clear to me whether the authors conduct a study of human judgments, and if they do, there are not enough details to understand what they did.
+
+4. Figure and table captions should include more details to explain the metrics, settings, and takeaways.
+
+### Questions
+None.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper tackles a limitation in current timeline summarization (TLS) evaluation by introducing a semantic-alignment framework to replace traditional metrics like Date F1 and A-ROUGE. The authors argue that existing metrics often mistake temporal closeness for semantic similarity, making them unsuitable for assessing LLM-based advancements. Their proposed Semantic-Alignment (SA) metrics use LLMs to align predicted and reference milestones by meaning before evaluating temporal and textual quality. For validation, they also develop FS-LLM-TLS, an improved TLS pipeline that integrates LLMs throughout the process. Experiments on three benchmarks show that the SA metrics align better with human judgment and reveal improvements compared with conventional evaluation methods.
+
+### Strengths
+1. Novel Evaluation Framework: The SA metrics systematically decouple semantic coverage, temporal accuracy, and textual quality, addressing a long-standing limitation in TLS evaluation. 
+
+2. Rigorous Validation: The authors thoroughly benchmark FS-LLM-TLS against baselines across datasets, model sizes, and ablation settings. Results consistently show SA metrics correlate better with human judgments and reveal LLM strengths overlooked by Date F1/A-ROUGE.
+
+3. Practical Pipeline Improvements: FS-LLM-TLS introduces meaningful enhancements to LLM-TLS, such as argument-aware snippet extraction and cluster-level abstraction, which improve semantic richness and milestone selection. The hybrid milestone selection strategy (mixing frequency and LLM reasoning) is well-motivated.
+
+### Weaknesses
+1. Limited Temporal Grounding Analysis: While SA metrics excel in semantic evaluation, the paper does not deeply analyze why temporal accuracy gains are modest. FS-LLM-TLS still relies on heuristic date assignments (e.g., mode clustering), which may limit temporal precision.
+
+2. Computational Cost: The SA metrics require extensive LLM calls for pairwise semantic judgments, which could hinder adoption. Efficiency comparisons (e.g., vs. embedding-based methods) are lacking.
+
+3. Evaluation of Metric Reliability: Although SA metrics align better with human judgments, statistical significance tests and inter-annotator agreement scores for human evaluations are not reported.
+
+### Questions
+Please refer to the weakness part.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

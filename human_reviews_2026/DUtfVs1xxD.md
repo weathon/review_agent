@@ -1,0 +1,176 @@
+# Uni-PrevPredMap: Extending PrevPredMap to a Unified Framework of Prior-Informed Modeling for Online Vectorized HD Map Construction
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Safety constitutes a foundational imperative for autonomous driving systems, necessitating maximal incorporation of accessible prior information. This study establishes that temporal perception buffers and cost-efficient high-definition (HD) maps inherently form complementary prior sources for online vectorized HD map construction. We present Uni-PrevPredMap, a pioneering unified prior-informed framework systematically integrating previous predictions with corrupted HD maps. Our framework introduces a tri-mode paradigm maintaining operational consistency across non-prior, temporal-prior, and temporal-map-fusion modes. This tri-mode paradigm simultaneously decouples the framework from ideal map assumptions while ensuring robust performance in both map-present and map-absent scenarios. Additionally, we develop a tile-indexed 3D vectorized global map processor enabling efficient 3D prior data refreshment, compact storage, and real-time retrieval. Uni-PrevPredMap achieves state-of-the-art map-absent performance across established online vectorized HD map construction benchmarks. When provided with corrupted HD maps, it exhibits robust capabilities in error-resilient prior fusion, empirically confirming the synergistic complementarity between temporal predictions and imperfect map data. Code is available in supplementary materials.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents a framework for online vectorized High-Definition (HD) map construction in autonomous driving systems. The main idea is to combine prior information from temporally previous predictions and cost-efficient HD maps in a prediction-driven temporal modeling architecture. The proposed Uni-PrevPredMap is derived from previous work of PrevPredMap with two core designs: tile-indexed 3D vectorized global map processor which enables efficient 3D prior updates, compact storage, and real-time retrieval, and a tri-mode paradigm which extends flexibility in handling different combination of prior information. Experiment shows that the proposed Uni-PrevPredMap achieves state-of-the-art performance on a set of public benchmarks including nuScenes and Argoverse2.
+
+### Strengths
+1. The setting of incorporating previous predictions and outdated HD maps prior for robust online HD map construction is reasonable for autonomous driving systems.
+2. The engineering design of tri-mode paradigm enables robust performance in both map-present and map-absent scenarios, which has practical values for real-world autonomous driving systems.
+
+### Weaknesses
+1. While the motivation of the paper is clear, the experiment validation is not sufficient. The paper declares that previous time predictions and cost-efficient/corrupted HD maps obtained from less frequently updated HD maps and crowd-sourced HD maps are complementary priors for online HD map construction, but there is no experiment validation on using different kinds of corrupted HD maps with different level of corruptions.
+2. The performance improvement in map-absent scenario as stated in Table 1 is not very impressive, i.e the performance gap between MapTracker and Uni-PrevPredMap is only 0.9% in mAP. 
+3. The ablation study in table 3 is not clear, from the table, the performance with '+ tile-indexed 3D vectorized global map processor' and '+ tri-mode paradigm' are both 74.0% under 'w/o map' setting, so what's the performance of adding both modules together?
+
+### Questions
+1. The paper mentioned that tile-indexed 3D global map processor stores and processes information in 3D, what is its computational cost and memory requirement?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on the core requirement of autonomous driving safety: the problem of fusing prior information for online vectorized HD map construction. It points out that time-aware caching and low-cost HD maps are two complementary types of priors, but existing models can only handle one of them in isolation and overly rely on the ideal map assumption. To address this issue, the authors propose a unified prior framework, Uni-PrevPredMap, which addresses the aforementioned issues through the following core designs:
+1. During training, through layered sampling and instance-level map perturbations, the model eliminates its reliance on an ideal map while ensuring robustness in both mapped and unmapped scenarios.
+2. Efficient prior updates, compact storage, and real-time retrieval are achieved based on vehicle UTM coordinates, extending 2D methods to 3D scenarios.
+3. Experimental validation: On the nuScenes (2D) and Argoverse2 (3D) datasets, Uni-PrevPredMap (and its variant Uni-PrevPredMap*, which incorporates corrupted maps) achieves state-of-the-art performance in map-missing scenarios and exhibits strong tolerance to instance-level/frame-level map perturbations (such as displacements, rotations, and additions and deletions), demonstrating the synergistic and complementary nature of the two types of priors.
+
+### Strengths
+1. This paper, for the first time, clearly demonstrates the complementary nature of time-aware caching and low-cost HD maps, demonstrating a strong academic innovation in its design approach.
+
+2. Comprehensive experimental design: Performance advantages are demonstrated on both 2D and 3D datasets, with results such as a mAP of 77.0 after 72 training epochs on nuScenes and 81.8 after integrating corrupted maps.
+
+3. Strong applicability: The framework meets the real-time demands of autonomous driving (inference speed of 11.5-12.2 FPS) and is compatible with low-cost, non-ideal HD maps, reducing the deployment cost of online map building and demonstrating its potential for migration to practical autonomous driving systems.
+
+### Weaknesses
+1. The paper explicitly states that height data is used only for spatial filtering and does not participate in prior generation. It also mentions that the bottleneck of 3D voxelization exceeding 2D rasterization in computational overhead remains unresolved. This undermines the core value of 3D design (such as priors for distinguishing vertical scenes like elevated roads and tunnels), leaving a gap between the goal of extending the technology to 3D scenarios and requiring further technical exploration.
+
+2. Compared to existing methods, Uni-PrevPredMap's inference speed (11.5-12.2 FPS), while meeting real-time requirements, is lower than some methods (such as MapTRv2's 16.4 FPS and FastMap's 17.2 FPS). The paper mentions that "parallelizing 3D filtering and rasterization can increase the speed to 14.2 FPS," but does not provide actual implementation results or analyze the speed-performance trade-off. Further verification is needed to verify its suitability for scenarios with higher real-time requirements, such as high-speed autonomous driving.
+
+3. The sampling ratio of the three-mode paradigm (non-prior: temporal prior: temporal-map fusion = 0.5:0.3:0.2) was verified to be optimal, but the reason why this ratio was optimal was not explained. For example, the specific impact of different ratios on the model's "unmapped generalization" and "mapped tolerance" was not explained, nor was the dependence of the ratio selection on dataset characteristics (such as the differences between nuScenes and Argoverse2). This resulted in a lack of support for the transferability of this design.
+
+### Questions
+1. Regarding 3D information utilization: The paper mentions that height data is only used for spatial filtering. What is the specific reason for not participating in prior generation? Have attempts been made to incorporate height information (e.g., road slope, tunnel height) into prior features (e.g., through multi-dimensional feature concatenation using the BEV encoder)? If so, what are the core technical obstacles encountered (e.g., computational overhead, feature alignment)?
+
+2. Regarding the completeness of the method comparison: Existing comparisons focus on "single-prior models" (e.g., MapTracker, which uses only temporal priors, PriorMapNet, which uses only map priors). Are there any baseline methods in the same field that attempt to integrate two types of priors? If so, please provide additional comparisons with these methods to more clearly demonstrate the advantages of the Uni-PrevPredMap framework.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces Uni-PrevPredMap, a unified framework for online vectorized HD map construction that integrates two complementary prior sources: temporal perception buffers (previous predictions) and cost-efficient, potentially corrupted HD maps. The core contribution is a tri-mode paradigm (non-prior, temporal-prior, and temporal-map-fusion) that ensures operational consistency and robust performance in both map-present and map-absent scenarios. By training with instance-level perturbations on map priors, the model is decoupled from ideal map assumptions and demonstrates strong error-resilient fusion capabilities. The framework is supported by a tile-indexed 3D vectorized global map processor for efficient, real-time prior retrieval and refreshment. Uni-PrevPredMap achieves state-of-the-art performance on map-absent benchmarks and empirically confirms the synergistic benefit of fusing temporal predictions with imperfect map data.
+
+### Strengths
+1. The introduction of corrupted HD maps as an additional prior modality is interesting.
+2. The proposed method is empirically strong, achieving state-of-the-art performance on standard online vectorized HD map construction benchmark sets.
+
+### Weaknesses
+1. The proposed method relies on heuristic design choices. For instance, the tri-mode paradigm is structured around specific training data types and requires manually tuning an optimal sampling ratio (as demonstrated in Table 7), which may not generalize easily across different datasets or environments.
+2. The paper's presentation could be improved for clarity. The three equations provided (Eq. 1-3) appear non-essential to the core idea and could be moved to the appendix. More importantly, the explanation of the core Refreshment and Retrieval mechanisms would benefit from a more intuitive, high-level explanation.
+3. The benefits of the temporal-prior are difficult to fully assess from static image results alone. The paper would be much stronger if it included supplementary videos to visually demonstrate the resulting temporal consistency and performance advantages.
+4. The paper lists experimental results while lacking deeper analysis. For example, it is noted that the tri-mode training does not degrade no map-prior (temporal prior) performance in Table 7. However, the paper provides no analysis of how the model avoids this potential performance trade-off while being trained on the additional map-fusion capability.
+
+### Questions
+The paper proposes a unified framework for online map construction, demonstrating strong performance by incorporating a map prior modality. While the results are good, the overall contribution is undermined by several key issues. The proposed method, particularly the tri-mode paradigm, appears to be heavily based on heuristics design. The paper also suffers from a lack of in-depth analysis, often listing experimental findings without sufficiently exploring the underlying reasons for their outcomes. Finally, the paper's presentation needs significant improvement for clarity and impact.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents a unified prior-informed framework for online vectorized HD map construction, Uni-PrevPredMap. This framework integrates two complementary prior sources — previous predictions and corrupted HD maps — to enhance temporal consistency. Uni-PrevPredMap operates under a tri-mode paradigm, which ensures consistent behavior across non-prior, temporal-prior, and temporal-map-fusion modes. This paper also proposes the tile-indexed 3D vectorized global map processor, to manage prior information.
+The framework is tested with nuScenes and Argover2 datasets showing some improvements over SOTA methods.
+
+### Strengths
+* The paper tackles an important challenge in online HD map construction by integrating temporal and prior information in a unified, adaptable framework.
+* The proposed tri-mode paradigm is conceptually interesting, as it provides operational flexibility between prior-free and prior-informed scenarios.
+* The empirical results suggest robustness to corrupted priors, demonstrating some progress in this specific research field.
+
+### Weaknesses
+* (L071) It would be helpful to briefly describe the “idealized fidelity assumptions” of maps early in the paper. As written, readers must infer these assumptions from context. A short explanation would improve clarity and motivation.
+
+* The distinctions between non-prior, temporal-prior, and temporal-map-fusion modes remain somewhat unclear.
+It would be useful to specify how each mode is derived or activated—for example, what features or signals determine which mode the system operates in.
+
+* The tile-indexed 3D vectorized global map processor appears conceptually similar to the memory buffer mechanism in MapUnveiler (Kim et al., 2025) and MapTracker (Chen et al., 2024). A clearer explanation of the main differences and any improvements introduced by Uni-PrevPredMap would help readers better understand the novelty.
+
+* The term “UTM coordinate” should be defined when first introduced. Not all readers may be familiar with it, and clarity here would avoid confusion.
+
+* Although the experimental results generally show improvements, the model still underperforms compared to some SOTA methods (Tab.1). This should not diminish the paper’s overall contribution, but it would strengthen the work to discuss potential reasons for these results—e.g., trade-offs between robustness and accuracy, or the effects of noisy priors.
+
+### Questions
+Please refer to Weakness section.
+Although this paper starts with an interesting approach, I was not able to fully understand the key concept, tri-mode paradigm, due to lack of detailed explanations. Also, current version requires further clarifications of its contributions with prior arts.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

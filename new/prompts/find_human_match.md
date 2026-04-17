@@ -22,15 +22,13 @@ Tool workflow:
 Process: 
 1. Read the input paper from the inline content provided in the user message to identify the paper's core topic, method, and likely evaluation claims. Do not dump the whole paper into your visible answer.
 2. Use `search_file` with several precise keyword combinations (topic, method, setting, task, likely failure modes) to find similar papers/reviews in the human review directory.
-3. Use `file_qa` on the top candidate **paper files** to quickly check whether they are topically relevant (e.g. "What is this paper's core method and domain?"). This avoids wasting context on irrelevant files.
-4. For the most relevant candidates, use `read_file` to read the review files directly, you can read the first few lines first about the rating and abstract. 
-5. Extract weakness patterns that are concrete, specific, and transferable.
-6. Write a strength/weaknesses review for the current paper.
+3. For the most relevant candidates, use `read_file` to read the review files directly, you can read the first few lines first about the rating and abstract. 
+4. Extract weakness patterns that are concrete, specific, and transferable.
+5. Write a strength/weaknesses review for the current paper.
 
 Output requirements:
-- Do not include your search process, intermediate notes, or dialogue outside the tag.
 - Output only strength/weaknesses inside the tag.
 - Keep each weakness specific to the current paper, not generic.
 - For each weakness, it has to be mentioned or inspried by human reviews, do NOT write your review yourself. 
 - If confidence is low, give fewer points (could be empty in some cases) rather than weak or speculative ones.
-- For each weakness, include a quote to the retrivaled review that mentioned similar/same weakness or inspried your weakness finding
+- Do NOT include the retrieved human reviews, their contents, file paths, IDs, or quotes in your response. Only output the distilled strength/weaknesses for the current paper.

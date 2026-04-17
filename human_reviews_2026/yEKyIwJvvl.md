@@ -1,0 +1,167 @@
+# Speak, Edit, Repeat: High-Fidelity Voice Editing and Zero-Shot TTS with Cross-Attentive Mamba
+
+- Decision: Reject
+- Scores: 0, 6, 6, 4
+
+## Abstract
+We introduce $\textbf{MAVE}$ ($\textbf{M}$amba with Cross-$\textbf{A}$ttention for $\textbf{V}$oice $\textbf{E}$diting and Synthesis), a novel autoregressive architecture for text-conditioned voice editing and high-fidelity text-to-speech (TTS) synthesis, built on a cross-attentive Mamba backbone. MAVE achieves state-of-the-art performance in speech editing and very competitive results in zero-shot TTS, while not being explicitly trained on the latter task, outperforming leading autoregressive and diffusion models on diverse, real-world audio. By integrating Mamba for efficient audio sequence modeling with cross-attention for precise text-acoustic alignment, MAVE enables context-aware voice editing with exceptional naturalness and speaker consistency. In pairwise human evaluations on a random 40-sample subset of the RealEdit benchmark (400 judgments), 57.2\% of listeners rated MAVE-edited speech as perceptually equal to the original, while 24.8\% prefered the original and 18.0\% MAVE- demonstrating that in the majority of cases edits are indistinguishable from the source. MAVE compares favorably with VoiceCraft and FluentSpeech both on pairwise comparisons and standalone mean opinion score (MOS) evaluations. For zero-shot TTS, MAVE exceeds VoiceCraft in both speaker similarity and naturalness, without requiring multiple inference runs or post-processing. Remarkably, these quality gains come with a significantly lower memory cost and approximately the same latency: MAVE requires $\sim6\times$ less memory than VoiceCraft during inference on utterances from the RealEdit database (mean duration: 6.21s, A100, FP16, batch size 1). Our results demonstrate that MAVE establishes a new standard for flexible, high-fidelity voice editing and synthesis through the synergistic integration of structured state-space modeling and cross-modal attention.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+5
+
+### Summary
+This paper proposes **MAVE**, a hybrid architecture leveraging a Mamba-based state-space sequence model enhanced with cross-attention for efficient, high-fidelity, and context-aware speech editing and zero-shot text-to-speech (TTS) generation. MAVE models long-range dependencies in audio tokens via Mamba, while dynamically aligning text and audio through cross-attention on phoneme embeddings, enabling bidirectional and precise speech modifications. The empirical evaluation on standard benchmarks demonstrates performance gains in naturalness, intelligibility, and speaker consistency compared to contemporary baselines such as VoiceCraft and FluentSpeech.
+
+### Strengths
+1. The integration of Mamba SSMs with a cross-attention mechanism tailored for audio-text alignment addresses the quadratic inefficiency of transformer-based decoders in long speech generation.
+
+### Weaknesses
+1. Lack of novelty. This work is essentially a copy of VoiceCraft in every aspect — design, writing, and overall structure — with the only difference being that the model architecture is changed from Transformer to Mamba.
+
+2. A severe lack of baselines, such as F5-TTS and MaskGCT, which both support TTS and editing.
+
+### Questions
+N/A
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The work proposes the first structured-state-space model (Mamba) successfully adapted for text-conditional speech generation (Voice Editing and Zero-Shot TTS) by fusing it with cross-attention layers for linguistic alignment. The proposed approach outperforms autoregressive and diffusion-based approaches in fidelity, efficiency, and robustness.
+
+### Strengths
+- The paper is novel and will intrigue the community since it is the first paper that uses MAMBA for these speech tasks according to the authors. I do remember that some people used it in the past but for different tasks (Mamba in Speech: Towards an Alternative to Self-Attention).
+- The paper is very well presented with very good experiments and explanations. Good presentation of both objective and subjective metrics. I do like the very well set up subjective evaluation and the details provided in the Appendix.
+
+### Weaknesses
+- The only weakness that I see is that the authors did not do a comparison with more Speech Editing or Zero-shot methods. They compared only with VoiceCraft. I would suggest to compare with other models too in order to have a more complete analysis.
+
+### Questions
+- Interesting masking with a mask token. I haven't seen that before. When I was doing research in Speech Editing we used to use masks of zeros on the mel-spectrogram but now since you use tokens it has to change. Very interesting detail.
+
+- Last paragraph of 3.2.1, can you elaborate a bit more of why MAMBA performs that good? Is there an ablation study for that? This paper will create a lot of discussion in the speech field since the audience is divided on the attention vs SSM, so it would be nice to give explanations on why this works better.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces MAVE (Mamba with Cross-Attention for Voice Editing and Synthesis), a novel autoregressive architecture for text-conditioned speech generation. The core innovation is a hybrid design combining a Mamba (SSM) backbone for efficient, long-sequence audio modeling with a cross-attention mechanism for robust text conditioning. This architecture is designed to effectively manage the significant length mismatch between text and audio modalities.
+
+The authors evaluate the model on two primary tasks. For speech editing, MAVE achieves performance on the RealEdit benchmark that is **comparable** to the state-of-the-art VoiceCraft model, with results largely within the confidence intervals of the baseline. The model's strengths are more clearly demonstrated in zero-shot text-to-speech (TTS), where MAVE achieves **statistically significant improvements** over VoiceCraft in both MOS naturalness and intelligibility.
+
+A key contribution of this work is its computational efficiency; MAVE requires approximately **6x less inference memory** than the Transformer-based VoiceCraft. The strong zero-shot TTS performance is presented as a direct application of the model's ability to learn speaker characteristics from audio context, a mechanism that is learned during its training on the speech editing (in-filling) task.
+
+### Strengths
+*   **Originality:** The paper's primary original contribution is the MAVE architecture. It proposes a hybrid design that combines a Mamba backbone, chosen for its linear-time efficiency in modeling long audio sequences, with a separate cross-attention mechanism for text conditioning. This architecture is a well-motivated solution for applying SSMs to a cross-modal task, specifically addressing the significant length mismatch between text and audio sequences. This integration of a Mamba decoder with a flexible, length-agnostic cross-attention module is a novel approach in this domain.
+*   **Clarity:** The paper is clearly written. The core architectural idea is presented logically and is supported by Figure 1, which effectively visualizes the text/audio data flow and the detailed decoder block. The authors explain the token rearrangement strategy that unifies the speech editing and TTS tasks under a single autoregressive framework. The inclusion of a theoretical complexity analysis in the appendix (A.4) also adds to the clarity of the model's proposed benefits.
+*   **Quality:** The paper's claims are supported by a thorough evaluation. On the primary speech editing task (Table 1), the MOS scores for naturalness and intelligibility are comparable to the VoiceCraft baseline, with results largely falling within the reported confidence intervals. While this demonstrates competitive performance, the model's quantitative strengths are more clearly shown in the zero-shot TTS evaluation (Table 2). Here, the model achieves a statistically significant improvement over the baseline in both naturalness (3.48 vs. 3.22) and intelligibility (4.20 vs. 4.01). Furthermore, the ablation study (Table 5) is of high quality and provides a strong justification for the Mamba + Cross-Attention design, showing it outperforms both a "Mamba-only" (concat) approach and a "Transformer + Cross-Attention" model.
+*   **Significance:** The significance of this work is twofold. First, from a practical standpoint, the paper presents a model that achieves competitive-to-superior generative quality while being significantly more efficient. The reported \~6x reduction in inference memory (Table 4) is a significant practical contribution, potentially making SOTA-level speech generation more accessible. Second, from a scientific standpoint, this work provides a viable blueprint for replacing the dominant Transformer backbone in complex, text-conditioned autoregressive audio models. It demonstrates that SSM-based hybrids can offer a favorable trade-off between performance and efficiency, which may encourage further research into similar architectures.
+
+### Weaknesses
+The claim in the abstract that the model is "not explicitly trained on the \[zero-shot TTS] task" is potentially misleading. Section 3.2.3 clarifies that the editing task uses surrounding audio for speaker context, while the TTS task uses a prepended prompt. The core mechanism—conditioning on audio tokens for speaker identity—appears to be a fundamental part of the training objective, not a purely emergent capability. A more precise framing would be that zero-shot TTS is a direct and successful *application* of the speaker context mechanism learned during in-filling. The authors are encouraged to clarify this framing in the final version.
+
+The paper's claims about state-of-the-art *speech editing* performance are not strongly supported by the data in Table 1. The MOS scores for MAVE versus VoiceCraft on the RealEdit benchmark are very close, with overlapping confidence intervals, suggesting performance is, at best, on par. This SOTA claim is further weakened, as the authors note, by the evaluation being on an incomplete version of the RealEdit benchmark. In contrast, the model's superiority is much clearer in the zero-shot TTS task (Table 2) and its efficiency (Table 4). The paper would be stronger if it re-framed its primary contribution around these more significant and clearly demonstrated achievements: namely, achieving *comparable* editing quality and *superior* TTS quality with a *dramatically* more efficient architecture.
+
+A significant practical limitation of the "speech editing" framework is its reliance on manual segmentation. The model requires the user to explicitly define the "before" and "after" audio spans for an edit. It cannot, for example, take a full audio file and a corrected transcript and "automatically find and fix" the errors. This makes it a powerful *component* for an editing tool, but not a fully automatic "corrector," which limits its immediate practical utility. This limitation should be discussed, and a constructive path for future work would be to investigate integrating this model with an automatic text-audio aligner to create a true, end-to-end "find-and-fix" system.
+
+The zero-shot TTS evaluation, while showing strong results on LibriTTS, could be made more robust. First, the evaluation is on clean read-aloud speech, which does not directly test the model's main strength: its training on "in-the-wild" Gigaspeech audio. Second, Table 3 shows a clear trend of the performance gap to ground truth widening as the generated text gets longer. To strengthen the paper's claims, the authors could (1) add a TTS evaluation on an "in-the-wild" test set (e.g., held-out Gigaspeech samples) to validate its robustness, and (2) provide a brief analysis of *why* long-form quality degrades (e.g., is it speaker similarity or text alignment?) to better guide future work on Mamba's long-context state.
+
+### Questions
+*   Could the authors please clarify the "not explicitly trained for zero-shot TTS" claim? Section 3.2.3 implies that speaker context is learned from surrounding audio tokens during editing. How does this mechanism fundamentally differ from prepending a reference prompt for zero-shot TTS, which seems like a direct application of the same learned capability?
+*   The practical utility of the editing feature relies on manual segmentation of the "before" and "after" audio. Have the authors investigated a path to a fully automated system, for instance, by combining MAVE with a text-audio aligner that could automatically identify and propose mismatched spans for correction?
+*   Given the paper's focus on Mamba's efficiency, did the authors experiment with replacing the Transformer-based text encoder with a Mamba-based one? This could create a more architecturally homogenous model and potentially yield further efficiency gains.
+*   Section 3.2.3 mentions "cross-speaker editing" as a possibility. Was this capability evaluated? For example, how well can the model edit a phrase into a target speaker's voice using a reference prompt from a *different* speaker?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces MAVE, an autoregressive TTS model that integrates a Mamba backbone (for efficiency) with cross-attention (for text-speech alignment). The inspiration comes from the fact that existing methods are often either high-fidelity but expensive, like Transformers, or efficient but struggle with coherence, like diffusion models . The paper demonstrates that MAVE achieves state-of-the-art performance in speech editing on the RealEdit benchmark as compared to VoiceCraft with 6x less inference memory. It also outperforms VoiceCraft in speaker similarity and naturalness for zero-shot TTS.
+
+### Strengths
+1. The main contribution of this paper is integrating Mamba with cross-attention to allow conditioning the model on text without explicit alignments. While I am not entirely familiar with related work in this area, this seems to be one of the first papers to do this and is a strong contribution. The ablations in Table 5 support the usefulness of MAVE having both Mamba and cross-attention; Mamba-only and Transformer-only underperform MAVE.
+2. The human evaluations show that the model is essentially perceptually equal or better than the ground-truth speech, which is encouraging.
+
+### Weaknesses
+1. MAVE is only compared to Voicecraft (over all test examples) and FluentSpeech (over a 14-example subset). There are lots of new open-source TTS models, many over a year old; F5-TTS, MaskGCT, VoiceStar. The paper lacks comparisons to a lot of these models and without these, the paper’s claim of state-of-the-art results ‘outperforming leading autoregressive and diffusion models’ is misleading.
+2. The authors emphasize one of MAVE’s main advantages is its linear-time complexity. However, the results in Table 4 show that MAVE is actually slower than VoiceCraft on the RealEdit benchmark. The claim of superior speed for longer sequences is purely theoretical (discussed in Appendix A.4)  and is not validated with an experiment. I’d recommend the authors experiment with longer text generations and show that the model is much faster than baselines experimentally.
+
+### Questions
+1. Can you provide a plot (e.g., sequence length vs. inference time) that shows the crossover point where MAVE actually results in faster wall-clock speed than theTransformer's quadratic scaling?
+2. The model’s naturalness reduces as the length of the generation increases (Table 3), as expected. You attribute this problem to the training dataset, which has examples of moderate length. However, it is also possible that the model architecture cannot maintain long-range coherence (although theoretically, given that it is based on Mamba plus cross-attention, it should). Can you design and run an experiment that disentangles these two possible causes?
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3

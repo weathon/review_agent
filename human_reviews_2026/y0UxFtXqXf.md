@@ -1,0 +1,190 @@
+# What matters for Representation Alignment: Global Information or Spatial Structure?
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 8, 8
+
+## Abstract
+Representation alignment helps generation by distilling representations from a pretrained vision encoder to intermediate diffusion features. We investigate a fundamental question - `what aspect of the target representation matters for generation, its global information (measured by Imagenet1K accuracy) or its spatial structure (pairwise cosine similarity between patch tokens)''? Prevalent wisdom holds that stronger global performance leads to better generation as a target representation.  To study this, we first perform a large-scale empirical analysis across 27 different vision encoders and different model scales. The results are surprising - spatial structure, rather than  global performance drives the generation performance of a target representation. To further study this, we introduce two straightforward modifications, which specifically accentuate the transfer of spatial information. We replace the standard MLP projection layer in REPA with a simple convolution layer and introduce a spatial normalization layer for the external representation. Surprisingly, our simple method (implemented in <4 lines of code), termed iREPA, consistently improves convergence speed of REPA, across a diverse set of vision encoders, model sizes, and training variants (such as REPA, REPA-E, meanflow, JiT etc). Our work motivates revisiting the fundamental working mechanism of representational alignment and how it can be leveraged for improved training of generative models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper investigates whether global semantic information or spatial/local information of the external encoder contributes more to the generation performance of REPA (Representation Alignment for diffusion models).
+First, the authors show that the amount of global semantic information (quantified by linear probing accuracy) of the external encoder may negatively correlates with REPA generation quality (measured by FID).
+Second, they introduce a metric for spatial information of the external representations, defined by how much closer patches exhibit higher feature similarity than distant ones, and show that this spatial inductive bias positively correlates with REPA generation performance.
+Finally, the authors propose two simple modifications to improve REPA: (1) replacing the MLP projection layer with a convolutional projection layer to preserve spatial structure, and (2) introducing a spatial normalization to encourage feature consistency among nearby patches. These enhancements consistently improve generation performance across multiple external encoders.
+
+### Strengths
+- The studied problem is well-motivated:analyzing what are the important factor in REPA of diffusion models.
+- The analysis is comprehensive. span across a lot of diverse external recent advanced external encoders and various sizes of diffusion models.
+- The empirical findings are clear and well-supported: global semantic information(as measured by linear-probe accuracy) weakly correlates with REPA generation performance(measured by FID), while spatia structure(measured by the spatial metrics) strongly correlates.
+-  The simple adjustments proposed in Section 3 are well-motivated, lightweight, and lead to consistent FID improvements across all encoders.
+- The qualitative examples in figure 2 gives a nice intuition on the spatial information of generated image.
+- The writing is clear and well-structured, making the analysis easy to follow despite the large experimental scope.
+
+Overall, the work provides practical and actionable insights for improving REPA performance in diffusion-based generative models.
+
+### Weaknesses
+- Figures 2, 3a, and 3c all show a negative trend between global information and generation quality, and Sections 1–2 carry that narrative. But Figure 4 actually shows the correlation is weakly positive among the diverse encoders, as opposed to completely negative. The paper’s wording early on makes it sound stronger than what the data supports.
+ - The paper should mention prior findings that REPA tends to improve generation quality at first and then degrade after more training epochs[1] That paper already pointed out that "REPA injects semantic anchors but underuses structural information, which overlaps a lot with this paper’s main claim.
+- Defining the linear probing accuracy as "global information" is not entirely intuitive as global information often refer to high-frequency features in respresentation learning domain. "Semantic information" is a better way to describe it. 
+- Missing details in experimental setup: Figure 3 is lacking some experimental setup details:for example, how many diffusion steps were used, or what diffusion backbone used. These details are important for interpreting the results and comparing across models.
+
+[1]Wang, Ziqiao, et al. "REPA Works Until It Doesn't: Early-Stopped, Holistic Alignment Supercharges Diffusion Training." arXiv preprint arXiv:2505.16792 (2025).
+
+### Questions
+- Have you tested whether your proposed spatial normalization or convolutional projection still helps when using already spatially rich encoders like SAM2?
+- Can you discsuss how doe the previous work's insight situates with your findings? [1] 
+- Could you clarify the experimental setup for Figure 3: specifically, how many diffusion steps were used and which diffusion backbone the experiments were based on?
+
+[1]Wang, Ziqiao, et al. "REPA Works Until It Doesn't: Early-Stopped, Holistic Alignment Supercharges Diffusion Training." arXiv preprint arXiv:2505.16792 (2025).
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This work presents an empirical study and enhancement of representation alignment (REPA), which refers to a constraint that aligns a generative model’s representations with those of a pre-trained model during learning. Specifically, the authors extensively experiment with various pre-trained encoders and conclude that representations with “spatially structured” properties contribute more to generation quality than those excelling in classification tasks. The spatial structure is measured using the pairwise cosine similarity between patch tokens. Inspired by this finding, the authors propose a strategy to replace the MLP in REPA with convolutional layers and introduce spatial normalization layers, thereby encouraging the generative model to better learn from the spatial structure of the encoder’s representations.
+
+### Strengths
+1. The paper systematically examines the relationship between the spatial structure of representations and metrics such as FID by testing an extensive set of encoders, and further strengthens this conclusion using Pearson correlation coefficients.
+
+2. Building on the above findings, the authors propose two strategies to encourage more effective learning of the spatial structure of representations. Both approaches are visually supported through attention map visualizations and are substantiated by ablation studies.
+
+### Weaknesses
+1. The conclusions of this work rely on the premise that metrics such as FID and IS accurately reflect model generation capability. However, several prior studies[1,2,3, 4] have argued and demonstrated that FID/IS may not fully capture model performance. This introduces some uncertainty to the findings of this work. Thus, it is recommended that the authors provide additional evaluation results based on other metrics - for instance, by replacing the feature extractor used for FID computation.
+
+2. Regarding the experimental setup, this work conducts training and evaluation exclusively on ImageNet at 256×256 resolution. The absence of results on other datasets or at different resolutions (e.g., 512×512) limits the generalizability of the claims. Moreover, since the Inception and VGG models used for FID/sFID/IS/Precision/Recall are also pre-trained on ImageNet, this further compounds the uncertainty in the evaluation.
+
+3. Given the potential limitations of the quantitative evidence raised in the previous points, the paper is notably lacking in qualitative results. Neither generated results of the proposed iREPA method nor qualitative comparisons with other approaches are provided, which would help better assess the actual improvements in generation quality.
+
+4. In the ablation study table (Table 2), under the DINOv2/DINOv3 settings, the sFID results for iREPA (full) are not the best. The authors are expected to explain this observation. Additionally, it is recommended not to format the specific numbers in bold to avoid misunderstanding.
+
+[1] Stein, George, et al. "Exposing flaws of generative model evaluation metrics and their unfair treatment of diffusion models." Neurips 2023.
+
+[2] Yang, Ceyuan, et al. "Revisiting the evaluation of image synthesis with GANs." Neurips 2023.
+
+[3] Kynkäänniemi, Tuomas, et al. "The role of imagenet classes in Fr\'echet Inception Distance." ICLR 2023.
+
+[4] Jayasumana, Sadeep, et al. "Rethinking FID: Towards a better evaluation metric for image generation." CVPR 2024.
+
+### Questions
+1. My primary concern revolves around the uncertainty introduced by the evaluation metrics, which affects the reliability of the findings and conclusions. The authors may consider addressing this by incorporating the suggestions outlined in the Weaknesses section, such as providing quantitative results with alternative evaluation metrics and on other datasets, as well as including qualitative results to better substantiate the claims.
+
+2. Would the use of encoders trained on segmentation or depth prediction tasks lead to better performance? Intuitively, such representations are likely to exhibit stronger spatial structure, and it would be valuable to examine whether they bring further improvements in the proposed framework.
+
+3. This is an open discussion, not a must: From the perspective of learning spatial structure, would it be beneficial to not apply the REPA constraint at all denoising steps?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+First, this paper investigates the underlying factors that make REPA effective. Through a large-scale empirical study involving 27 different vision encoders, the paper demonstrates that spatial structure is more important than global information. Second, the paper introduces a simple and efficient metric, termed Spatial Structure Metric (SSM). Third, the paper proposes an improved iREPA method which is designed to better preserve and transfer spatial information. Extensive experiments show that iREPA consistently accelerates convergence and improves final generation quality over the baseline REPA across a wide variety of encoders, diffusion model sizes, and training variants.
+
+### Strengths
+S1. The paper's primary contribution—that spatial structure, not global semantic accuracy, is the key driver for REPA's success—is a significant and non-obvious finding. The authors have conducted a comprehensive set of experiments to validate their claims.
+S2. The proposed iREPA method is elegantly simple (noted as <4 lines of code) yet highly effective. The two modifications (convolutional projection and spatial normalization) are well-motivated by the paper's core finding and are easy to implement, which significantly increases the practical value and potential for adoption.
+S3. The experimental results clearly demonstrate the effectiveness of iREPA across multiple evaluation aspects. Specifically, iREPA exhibits consistent performance gains in scalability (handling larger model sizes), robustness across different encoder depths, and improvements in generation quality.
+
+### Weaknesses
+W1. The paper primarily focuses on improving REPA and its variants. While this is a valid contribution, the proposed method is not benchmarked against other, orthogonal techniques for improving generative model training. 
+W2. In the correlation plot between linear probing accuracy and gFID (Fig 1 left), there are two noticeable outliers (points 25: Mocov3-l, 27: MAE-l) that have both low accuracy and poor (high) gFID. These high-leverage points significantly influence the linear regression.
+
+### Questions
+Q1. Following on from W1, could the authors show how iREPA's convergence acceleration compares to other popular methods for improving generative model training? Could it work together with other training methods?
+Q2. If the outliers are removed, will the conclusion corresponding to Figure 1 still hold?
+Q3. The iREPA modifications are praised for their simplicity. However, given the strong conclusion that spatial structure is key, did the authors experiment with more sophisticated mechanisms or network structure to maximize spatial information transfer?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper investigates REPA and systematically analyses how to best guide diffusion model training. With external representations. Through a large-scale empirical study, the authors show that spatial structure correlates more strongly with generation quality than global semantic information and based on these findings, the paper introduces iREPA. The method is a minimal but effective change to the existing pipeline that shows consistent improvements to REPA by replacing the MLP with a convolutional layer and adding spatiall normalization layer to enhance spatial contrast.
+
+### Strengths
+- **Fundamental insight that provides stable gains**: the work provides large-scale evidence that spatial structure rather than semantic quality determines usefulness of pertained visual features for generative alignment and uses this insight to implement a simple and minimal intervention, that improves convergence and generative quality consistently. 
+- **Generalization and robustness:** the proposed method is able to show improvements across multiple architectures / encoders (DINOV2, SAM2, CLIP, etc.), model scales (-B to -XL) and training variants 
+- **Extensive experimentation and validation:** provides extensive correlation studies, ablations, and analyses to support the central claim
+
+### Weaknesses
+**Effect of removing global semantics:** iREPA intentionally suppresses the global semantic component of pretrained representations to enhance spatial contrast. While this clearly benefits diffusion-based generation, it remains uncertain how much this trade-off might affect tasks that depend on higher-level semantic coherence or multimodal conditioning.
+
+### Questions
+1. **Generalization to multimodal or semantically guided setups**: Given that iREPA explicitly downweights global semantic signals, how might the approach generalize to multimodal or text-conditioned diffusion models where semantic correspondence is critical? Would some hybrid form of spatial and global alignment be beneficial in that setting?
+2. While the results clearly show that preserving spatial correlations improves sample realism, the mechanism behind this effect is not fully explained. Do the authors believe that maintaining local spatial dependencies helps the diffusion model reconstruct structure more coherently during denoising, or that it serves as a regularizing inductive bias for patch-level consistency?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3

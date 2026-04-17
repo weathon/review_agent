@@ -1,0 +1,192 @@
+# RLBenchNet: Benchmarking Neural Architectures with PPO Across Reinforcement Learning Tasks
+
+- Decision: Reject
+- Scores: 0, 4, 2, 2
+
+## Abstract
+Reinforcement learning (RL) has advanced significantly through the application of diverse neural network architectures. In this study, we systematically evaluate the performance of several architectures within RL tasks using a widely adopted policy gradient algorithm, Proximal Policy Optimization (PPO). The architectures considered include Long Short-Term Memory (LSTM), Multi-Layer Perceptron (MLP), Mamba/Mamba-2, Transformer-XL, Gated Transformer-XL, and Gated Recurrent Unit (GRU). Through comprehensive experiments spanning continuous control, discrete decision-making, and memory-based environments, we uncover architecture-specific strengths and limitations. Our results show that: (1) MLPs excel in fully observable continuous control tasks, offering an effective balance between performance and efficiency; (2) recurrent architectures such as LSTM and GRU provide robust performance in partially observable settings with moderate memory demands; (3) Mamba models achieve up to 4.5× higher throughput than LSTM and 3.9× higher than GRU, while maintaining comparable performance; and (4) only Transformer-XL, Gated Transformer-XL, and Mamba-2 succeed on the most memory-intensive tasks, with Mamba-2 requiring 8× less memory than Transformer-XL. These findings highlight the trade-offs among architectures and provide actionable insights for selecting appropriate models in PPO-based RL under different task characteristics and computational constraints.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+3
+
+### Summary
+This paper presents RLBenchNet, a set of benchmark results which evaluate the performance of various neural network architectures (MLP, LSTM, GRU, Mamba, Mamba-2, Transformer-XL, and GTrXL) in an RL setting trained by the PPO algorithm. By testing across a diverse set of task types (continuous and discrete control with and without memory dependency in the environment) individual benefits and tradeoffs are identified such that for each task type recommendations are made on which architectures are best to consider. Practical guidelines follow with MLPs excelling in simple, fully observable tasks; traditional RNNs (LSTM/GRU) being robust for moderate memory needs, and modern sequence models being best for long-horizon memory tasks.
+
+### Strengths
+- This work aims to provide general advice to practitioners so that model selection can be tied to task type in the, often confusing and difficult to navigate, space of RL architecture choice
+- All models are compared with the same algorithm (PPO) and applied to a range of different types of task, some requiring long vs short timescales of integration of information and some requiring continuous vs discrete control signals. This diversity allows for somewhat nuanced recommendations
+- Modern models could be placed head to head with clear outcomes such as the note that Mamba can be 4.5x faster than LSTM and use 8x less memory than Transformer-XL while achieving competitive performance. Such comparisons are necessary to also begin to place modern sequence models in the correct frame of application vs transformer models and traditional RNN models.
+
+### Weaknesses
+- This work is largely a systematic analysis of the application of the PPO algorithm to models with a range of tasks. Aside from some recommendations, there is little to no novelty in this and very little scientific development of the field and little novelty or innovation
+- Hyperparameters were not tuned to each architecture individually and instead the default PPO hyperparameters where used by and large. This is a significant drawback as all conclusions cannot therefore be taken as reflective of model peak performances. This also means that the recommendations may not apply under alternative hyperparameterizations.
+- The number of tasks tested were relatively small, therefore there is no real statistical measure that the recommendations are truly robust phenomena across whole families of tasks.
+
+### Questions
+- How can the authors be sure that these results are not simply a consequence of the default PPO hyperparameters? In more plain words, why can these results and recommendations be trusted to transfer outside of the specific setups described in this work?
+- Would you claim that the Practical Guidelines (Section 4.7) are a significant contribution? These seem to be rather vague and general statements which don't have much specificity.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper benchmarks neural architectures (MLP, LSTM, Transformers, Mamba) using the PPO algorithm across continuous control, discrete, partially observable control and memory-intensive RL tasks. The results highlight the efficient architectures like MLP and Mamba-2 should be prioritized, while computationally expensive transformers should be reserved for tasks with extreme memory demands.
+
+### Strengths
+1. This work offers valuable insights into the performance of diverse network architectures across multiple reinforcement learning (RL) tasks, aiding researchers in understanding the suitability of various architectures for different contexts.
+2. The paper is logically structured, clearly written, and effectively illustrated with well-designed figures and tables, which successfully convey the research outcomes.
+
+### Weaknesses
+1. **The experimental design is too simple**, which significantly limits the paper's generalizability. Each task category was evaluated in only 3 environments, all using the PPO algorithm. Using more sample-efficient algorithms, like Rainbow or SAC, could potentially reveal more substantial performance differences among the network architectures, especially in tasks like the discrete control Seaquest, challenging the current finding that the structures perform similarly. To bolster the robustness of the findings, it is advisable to include a wider range of environments for each task category.
+2. **The paper would benefit from a deeper discussion of its methodological choices.** For instance, the rationale behind using different observation inputs for the Mamba, Transformer-XL, and MLP models is not explained, nor is its potential impact on the outcomes analyzed. Moreover, the exploration of network architectures and scales is quite restricted. The study only examines single-layer LSTM and GRU models, and the largest network tested contains fewer than 300,000 parameters. These limitations in experimental scope and design undermine the overall convincingness of the paper.
+
+### Questions
+1. Can authors explain the rationale behind using different observation inputs for Mamba, Transformer-XL, and MLP models? How might these choices have influenced the results?
+2. Can authors provide more diverse environments for each task category to enhance the generalizability of the findings? For instance, including additional continuous control tasks from benchmarks like MetaWorld or D4RL could provide a more comprehensive evaluation.
+3. Recently, more network architectures have been proposed for RL tasks, such as SimBa-v2. Have the authors considered including such architectures in their benchmark to provide a more up-to-date comparison?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper benchmarks MLPs, LSTM/GRU, Transformer-XL (TrXL) and GTrXL, and Mamba/Mamba-2 within a unified PPO setup across MuJoCo, Atari, masked classic control, and MiniGrid, selecting three tasks from each suite. It reports that (1) MLPs are strong on fully observable continuous-control tasks; (2) recurrent networks help on short-horizon POMDPs; (3) Mamba models deliver much higher throughput and lower memory usage than LSTM/GRU/TrXL; and (4) only TrXL, GTrXL, and Mamba-2 solve the most memory-intensive tasks, with large memory savings relative to TrXL.
+
+### Strengths
+The benchmark tackles a question that is genuinely interesting to the RL community. Standardising on CleanRL with a fixed PPO implementation is a sensible control choice. The experiments cover discrete, continuous, masked, classic control and minigrid environment. The takeaways are clearly stated and distilled into actionable guidelines.
+
+### Weaknesses
+My major concerns are:
+1. As a benchmark paper, the evidence provided by the paper is not strong enough to support the general claims and guidance the authors make. For every category, there are only 3 tasks selected. Using Atari as an example, it is questionable whether these three tasks are representative enough for the generality of the findings. Different Atari games have very different tasks, so selecting only three games can introduce a strong inductive bias toward certain architectures. The generality of the claim is weakened. I think using the game choices in Atari-100k can at least strengthen the paper’s claims.
+2. Some choices made by the authors are untested and have unknown effects on fairness. For instance, the authors reduce the observation window from 7x7 to 3x3 without providing experiments with 7x7; this is also questionable in terms of whether it introduces an inductive bias favouring certain architectures. Adding 7x7 experiments would improve the claim.
+
+Some minor places:
+1. An architecture diagram for each model would help.
+2. SeaQuest is on figure 2 but missing on the table 4. There are other tasks missing as well as it is not 3 tasks per category.
+3. There are many references missing especially for different architecture:
+
+**GRU**:
+
+Dreamers family: 
+Hafner, Danijar, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. ‘Mastering Diverse Domains through World Models’. arXiv:2301.04104. Preprint, arXiv, 2023. http://arxiv.org/abs/2301.04104.
+
+**Transformers**:
+
+Micheli, Vincent, Eloi Alonso, and François Fleuret. ‘Transformers Are Sample-Efficient World Models’. International Conference on Learning Representations, 1 March 2023.
+
+Robine, Jan, Marc Höftmann, Tobias Uelwer, and Stefan Harmeling. ‘Transformer-Based World Models Are Happy With 100k Interactions’. International Conference on Learning Representations, 13 March 2023.
+
+**Mamba/Mamba-2**
+
+Samsami, Mohammad Reza, Artem Zholus, Janarthanan Rajendran, and Sarath Chandar. ‘Mastering Memory Tasks with World Models’. International Conference on Learning Representations, 2024.
+
+Wang, Wenlong, Ivana Dusparic, Yucheng Shi, Ke Zhang, and Vinny Cahill. ‘Drama: Mamba-Enabled Model-Based Reinforcement Learning Is Sample and Parameter Efficient’. International Conference on Learning Representations, 2025.
+
+### Questions
+1. For the Mamba/Mamba-2 paper, what are you using for the decision policy—the output of the last layer or the SSM state?
+2. Do RNN variants reset at episode boundaries?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper presents a systematic benchmark of several neural network architectures for reinforcement learning, utilizing the Proximal Policy Optimization (PPO) algorithm as a consistent baseline. The architectures evaluated include standard MLPs, recurrent networks (LSTM, GRU), Transformer-based models (Transformer-XL, Gated Transformer-XL), and modern state-space models. 
+
+
+The study conducts experiments across a diverse set of environments, including continuous control (MuJoCo), discrete control (Atari), and various partially observable and memory-intensive tasks (Masked Classic Control, MiniGrid).
+
+
+The paper provides practical guidelines for practitioners, recommending that they start with simple MLPs and then consider Mamba-2 as a highly efficient default for tasks requiring memory, reserving expensive Transformer models only for extreme-memory scenarios.
+
+### Strengths
+The paper's strength lies in its high practical relevance; it highlights the order in which practitioners should proceed when using RL (at least for PPO). By using clean PPO implementation, the study successfully isolates the architectural effects on performance.
+
+
+For clarity of the paper, the motivation and methodology are well-written, and the results are logically organized by environment type. Moreover, call-out boxes in each section effectively summarize the key takeaways. While benchmarking studies in online RL are not a new topic, this is one of the first comprehensive, unified benchmarks to compare different architectures directly.
+
+### Weaknesses
+1) Hyperparameter tuning
+
+The study relies heavily on default CleanRL PPO hyperparameters, except for a reduced learning rate for Mamba models (Section 3.3). Although this is essential for controlling conditions, it can be a weakness because different architectures have different optimization requirements.
+
+2) Dependency on learning algorithms
+
+The comparison between architectures is tested using PPO, which does not imply that one architecture is always suitable for other online RL applications. Notably, it is possible that the results do not apply to widely used off-policy algorithms, such as SAC and TD3, where the data distributions differ significantly from those of PPO.
+
+### Questions
+Overall, I would like to see a more in-depth analysis of the reasoning behind the results, particularly which characteristics of the architecture and environments/tasks contributed to the differences among them. For example, in Acrobot-v1 Masked (Fig. 3), frame stacking (PPO-4) solves the task, whereas PPO-1 results in complete failure. However, in HalfCheetah (Fig. 1), PPO-1 outperforms PPO-4.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

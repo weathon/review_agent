@@ -1,0 +1,149 @@
+# Towards Active Synthetic Data Generation for Finetuning Language Models
+
+- Decision: Reject
+- Scores: 4, 2, 4
+
+## Abstract
+A common and effective means for improving language model capabilities involves finetuning a “student” language model’s parameters on generations from a more proficient “teacher” model. Termed “synthetic data”, these generations are often produced before any student finetuning, but some work has considered generating new synthetic samples as training progresses. This paper studies and advocates for the latter case, where data are generated in an iterative, closed-loop fashion that is guided by the current state of the student model. For a fixed budget of generated samples, or a budget in terms of compute spent querying a teacher, we show that this curation of finetuning data affords improved student performance over static generation. Further, while there have been several LLM-specific methods proposed that operate in this regime, we find that simple, inexpensive selection criteria from the active learning literature tend to be most performant. We validate these claims across four mathematical and logical reasoning datasets using four different small language models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper studies an iterative approach to synthetic data generation for fine-tuning small language models (SLMs). Instead of generating a large static dataset from a teacher model at once, the authors propose a closed-loop scheme where the student model’s current state guides which examples are selected for further data generation by the teacher.
+The work benchmarks several existing data selection strategies from active learning—uncertainty sampling (high-loss), reward-based scoring, LLM-as-a-judge, and BADGE diversity selection—and claims that simple heuristics like high-loss sampling outperform more expensive LLM-judge–based methods. Experiments are conducted on four reasoning datasets (GSM8K, Math1–3, ProntoQA, Game of 24) using various small instruction-tuned models. Results suggest that simple heuristics such as high-loss selection outperform more complex and expensive methods like LLM-as-a-judge, offering improved data efficiency under a fixed compute budget.
+
+### Strengths
+•	The authors provide a solid benchmark showing that simple, inexpensive heuristics (e.g., high-loss selection) can outperform more complex LLM-as-a-judge strategies.
+•	The work provides practical guidance for synthetic data generation under constrained compute budgets, which can be valuable for practitioners training SLMs.
+•	The paper is clearly written and easy to reproduce.
+•	It contributes to the empirical understanding of how different data-selection heuristics impact fine-tuning performance and efficiency.
+
+### Weaknesses
+•	Limited novelty: The core idea—iterative, student-aware synthetic data generation—has been explored in multiple prior works. This paper mainly repackages it under the active learning perspective.
+•	Lack of theoretical or conceptual insight: The paper does not explain why the compared heuristics differ or what properties (difficulty, diversity, informativeness) they capture.
+•	Marginal performance gains: Improvements are small or inconsistent. For GSM8K and ProntoQA, performance remains below or comparable to prior SFT results; only one dataset (Game of 24) shows notable gains.
+•	Scope limitation: All experiments are conducted on small 7–8B models; scalability to larger models or broader domains is untested.
+•	Potential bias amplification: Since selection is based on student performance, the loop can reinforce sampling bias (e.g., favoring easy samples), which the paper neither analyzes nor mitigates.
+•	Unclear takeaway: The results show minor absolute improvements, so the main claimed advantage, data efficiency, needs stronger quantitative justification.
+
+### Questions
+1.	How do you ensure that the iterative selection process does not bias the dataset, e.g., easier questions?
+2.	Why does the performance of your proposed method have such a better performance, even better than the teacher model, on the Game of 24 dataset? 
+3.	How would the method behave with a larger teacher model?
+4.	In your comparison, you do not control the SFT dataset size. Will that cause unfair comparison among different methods?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper studies how to make synthetic data generation for small language model (SLM) finetuning more data-efficient. Instead of static, one-shot generation from a teacher LLM, it proposes an iterative and student-aware approach: at each round, the student model is used to score or select informative examples from a seed set, which then guide new synthetic question–answer pairs generated by the teacher. The student is then finetuned on the accumulated synthetic data. The authors systematically compare several selection criteria—such as student loss, reward score, LLM-as-a-judge, and BADGE—and find that simple active learning strategies (e.g., selecting high-loss samples) outperform complex LLM-based scoring under the same compute budget. Experiments on four reasoning datasets (GSM8K, Math1–3, ProntoQA, and Game of 24) demonstrate strong data efficiency and even near-SOTA SFT performance with an order of magnitude less training data.
+
+### Strengths
+- The paper provides a clear and unified experimental framework for iterative synthetic data generation, grounding the idea in active learning principles.
+- Empirical results are extensive: four datasets, four SLMs, multiple scoring algorithms, and comparisons to static generation.
+- The conclusion—that simple, low-cost criteria (e.g., high student loss) outperform expensive LLM-as-a-judge scoring—is practical and well-supported.
+- The ablation on selection design choices (argmax vs. sampling, using prediction vs. ground truth) is detailed and informative.
+- The method achieves impressive data efficiency, matching or exceeding prior SFT performance with far fewer examples.
+
+### Weaknesses
+- Conceptually, the idea of iterative, student-guided data generation is not entirely new. Prior works such as [1,2,3] (especially 1) have explored similar active distillation loops where the student model guides data selection or teacher queries. However, the present paper does not cite or discuss these connections, nor does it clarify what is fundamentally new beyond applying classic active learning heuristics in this context.
+- The method, while empirically solid, lacks deeper theoretical or conceptual insight into why the high-loss criterion works best—most explanations remain empirical.
+- The study focuses solely on SFT; it would be valuable to test whether the same iterative synthetic data idea scales to RLHF or continual training.
+- Some experiments (e.g., Math1–3) show relatively small margins over static generation, suggesting the benefit may vary with domain or data diversity.
+- The paper does not analyze the diversity or potential overfitting of the generated datasets across iterations.
+
+[1] ELAD: Explanation-Guided Large Language Models Active Distillation. In Findings of the Association for Computational Linguistics: ACL 2024, pages 4463–4475, Bangkok, Thailand. Association for Computational Linguistics.
+
+[2] Evolving knowledge distillation with large language models and active learning. arXiv preprint arXiv:2403.06414.
+
+[3] Active large language model-based knowledge distillation for session-based recommendation. In Proceedings of the AAAI Conference on Artificial Intelligence (Vol. 39, No. 11, pp. 11607-11615).
+
+### Questions
+- How does the proposed iterative generation compare quantitatively with recent active distillation frameworks (e.g., ELAD or Evolving KD) under similar budgets?
+- Could the authors clarify whether the benefit primarily comes from better data selection or progressive curriculum effects from student feedback?
+- How robust is the approach when the teacher’s generation quality degrades (e.g., smaller or domain-specific teachers)?
+- Would the same active selection principles extend to reinforcement-based finetuning or continual pretraining?
+- Could the authors release intermediate synthetic datasets to verify the claimed data-efficiency curves and reproducibility?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces an iterative, closed-loop method for Active Synthetic Data Generation (ASDG) to finetune Small Language Models (SLMs) using a Teacher LLM. The process leverages the Student's current performance (loss and predictions) to actively select seed prompts for generating new, highly informative synthetic data. The authors formally benchmark various data selection heuristics (including loss, reward, LLM-as-a-judge, and BADGE) across four reasoning datasets and four SLMs. The main finding is that iterative generation is significantly more data-efficient than static generation, and the simple heuristic of prioritizing samples with the highest student loss is the most effective and performant, often achieving competitive results with much larger, statically generated SFT datasets.
+
+### Strengths
+The conclusion that simple data selection methods, such as prioritizing hard samples with high loss, often outperform complicated and expensive LLM-as-a-judge based methods is a useful result for practitioners, suggesting that resource-intensive scoring is not always necessary.
+
+The use of learning curves and the pairwise win-rate matrix (Figure 4) provides a structured comparative analysis focused on the core concept of data efficiency.
+
+Analysis is thorough, covering four distinct reasoning datasets (GSM8k, Math1-3, ProntoQA, Game of 24) and four different student SLMs (Mistral 7B, Llama 3 8B, Qwen 7B, Qwen 2.5 7B).
+
+### Weaknesses
+The paper claims to provide a "benchmark study for iterative synthetic data generation" but fails to run a head-to-head comparison against the actual selection methods proposed by the most relevant prior works, specifically LLM2LLM (Lee et al., 2024) and the full LION (Jiang et al., 2023c) strategy. The critical "incorrect student answers" criterion from LLM2LLM is relegated to the appendix (C.1) despite being a highly competitive baseline in a truly active synthetic data setting.
+
+Limitations in Experimental Scale and Baseline Selection Validity: 1) The paper focuses on a small, fixed training budget (1k samples per iteration, max total 10k for GSM8k/Math1-3). This scale is extremely small for finetuning modern SLMs, especially when compared to the multi-hundred thousand to multi-million sample sizes used by SOTA baselines in Table 1. While the relative performance of the selection methods within this small budget is clear, can the absolute efficiency claims scaling up with data? 2) Static Generation (Random Sampling) is Too Weak: This is the weakest possible baseline. A more competitive baseline would be a fixed synthetic dataset filtered using some non-active metric (e.g., high reward score, or high diversity selection applied once). The superiority of any student-aware curriculum over pure random sampling is expected, so the magnitude of this win is not fully persuasive.
+
+Insufficient Discussion of Computational Budget and Trade-offs The paper frames the work around a "fixed data generation budget" (L14). However, the budget analysis is incomplete. 1) Teacher Output Cost is Missing: The current analysis (Figure 5) only uses Input Tokens as a proxy for compute. Since the primary cost for Chain-of-Thought (CoT) generation is the Teacher's Output Tokens, omitting this cost makes the true teacher compute comparison incomplete. 2) Student Cost is Ignored: The iterative loop requires the student to make predictions and compute gradients on the entire seed set $D_{0}$ at every iteration. This computational overhead on the student's side grows with the seed set size and the number of iterations ($|D_0| \times T$), and should be explicitly discussed in the efficiency trade-off analysis.
+
+### Questions
+The authors state they have access to the ground-truth label $y$ but find that using the loss from the model's own generation $\mathcal{L}(z_i, \theta)$ ("uncertainty") is more effective than the true loss $\mathcal{L}(z_i, y)$. This counter-intuitive finding is not explored beyond a single sentence. Why is using the model's own (potentially incorrect) generation as the target label better than using the verified ground truth label? This requires deeper analysis.
+
+Why BADGE Implementation? The critical decision to use generated sequences instead of ground-truth targets for BADGE's gradient representations (L243-245) lacks sufficient justification, similar to the loss/uncertainty choice.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

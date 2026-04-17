@@ -1,0 +1,210 @@
+# Global Convergence and Pareto Front Exploration in Deep-Neural Actor-Critic Multi-Objective Reinforcement Learning
+
+- Decision: Reject
+- Scores: 4, 6, 2, 6
+
+## Abstract
+Multi-objective reinforcement learning (MORL) has gained considerable traction in recent years, with applications across diverse domains. 
+However, its theoretical foundations remain underdeveloped, especially for widely used but largely heuristic deep neural network (DNN)-based actor–critic methods. 
+This motivates us to study MORL from a theoretical perspective and to develop DNN-based actor–critic approaches that (i) provide global convergence guarantees to Pareto-optimal policies and (ii) enable systematic exploration of the entire Pareto front (PF). 
+To achieve systematic PF exploration, we first scalarize the original vector-valued MORL problem using the weighted Chebyshev (WC) technique and leveraging the one-to-one correspondence between the PF and WC scalarizations. 
+We then address the non-smoothness introduced by WC in the scalarized problem via a parameterized log-sum-exp softmax approximation, which allows us to design a deep neural actor–critic method for solving the smoothed WC-scalarized MORL problem with a global convergence rate of $\mathcal{O}(1/T)$, where $T$ denotes the total number of iterations. 
+To the best of our knowledge, this is the first work to establish theoretical guarantees for both global convergence and systematic Pareto front exploration in deep neural actor–critic MORL. 
+Finally, extensive numerical experiments and ablation studies on recommendation system training and robotic simulation further validate the effectiveness of our method, especially its capability in Pareto exploration.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces weighted Chebyshev techniques to reformulate the MORL problem, enabling the finding of weakly Pareto-optimal policies for the WC-scalarized RL formulation with a global convergence guarantee. It further proposes a smooth approximation of the WC-scalarized problem to address the non-smoothness issue, which makes neural network training feasible. Based on this, the authors also prove that a DNN-based actor–critic algorithm for the WC-scalarized RL problem enjoys finite-time global convergence. They provide experiments on a recommendation-system task and a multi-objective robotic simulation. Although the theoretical part is relatively complete and novel, the experimental evaluation and related algorithmic design have clear limitations.
+
+### Strengths
+1. The mathematical formulation and proofs are well structured and technically sound, making the theoretical contribution both clear and credible.
+2. The proposed DNN-based implementation makes the method practical and easy to plug and play with state-of-the-art MORL approaches.
+3. The paper provides experiments on both robotics and recommendation-system tasks, demonstrating the general applicability of the framework.
+
+### Weaknesses
+1. The experimental setup for the recommendation-system task is confusing:
+(a) How many policies (and corresponding preference vectors) were trained in total? In addition, were all baselines evaluated using the same number of policies for a fair comparison?
+(b) Could you clarify the rationale for selecting these baselines? Why were no state-of-the-art MORL methods included for comparison?
+(c) What exactly does the statement "the reference point is our method on the same setting as in Table 2" mean? Please clarify how this reference point is defined and used in Figure 2.
+(d) Why did not you use standard MORL evaluation metrics such as hypervolume or expected utility?
+2. Regarding the robotics experiment, the appendix mentions that the authors just manually select a group of preferences. This choice is confusing and may have significantly limited the performance of both the proposed method and the baselines.
+3. As noted above, the preference vectors in this paper are selected randomly. For experiments with a continuous Pareto front, this is impractical, as it cannot ensure adequate coverage of the front. However, the proposed method seems easily compatible with multi-policy MORL frameworks [1-3], which could systematically explore or sample preferences to better approximate the entire Pareto front.
+4. The paper lacks an ablation study comparing the proposed WC scalarization with the standard linear scalarization, which would help verify whether the method indeed provides any practical advantage in exploring the Pareto front.
+
+References
+[1] Xu, Jie, et al. "Prediction-guided multi-objective reinforcement learning for continuous robot control." International conference on machine learning. PMLR, 2020.
+[2] Felten, Florian, El-Ghazali Talbi, and Grégoire Danoy. "Multi-objective reinforcement learning based on decomposition: A taxonomy and framework." Journal of Artificial Intelligence Research 79 (2024): 679-723.
+[3] Liu, Ruohong, et al. "Efficient Discovery of Pareto Front for Multi-Objective Reinforcement Learning." The Thirteenth International Conference on Learning Representations.
+
+### Questions
+Please refer to the questions listed in the Weakness section above. I would be happy to raise my score if the authors can address the concerns mentioned above.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper develops a deep neural network-based actor-critic algorithm for multi-objective reinforcement learning that achieves global convergence to Pareto-optimal policies with a convergence rate of O(1/T). The authors use a smoothed weighted-Chebyshev scalarization technique to convert the multi-objective problem into a scalar-valued optimization problem, enabling systematic exploration of the entire Pareto front. They provide theoretical convergence guarantees and demonstrate the algorithm's effectiveness through experiments on recommendation systems and robotic simulations.
+
+### Strengths
+The paper makes good theoretical contributions by establishing the finite-time global convergence guarantees for DNN-based actor-critic methods in multi-objective reinforcement learning, addressing a notable gap between empirical practice and theory. The use of smoothed weighted-Chebyshev scalarization is well-motivated, enabling both global optimality and systematic Pareto front exploration through a principled mathematical framework. The theoretical analysis is rigorous, extending the performance difference lemma to the MORL setting and carefully handling the complexities introduced by neural network approximation. The paper is generally well-structured, with clear problem formulation and logical progression from motivation to algorithm design to convergence analysis. The experimental validation on recommendation systems and robotic simulation demonstrates practical applicability.
+
+### Weaknesses
+The paper has several limitations. The literature review is narrow, focusing primarily on scalarization methods while omitting important MORL approaches such as geometric analysis of the Pareto front, evolutionary methods, hypervolume-based techniques, and other non-scalarization paradigms, which limits proper contextualization of the contribution. The theoretical results rely on restrictive assumptions (particularly Assumptions 3-6) whose practical validity remains unverified, and the sample complexity suggests poor scalability to many-objective problems without empirical investigation of this limitation. The experimental evaluation is insufficient— the paper lacks comparison with recent DNN-based MORL methods beyond PDPG, making it difficult to assess whether the theoretical advantages translate to practical performance gains over existing approaches. Additionally, important practical considerations such as hyperparameter sensitivity, computational cost analysis, and guidance for parameter selection are largely absent, limiting the work's applicability to real-world problems.
+
+### Questions
+no
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper examines the problem of Multi-Objective Reinforcement Learning (MORL). It proposes an algorithm in the family of deep neural actor-critic methods to solve it. This algorithm relies on a smoothed Chebyshev scalarization to transform the MORL problem into scalar optimization. The main contribution of the paper is claimed to be that this algorithm enjoys provable convergence to the global optimum, while also providing a systematic exploration of the Pareto front as the scalarization free parameter is varied. Experiments on two MORL setups are claimed to demonstrate the practicality of the method.
+
+### Strengths
+The idea of a smoothed Chebyshev scalarization can prove useful when exploring highly concave Pareto Fronts in MORL.
+
+The exposition of background for MORL is also comprehensive and precise.
+
+Finally, the topic of study is highly relevant. The authors correctly identify that provable guarantees for DNN-based methods in MORL are lacking in the literature, at least to my knowledge.
+
+### Weaknesses
+Generally, one has to be suspicious of any claim of provable global convergence of deep neural networks. This problem is, to my knowledge, unsolved, even without the added complexity of Reinforcement Learning. For example, one popular object of study in the theory literature are "deep linear networks," which are DNNs without activation layers. This major simplification speaks to the difficulty of the original challenge.
+
+# Problem with Assumption 4
+Unfortunately, in my understanding, this paper fails to address the DNN global convergence adequately. In particular, I believe that the Assumption 4 that the paper introduces never holds for the class of policies that the paper considers. On L220-224, the paper introduces DNNs _with ReLu activation_. This activation function is scale-invariant, i.e. $ReLu(\alpha x)=\alpha ReLu(x)$ for $\alpha>0$. This introduces a problem that is well-known in the literature, namely the fact that the parameterization of DNNs with ReLu is redundant. Indeed, one can scale the weight and bias on layer $b-1$ by an arbitrary factor $\alpha>0$ and then scale the layer $b$ by $1/\alpha$. This results in an identical mapping, in our case an identical policy $\pi_\theta(a|s)$. What this means is that there is a vector $\mathbf{v}$ such that $\nabla_\theta \log \pi_\theta(a|s)$ is orthogonal to $\mathbf{v}$ _for any state $s$ and action $a$_. This in turn implies that $\mathbf{v}$ is a null-vector of $\mathbb{E}[\nabla_\theta \log \pi_\theta(a|s)\nabla^\intercal_\theta \log \pi_\theta(a|s)]$, which makes Assumption 4 unattainable. The paper cites multiple prior works to back up the reasonability of the assumption. These papers, however, are much more careful when introducing it:
+- Liu et al, 2022. They introduce this assumption, but in the paper they only discuss that it holds _for linear policies_ with Gaussian noise. In Appendix B.2, which is also referred to by several other authors, they discuss the caveats of this assumption, mentioning that it _may_ hold for some non-linear classes of policies. They also mention that this is a _minimal_ requirement for proving convergence of their algorithm, which may close off this avenue for proving global convergence of DNNs with ReLu. I am less certain of the last part because I'm not sure how the algorithm from this paper relates to that of Liu et al.
+- Agarwal et al, 2021. On cursory scan, they seem to only discuss assumption 5 from this paper, and not 4. Instead of 4, they use a different relative conditioning assumption (Assumption 6.5 in their paper). 
+- Ding et al, 2021. They also discuss this assumption in Appendix 8 and refer to Liu et al. They purposefully stay abstract and do not rely on specific DNN policies, only discussing deep learning a bit in the intro.
+
+I believe that this is the reason why prior works in _provable_ single- and multi-objective RL could only prove something for much simpler classes of policies.
+
+More generally, for a paper whose main contribution is an algorithm with provable convergence, I would expect to see some attempts to verify whether the assumptions hold in practice. One can, for example, estimate the Fischer information matrix by collecting rollouts on the practical environments, and computing the empirical expected value matrix. Then, one could check whether its lowest eigenvalue is non-zero and how large is $\sigma$. This paper provides no such analysis.
+
+If I am not wrong about this assumption, in my opinion this issue is sufficient on its own to warrant a rejection.
+
+## Problems with the experimental setup
+
+The experimental validation of the algorithm, to which the paper dedicates less than a page, is also rather limited. For the first evaluation Sec. 6.1), the authors compare the values of the individual rewards to some baselines. It remains unclear from the main paper and from the (short) Appendix B.1 what was the preference vector that was used for comparison, and even whether this vector is set to the same value for the baselines. The authors also perform an evaluation to see if the Pareto front is adequately covered. From L454-457, my understanding is that they run their algorithm as a _single-objective_ RL problem by maxing out the preference on individual objectives. This is inadequate as a method for evaluating MORL. An overview work on MORL that is often used as a reference in the field [1] dedicates the entire Section 8 to evaluation methods. These include metrics such as hypervolume, the $\epsilon$-metric, utility-based, etc. None of these are reported in this paper.
+
+For the second evaluation environment (Sec. 6.2), the paper uses the Walker environment from Gymnasium. Here, the paper does provide a plot of the Pareto front, but does not show how the baselines perform.
+
+[1] Hayes, Conor F., et al. "A practical guide to multi-objective reinforcement learning and planning." arXiv preprint arXiv:2103.09568 (2021).
+
+## Typos & other minor issues
+- Algorithm 1, L7: I assume you want to sample the action and get $\nabla\log\pi$ outside of the inner loop
+
+l170: have->has
+l220: a->an
+l259: "that," comma not needed
+l375: should say "positive semi-definite order"
+l461: mojoco->mujoco
+
+### Questions
+For the second evaluation environment (Sec. 6.2), the paper uses the Walker environment from Gymnasium. The single-objective imlementation of Gymnasium is cited, but a multi-objective environment is used. Do you actually use the MO-Gymnasium [2] or re-implement the multi-objective environment? I suspect it's the former, in which case it would be better to cite the actual environment.
+
+[2] Felten, Florian, et al. "A toolkit for reliable benchmarking and research in multi-objective reinforcement learning." Advances in Neural Information Processing Systems 36 (2023): 23671-23700.
+
+Also, what are the types of distribution parameterizations that the paper uses for the policy $\pi(a|s)$?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper studies the theoretical foundations of DNN–based actor–critic methods with weighted Chebyshev scalarization for MORL.  Experiments on recommendation and robotic control tasks are included to illustrate the theoretical results.
+
+### Strengths
+The paper presents a well-defined theoretical contribution, analyzing DNN-based actor–critic methods under the weighted Chebyshev (WC) scalarization framework.
+
+The authors provide conditions under which a finite-time global convergence proof with an O(1/T) rate and accompanying sample complexity analysis is possible.
+
+### Weaknesses
+While the theoretical contribution is addressed, the use of weighted Chebyshev scalarization in MORL field itself is not a new idea. The scope of novelty is not sufficiently emphasized; the contribution could be better positioned relative to prior MORL work using similar scalarization techniques.  
+
+The main contribution is theoretical, and the algorithmic or methodological novelty beyond the convergence analysis is limited.
+
+Fig. 4, or in fact the paper as a whole, does not contain any statistical information regarding reliability. The data shown here is a study of the parameter settings, not necessarily an ablation study. A a network with $D\le 4$ layers is usually not considered as a deep network, it's just a feed-forward network.
+
+### Questions
+Beyond theoretical guarantees, how might the proposed convergence analysis inform the design or improvement of practical MORL algorithms? 
+
+Could the authors clarify what aspect of their approach represents the main novelty compared with existing WC-based scalarization methods? Likewise, we could ask whether Assumption 6 is already guaranteeing that a scalarization exists that is sufficient to solve the problem, which doesn't apply in MORL in general. 
+
+The control cost is defined (only in the appendix) as a squared norm, but in Figure 3 it assumes also negative values. Also, in seems to be maximized rather than minimized (as stated in the text). Can you check this and provide the definitions completely and already when needed?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

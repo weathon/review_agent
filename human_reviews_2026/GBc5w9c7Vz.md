@@ -1,0 +1,196 @@
+# From Quantifying to Reducing Uncertainty: Diffusion Hypernetworks for Robust Medical Image Reconstruction
+
+- Decision: Reject
+- Scores: 2, 2, 4, 4
+
+## Abstract
+Accelerated medical imaging is widely used for reduced scan time and exposure to radiation, improving patient experience. However, sparse-view CT and accelerated MRI produce reconstructions that suffer from both aleatoric (acquisition noises, undersampling, patient motions) and epistemic (model uncertainty) variability. Prior work has focused on quantifying uncertainty, but reporting it alone does not improve the robustness of reconstructed images. We introduce a diffusion-based reconstruction framework with a Bayesian hypernetwork that explicitly reduces uncertainty rather than merely estimating it. Two complementary learning objectives target the distinct sources: noise-consistency to reduce aleatoric uncertainty and  weight-consistency to reduce epistemic uncertainty. Trained in separate phases to avoid interference, these learning objectives produce reconstructions that are both high-quality and reliable. Experiments on sparse-view CT (LUNA16) and accelerated MRI (fastMRI Knee and Brain) show substantial reductions in both uncertainty components without degrading image quality, and consistent gains in downstream lung nodule segmentation and pathology classification performance. By shifting uncertainty from a diagnostic overlay to an optimization target, our method produces reconstructions that are anatomically accurate and clinically useful, advancing uncertainty-aware generative modeling for medical imaging.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper extends HyperDM---a method for quantifying aleatoric uncertainty (AU) and epistemic uncertainty (EU)---by adding two new loss objectives (one aleatoric and one epistemic) which aim to reduce uncertainty. The aleatoric objective operates on each mini-batch and minimizes the difference between two noisy input conditions. The epistemic objective also operates on each mini-batch and minimizes the difference between predictions from two sampled hyper-network weights. These objectives are used to train two distinct models (i.e., AUDiff and EUDiff), which are experimentally validated against HyperDM on three medical datasets.
+
+### Strengths
+1. The proposed loss objective is novel.
+
+### Weaknesses
+1. The concept of reducing uncertainty in this context is not valid. For instance, EU is inherently tied to the underlying data and cannot be reduced without the addition of data. Driving down the absolute value of AU/EU estimates should not be an objective as different uncertainty estimation methods will produce AU/EU measures of vastly different magnitudes and scales. The goal of uncertainty estimation is to inform downstream applications like out-of-distribution detection, misclassification detection, and etc.
+2. The claim in Section 3.2.1 that injecting additive white Gaussian noise makes the model insensitive to noise present in the forward measurement model (i.e., shot noise, ADC noise, under-sampling, etc.) is incorrect. While injecting Gaussian noise can reduce sensitivity to measurement noise to some extent, the model cannot be said to be fully robust / insensitive to such noise since the loss objective has no explicit knowledge of the noise process (and training data is limited).
+3. Computational overhead. Presumably, computation of the EU / AU objective in each is expensive. Some metrics on the computational overhead should be provided.
+4. I'm unsure that the weight-consistency objective is a good idea. In theory, there may be two dissimilar sets of weights that capture different parts of the target output distribution. Collapsing all of the weights to a mode may result in reduced coverage of the target distribution (i.e., long-tails are missed), which is important for capturing extreme events.
+
+### Questions
+1. Is training stable over a reasonable range of configurations? For example, how sensitive are the results to the chosen weights? Will slight changes to the weights destabilize training?
+2. Fix minor typos. E.g., line 128 "paring" should be "pairing"
+3. Fig. 1 should have error bars to give some indication of how much of the error is due to randomness.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes a Bayesian hypernetwork-based conditional diffusion model that is trained to reduce surrogates for aleatoric and epistemic uncertainty. The idea is explained based on HyperDM, explicitly targeting the two uncertainty terms considered in that methodology. Experiments are performed on CT and MRI datasets.
+
+### Strengths
+- I like the idea of trying to reduce EU and AU during training
+- The paper is well-written, especially the background is very clear
+
+### Weaknesses
+- The main issue is the disconnect from the medical image reconstruction community. Conditional DMs are not what is commonly used for solving inverse problems, as these are very dependent on protocol-specific training. Instead the trend is to solve an inverse problem with explicit incorporation of the measurements and the forward operator using DMs as priors. The current methodology does not seem to extend to that more relevant setup.
+- In HyperDM, two components are identified for EU and AU, but these are really surrogates within the BHN framework, and not exact. This issue is amplified further in the way the two losses in (4) and (7) are defined, which are further surrogates of the HyperDM definitions. The gap created is not characterized theoretically.
+
+Minor:
+- All datases considered here are multi-slice 2D, not 3D. Also please clarify whether multi-coil or single-coil MRI data was used in the knee setup, and please specify the acceleration rate for MRI experiments.
+- Section 4.4 is written in non-standard language for medical imaging reconstruction community. I do not understand the three setups here. For instance, in setup 1, are you training a segmentation/classification network on zero-filled images (with artifacts)? Why would anyone do this? And why should this network generalize to "clean" reconstructions? Similar questions for the other two setups.
+- There are works that have used uncertainty to improve regression tasks before, which may help put the overarching idea in context.
+
+### Questions
+- Can you characterize the gap between the surrogate losses in (4) and (7) with true EU and AU?
+- Why isn't there an expectation over \theta(z) in (4)? Similarly no expectation over the trajectories in (7)?
+- Why isn't the two objectives combined together? This is briefly discussed at the end of Section 3.2.2, but no data is shown.
+- What acceleration rate is used for the MRI experiments?
+- Can you clarify the setups in Section 4.4?
+- It's hard to see any of the reconstructions in Fig. 2, can you provide higher resolution versions with error maps?
+- Can you discuss how the method behaves when the protocol changes, e.g. a different sparse view in CT or a different undersampling rate in MRI?
+- How does the quality of DMs defined through \theta(z) sampled from the BHN framework compare to a single DM trained directly with the appropriate loss?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The presented approach builds on HyperDM and presents a diffusion-based framework for medical image reconstruction that aims to reduce rather than simply estimate uncertainty. It combines a pre-trained diffusion model with a Bayesian hypernetwork that generates the model’s weights and introduces two training objectives addressing different uncertainty sources. The noise consistency loss makes reconstructions stable under small input perturbations, reducing uncertainty caused by measurement noise, while the weight consistency loss encourages agreement among reconstructions from different sampled weight sets, reducing model-related uncertainty. Only the hypernetwork is optimized while the diffusion model remains fixed. Experiments on computed tomography and magnetic resonance imaging show that both uncertainty types are reduced without loss of image quality, and that downstream tasks such as lung nodule segmentation and pathology classification improve.
+
+### Strengths
+The clear disentanglement and targeted reduction of aleatoric and epistemic uncertainty are novel and interesting. The paper is in most parts clearly written, easy to follow, and provides sufficient context and explanation of the prior work it builds upon. The proposed objectives are simple yet well motivated, offering an intuitive and principled way to make uncertainty a direct optimization goal rather than a secondary outcome of model estimation.
+
+### Weaknesses
+My first major concern lies in how the hypernetwork is trained. As I understand it, the hyper network parameters must be updated by unrolling the full diffusion process and backpropagating through it, which makes the approach computationally expensive and difficult to scale. A second major concern is the poor reconstruction performance observed on the fastMRI dataset. It remains unclear why the base diffusion model performs so poorly, is this a consequence of using a lightweight model for feasibility, or would the method fail to work with a higher-quality backbone? In addition, the authors model measurement noise as simple Gaussian perturbations, which does not reflect the actual acquisition process in many medical imaging modalities. In fastMRI, for example, undersampling is typically performed using a random k-space mask rather than additive Gaussian noise. It would be important to clarify whether the proposed approach could handle such structured, non-Gaussian noise.
+
+### Questions
+1. How is the hypernetwork trained in practice? Does it require unrolling the entire diffusion process and backpropagating through it, and if so, how does this affect scalability?
+
+2. What explains the poor reconstruction quality on the fastMRI dataset? Is the low performance due to a simplified or lightweight base model chosen for feasibility, or would the method struggle to work with a stronger backbone?
+
+3. Why is measurement noise modeled as Gaussian when many medical imaging modalities, such as fastMRI, involve structured or non-Gaussian noise (e.g., random k-space masks)?
+
+4. Could the proposed approach handle more realistic noise models or acquisition processes beyond additive Gaussian noise?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper extends diffusion-based reconstruction by introducing a Bayesian hypernetwork (BHN) that explicitly reduces aleatoric (AU) and epistemic (EU) uncertainty. Two objectives are trained separately: a noise-consistency loss to stabilize outputs under input perturbations (reducing AU), and a weight-consistency loss to enforce agreement across BHN-sampled weights (reducing EU). Experiments on sparse-view CT (LUNA16) and accelerated MRI (fastMRI) show significant AU/EU reduction while maintaining or improving PSNR/SSIM. Downstream segmentation and classification tasks also benefit from incorporating uncertainty maps.
+
+### Strengths
+Clear framing of uncertainty reduction, not just quantification.
+
+Conceptually clean decomposition of AU and EU with separate training.
+
+Strong empirical results on CT and MRI, including downstream clinical tasks.
+
+Modular design—BHN applied on top of a diffusion model without retraining the base denoiser.
+
+### Weaknesses
+Reported AU/EU reductions are extreme (up to 8–9 orders of magnitude) without calibration or coverage analysis, raising concerns of posterior collapse.
+
+Minimizing variance can trivially reduce uncertainty without ensuring realistic posterior spread.
+
+CT experiments rely on simulated Gaussian noise rather than realistic Poisson or view-dependent models.
+
+Computational cost (M×N sampling) is high and unreported.
+
+No test of whether a single joint AU/EU objective could balance both sources.
+
+Lack of confidence intervals or significance testing for reconstruction and downstream metrics.
+
+Evaluation limited to a single 2D diffusion backbone; unclear scalability to 3D or multi-coil MRI.
+
+### Questions
+How calibrated are AU and EU with respect to actual reconstruction error?
+
+Does the weight-consistency term collapse the BHN posterior?
+
+How sensitive are results to the number of weight and noise samples (M, N)?
+
+How realistic are the CT measurement perturbations used for AU training?
+
+What is the runtime and memory cost per reconstruction compared to baseline HyperDM?
+
+How do improvements hold under out-of-distribution conditions (e.g., unseen masks or noise levels)?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

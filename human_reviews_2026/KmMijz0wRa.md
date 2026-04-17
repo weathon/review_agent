@@ -1,0 +1,277 @@
+# VoiceAssistant-Eval: Benchmarking AI Assistants across Listening, Speaking, and Viewing
+
+- Decision: Reject
+- Scores: 4, 2, 4, 4, 6, 6
+
+## Abstract
+The growing capabilities of large language models and multimodal systems have spurred interest in voice-first AI assistants, yet existing benchmarks are inadequate for evaluating the full range of these systems’ capabilities. We introduce VoiceAssistant-Eval, a comprehensive benchmark designed to assess AI assistants across listening, speaking, and viewing. VoiceAssistant-Eval comprises 10,497 curated examples spanning 13 task categories. These tasks include natural sounds, music, and spoken dialogue for listening; multi-turn dialogue, role-play imitation, and various scenarios for speaking; and highly heterogeneous images for viewing.
+To demonstrate its utility, we evaluate 21 open-source models, GPT-4o-Audio and Gemini-live-2.5-flash, measuring the quality of the response content and speech, as well as their consistency. The results reveal three key findings: (1) open-source models can be highly competitive with proprietary models; (2) most models excel at speaking tasks but lag in audio understanding; and (3) well-designed smaller models can rival much larger ones. Notably, the mid-sized Step-Audio-2-mini (7B) achieves more than double the listening accuracy of LLaMA-Omni2-32B-Bilingual. However, challenges remain: multimodal (audio+visual) input and role-play voice imitation tasks are difficult for current models, and significant gaps persist in robustness and safety alignment. VoiceAssistant-Eval identifies these gaps and establishes a rigorous framework for evaluating and guiding the development of next-generation multimodal voice assistants.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposed a large benchmark for evaluating the speaking/listening/viewing abilities of voice assistant models. The proposed benchmark includes 10497 examples over 13 task categories. These tasks include listening(sounds, music, spoken dialogue...), role-play imitation, various scenarios for speaking, and images for viewing.  They evaluate 22 speech/omni models varied in different parameter sizes. The authors showed some insights from the results and conducted further error analysis on Qwen2.5-Omni-7B by humans, and also pointed out some challenges that remain in the field.
+
+### Strengths
+1. This is the first paper to include visual modality in speech assistant evaluation benchmark.
+2. They included an exhaustive evaluation of recent SoTA speech/omni models on their benchmark.
+
+### Weaknesses
+1. The novelty of the benchmark is somewhat limited. Seems to me that most of the work done in this paper is merely merging existing data sources and using LLM and TTS tools to convert text questions into audio questions.
+2. As an evaluation benchmark for daily use of voice assistants, I think the lack of real data is a major flaw of this benchmark.
+3. The lack of human evaluation makes it hard for people to infer a voice assistant's performance in daily life from the results on this benchmark. For future researchers in this field, they cannot infer if these tasks are high-quality and reasonable for real-world voice assistant scenarios Therefore, it makes this benchmark less likely to be useful for the future research.
+
+### Questions
+1. For “Diverse Audio Contexts”, how did the authors choose the type of environmental sounds to overlap with the input speech?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper claims that they introduces the first comprehensive benchmark designed to evaluate AI voice assistants across three modalities: listening, speaking, and viewing. The benchmark includes 10,497 curated examples covering 13 task categories.Extensive experiments shows that current models cannot do well in these task.
+
+### Strengths
+1. The paper is easy to follow.
+2. The experiment covers a wide range of models.
+
+### Weaknesses
+1. The contribution of this work appears incremental. In the proposed benchmark, different tasks are disentangled and evaluated separately, which limits the motivation and novelty of the paper. Existing comprehensive benchmarks already provide suitable evaluation protocols. If the goal is to assess the capability of a universal speech model, this can be achieved by evaluating performance across multiple existing benchmarks. 
+2. The findings are intuitive. Claims such as “proprietary models cannot definitively surpass open-source models” are rather obvious. There is no model "definitely" surpass other models for all tasks. In fact, according to the experiments, proprietary models generally outperform open-source ones on average. The other two key findings are also trivial.
+3. There are some existing audio-visual benchmark like [1][2][3], but there is no discussion in this paper. The claimed Weakness 4 regarding the limitations of existing benchmarks does not hold.
+4. As a benchmark paper, the human evaluation step for assessing dataset quality, as well as the alignment between automatic evaluation and human judgment, is important. Please include these analyses in the main text rather than only in the appendix.
+5. For role-playing tasks, models such as GPT-4o-Audio and Qwen2.5-Omni achieve nearly the highest scores, yet they use predefined speakers. What is the reason these models can still obtain such high scores?
+
+I set my confidence score to 4 instead of 5 because I only flip through the appendices. According to the reviewer guidelines, we are not required to inspect the appendices in detail. After carefully reading the main text and briefly reviewing the appendices, I believe the motivation, novelty, and contribution of this paper do not meet the ICLR acceptance threshold. This is a fundamental issue that cannot be easily resolved by adding experiments or minor revisions, so I lean toward rejection and give a score of 2.
+
+(If some important information is currently placed in the appendices, please let me know and revise the manuscript to move it into the main text. I would be happy to reconsider my score in that case.)
+
+[1] Gong, Kaixiong, et al. "AV-Odyssey Bench: Can Your Multimodal LLMs Really Understand Audio-Visual Information?." 
+
+[2] Yao, Jihan, et al. "MMMG: a Comprehensive and Reliable Evaluation Suite for Multitask Multimodal Generation." 
+
+[3] Sung-Bin, Kim, et al. "Avhbench: A cross-modal hallucination benchmark for audio-visual large language models.
+
+### Questions
+1. Why is the UTMOS score threshold set to 3.8? I believe that for modern TTS systems, a UTMOS score of 3.8 does not represent high-quality audio.
+2. For models that require a voice prompt, such as Step-Audio-2-mini, what kind of voice prompt do you use?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces **VoiceAssistant-Eval**, a comprehensive benchmark for evaluating multimodal AI assistants across *listening*, *speaking*, and *viewing* abilities. It includes over 10K curated samples and uses a triadic evaluation framework measuring content, speech, and consistency. Experiments on 22 models show that proprietary systems do not always outperform open-source ones, and that smaller, well-designed models can rival much larger ones. The benchmark is broad, systematic, and valuable for advancing voice-first AI evaluation. However, it relies entirely on **synthetic TTS audio**, which may limit realism, and lacks **barge-in (interruption) scenarios**, making it less fair for full-duplex systems like *Moshi* or *Freeze-Omni*. Incorporating real human speech and interaction-based tests would make it more representative of real-world usage.
+
+### Strengths
+- Comprehensive coverage – This is the first benchmark to simultaneously assess listening, speaking, and viewing in one unified framework, addressing several known limitations of prior voice or multimodal benchmarks.
+- Systematic evaluation methodology – The triadic evaluation (content–speech–consistency) provides a holistic and interpretable view of model capabilities beyond text-only metrics.
+- Broad and transparent comparison – Results across 22 models reveal key performance trends and highlight that smaller, well-aligned models can rival or exceed much larger ones.
+
+### Weaknesses
+- Lack of real human speech data. The benchmark relies entirely on TTS-synthesized audio for both prompts and responses. It is unclear whether performance on synthetic speech generalizes to real-world human recordings. I suggest incorporating real conversational corpora such as Fisher or similar datasets to better reflect authentic human–assistant interactions.
+
+- Absence of interruption (barge-in) scenarios. The benchmark does not test situations where a user interrupts the assistant mid-speech, which are common in real human–AI conversations. This omission disadvantages full-duplex systems such as Moshi, Freeze-Omni and SALMONN-omni, which are explicitly designed to handle barge-in interactions. Even if most evaluated models are turn-based and cannot support such behavior, the benchmark should still include dedicated test cases to highlight the unique strengths of full-duplex voice assistants.
+
+### Questions
+- About Table 3: What are the specific characteristics and differences among the various tasks? It would be helpful if the authors could include one representative sample for each task in the appendix to illustrate its unique properties and how it differs from the others.
+
+
+- Evaluation metrics across tasks: The specific evaluation metrics likely differ by subtask. In my opinion, emotion similarity should only be evaluated in the EMO subtask, and speaker similarity only in the RLP (role-play) subtask, is it right? Therefore, the detailed computation methods for each metric must vary across tasks. I suggest that the authors explicitly describe the evaluation criteria and metric formulations for each subtask in the appendix.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents VoiceAssistant-Eval, a comprehensive benchmark for evaluating AI assistants across listening, speaking, and viewing capabilities. It consolidates 13 diverse tasks spanning speech understanding, speech generation, multimodal grounding, and role-play imitation, and introduces a triadic evaluation protocol that jointly measures response consistency, speech quality, and content quality. Experiments on 21 open-source and proprietary systems reveal distinctive strengths and weaknesses among models and offer insightful directions for future research.
+
+### Strengths
+* Addresses a timely and important research problem by focusing on the speech-in/speech-out evaluation paradigm, an emerging yet underexplored direction in developing voice assistants and omni-modal LLMs.
+* Provides clear and well-motivated problem framing, effectively articulating the limitations of current benchmarks (W1-W4) and demonstrating how these gaps motivate the proposed benchmark design.
+
+### Weaknesses
+* The paper critically fails to provide clear definitions for each of the 13 tasks. For example, "speaking-robustness" is indeed ambiguous. Does it test resistance to input noise, adversarial prompts, or something else? This lack of clarity undermines the benchmark's representativeness and positioning and makes it impossible to assess whether the tasks actually measure what they claim to measure.
+* The technical novelty of the paper is limited, as its primary contribution lies in dataset aggregation and curation rather than methodological innovation. The benchmark primarily integrates 47 existing datasets with synthetic speech and applies standard evaluation metrics.
+* Many tasks, especially for those under the speaking and viewing categories, appear to emphasize surface-level semantic understanding of speech before solving the task itself. This raises an important question: how much performance difference arises from using audio input versus text input? A baseline system employing a text-based variant (to isolate modality effects) and a cascade pipeline (ASR --> LLM/VLLM --> TTS) could serve as a strong comparison point, yet such baselines are not included in the current study.
+* Related to the previous one. Several critical aspects of speech-centric understanding that are fundamental to voice assistants—such as reasoning about intonation, prosody, and pause timing to infer intention, or conditioning responses on speaker emotion and stress—are not considered. Moreover, robustness to noise and acoustic variation is not explicitly evaluate and discussed. A discussion of these limitations and possible extensions would strengthen the impact of this benchmark.
+* Using a speaker embedding model as a primary evaluation tool for the role-play task risks overemphasizing timbre similarity rather than capturing prosodic style, speaking tone, or persona-specific delivery.
+* The claim that current models perform better on speaking tasks than on listening tasks is also problematic, since the relative difficulty levels for humans across these categories are unknown. Without a human performance baseline or a normalization for task difficulty, such cross-category comparisons risk being non-equivalent and may not reflect genuine model limitations.
+
+### Questions
+* Given the paper’s focus on voice assistants, it would be advisable to include additional proprietary baselines (e.g. Gemini) in the comparative evaluation.
+* The paper should clearly specify how the triadic score is aggregated (e.g., geometric mean vs. weighted sum) and provide a clear justification for this design choice.
+* It would be helpful to clarify whether and how the leaderboard will be made publicly available.
+* A majority of the identified weaknesses stem from unclear presentation, insufficient justification of design choices, and limited discussion of potential limitations. Addressing these issues would substantially strengthen the paper and could justify a higher review score upon revision.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 5
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduce VoiceAsssistant-Eval, a comprehensive benchmark designed to assess AI assistants across listening, speaking, and viewing, comprising 10,497 curated examples spanning 13 task categories. The evaluation focus on hands-free interaction and "voice-first". The measurement aspects include the quality of response content, speech, and their consistency. They evaluated 21 open-source models and GPT-4o-Audio, and reveal some key findings.
+
+### Strengths
+1. Closer to real voice assistant evaluation: in practical scenarios, voice assistants need to support speech-only interaction. In this benchmark, all examples use speech rather than text for interaction (using speech as input and output). In the evaluation of listening, in addition to speech, it also covers everyday soundscapes including natural sounds, music, environmental noises.
+
+2. Comprehensive test categories: including four listening tasks (general, music, sound, speech), eight speaking tasks (assistant, emotion, instruction following, multi-round, reasoning, robustness, role playing, safety), and one viewing task (multi-discipline). The sample numbers among different categories are basically balanced. They evaluate across three dimensions: content quality, speech quality, and consistency between them.
+
+3. A comprehensive evaluation and comparison on 21 open-source models and one closed-source model GPT-4o-Audio, with findings: (1) Proprietary models cannot definitively surpass open-source models; (2) Current models tend to perform better on speaking tasks than on listening tasks; (3) Smaller, well-architected models can rival larger models; (4) Role-play tasks are challenging; (5) Multi-modal (vision+audio) integration remains a challenge; (6) Safety alignment and robustness still require further improvement.
+
+4. Authors conducted a consistency check between gpt-oss-20b and human evaluation, showing that gpt-oss-20b align with human preference.
+
+### Weaknesses
+1. As you said, one weakness of other benchmarks is “they rarely evaluate models under realistic conditions with varied audio contexts.” (line 090-091). However, in your speech synthesis, you filter with UTMOS and regenerate until the score > 3.8, then pick the lowest-WER sample via Whisper. This pipeline likely biases toward clean, high-MOS TTS and away from truly noisy/realistic conditions (real-life recordings with UTMOS<3 are common). How do your benchmark avoid the issue of “don't evaluated under realistic conditions”?
+
+2. Overclaim in Related Work section: line 181 mentions that previous benchmarks did not have audio/visual context or voice imitation; line 191 claims that VoiceAssistant-Eval is first to evaluate models in rich audio–visual contexts. However, OmniDialog[1] (trimodal text-vision-audio dialogues) and AV-Odyssey Bench[2] (4,555 multimodal problems integrating text, visual and audio) already evaluate audio-visual (+text) understanding.  I acknowledge your benchmark’s speech-out, voice-first setting is novel and valuable, but saying previous benchmarks lacked audio/visual context is incorrect.
+
+3. Aggregating multiple metrics into a single score will harm the fine-grained evaluation of content quality and speech quality. As shown in Appendix G, there is a trade-off between content and speech quality. Aggregating them into a single score will lead to the inability to evaluate a model’s speech and content capabilities separately.
+
+4. The presentation of the Triadic Evaluation System is very hard to follow. Important details should be in the main text with detailed explanation or formula.
+
+5. The findings about proprietary vs. open-source models may be outdated, as GPT-4o-Audio is from early 2024. Including more recent proprietary models would strengthen the comparison.
+
+[1] Razzhigaev, Anton, et al. "OmniDialog: A Multimodal Benchmark for Generalization Across Text, Visual, and Audio Modalities." Proceedings of the 2nd GenBench Workshop on Generalisation (Benchmarking) in NLP. 2024.
+
+[2] Gong, Kaixiong, et al. "AV-Odyssey Bench: Can Your Multimodal LLMs Really Understand Audio-Visual Information?." arXiv preprint arXiv:2412.02611 (2024).
+
+### Questions
+1. Why do you think the ability of role playing is important? Would model's affective expressivity and empathy (without mimicking a specific speaker) be a more direct driver of user trust and sustained engagement than timbre imitation?
+
+2. About the triadic evaluation system section, how are the three individual scores calculated respectively? What is the purpose of emotion prompts, and why keep emotions with probability >1% (not another number, for example, 10%)? How is the length threshold WER for multiple-choice questions done? What do the formulas in lines 301–307 mean? Why choose multiplication of three subscores rather than an additive/geometric aggregation? Why are the speaking score and listening score comparable (line 368, "20 out of 22 models score higher on Speaking than on Listening")?
+
+3. In your role playing task, do you consider different languages, accents, and genders?
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 6
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces VoiceAssistant-Eval, a comprehensive benchmark designed to evaluate voice-first assistants across the dimensions of listening, speaking, and viewing. The benchmark encompasses a diverse set of tasks and scenarios, enabling systematic assessment of model performance in terms of content quality, speech quality, and consistency. Extensive experiments are conducted on 21 open-source models as well as GPT-4o-Audio, accompanied by an in-depth error analysis that provides valuable insights into system behavior.
+
+### Strengths
+1. The study presents extensive experiments involving a broad range of open-source models, offering a thorough comparative evaluation.
+
+2. The proposed benchmark covers diverse scenarios, assessing multiple dimensions of voice-first assistant capabilities.
+
+3. The paper provides comprehensive result analyses, uncovering several noteworthy findings. Additionally, the authors investigate the correlation with human evaluations and the stability of the evaluation metrics.
+
+### Weaknesses
+1. score calculation: The current multiplicative scoring approach may excessively penalize a model for weaker performance in any single dimension. Conducting additional ablation studies on alternative combination strategies could provide a fairer and more balanced evaluation.
+
+2. The key finding 1 "proprietary models do not universally outperform open-source models" would be more convincing if the evaluation included a broader set of proprietary systems.
+
+### Questions
+1. I'm quite confused about the score calculation. Providing a formula in the main text will be helpful. Moreover, the multiplicative step may not be necessary, as it obscures the specific strengths and weaknesses of individual dimensions. Reporting each individual score separately could provide a more transparent and informative assessment of model performance.
+
+2. It may also be beneficial to include more commercial models, for example, Gemini-2.5-Pro, to better represent the upper bound of current model capabilities and offer a stronger reference point for comparison.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

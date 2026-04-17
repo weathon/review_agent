@@ -1,0 +1,172 @@
+# One Life to Learn: Inferring Symbolic World Models for Stochastic Environments from Unguided Exploration
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4
+
+## Abstract
+Symbolic world modeling is the task of inferring and representing the transitional dynamics of an environment as an executable program. Previous research
+on symbolic world modeling has focused on simple, deterministic environments
+with abundant data and human-provided guidance. We address the more realistic and challenging problem of learning a symbolic world model in a complex, stochastic environment with severe constraints: a limited interaction budget
+where the agent has only “one life” to explore a hostile environment and no external guidance in the form of human-provided, environment-specific rewards or
+goals. We introduce OneLife, a framework that models world dynamics through
+conditionally-activated programmatic laws within a probabilistic programming
+framework. Each law operates through a precondition-effect structure, allowing
+it to remain silent on irrelevant aspects of the world state and predict only the attributes it directly governs. This creates a dynamic computation graph that routes
+both inference and optimization only through relevant laws for each transition,
+avoiding the scaling challenges that arise when all laws must contribute to predictions about a complex, hierarchical state space, and enabling accurate learning
+of stochastic dynamics even when most rules are inactive at any given moment.
+To evaluate our approach under these demanding constraints, we introduce a new
+evaluation protocol that measures (a) state ranking, the ability to distinguish plausible future states from implausible ones, and (b) state fidelity, the ability to generate future states that closely resemble reality. We develop and evaluate our framework on Crafter-OO, our reimplementation of the popular Crafter environment
+that exposes a structured, object-oriented symbolic state and and a pure transition function that operates on that state alone. OneLife can successfully learn
+key environment dynamics from minimal, unguided interaction, outperforming a
+strong baseline on 16 out of 23 scenarios tested. 
+We also demonstrate
+the world model’s utility for planning, where rollouts simulated within the world
+model successfully identify superior strategies in multi-step goal-oriented tasks.
+Our work establishes a foundation for autonomously constructing programmatic world models of unknown,
+complex environments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents an approach to learning symbolic world models from observations in an MDP.
+
+In the proposed framework, a world model is a weighted set of “laws,” each law being a pair of a precondition and an “effect” function that modifies attributes of an input state given an input action. The laws are synthesized by prompting an LLM, and, given the laws, the weights are optimized by maximizing with gradient descent the likelihood of a set of transitions.
+
+The authors conduct experiments on a custom environment that reimplements Crafter (a popular RL environment) but exposes the entire state in text form. The experiments are conducted in a controlled (but significantly limiting) setting and compare the proposed system to a recent baseline, showing some improvement.
+
+### Strengths
+- Significance: the work leverages LLMs to synthesize “reactive” laws that are used to parametrize a world model. Even if I don't consider the proposed method's novelty one of its strengths, in my opinion it is of interest to the community to understand the performance (and limitations) of this kind of system, and I expect the results in this work to inform future research. Thus, **I consider significance to be one of the strengths of the paper.**
+- Quality: the design choices in this framework are sensible (even if at times the motivations are not clearly articulated). Furthermore, the method appears to be relatively well-documented in the appendix, so even if the results are in some sense negative (the synthesized world models appear to be far from perfect), the experiment results are informative. Thus, **with some changes (see suggestions), I would consider the quality of the work to be adequate for this venue.**
+
+### Weaknesses
+The paper is generally well-written, but at times the manuscript could be more precise. In particular:
+- Some aspects of the method are not described with enough detail (see suggestions 2, 3 and 5).
+- Some aspects of the experimental setup should be emphasized (see suggestions 1 and 6).
+- The results are a bit difficult to interpret due to the use of MRR (see suggestion 4).
+- Some of the design choices are not motivated (see suggestion 7).
+
+The experimental setup has significant limitations:
+- The experiments only include one baseline (see suggestion 8).
+- Experiments are performed in a single domain. I do not consider this to be a critical flaw, but it does limit the significance of the experiments.
+
+### Questions
+Questions:
+- Why are the weights necessary? My guess is that they serve to “soften” the preconditions (which are deterministic predicates), but there is no actual motivation for the inclusion of the weights in the manuscript.
+- What is the space of laws? In the Appendix it can be observed that you have a (custom?) library with which you specify the distributions of attributes for the next state, but it is never stated what space is covered with the library (e.g., what types of distributions can be represented).
+- What is the experimental setup for measuring the rank? My understanding is that 10 “candidate next states” are generated with a method that leverages domain knowledge to create plausible candidates (one of which is the actual ground truth next state), and then the rank of the ground truth next state among that set is measured. Is this correct?
+- Why use reciprocal rank instead of (raw) rank?
+- In line 281 you state, “The policy is not provided with specific knowledge of the environment,” but in Box F.1 it can be seen that the exploration policy does leverage domain knowledge (e.g., 1588: “you may encounter creatures that are hostile and will attack you”). This must be clarified.
+- Experiments are conducted per scenario, where scenarios. Does this mean that a full model of the environment is never synthesized? I.e., a model that captures all the behaviors that could happen.
+- The transition function of the environment is described as a “pure transition function.” Is this accurate? If so, why not synthesize a deterministic world model?
+- Have you evaluated the model predicting multiple next states in sequence? Good-enough performance in this is necessary for model-based planning and training. Based on your results (18% rank @ one), I would expect the model to perform poorly (it is still useful for the community to know that this kind of system does not perform well enough).
+- Why did you not include other systems as baselines (e.g., WorldCoder)? Your baseline is adequate, but a single data point to compare to is not ideal.
+- Is the core difference between the proposed system and PoE that the proposed system aims to synthesize “atomic” laws?
+
+Suggestions:
+1. You must correctly state that the exploration policy leverages domain knowledge to get meaningful trajectories (Box F.1). This is important because the quality of the trajectories influences the synthesis of the world model.
+2. I suggest fully reworking the description of the synthesizer (line 288), as it cannot be inferred at all that the synthesizer is a custom routine that calls an LLM to synthesize a law for each detected change in the state (Listing 17).
+3. I suggest you describe (with some level of precision) the set of laws that can be synthesized. In the Appendix it is shown to be Python programs that use a library to describe the distributions of each attribute of the state in the next state. This should be stated in the main text, as it informs the reader about the level of expressivity of the system and the types of programs that are being synthesized, both of which are important to understand the work.
+4. I suggest you provide a visualization of the ranks of the states (e.g., a scatter plot with a corresponding histogram). This would help the reader better understand the performance of the model (and baseline ideally).
+5. The laws are stochastic (as can be seen in, e.g., Box A.4), but in line 237 you use notation typically reserved for (deterministic) functions. I suggest making the definition of all parts of the world model mathematically precise.
+6. If the per-scenario experimental setup implies that a “full” world model (i.e., a model that covers the entire state space) is never synthesized, then this should be stated in the manuscript, as it helps the reader understand the scope of the experiments.
+7. Motivate the use of the law's weights. Ideally this is done with both a conceptual explanation and an ablation study.
+8. Adding another baseline would significantly improve the experimental section.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper learns a symbolic/programmatic world model for Crafter. It uses LLM for exploration to collect data for training world models. It then asks LLMs to generate codes as world models given the collected data. The programs are modeled as a probabilistic composition of simpler programs/laws, taking advantage of the decompositionability of states to speed up program synthesis. It also builds a Crafter-OO environment together with some evaluation metrics.
+
+### Strengths
+The new Crafter-OO environment is interesting. It's more stochastic (like the random movements of zombies) than the previous environments used in the field. It's good to see that symbolic world models also work in the Crafter environment. 
+
+The paper is generally well-written.
+
+### Weaknesses
+It's hard to tell the differences between program synthesizers in this paper versus PoE-World, and why the differences are important.
+
+Although it is informative to check if the next states are predicted correctly, it would be much better to use metrics that involve long trajectories and goals, such as the success rates of solving a problem in Crafter using the learned world model.
+
+### Questions
+* What are the differences between the program synthesizers in this paper versus PoE-World, and why are the differences important?
+
+* Are there metrics involving long trajectories and goals? How good are the learned world models from that perspective?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces ONELIFE, a framework for learning a symbolic world model from a single, unguided "one life" exploration in a complex and stochastic environment. The core of ONELIFE is to model the world's dynamics as a "mixture of laws", which are programmatic rules with preconditions and effects. The system uses a probabilistic programming approach to infer the importance of these laws, efficiently routing credit only to the rules that are relevant to observed changes in the state. To test this method, the authors also developed Crafter-OO, a new, complex testbed based on the Crafter environment, which exposes a fully symbolic, object-oriented state. The authors demonstrate that ONELIFE is superior to a baseline in its ability to rank plausible future states, suggesting it learns a more accurate model of the environment's rules.
+
+### Strengths
+- The introduction of Crafter-OO is a valuable contribution to the research community, offering a new, complex testbed for agents that must operate in dynamic environments with a mixture of underlying laws.
+- The paper tackles a challenging and important problem setting: learning a world's rules from minimal, unguided interaction in a hostile, stochastic environment.
+
+### Weaknesses
+- The setup, while realistic in its limited interaction budget, makes several unrealistic assumptions. It relies on full, symbolic observability of a structured state, which is rare. The "one life" constraint also feels artificial for many real-world tasks (e.g., robot manipulation) where mistakes are often recoverable.
+- The technical novelty of the method itself is somewhat unclear. Domain inference, state tracking, and programmatic models are not new. The paper could do a better job of positioning its technical novelty against this prior work, beyond just the Crafter-OO and "one life" setting.
+- The paper is unclear about the environment's specifics. For instance, it's not immediately clear why the object-oriented state isn't just described as a PDDL-based representation. A clear list or description of the agent's action space is also missing, making it hard to grasp the task's complexity.
+- The framework is only evaluated on Crafter-OO. While this is a new and complex environment, testing on only one domain makes it difficult to assess the generalizability of the ONELIFE framework.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3

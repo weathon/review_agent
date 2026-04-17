@@ -1,0 +1,187 @@
+# NatADiff: Adversarial Boundary Guidance for Natural Adversarial Diffusion
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 8, 4
+
+## Abstract
+Adversarial samples exploit irregularities in the manifold "learned" by deep learning models to cause misclassifications. The study of these adversarial samples provides insight into the features a model uses to classify inputs, which can be leveraged to improve robustness against future attacks. However, much of the existing literature focuses on constrained adversarial samples, which do not accurately reflect test-time errors encountered in real-world settings. To address this, we propose `NatADiff', an adversarial sampling scheme that leverages denoising diffusion to generate natural adversarial samples. Our approach is based on the observation that natural adversarial samples frequently contain structural elements from the adversarial class. Deep learning models can exploit these structural elements to shortcut the classification process, rather than learning to genuinely distinguish between classes. To leverage this behavior, we guide the diffusion trajectory towards the intersection of the true and adversarial classes, combining time-travel sampling with augmented classifier guidance to enhance attack transferability while preserving image quality. Our method achieves comparable white-box attack success rates to current state-of-the-art techniques, while exhibiting significantly higher transferability across model architectures and improved alignment with natural test-time errors as measured by FID. These results demonstrate that NatADiff produces adversarial samples that not only transfer more effectively across models, but more faithfully resemble naturally occurring test-time errors when compared with other generative adversarial sampling schemes.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a novel and well-motivated method for generating natural adversarial samples using diffusion models. The proposed NatADiff framework effectively combines adversarial boundary guidance, classifier augmentations, and time-travel sampling to produce highly transferable and semantically meaningful adversarial examples. 
+
+This paper introduces NatADiff, a diffusion-based method for generating natural adversarial samples. The key contributions are: 1）It proposes a novel technique that guides the diffusion sampling trajectory toward the intersection of the true and adversarial classes, encouraging the inclusion of adversarial features in a semantically plausible manner; 2) It uses differentiable image transformations to reduce the influence of constrained adversarial perturbations and promote more robust and transferable adversarial features; 3) 
+ It presents an untargeted attack strategy that selects adversarial classes based on semantic similarity using CLIP embeddings, improving attack success and visual quality.
+
+### Strengths
+1. The adversarial boundary guidance mechanism is a novel and intuitive way to incorporate adversarial features without deviating entirely from the true class, leading to more plausible and transferable samples.
+
+2. NatADiff achieves significantly higher transferability than existing methods across a wide range of models, including adversarially trained classifiers.
+
+3. The paper includes thorough ablation studies and visualizations that validate design choices and provide interpretability.
+
+### Weaknesses
+1. The methodological novelty is limited; the core components of NatADiff lack fundamental innovation. Classifier augmentations and time-travel sampling are directly borrowed from prior works to address known issues (e.g., constrained perturbations and sample quality degradation). The main proposed contribution, adversarial boundary guidance, is essentially a weighted interpolation between two established concepts: classifier-free guidance and the novel but straightforward idea of guiding towards a class intersection ($y ∩ ȳ$) using a composite text prompt. While the combination of these elements is new and effective, the paper does not introduce a groundbreaking new algorithm or theoretical insight. It is better characterized as a skillful and well-engineered integration of existing techniques towards a new objective.
+
+
+2. NatADiff is computationally expensive (103 seconds per sample), primarily due to the iterative diffusion process and time-travel sampling.
+
+3. Experiments are confined to ImageNet. It is unclear how well NatADiff generalizes to other domains. (eg. CUB-200, Stanford Cars in DiffAttack ).
+
+4.  NatADiff often introduces significant semantic changes to the original content, leading to the generation of implausible or unnatural features (e.g., objects with distorted shapes or unrealistic textures). While this may effectively fool classifiers, it limits the applicability of the attack in real-world scenarios where the adversarial sample must remain a faithful representation of the source semantic content. For instance, in content authentication, medical imaging, or any context where the integrity of specific visual features is paramount, such drastic alterations are not permissible and would be easily flagged by a human observer.
+
+5. The experimental comparison is skewed in favor of NatADiff. Methods like DiffAttack and ACA are reference-based attacks; they are constrained to be similar to a given clean source image. In contrast, NatADiff and AdvClass are generative-based attacks that start from random noise and have the freedom to generate any image on the manifold. This fundamental difference grants NatADiff a significantly larger attack surface, as it is not bound by the semantic content of a specific source image. Comparing these two distinct paradigms under the same "unconstrained attack" umbrella is misleading and overstates NatADiff's advantages.
+
+### Questions
+1. Why does adversarial boundary guidance improve transferability? Is there a theoretical link between class intersection and model shortcut learning?
+
+2. How do humans perceive NatADiff-generated samples? Do they align with human judgment of class membership?
+
+3. Can NatADiff be adapted to a "guided editing" setting, where it modifies a provided source image towards an adversarial target, rather than generating from scratch?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This study introduces NatADiff, an adversarial sampling framework that leverages a denoising diffusion model to synthesize "natural adversarial examples" by guiding sampled images toward the intersection of the manifold between true and adversarial categories. The authors propose an adversarial boundary guidance method to generate adversarial examples that are more realistic and transferable than baseline attack strategies. Empirical results on ImageNet classifiers and a range of model architectures demonstrate that this approach improves attack transferability and approaches true test-time error.
+
+### Strengths
+1. This paper connects the concept of adversarial bound guidance with the generation of natural adversarial examples, formalizing the intuition that natural errors occur due to overreliance on contextual cues. This is a well-thought-out approach.
+2. The method demonstrates excellent technical depth and implementation. It combines time-travel sampling, classifier-free guidance, gradient normalization, and boosting; ablation experiments are conducted for each component to evaluate its contribution.
+3. Experimental results demonstrate that NatADiff achieves comparable or even higher attack success rates than state-of-the-art methods in both white-box and transfer settings. The high transferability of its attack is demonstrated across a variety of victim architectures, including convolutional and Transformer-based models.
+
+### Weaknesses
+1. The manuscript provides no ablation study or discussion on the robustness of the adversarial boundary guidance to variations in the textual implementation of the intersection prompt `y ∩ ỹ`. The stability of results across different prompt engineering strategies (e.g., varying templates or phrasing) remains entirely unexplored.
+2. The appendix mentions that the adversarial guidance strength was "manually tuned" and notes that s behaves close to binarization (the attack succeeds only after reaching a threshold). The paper mentions "the optimal value of s varied across classifiers" and reports the specific values in Table 4 but does not verify how s affects gradient stability or vanishing/divergence.
+3. All experiments were conducted only on ImageNet and its commonly used architectures. Whether this method can be extended to non-image data modalities, domain-transfer scenarios, or truly open-world environments has not been discussed or empirically verified.
+
+### Questions
+1. Could the authors provide more technical details or ablation results on the construction and effect of the intersection prompt `y ∩ ỹ`? Specifically, how stable are the results under different prompt generation strategies?
+2. Could the authors provide rigorous analysis or experimental results on how the adversarial guidance strength s influences gradient vanishing or explosion phenomena, particularly given its threshold-like behavior and dependence on classifier architectures?
+3. The paper has a great idea. What needs to be done to adapt NatADiff to domains beyond natural images (e.g., audio, tables, or multimodal data)? Are there any inherent limitations?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper proposes NatADiff, a diffusion-based method for generating highly transferable natural adversarial samples. It introduces adversarial boundary guidance and classifier augmentations to steer diffusion sampling toward class intersections, mimicking naturally occurring test-time errors. NatADiff achieves strong white-box attack success rates and significantly higher transferability than existing methods, with samples more closely resembling natural adversarial examples.
+
+### Strengths
+- Novel integration of adversarial boundary guidance and classifier augmentations in diffusion models.
+- Strong empirical results: high transferability and competitive white-box performance.
+- Well-motivated by the link between contextual cues and natural adversarial samples.
+- Comprehensive evaluation across multiple architectures and adversarial defenses.
+
+### Weaknesses
+- Computationally expensive due to iterative diffusion sampling.
+- Limited to ImageNet; evaluation on more specialized domains is future work.
+- Similarity targeting may lead to subtle misclassifications (e.g., between similar classes).
+
+### Questions
+- Why do you only limit to ImageNet?
+- Alg 1: What does the star after $\epsilon$ mean?
+- Will you provide your code?
+- You use the RTX 4090. You havn't specified the memory size. Maybe only 24 GB. Can you only attack one image after another or more images at once?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes NatADiff, a novel diffusion-based sampling scheme designed to generate natural adversarial samples. The method is motivated by the observation that deep learning models often rely on “contextual cues” to perform “shortcut learning”, which is hypothesized to be the cause of natural test-time errors. The core methodology is termed “Adversarial Boundary Guidance”, a technique that guides the diffusion trajectory toward the intersection of the true and adversarial class manifolds, notably implemented by manipulating text prompts (e.g., “True Class and Adversarial Class”). To enhance attack transferability, this method is combined with “augmented classifier guidance”, and “time-travel sampling” is used to preserve image quality. Experimental results demonstrate that while NatADiff achieves comparable white-box ASR to SOTA methods, it exhibits vastly superior transferability. Furthermore, the generated samples prove effective even against adversarially trained models, suggesting the attack targets a more fundamental vulnerability than traditional perturbation-based attacks.
+
+### Strengths
+(S1) Vastly Superior Transferability
+The paper's primary strength lies in its demonstration of vastly superior transferability. As shown in Table 1, the proposed NatADiff significantly outperforms all competitors, including SOTA diffusion-based attacks like AdvClass and DiffAttack, in average transfer ASR. The ability to successfully attack a ViT-H model with samples generated from a CNN (RN-50) at such a high success rate strongly suggests the method identifies fundamental, architecture-agnostic vulnerabilities.
+(S2) Novel and Well-Motivated Methodology
+This strong empirical result is supported by a novel and well-motivated methodology. The core idea of “Adversarial Boundary Guidance”, which leverages the diffusion model’s text-conditioning to guide the sampling trajectory toward the intersection of the true and adversarial classes (e.g., using an “A and B” prompt), is a clever way to operationalize the “shortcut learning” hypothesis. This is logically combined with “augmented classifier guidance” to suppress non-transferable, pixel-level perturbations and force the model to manifest more robust structural features.
+(S3) Effectiveness Against Adversarial Defenses
+The effectiveness of NatADiff against adversarially trained models (AdvRes and AdvInc) is a significant finding. These models are specifically designed to resist traditional perturbation-based attacks, and NatADiff’s success against them underscores that it operates via a fundamentally different and more robust attack vector.
+(S4) Insightful Analysis of Attack Variants
+Finally, the paper provides an insightful analysis of the trade-off between the random-targeted (T) and similarity-untargeted (U) variants. The observation that the (T) variant achieves a better FID-A score (alignment with natural errors) at the cost of ASR, while the (U) variant does the opposite, lends support to the hypothesis that natural errors often arise from blending features of disparate classes.
+
+### Weaknesses
+(W1) Inconsistent motivation for Similarity Targeting: The authors motivate the use of similarity targeting (U) by stating that it “outperform[s] targeted attacks (T)”. While this holds true for CNN surrogates (RN-50, Inc-v3), the paper fails to acknowledge or analyze the contradictory result from the ViT-H surrogate, where the random targeted attack (T) significantly outperforms the similarity-based untargeted attack (U) in average ASR (73.2% vs 69.7%). This omission weakens the claim that similarity targeting is a universally superior strategy, especially for Transformer-based models.
+(W2) Lack of Direct Evidence for the “Class Intersection” Claim: The paper’s core hypothesis is that NatADiff guides the trajectory towards the “intersection of the true and adversarial classes” 6. However, the evidence provided is indirect (FID-A scores) or qualitative (image samples). The paper would be significantly strengthened by providing direct, quantitative evidence. For example, a t-SNE/UMAP visualization plotting the embeddings of the generated samples against the manifolds of the true and adversarial classes would be necessary to truly validate that the generated samples lie in this hypothesized “intersection”.
+(W3) Limited Scope of Evaluation: The evaluation is confined to the broad, 1000-class ImageNet dataset. It remains unclear how the “contextual cue” hypothesis holds on fine-grained datasets (e.g., Oxford-Pet) where inter-class similarity is high and shortcuts might be far more subtle. While the authors acknowledge this limitation in the appendix, an experiment on a fine-grained dataset would have substantially strengthened the paper's claims of generalizability.
+(W4) In Equation 10, it seems you should use argmax instead of argmin. In this equation, you should specify the class with the highest similarity, not the lowest, as the adversarial target.
+
+### Questions
+Concerns are in the weakness section
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,161 @@
+# Learning to Link: Incorporating Multi-hop QA Examples Improves Dispersed Knowledge Injection
+
+- Decision: Reject
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Language models have proven effective as knowledge bases for answering both single- and multi-hop questions at web scale. However, a persistent challenge is whether and how these models connect facts dispersed across documents --- a core requirement for multi-hop reasoning from parametric knowledge. In this paper, we present an empirical study of the learning dynamics underlying such linking in controlled settings. We compare different training regimes on varied synthetic datasets, showing that standard training on isolated documents leads to limited effectiveness in two-hop knowledge extraction. Our results indicate that interleaving exposure to documents and two-hop question answering (QA) examples --- whose answers require composing relations across documents --- enables models to generalize cross-document linking across domains, entities, and relations. A key finding is that QA examples alone are insufficient: pairing questions with their grounding documents during training is essential, indicating that models are not simply memorizing the QA format. Finally, we show that making these connections within a single forward pass remains challenging; therefore, chain-of-thought answering is crucial for assessing the injection of knowledge dispersed across documents.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper studies how LLMs acquire the ability of multi-hop reasoning by connecting facts across different docs. Experiments on four synthetic datasets over different topics show that standard training on isolated document is insufficient. Incorporating questions with their grounding docs is essential during training. Additionally, the authors demonstrate that the connections cannot be effectively carried out in a single pass.
+
+### Strengths
+- The paper provides insights into the question: how do LLM learn to compose facts from different sources?
+- The main finding that grounded QA examples are crucial for teaching this linking skill is significant
+- Ablation provides strong evidence that grounding in documents is the key to better performance
+
+### Weaknesses
+- Experiments are carried out on purely synthetic data, which may have very different information layout as real-life documents. 
+- The paper adopts standard LM objective for training, yet models may further benefit from other training methods such as contrastive learning, RL, etc. 
+- All conclusions are drawn over a single model (Qwen2.5-7B), which may not generalize to models from different family or models of different sizes.
+
+### Questions
+- How does instruction model perform on multi-hop QA, as compared to base model?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper investigates how LMs learn to answer multi-hop questions with their parametric knowledge. The paper creates synthetic datasets on topics of “clubs”, “people”, “planet”, and “software”, and conducts controlled experiments on these datasets. The datasets are split into “documents” which describe the attributes of the entities, and “QA”s which are questions paired with answers and optionally how the intermediate (bridge) entity connects to the answer entity for two-hop questions. Results show that LMs cannot learn to link two entities in two different documents from QA formats alone. The QA pairs should be accompanied by the corresponding supporting documents. Analysis shows that LMs perform better in free-form generation settings compared to multiple-choice settings, since they cannot generate the intermediate entity.
+
+### Strengths
+1. The created dataset fits the purpose of the experiments. The dataset construction process is reasonable. 
+2. The descriptions of experiments are mostly clear, with some minor details left out. I don’t have to refer to the appendix a lot. 
+3. The experiment design fits the research questions asked, and the execution is pretty solid.
+
+### Weaknesses
+1. **Findings are limited.** This is my main complaint, and the main reason for my current score. I think RQ1 and RQ2 are pretty clear without doing the experiments, in that you would not expect the LM to learn cross-document links if it is only trained on individual documents. This is supported by previous works mentioned in L373-L377 in the paper. RQ3 seems obvious if you view it as in-domain training; if LMs only see the QA pairs without the documents, you are asking LMs to perform a task they have not seen before. LMs would not know at test time to connect different documents to answer the question, as they never did it during training. One evidence for supporting my view is that OOD generalization results are pretty bad, suggesting that whether the training is in-domain matters more than if you have both the documents and the QA pairs. RQ4 is the one I find more interesting, but I think multiple-choice questions are not the best way to test this and are not that realistic. There could be a better way to test if LMs could perform this in a single pass. 
+2. The experiments are only on one model. It is unclear how model architecture, pretraining data, instruction-following capabilities, and model size would affect the results. One example is that if the LM can perform chain-of-thought (CoT), it might not need many QA examples (fewer than number of documents perhaps) to answer multi-hop questions. 
+3. Results do not generalize OOD. To reiterate my point in 1., it seems whether the training is in-domain or not matters more than QA appearing alongside the documents. This is not necessarily a weakness, but this makes the claim that “pairing questions with their grounding documents is essential” weaker, and I think maybe the statements in the paper should be made weaker as well.
+
+### Questions
+1. What are the templates for generating the questions? 
+2. How are the attributes in Table 4 decided? 
+3. What are the prompts for generating the entities? (For clubs, planets, and software) Also how do you generate the family tree for people? 
+4. Do you have the statistics of how many other entities are each entity linked to? To get a sense of how many links are there between documents. 
+5. For docs-only results in Table 1, is the model trained on docs of training + test set? 
+6. To test if the model can answer the question in one step, should we also include QA pairs where the answers do not include the intermediate entity, but just the final answer? In that case, there is no train-test mismatch. 
+7.  In fine-tuning, how do you order the examples? How do you order QAs and documents?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper tests the multi-hop QA ability of the large language model to verify its internal mechanism. The paper found that the generalization ability can be improved by letting the model contact the multi-hop QA samples and the corresponding documents, and proposed that it is not enough to provide only QA samples, and the questions must be paired with their basic documents during training.
+
+### Strengths
+1. This paper makes a detailed investigation on the mechanism of multi-hop QA ability.
+2. This paper constructs a simulation dataset to verify the multi-hop capability.
+
+### Weaknesses
+1. The simulation dataset constructed in the paper did not comprehensively test its similarity with the real scene.
+2. The paper explored single-hop and double-hop scenarios, but did not discuss further multi-hop situations.
+3. Four research questions are put forward in the paper, but experiments are not conducted for the four questions in the experiment, and there is also a lack of analysis.
+
+### Questions
+Why choose these four entity concepts?  The concept of planets as a physical entity is not very common in real-life scenarios.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies the question of how well LLMs can learn multi-hop facts that are spread across different documents. They show models are poor at this and propose a scheme to train models where they interleave documents and ask multi-hop questions. This improves performance on multi-hop questions substantially.
+
+### Strengths
+The paper could have insights into synthetic data generation schemes. Many open-source and frontier models are powered by synthetic data schemes that look to augment documents multiple times to better instill pieces of knowledge. This paper shows this needs to be done at a multi-document level rather than considering one document at a time.
+
+### Weaknesses
+* I think the presentation could be far improved. For example, I work closely in this area and didn't fully grok what the paper was talking about until reading the introduction. 
+* The experimental setup is very simplistic. We have a finetune of Qwen on a set of synthetic documents. One could imagine a synthetic data creation setting (e.g., something of flavor to this https://arxiv.org/abs/2508.09494 but not necessarily this exact work but just work in this flavor over the last few years), where we try to instill a set of facts at scale into a model via synthetic data.
+
+### Questions
+_
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,210 @@
+# LiveNewsBench: Evaluating LLM Web Search Capabilities with Freshly Curated News
+
+- Decision: Reject
+- Scores: 2, 4, 2, 4
+
+## Abstract
+Large Language Models (LLMs) augmented with web search capabilities demonstrate strong potential on tasks requiring real-time knowledge access or retrieval of obscure facts. However, evaluating such systems remains challenging. Existing benchmarks like SimpleQA, BrowseComp, FreshQA and SealQA typically rely on fixed benchmark questions, making them difficult to disentangle genuine search abilities from memorized world knowledge, while also raising concerns around benchmark overfitting. Manual curation also limits these benchmarks to test-only settings, leading to a lack of open training data. To address these limitations, we introduce LiveNewsBench, a scalable, regularly updated, and challenging benchmark designed to rigorously assess the web search capabilities of LLMs. LiveNewsBench automatically generates fresh question-answer pairs from recent news articles, ensuring that solving the benchmark requires information beyond an LLM’s training data, thereby enabling a clear distinction between the model's internal knowledge vs. search skills. Our automated and scalable data pipeline supports construction of training, validation, and test sets, addressing the lack of open data for training web-search-enabled LLMs. The benchmark questions are deliberately challenging, requiring multiple search queries, page visits, and reasoning steps, making them suitable for assessing agentic search abilities of LLMs. To ensure reliable evaluation results, we include a subset of human-verified samples in the test set. We commit to updating LiveNewsBench quarterly over the next two years to maintain its recency. We use LiveNewsBench to evaluate a diverse suite of systems, including commercial, open-weight and local LLMs, as well as LLM-based web search APIs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes LiveNewsBench, a benchmark designed to evaluate the web research capabilities of LLMs. It uses an automatic pipeline to collect recent news articles and then prompts LLMs to generate QA pairs based on them. The authors also commit to maintaining the benchmark for two years and evaluate a wide suite of systems.
+
+### Strengths
+* The pipeline is straightforward and easily scalable.
+* The experiments are comprehensive, testing a wide variety of both closed-source and open-source models across different sizes.
+* The authors include a human-verified test set (200 questions) and show that the discrepancy between results on unverified and verified sets is minimal.
+
+### Weaknesses
+* The LLM-based quality control appears weak. As stated in the paper, during human annotation, around 20% of the QA pairs that passed automated verification were rejected by annotators. This means that the training, validation, and most of the test sets (except for the human-verified subset) contain roughly 20% noise, which is quite high. The paper should explore ways to further reduce this noise. Although this does not seem to heavily affect evaluation results (Section 4.2), it could pose issues when training on these noisy data.
+* The test set size is relatively small. For example, SimpleQA contains 4K QA pairs, while LiveNewsBench’s test set includes only 800 questions, and the Longitudinal Q&A Set just 300 questions.
+* The benchmark requires ongoing human maintenance. What happens after two years when it is no longer maintained? The long-term impact of the benchmark could be questioned because of this.
+* The paper lacks discussion on the copyright and licensing issues of using news articles to construct datasets. Some websites may have stricter content licenses than others.
+
+### Questions
+* What is the total cost of generating the entire dataset?
+* The dataset partitioning seems unusual. The paper states, 
+> In the current release, the training set includes over 6,800 Q&A pairs based on news events from January to May 2025. The validation set contains 680 samples from June 2025, and the test set comprises 800 samples from July and August 2025.
+
+Why are the training, validation, and test sets split chronologically rather than randomly? Wouldn’t random assignment yield a more representative evaluation?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper introduces LiveNewsBench, a scalable and regularly updated benchmark for evaluating the web search capabilities of large language models (LLMs). The authors argue that existing benchmarks fail to distinguish between retrieval and memorized knowledge because they rely on static question sets that models may already have seen during training. To overcome this, they construct LiveNewsBench from freshly published news articles, automatically generating question–answer pairs that require real-time retrieval and multi-step reasoning. The benchmark includes training, validation, and test sets, as well as a human-verified subset and a longitudinal component that tracks how answers evolve over time. Evaluations show that LiveNewsBench effectively differentiates models' search abilities: leading proprietary models such as GPT-5 and Grok 4 perform best, while smaller open models lag behind. Disabling internet access causes large performance drops, which confirms that the dataset minimizes contamination from pretraining data. The authors conclude that LiveNewsBench provides a reliable, contamination-limited foundation for measuring and improving LLMs' capacity to reason over dynamic, real-world information.
+
+### Strengths
+- The paper identifies and mitigates a major flaw in existing web-search benchmarks by using recent news events that occur after model training cutoffs, which ensures minimal contamination from pretraining data
+
+- The benchmark's fully automated pipeline produces large quantities of question-answer pairs with limited human input while maintaining reasonable quality
+
+- The benchmark is designed to refresh quarterly, which helps maintain relevance and tests models on genuinely new information
+
+- The results demonstrate clear differentiation among proprietary, open-source, and smaller models, which confirms the benchmark's ability to measure genuine differences in search performance
+
+### Weaknesses
+- The paper overstates the limitations of static benchmarks. Static questions remain informative when their correct answers have changed since a model's training cutoff, as they still require retrieval rather than recall. The authors have not convincingly shown that they need to keep generating new benchmarks every few months -- a well-designed static benchmark with time-sensitive questions could already achieve the same goal.
+
+- The benchmark conflates retrieval ability with reasoning accuracy. A model may successfully retrieve the correct information yet fail due to flawed reasoning, so the reported performance does not isolate retrieval skill from broader reasoning capability.
+
+- The human-verified subset cannot guarantee the reliability of the full dataset. Since about 20% of automatically generated items are rejected during manual review, a similar error rate may persist in the unverified portion, which undermines claims of overall data quality.
+
+- The reported accuracies of 85-91% suggest that the benchmark questions may not be sufficiently difficult. The small remaining headroom could also reflect label or data errors rather than genuine task difficulty. If top models already perform near ceiling, the benchmark may fail to provide meaningful differentiation or headroom for future progress.
+
+- The benchmark is planned for quarterly updates over only two years, which raises questions about its long-term value.
+
+### Questions
+The changing question set makes it difficult to track progress or compare results over time with confidence. How can we tell whether higher scores in later rounds reflect true model improvement or just easier questions?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper presents LiveNewsBench, a new benchmark focusing on fresh knowledge from Wikipedia events, sourced from relevant news. The benchmark is constructed from a pipeline of retrieving news articles from Wikipedia events archive, matching the events to specific news articles, generating QA pairs with GPT-5, verifying generated answers with Claude Sonnet 4, and human verification of 200 examples. Experiments on the proposed benchmark with different LLMs using search implemented with a ReAct prompt are conducted, demonstrating the usage of the benchmark on fresh news knowledge.
+
+### Strengths
+- The paper is well written and easy to understand.
+
+- Benchmark construction steps are clearly documented. QA verification with both different models and humans are conducted, making sure the QA qualities are controlled.
+
+- Experiments with the search enabled LLMs demonstrate the usefulness of the proposed benchmark.
+
+### Weaknesses
+- The novelty of the work is limited, given the prior research in this direction, such as Fresh QA [1] and Daily Oracle [2].
+
+- The news fetching pipeline is indirect and could accumulate errors. The paper takes a backward approach, going from Wikipedia events to find possible url to the actual news articles. Errors could compound in these matching processes. Why not directly fetch the news articles to generate the QA pairs?
+
+- The benchmark construction relies on heavy usage of different LLMs, and many such as GPT-4.1, GPT-5, Claude Sonnet 4 are proprietary. It remains unclear whether the dependency on the SOTA LLMs is critical, and how sensitive the benchmark is to the choices of the models. Also, the versions and capabilities of the proprietary models could change, and it is unclear how to maintain the consistency of the benchmark.
+
+- Following the above reason, the cost of the benchmark construction is not revealed, as well as details of the cost-performance tradeoff.
+
+- The human validation is done by one of the authors, which may possess intrinsic bias in the human study of the research. Human validation guidelines are not demonstrated. Also, human validation shows 20% of rejection rate, which makes it unclear how to parse the significance accuracy shown in Table 2, where scores are between 70% and 90%. Error analysis is lacking, to understand the real quality of the generated QA pairs.
+
+- The benchmark still needs human involvement and curation, per the promised quarterly updates for the next two years. This may limit the practical usage and maintenance of the benchmark.
+
+- The comparison with prior work, such as FreshQA [1] and Daily Oracle [2], lacks details to fairly trust the results to justify the contribution of this work. FreshQA has knowledge of different update frequencies, so it does not make sense to compare to the part of the dataset with mostly static knowledge. Daily Oracle has multiple choice questions, which may bias towards higher accuracy in the offline setting. 
+
+- The paper positions the proposed benchmark for evaluating LLM search capabilities. There are two steps, search and reasoning based on the searched results. It is unclear what certain LLMs are lacking; a model not answering a question correctly could be due to the searched results not correct, or the model not able to reason effectively. The experiments and analysis may be sufficient to fully understand the bottleneck for different models.
+
+
+> [1] (2023) FreshLLMs: Refreshing Large Language Models with Search Engine Augmentation
+
+> [2] (2024) Are LLMs Prescient? A Continuous Evaluation using Daily News as the Oracle
+
+### Questions
+1. Why not directly use the news articles to extract events and QAs?
+
+2. The questions generated, as demonstrated in Figure 2, may still not be uniquely identifiable, as there are no time markers. Similar events could happen at multiple times.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper introduces a regularly (quarterly) updated news question answering benchmark, to evaluate the capability of LLMs to answer questions about events beyond their training data by using search and reasoning.  The benchmark is generated in a mostly automatic way, by collecting news stories and prompting LLMs (GPT-4.1, GPT-5) to generate and validate question-answer pairs based on the news.  Some of the questions require a mix of search and reasoning (for example, computing the sum of multiple numbers found via search).  A portion of the test data is human-validated and evaluation is performed via LLM as a judge.  The paper demonstrates that current models perform quite well on the benchmark when given access to search (up to 90+%, with many models getting accuracies in the 80-90% range), but fairly poorly without search (15-25% accuracy).
+
+My current assessment of this paper is a marginal reject.  The need for such a benchmark is clear, and the approach is reasonable.  However, I am not convinced that the work makes a sufficient research contribution beyond prior work on regularly updated news QA benchmarks, and I have a few other concerns about details of the execution (see weaknesses below).
+
+### Strengths
+- The motivation for the benchmark is clear:  There is a need to better evaluate search-enabled models on events beyond their training.
+
+- The approach of combining question generation, validation, and human verification seems likely to produce quality QA pairs (though at the moment this can't be completely validated -- see weaknesses below).
+
+- The paper is generally well-written.
+
+### Weaknesses
+**1**)  It is not clear to me that the paper makes a sufficient research contribution beyond prior work on "live" QA benchmarks.  Because it requires human validation, the benchmark cannot be updated arbitrarily frequently.  The authors commit to updating it quarterly for 2 years.  This seems similar to prior efforts, such as FreshQA and RealTimeQA.  The paper states that RealTimeQA is not "continuously updated"; but if my understanding is correct, it was continuously updated (weekly) for some time until it wasn't -- just like the authors of this submission promise to do.  It is not obvious to me how different the proposed benchmark is from extending RealTimeQA.  In the case of FreshQA, the paper states that FreshQA is too easy for LLMs without search, but I am unclear about this argument (see weakness #2).  I do see some other differences between these benchmarks (e.g., RealTimeQA had a much smaller number of questions), but I don't know whether these differences are sufficient to produce different conclusions when models are tested on them.  (Here I am ignoring the comparison the paper makes with Daily Oracle, since the task there is future prediction, which is different from factual QA.)
+
+**2**)  Regarding the comparison with FreshQA:  The paper states that GPT-5 obtains an accuracy of 72.4% on it.  The FreshQA paper however lists accuracies of ~30-45% for GPT-4 (depending on the choice of "strict" or "relaxed" metric -- which is being used here?) and <15% for fast-changing questions, which are the most comparable to LiveNewsBench.  Is GPT-5 that much better than GPT-4 without search?  Could the authors confirm that they reproduce the accuracy of GPT-4 on FreshQA listed in the FreshQA paper?  How does GPT-5 do on the fast-changing subset of FreshQA?  These questions seem important to address in order to make a convincing case for the need for LiveNewsBench over FreshQA.  
+
+**3**)  The human validation is done by an author of the paper, and the paper states that the human validator rejects about 20% of the automatically generated QA pairs.  Since the authors could be biased, an additional validation should be done by independent human validators to get an unbiased estimate of QA quality and ideally to measure inter-human agreement as well.
+
+**4**)  The benchmark questions test both search and reasoning capabilities.  This can be seen as a strength, but on the other hand, the fact that these skills are mixed in a single question means that we cannot separate a model's basic reasoning ability (such as mathematical skills) from its ability to search for new knowledge.  Since reasoning ability has nothing to do with the "live" nature of the benchmark, the case for including it is not clear to me.  Perhaps it would make sense to at least separate the questions into multiple classes, depending on whether they are expected to require search, reasoning, or both?
+
+**5**)  A more minor weakness:  The paper states that the benchmark will be updated on a quarterly basis.  This may be sufficient for many purposes, but it does mean that when a new model comes out, it may take a full quarter before it can be meaningfully evaluated.
+
+**6**)  Also minor:  The benchmark relies on GPT-4.1 and GPT-5 for question generation and evaluation.  These are closed models whose availability and features are out of the authors' control, which could introduce instability into the benchmark updates.
+
+**7**)  The provided URL, livenewsbench.com, does not appear to be live.
+
+### Questions
+- I have a hard time following the longitudinal example in Fig. 2.  What makes it longitudinal?  
+- Table 3 doesn't appear to be referenced anywhere.  I assume it should have been referenced in Sec. 4.3?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2

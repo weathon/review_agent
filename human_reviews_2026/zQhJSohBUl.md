@@ -1,0 +1,196 @@
+# Multi-Level Regression for Nonlinear Contextual Bandits and RL: Second-order and Horizon-free Regret Bounds
+
+- Decision: Reject
+- Scores: 4, 6, 2, 4
+
+## Abstract
+Recent works have established second-order regret bounds for nonlinear contextual bandits. However, these results exhibit a suboptimal dependence on the complexity of the function class. To close this gap, we propose a novel algorithm featuring a multi-level regression structure. This method partitions data by their uncertainty and variance, then performs separate regressions on each level, enabling adaptive, instance-dependent learning. Our method achieves a tight second-order regret bound of $\tilde{O}\Big(\sqrt{d_\mathcal{F} \log N_\mathcal{F} \sum_{t\in[T]} \sigma_t^2} + R d_\mathcal{F} \log N_\mathcal{F}\Big)$, which matches the theoretical lower bound. Here, $d_\mathcal{F}$ and $\log N_\mathcal{F}$ represent the Eluder dimension and log-covering number of the reward function class $\mathcal{F}$, $\sigma_t^2$ is the unknown variance of the reward at round $t$, and $R$ is the range of rewards. The proposed algorithm is computationally efficient assuming access to a regression oracle. We further extend our framework to model-based reinforcement learning, achieving a regret bound that is both second-order and horizon-free. The underlying multi-level regression technique is of independent interest and applicable to a broad range of online decision-making problems.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes a multi-level regression (MLR) framework (ADALEVEL + weighted regressions) for nonlinear contextual bandits with unknown, heteroscedastic variance, yielding the algorithm UCB-MLR. The key idea is to partition data by both uncertainty and estimated variance, run separate regressions per level, and aggregate optimistic UCBs. Under standard realizability plus an auxiliary assumption on the squared-reward model, the paper proves a second-order regret, matching prior lower bounds in the main term. The framework is extended to model-based RL, giving a horizon-free, second-order regret bound under an additional variance-of-variance assumption.
+
+### Strengths
+A good theoretical contribution:
+
+1. Close a know gap: main term scales as $\sqrt{d_F}$, matching the lower bound in bandit setting.
+
+2. Use a regression oracle and shows how to compute the uncertainty measure $D_F$ via binary search with $\tilde{O}(1)$ oracle calls.
+
+### Weaknesses
+1. Lack of empirical studies. Even though this paper is a theoretical work, I still think it is proposing a novel algorithm. That means the feasibility and practical evidence are critical to include. I don't think the paper needs lots of simulation and experiments but some experiment to show the performance and show the theoretical insight (to guide the practical use case) are required to be a satisfied paper. 
+
+2. Subsequence from above point, since there is no practical results, I don't see how to choose or set the (hyper)parameters for the algorithms. I am concerned about the feasibility. For example, the choice of $\alpha$, $\tilde{\alpha}$, $gamma$, $\tilde{gamma}$ and constant $R$ and confidence scales $\beta_{t, \ell}$ etc. For theory, parameters are fully specified in the appendix (but some require unknown complexity terms). A short “practical tuning” section would improve usability.
+
+3. RL extension assumptions: the RL bound adds a variance-of-variance condition (and deterministic rewards), which may be restrictive; more concrete families where this holds would help.
+
+### Questions
+1. Why using the non-standard assumption for $y_t^2$? Please provide concrete distributional families (beyond sub-Gaussian) where $Var[y^2|X] \leq c_V^2 R^2 Var[y|x]$ holds, and examples where it fails. How sensitive are your bounds/algorithms to violations?
+
+2. In Eq 4.2, there is $g \in F$ but earlier introduce a distinct class. I assume it is a typo? or do you intend to state $F = G$ in the analysis? If $G \neq F$, how do $d_G$, $\log N_G$ enter computation and tuning?
+
+3. What concrete F families admit the weighted-regression oracle in near-linear time and allow efficient evaluation of $D_F$ via binary search (e.g., RKHS with kernel ridge, GLMs)? Any hardness results if $F$ is a deep net class?
+
+4. For the RL extension, please restate the exact variance-relation assumption and give examples (e.g., linear mixture MDPs with bounded features) where it holds; can you weaken it without losing horizon-free behavior?
+
+5. Lemma 4.3 uses a covering-net union bound with weights bounded by $W$. Under ADALEVEL, do we always have $W \leq 1$? Please point to the exact place in property 1 that enforces this bound.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+In this paper, the authors propose a multi-level regression framework for nonlinear contextual bandits and model-based RL. The key algorithmic idea is ADALEVEL, which partitions data using both a per-point uncertainty proxy and an online-learned variance upper bound; separate weighted regressions are run per level and actions are chosen by the minimum across level-wise UCBs. A central technical ingredient is a Bernstein/Freedman-style concentration lemma for nonlinear regression that decouples variance from uncertainty, fixing the $\sqrt{d_F}$ gap that persisted in prior nonlinear multi-layer analyses. For bandits, UCB-MLR achieves a second-order regret
+$\tilde O(\sqrt{d_F \log N_F \sum_t \sigma_t^2} + \max(1,C) R d_F \log N_F)$
+with $C=\max(1,c_v)\sqrt{(d_G \log N_G)/(d_F \log N_F)}$, matching the known lower bound in the main term under standard realizability. For RL, the same multi-level idea combined with value-targeted regression yields an instance-dependent, horizon-free bound
+$\tilde O(\sqrt{d_F \log N_F \mathrm{Var}^\*_K} + \max(1,c_v) d_F \log N_F)$.
+
+### Strengths
+The paper studies nonlinear contextual bandits with unknown variances, where prior multi-layer methods incurred an extra $\sqrt{d_F}$ in the leading term. The decoupled Bernstein bound together with variance-aware leveling removes this and reaches the minimax-tight second-order rate, resolving a standing gap and aligning with the spirit of the linear case. The adaptive leveling idea is clean and potentially reusable in other online learning settings. The paper is clearly written and the approach is easy to follow.
+
+### Weaknesses
+The lower-order term in the bandit regret depends on the second-moment modeling through $C$. When $d_G \log N_G \gg d_F \log N_F$, this term scales like
+$\tilde O(R \cdot \max(1,c_v)\sqrt{(d_F \log N_F)(d_G \log N_G)})$
+rather than purely $d_F \log N_F$. While I do not have a concrete instance where $d_G \log N_G$ dominates, this dependence is a side effect of learning the variance via a separate class and may leave a (lower-order) gap in unfavorable modelings.
+
+Minor typos and suggestions:
+- In Equation (4.2), the squared-target regression for $g$ should minimize over $\mathcal G$ (not $\mathcal F$).
+- In Line 8 of Algorithm 1, to align with Assumption 3.2, ADALEVEL should receive $c_v R \bar \sigma_t$ (or state $R=1$ after normalization).
+- The paper uses both $l$ and $\ell$ as level indices for the $\mathcal F$- and $\mathcal G$-branches; consider renaming one of them for readability.
+
+### Questions
+- What is the exact definition of $d_P$ when comparing to distributional/transition-model baselines? It would be helpful to state this explicitly in the introduction alongside Tables 1.
+- The paper assumes the second moment is realizable. While common in recent work, is this assumption necessary here? In RL, could one leverage the structure of $V^2$ directly (e.g., via clipped/Catoni-style targets) to avoid a separate modeling burden while keeping horizon-free rates?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a unified Multi-Level Regression (MLR) framework for both contextual bandits and model-based reinforcement learning with general function approximation. The framework leverages multi-level uncertainty partitioning and weighted regression to jointly estimate rewards and higher-order variance information. The authors claim three main advantages: (1) instance-dependent regret bounds, (2) second-order exploration guarantees, and (3) horizon-free regret in RL settings. The paper demonstrates theoretical benefits compared to prior work such as Huang et al. (2024) and Wang et al. (2025), particularly achieving improved computational tractability while maintaining strong statistical guarantees. Regret analyses, confidence bounds, and computational complexity are rigorously addressed.
+
+### Strengths
+Theoretical generality and unification
+The proposed multi-level regression framework is conceptually appealing and unifies several strands of variance-aware learning in contextual bandits and RL under a single analytical blueprint. The results meaningfully extend horizon-free and instance-dependent learning beyond linear mixture MDPs.
+
+Improvement over closely related approaches
+The paper offers a more favorable combination of assumptions, regret guarantees, and computational efficiency compared to:
+Huang et al. (2024): avoids suboptimal dependencies on higher-order value moments
+O-MBRL (Wang et al., 2025): avoids requiring access to the full transition distribution
+The work achieves a strong balance between theory and algorithmic feasibility.
+
+### Weaknesses
+1.Strong realizability assumptions limit practicality
+The requirement that both the mean reward function \*f\* and the variance model \*g\* lie in known hypothesis classes is quite restrictive—especially in model-based RL, where model misspecification often induces compounding errors. The feasibility of estimating higher-order variance surrogates in realistic environments is not adequately addressed.
+
+2.Insufficient explanation of the multi-level mechanism
+The ADALEVEL component and level partitioning strategy play a central role but lack conceptual intuition. It remains unclear: why this particular partitioning is necessary, how level granularity influences performance, what happens under noisy or misclassified uncertainty estimates. The methodological novelty therefore feels underspecified.
+
+3.Lack of empirical evaluation
+The submission provides no experiments to validate computational advantages or regret improvements in practice. For a venue like ICLR, this severely weakens the impact—especially given that comparable works demonstrate sample-efficient performance empirically.
+
+4.Limited discussion of highly related prior research
+While the paper cites key works (Ye et al., 2025; Huang et al., 2024; Zhao et al., 2023), the comparative analysis is mostly surface-level. It would be beneficial to more explicitly quantify: the precise statistical gaps closed relative to each approach, the behavior of MLR under approximate function classes.
+
+5.Exposition challenges
+Presentation is dense and relies heavily on appendix proofs. Several key insights are obscured by technical details, making the core contribution harder to appreciate for general RL readers.
+
+This paper follows previous works problem, lacking problem novelty.
+
+### Questions
+see weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This submission claims to shave a $\sqrt{d}$ factor in the variance-dependent regret bound for learning bandits and episodic MDPs with general function approximation under various additional assumptions, especially the known uniform upper bound on the reward variance. The proposed algorithm employ an algorithmic peeling technique for both the second and forth order moments, whose analysis relies on a newly established martingale concentration for nonlinear online regression with uniform noise upper bound.
+
+### Strengths
+- The proof is well-written.
+- This is the first work under general function approximation claiming to be able to nearly recover the tight dimension dependency for linear bandits and linear mixture MDPs. And the recovery of Zhao et al. (2023) in the MDP setting is faithful and correct.
+
+### Weaknesses
+- The outline from Lemma 4.3 to Theorem 4.2 is strictly weaker than Zhao et al. (2023) in the linear case because Zhao et al. (2023) does not need the uniform upper bound $\sup_{t} \sigma_t$ to be known to the agent.
+- Table 1 is misleading. Actually, Zhao et al. does not need this assumption involving $c_v$, which means to have an apple-to-apple comparison, the second term in the authors' regret bound (for linear bandits) should scale with $R^2$ instead of $R$.
+- The authors omit the dependency w.r.t. $\mathcal{G}$ here. But it is crucial to notice that $\mathcal{G}$ does NOT have an apple-to-apple counterpart in Zhao et al. (2023). Since $g_* \in \mathcal{G}$ essentially models $f_*^2(x_t) + \mathrm{Var}[\epsilon_t | x_t]$, and $\mathrm{Var}(\epsilon_t|x_t)$ can have very complex dependency w.r.t. $x_t$, which is allowed and is NOT modeled using an additional Eluder dimension in Zhao et al. (2023), the regret bound in this table might be considered misleading or an overclaim, unless the authors can propose a concrete upper bound of $d_\mathcal{G}$ in the setting of Zhao et al. (2023)
+
+### Questions
+- In the MDP setting, if the authors' total reward is bounded by $1$ in each episode, the $c_v$ in Assumption 3.5 can be just $c_v=2$ following the Lemma E.7 in https://arxiv.org/pdf/2407.15007, right?
+- In the MDP setting, since the authors are only peeling the second and the forth moments, is it possible to follow the spirit of [The proof of Lemma 3.2 in https://arxiv.org/pdf/2407.15007] to bypass the tedious high-order expansion arguments in Appendix C.2 and Appendix D?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3

@@ -1,0 +1,201 @@
+# Structural Prognostic Event Modeling for Multimodal Cancer Survival Analysis
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 2
+
+## Abstract
+The integration of histology images and gene profiles has shown great promise for improving survival prediction in cancer. However, current approaches often struggle to model intra- and inter-modal interactions efficiently and effectively due to the high dimensionality and complexity of the inputs. A major challenge is capturing critical prognostic events that, though few, underlie the complexity of the observed inputs and largely determine patient outcomes. These events---manifested as high-level structural signals such as spatial histologic patterns or pathway co-activations---are typically sparse, patient-specific, and unannotated, making them inherently difficult to uncover. To address this, we propose SlotSPE, a slot-based framework for structural prognostic event modeling. Specifically, inspired by the principle of factorial coding, we compress each patient’s multimodal inputs into compact, modality-specific sets of mutually distinctive slots using slot attention. By leveraging these slot representations as encodings for prognostic events, our framework enables both efficient and effective modeling of complex intra- and inter-modal interactions, while also facilitating seamless incorporation of biological priors that enhance prognostic relevance. Extensive experiments on ten cancer benchmarks show that SlotSPE outperforms existing methods in 8 out of 10 cohorts, achieving an overall improvement of 2.9%. It remains robust under missing genomic data and delivers markedly improved interpretability through structured event decomposition.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces SlotSPE, a novel framework for multimodal cancer survival analysis that integrates histology images (WSIs) and genomic data. The core innovation is to model sparse, patient-specific "prognostic events" by compressing high-dimensional inputs into a compact set of dynamic "slots" using slot attention. The model selectively activates the most predictive slots for each patient via a Mixture-of-Experts (MoE) style decoder, enhancing personalization and sparsity. A key feature is a biologically-guided cross-modal reconstruction task, where the model learns to predict gene expression from histology images, thereby enforcing meaningful alignment and enabling robust performance even with missing genomic data. Extensive experiments on ten TCGA cancer cohorts demonstrate that SlotSPE significantly outperforms existing state-of-the-art methods in predictive accuracy, robustness, and interpretability.
+
+### Strengths
+1. Strong Empirical Evidence: The claims are well-supported by extensive experiments across ten TCGA cancer cohorts. 
+2. Enhanced Interpretability: The model provides a structured way to interpret its predictions. 
+3. This model can better capture the sparse and individualized nature of cancer drivers.
+4. Biologically Guided Alignment: A key strength is the cross-modal reconstruction task, where omics-derived slots are used to predict gene expression from histology images.
+
+### Weaknesses
+1. The article does not provide a detailed analysis of training time or computational resource usage compared to other methods (e.g. flops), which makes it difficult to assess its practical scalability.
+2. There are a few baselines for comparison under missing modalities. Although some baselines do not take into account the actual modality, you can manually modify the code for testing.
+3. Hyperparameter Sensitivity: The model has numerous hyperparameters, including the number of slots for each modality, the number of selected top-K. Are there any results of ablation of these hyperparameters?
+
+### Questions
+1. Your method is somewhat similar to AdaMHF[1], both consider efficient and input sparse. Please explain the difference and compare and cite it.
+[1] Zhang S, Lin X, Zhang R, et al. AdaMHF: Adaptive Multimodal Hierarchical Fusion for Survival Prediction[J]. arXiv preprint arXiv:2503.21124, 2025.
+2. The article does not provide a detailed analysis of training time or computational resource usage compared to other methods (e.g. flops), which makes it difficult to assess its practical scalability.
+3. There are a few baselines for comparison under missing modalities. Although some baselines do not take into account the actual modality, you can manually modify the code for testing.
+4. Hyperparameter Sensitivity: The model has numerous hyperparameters, including the number of slots for each modality, the number of selected top-K. Are there any results of ablation of these hyperparameters?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper focuses on the problem of modeling intra- and inter-modal interactions effectively and efficiently. The authors proposed SlotSPE, a Slot-based Structural Prognostic Event modeling method. SlotSPE compress each patient’s multimodal inputs into compact, modality-specific sets of mutually distinctive slots using slot attention. By using the slots representations as encoding s for prognostic events, the method enables both efficient and effective modeling of complex intra- and inter-modal interactions, while also facilitating seamless incorporation of biological priors that enhance prognostic relevance.
+
+### Strengths
+1. The evaluation experiments is comprehensive and convincing.
+2. The paper is overall well-written and easy to follow.
+3. The experimental results shows that the value of most evaluation metrics of the proposed method obviously outperform the baseline methods.
+4. The proposed selective slot is simple but effective and novel.
+
+### Weaknesses
+1. The ablation study, though detailed, could be extended to include comparisons with more recent foundation models.
+
+### Questions
+1. How sensitive is SlotSPE to the number of slots and gating hyperparameters?
+2. Have the authors examined whether the reconstructed genomic features can be used directly for downstream biological interpretation?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+1
+
+### Summary
+The paper proposes a slot-based, patient-specific representation for multimodal prognosis: whole-slide images and pathway-level transcriptomics are compressed into a few sparsely gated “prognostic event” slots; cross-modal reconstruction guided by biological priors aligns morphology and omics and enables imputation when omics is missing. Across multiple TCGA cohorts, the method shows consistent C-index gains and argues lower computational complexity by interacting at the slot level rather than instance level. While promising for interpretability and robustness, the work lacks empirical evidence for its efficiency claims (runtime/throughput/memory/scaling) and does not integrate clinical covariates or report multivariable analyses, calibration, or decision utility.
+
+### Strengths
+- Patient-specific slot representation with sparse gating focuses on a small set of salient prognostic factors, improving interpretability.
+
+- Cross-modal reconstruction with pathway priors aligns WSI and transcriptomics and supports missing-omics scenarios.
+
+- Consistent performance gains over baselines across multiple TCGA cohorts, with competitive single-modality ablations.
+
+- Architecture and losses are clearly specified, facilitating ablations and reproduction.
+
+### Weaknesses
+- Efficiency evidence missing: No wall-clock time, throughput (slides/s), peak GPU memory, or scaling curves vs. #slots/Top-K/#patches under identical hardware/batch settings.
+
+- Clinical variables omitted: No inclusion of age/stage/treatment etc., and no multivariable survival analysis, calibration, or decision-curve analysis to establish clinical utility.
+
+### Questions
+1. Efficiency & scaling
+  - Please report training/inference time, throughput, and peak GPU memory for your method and strong baselines on the same hardware and batch size.
+  - Provide scaling curves for time/memory as functions of #slots (S), Top-K, and #WSI patches, and discuss speed/accuracy and memory/accuracy trade-offs.
+  - Break down module-level costs (WSI encoder, omics encoder, slot interactions, reconstruction) to identify bottlenecks.
+
+2. Clinical utility
+  - Incorporate clinical covariates (age, sex, stage, treatment, etc.) and report multivariable Cox/discrete-time results for: (i) clinical-only, (ii) model-only, and (iii) clinical + model, with ΔC-index, time-dependent AUC, and IBS.
+  - Add calibration plots and decision curve analysis (DCA), and propose a concrete high/medium/low-risk stratification to illustrate potential clinical use.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes a structural prognostic event modeling framework for multimodal survival prediction. The proposed method identifies the patient-specific prognostic events through slot-based representation learning, integrates a cross-modal reconstruction mechanism embedded with biological priors to enhance modal alignment and robustness, and delivers superior and stable performance on ten cancer cohorts. Moreover, the framework demonstrates improved interpretability through the structured decoupling ability of the proposed representation.
+
+### Strengths
+1. This paper adopts a slot-attention module to survival analysis task and further introduces a Mixture-of-Experts (MoE) mechanism for selective slot activation.
+
+
+2. Incorporating reconstruction regularizations preserves the information in input features and enhances the model’s robustness under missing-modality scenarios.
+
+
+3. The proposed framework exhibits the generalization across ten cancer survival datasets, offers good interpretability.
+
+### Weaknesses
+1. The novelty of this work is limited, as both the Slot Attention and MoE modules have been widely used across various tasks, including survival analysis.
+
+2. The overall writing and structural organization of the paper are quite unclear:
+
+    (1) In the Selective Slot Activation section, the text notes “Conceptually, each slot is treated... A lightweight gating function $\phi$ predicts a retention score for each slot.” The description claims that the output is of dimension $N_t$, while according to the accompanying formula, it should be a scalar score—which is inconsistent.
+
+    (2) In the paragraph “Then the top-K slots are selected using the Gumbel-Top-K...”, the variable $\widetilde{w}$ is of dimension $S$, where $S$ denotes the number of slots before selection. It is unclear whether the softmax is applied to the selected slots or to all slots.
+
+    (3) Throughout the paper, many variables—especially those with subscripts—lack clear definitions, which seriously hinders readability.
+    
+    (4) Figure 2 is not introduced or referenced in the main text, making its purpose and relevance unclear.
+    
+    (5) In the paragraph “Given the omics-derived slots $S_g$,...”, the specific role of $S_g$ is not clarified—does it serve as initialization weights or as fixed guidance for new slot generation?
+
+    (6) Section 3.2 as a whole lacks appropriate references to figures, leading to poor readability.
+
+    (7) The paper’s organization is confusing; for instance, to understand the “reconstruction” part, the reader must jump to Appendix B.3, which in turn refers to Equation (5) that appears in the following section—this disrupts the logical reading flow.
+   
+    (8) In Section 3.2 (Slots Interactions), the description of self-interaction and cross-attention mechanisms is vague—it is not specified whether these operations are performed on all slots or only on the selected ones.
+
+    (9) In Section 3.3 (Training and Inference), the reader is directed to Appendix B.5 for the total loss, yet the survival loss is not clearly defined. What exactly constitutes the “standard survival prediction loss”? Moreover, without Equation (18), it is impossible to infer the last two terms of $L_{\mathrm{surv}}$ from the main text, which indicates significant ambiguity in the writing.
+
+3. The authors are encouraged to clarify the unique aspects and improvements of the MoE mechanism used in this work in comparison to the previously published paper such as [1], in order to emphasize the genuine novelty of the proposed approach.
+
+    [1] From Single-Cancer to Pan-Cancer Prognosis: A Multi-Modal Deep Learning Framework for Survival Analysis with Robust Generalization Capability.
+
+### Questions
+Please refer to the **Weaknesses**.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2

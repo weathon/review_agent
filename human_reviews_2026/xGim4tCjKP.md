@@ -1,0 +1,203 @@
+# Partially Functional Dynamic Backdoor Diffusion-based Causal Model
+
+- Decision: Reject
+- Scores: 2, 4, 4, 0
+
+## Abstract
+Causal inference in settings involving complex spatio-temporal dependencies, such as environmental epidemiology, is challenging due to the presence of unmeasured confounding. However, a significant gap persists in existing methods: current diffusion-based causal models rely on restrictive assumptions of causal sufficiency or static confounding. To address this limitation, we introduce the Partially Functional Dynamic Backdoor Diffusion-based Causal Model (PFD-BDCM), a generative framework designed to bridge this gap. Our approach uniquely incorporates valid backdoor adjustments into the diffusion sampling mechanism to mitigate bias from unmeasured confounders. Specifically, it captures their intricate dynamics through region-specific structural equations and conditional autoregressive processes, and accommodates multi-resolution variables via functional data techniques. Furthermore, we provide theoretical guarantees by establishing error bounds for counterfactual estimates. Extensive experiments on synthetic data and a real-world air pollution case study confirm that PFD-BDCM outperforms current state-of-the-art methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces the Partially Functional Dynamic Backdoor Diffusion-based Causal Model (PFD-BDCM), a generative framework for causal inference in complex spatio-temporal settings with unmeasured confounding. The method integrates diffusion models into a structural causal model framework. By incorporating valid backdoor adjustments directly into the diffusion sampling process and modeling unmeasured confounders via region-specific equations and conditional autoregressive processes, the authors aim to provide more robust causal estimates. The paper is supported by theoretical error bounds for counterfactual estimates and demonstrates the effectiveness on both synthetic data and a real-world air pollution case study.
+
+### Strengths
+1. The method integrates diffusion models with spatio-temporal structural causal models, offering a approach to handling dynamic unmeasured confounding.
+1. Theoretical error bounds are provided, formally linking the model’s reconstruction error to its counterfactual estimation accuracy.
+
+### Weaknesses
+1. It is confusing what the 'unmeasured confounding' means in this paper. For example, the abstract claims 'incorporates __valid backdoor adjustments__ into the diffusion sampling mechanism to mitigate bias from __unmeasured confounders__'. However, if a valid backdoor adjustment set exists, this typically implies that there are no unmeasured confounders. Clarification is needed regarding how unmeasured confounding is formally defined and addressed in this framework.
+2. As a follow-up question, if unmeasured confounders are indeed present, how does the authors' approach ensure identifiability of causal queries? The conditions for identifiability under unmeasured confounding should be explicitly stated.
+3. The (partial) additive form of relationship in Eq.1 between $X_{C_{1,ij}}$  to  $X_{C_{2,ij}}$ may be restrictive. Would this formulation exclude interaction terms and potentially limit the model's applicability to more complex real-world processes?
+4. Theorem 1 resembles results in causal representation learning (e.g., SIG [1], iVAE [2]), which typically rely on different sets of strong assumptions. Could the authors discuss potential connections or distinctions between their assumptions and those in the CRL literature?
+5. Assumptions 2 and 3 appear strong. A2 requires $f$ to be strictly increasing wrt $U$ and A3 requires $g$ to be invertible. It would be helpful to provide real-world examples or justifications supporting the plausibility of these assumptions.
+
+
+[1] Li, Zijian, et al. "Subspace identification for multi-source domain adaptation." *Advances in Neural Information Processing Systems* 36 (2023): 34504-34518.
+
+[2] Khemakhem, Ilyes, et al. "Variational autoencoders and nonlinear ica: A unifying framework." *International conference on artificial intelligence and statistics*. PMLR, 2020.
+
+
+I may have missed some aspects of the authors' argument, and I am open to revising my assessment. 
+I am happy to increase my score if my concerns are well addressed.
+
+### Questions
+see above
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a Partially Functional Dynamic Backdoor Diffusion-based Causal Model (PFD-BDCM), a generative framework that embeds valid backdoor adjustment directly into diffusion sampling to handle unmeasured, spatio-temporal confounding and mixed-resolution (functional) variables. It models region-specific structural equations with temporal dependence via conditional autoregressive processes, and learns per-node conditional diffusion encoders/decoders (DDIM-style) that reconstruct variables from their backdoor sets while treating latent codes as proxies for exogenous noise. The trained system supports observational, interventional, and counterfactual queries by cascading nodewise generators in topological order. The authors also derive theoretical guarantees: under monotonicity, encoder invertibility, and independence conditions, counterfactual error is bounded by reconstruction error, with multivariate extensions. Empirically, across synthetic dynamical systems and a real air-pollution application in China, PFD-BDCM improves distributional fit for observational/interventional sampling and reduces counterfactual MSE compared to DCM/BDCM variants, with similar runtime.
+
+### Strengths
+- The method integrates valid backdoor adjustment directly into diffusion sampling, which helps mitigate bias from unmeasured confounders during generation.  It explicitly models spatio-temporal dependence in confounders using region-specific structural equations and conditional autoregressive processes, making it well-suited for dynamic systems. 
+
+- The paper accommodates variables observed at heterogeneous resolutions via functional data techniques and basis expansions, broadening applicability to mixed-resolution datasets. 
+
+- Training is modular and parallelizable because each node’s diffusion model uses only its target variable and corresponding backdoor set, enabling independent optimization across nodes. 
+
+- The approach requires only the dynamic causal graph and observational data for training, yet still enables precise counterfactual resolution after training. 
+
+- Empirical results on multiple synthetic datasets show consistent improvements over prior diffusion-based causal models across observational, interventional, and counterfactual tasks.
+
+### Weaknesses
+1/ The approach assumes access to the dynamic causal graph and even states that all structural parameters are "assumed to be known" (with estimation delegated to prior work). In realistic settings, both graph structure and parameters are uncertain, so performance may degrade under graph misspecification. How robust is the method to errors in the backdoor sets or to partially wrong edges in the DAG?
+
+2/ The method critically relies on correct backdoor adjustment per node. If the specified backdoor set omits a true confounder or includes a descendant, both reconstruction and the counterfactual procedure can be biased. Is there any sensitivity analysis where the backdoor sets are perturbed (missing/extra variables)?
+
+3/ Functional covariates are handled via basis expansion, but performance can depend strongly on basis choice and truncation level. The paper gives mathematical details but does not show hyperparameter sensitivity or comparisons across bases (e.g., B-spline vs wavelet) and Kn. Are there guidelines or data-driven selection procedures (e.g., cross-validation) evaluated here? 
+
+4/ For interventional/observational sampling the framework draws $Z_k$ from a standard normal, whereas the theory assumes $U \sim N(0, \Psi)$ and learns an invertible mapping. If the true noise is non-Gaussian or heavy-tailed, how does this mismatch affect generated interventional and counterfactual distributions? Have the authors tested non-Gaussian latent noise?
+
+### Questions
+Please refer to the questions in Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The authors combine many known techniques (structural causal models, structural equation modeling, conditional autoregression, functional embedding, and diffusion models) into a combined architecture.  The model is then trained on a new synthetic spatio-temporal dataset and a well-known pollution dataset.  Results compared with the DCM model which was the base architecture for the proposed method show some improvements.
+
+### Strengths
+- The studied problem of spatiotemporal causal and counterfactual analysis is difficult and significant
+- Improvements over the DCM baseline
+
+### Weaknesses
+- No figure showing the overall pipeline is provided
+- The contribution of the diffusion component is not made clear
+- The distinction between interventional and counterfactual is not made clear
+- The reported values in Table 1 seems to have surprisingly high variance but it is not discussed much 
+- Many important results are only available in the appendix without proper referencing in the main paper
+- The synthetic data does not seem to obey the proposed constraints from the methodology section
+- The inconsistent notation throughout is very confusing without any justification
+- It is unclear why DCM is a sufficient baseline for this setting.  Other spatiotemporal prediction models are likely to be reasonable baselines.
+- The baseline is not reported on the real-world dataset
+
+### Questions
+- What is the motivation behind C1 and C2 in separating out the variables?
+- What is the major purpose of the diffusion component?
+- Why is only comparing to the DCM base architecture justified?
+- How do the author's assumptions about the backdoor adjustment set apply to generic spatio-temporal data, and does the pollution dataset seem reasonable for obeying these assumptions?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+4
+
+### Summary
+This papers looks at the problem of learning a model to perform causal inference in settings where there is spatial cause-effect relationships between endogenous variables, where we observe them over time, and where these variables can have unobserved confounding between them. To this end, the authors expand previous work on Backdoor Diffusion Causal Models (BDCMs) to the supposed setting, modelling the functional dependencies among variables accordingly. The authors provide theory on the validity of the model reconstruction, and compare their method with existing diffusion baselines in a synthetic and a real-world dataset.
+
+### Strengths
+- **S1.** The paper looks at a really complex setting, where exogenous variables share spatial and temporal dependencies, and it is therefore an interesting setting to study.
+- **S2.** The authors provide theoretical guarantees on the correctness of the estimations provided by their model. 
+- **S3.** The provided empirical results support the proposed model.
+
+### Weaknesses
+- **W1.** The paper is quite unclear, and especially when it comes to the problem statement and modelling assumptions, which are both intertwined. For example:
+  - **W1.1.** I understand that section 2.1 is the problem statement, yet it is implicitly assumed in Eq. (1) an additive noise model.
+  - **W1.2.** Moreover, the only structural relationships defined are those of the explained nodes, which only depend on explanatory nodes. What about dependencies between explained nodes? And nodes that do not fit in any of the two categories?
+  - **W1.3.** Then, still in section 2.1, the variables of the problem statement are modeled using a basis expansion in Eq. (4). Shouldn't that be part of modeling?
+- **W2.** Similarly, it is rather unclear to me what it the exact setting being tackled. 
+  - In section 2.1, there are no dependencies between variables of different timesteps and they share structural equations, making it a multi-environment problem where the different timesteps only act as more i.i.d. data.
+  - Then, in section 2.2 (3rd paragraph) the authors model the equations as $X_{ijk} = f_{ij}(X_{B_k}, U_k)$. That is, the same variable $k$ shares exogeneous noise (which I would not call "unmeasured confounders" as in line 206) across regions and timesteps, and differ on the structural equations, turning the problem into a multi-view problem.
+- **W3.** More generally, all the writing needs further polishing. The introduction is unnecessarily long, more so when diffusion models are explained in a single paragraph and there is no discussion at all about the results on the real-world dataset, just a description.
+- **W4.** Statements lack citations or justifications. For example, in line 206 it says "Perfect reconstruction $\hat X_k = X_k$ implies that $h$ approximates the true structural function $f$". There is no justification, no citation, and that statement basically says that the model is identifiable, a core problem in causal inference. 
+- **W5.** Similarly, the article completely omits any reference (nor comparison) to any other causal generative model other than DCM or BDCM. This includes [NCMs](https://arxiv.org/abs/2107.00793), [CNFs](https://arxiv.org/abs/2306.05415), [DeCaFlow](https://arxiv.org/pdf/2503.15114), or [Diff-SCM](http://arxiv.org/abs/2202.10166), among others.
+- **W6.** While the theory can be interesting, I find rather surprising that there is no reference to Theorem 1 of the [DCM](http://arxiv.org/abs/2302.00860) paper, which provides the exact same reconstruction guarantees as Corollary 2. Indeed, the proof of Lemma 1 is copy-and-pasted from that paper and thus **plagiarized**.
+
+### Questions
+- **Q1.** Is Eq. (3) invertible always?
+- **Q2.** What do the authors mean with "All parameters in the structural model are assumed to be known in this context"in line 187?
+- **Q3.** What exactly is a "functional random variable"? Where is it defined?
+
+---
+Other feedback:
+- I find a bit strange to refer to counterfactuals as "Why?" rather than "What would have been if?" in the first intro line.
+- Please fix the references and remove the "et al." when there are more than three authors.
+- L49: "intervention" -> "interventional"
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2

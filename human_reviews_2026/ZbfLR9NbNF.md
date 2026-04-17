@@ -1,0 +1,181 @@
+# Dynamic Chunking for End-to-End Hierarchical Sequence Modeling
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 8
+
+## Abstract
+Major progress on language models (LMs) in recent years has largely resulted from moving away from specialized models designed for specific tasks, to general models based on powerful architectures (e.g. the Transformer) that learn everything from raw data. Despite this trend, pre-processing steps such as tokenization remain a barrier to true end-to-end foundation models. We introduce a collection of new techniques that enable a dynamic chunking mechanism which automatically learns content- and context- dependent segmentation strategies learned jointly with the rest of the model. Incorporating this into an explicit hierarchical network (H-Net) allows replacing the (implicitly hierarchical) tokenization--LM--detokenization pipeline with a single model learned fully end-to-end. When compute- and data- matched, an H-Net with one stage of hierarchy operating at the byte level outperforms a strong Transformer language model operating over BPE tokens. Iterating the hierarchy to multiple stages further increases its performance by modeling multiple levels of abstraction, demonstrating significantly better scaling with data and matching the token-based Transformer of twice its size. H-Nets pretrained on English show significantly increased character-level robustness, and qualitatively learn meaningful data-dependent chunking strategies without any heuristics or explicit supervision. Finally, the H-Net's improvement over tokenized pipelines is further increased in languages and modalities with weaker tokenization heuristics, such as Chinese and code, or DNA sequences (nearly 4x improvement in data efficiency over baselines), showing the potential of true end-to-end models that learn and scale better from unprocessed data.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors propose a hierarchical model (H-net) that can operate on raw byte sequences. The model is learned end-to-end. First, the sequence is processed by a shallow Mamba-based encoder, then it is chunked and downsampled to reduce its length. Then, the main network, which can have any architecture —typically a Transformer or, recursively, an H-net for multiple hierarchy levels. Then, a smoothing module is applied to provide gradients for the decision points, the sequence is upsampled by repeating the main network's output the correct number of times, and a Mamba-based decoder network outputs the full-length sequence. Additional regularization is used to achieve the desired target compression ratio.
+
+The model consistently outperforms its competitors, including Transformers, SpaceByte, and MambaByte
+
+### Strengths
+- Interesting, fully differentiable method
+- Improved scaling
+- Improved robustness
+
+### Weaknesses
+- Complexity
+- Clarity: Some baselines are not described in enough detail. For example, what exactly is H-Net (Space) or H-Net (pool)? Some details are described in the appendix, but are very vague. Line 353 claims that the main network also uses Mamba layers, but this is never described. Are all layers Mamba layers? Only some?
+- The only BPE model is a Transformer; however, the H-net uses Mamba layers. It would be nice to have a Mamba-based BPE model to see if the dynamic chunking or the Mamba is a bigger win.
+
+### Questions
+- In line 206, the authors say "where chunking layer ... ", however the chunking layer is defined afterward, which is a bit confusing
+- In line 355, the authors say "As discussed Section, ... comprise mainly Mamba-2 layers.". However, Mamba was never mentioned before in the paper.
+- It would be nice to describe what the scales are in the text. Now one has to look at the figure descriptions to be able to figure it out.
+- In line 1455, the authors say "Multiplying upsampled vectors by their confidence scores incentivizes the routing module to make confident, accurate decisions.". However, they are multiplied by one, and the difference is only in the backward. Why does this trick help?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper introduces a new tokeniser-free architecture, H-Net, that learns segmentation strategies and can be applied more than once, thereby creating learnable tokenisation. It evaluates its performance with respect to other architectures when data- and compute-matched.
+
+### Strengths
+- Interesting architecture that contributes to investigating the long-lasting issue of tokenisation in language models (aka tokenisation-free architectures)
+- Many carefully conducted experiments, with positive results
+- Paper clear and well written
+
+### Weaknesses
+- I think it is not ideal that the state of the art is only briefly described in the main part of the paper, and discussed at more length in an appendix. It makes the main part of the paper not really self-contained
+- Moreover, the discussion on what is different and novel with H-Net with respect to previously published works is insufficient, especially in the main part of the paper. The authors write that "H-Nets […] unlock the ability to remove another layer of pre-processing, such as tokenizers, and instead learn them end-to-end". To me, it is not the case that H-Nets "unlock" (i.e. make possible for the first time ever) such an "ability". Previous work have done this before, and the authors should acknowledge it better, and clearly explain how and why H-Nets are novel and better.
+- The authors rightly explain that such tokeniser-free architectures remove the need for heuristic tokenisation strategies, and create "optimal" (in some sense) segments that can be visualised and analysed. The authors only show a handful of examples in English, although they mention the fact that improvements are better in Chinese. This is certainly due to the fact that their algorithm re-discovers whitespace-separated tokens in English, but cannot to that in Chinese, where there are no whitespaces. But a whole discussion on the boundaries endogenously learned by the model is missing. In languages using a script that includes whitespaces, how often are boundaries placed on whitespaces? When are whitespaces not used as boundaries, and when does the model places boundaries at other places? In languages using a script that does not includes whitespaces, do the endogenously learned segments "look like" what linguistic traditions (and more recently, treebank developers) have defined as "words" or "word-forms"? When using 2 levels of hierarchy, does the first level generate morph-like units (it seems that it does not, at least on the examples shown on English)? To me, adding such a discussion is absolutely necessary to understand what the model actually learns and how (and when) it (should) perform(s) better than models relying on heuristic and/or statistics-based tokenisation strategies (whitespace, BPE, etc.)
+
+### Questions
+- will the codebase be released?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces H-Net, a novel and compelling hierarchical architecture for end-to-end sequence modeling directly from raw bytes, aiming to replace the conventional tokenization pipeline. The core contribution is a "Dynamic Chunking" (DC) mechanism that learns content- and context-dependent segmentation strategies jointly with the main model. This is achieved through a clever combination of a similarity-based routing module to predict boundaries and a smoothing module to ensure stable, differentiable end-to-end training. The authors demonstrate empirically that H-Net not only trains stably at scale (up to 1.3B parameters) but also outperforms strong, compute-matched BPE-tokenized Transformer baselines. Furthermore, they show that the architecture can be recursively stacked (2-stage H-Net), leading to even better performance and scaling, particularly on languages and modalities where traditional tokenization heuristics are less effective, such as Chinese, code, and DNA sequences.
+
+### Strengths
+- **Novelty and Significance:** The paper's primary strength lies in presenting a robust and scalable framework for fully end-to-end, learnable segmentation. The Dynamic Chunking mechanism, especially the smoothing module that turns a discrete selection problem into a differentiable one, is an elegant solution to a notoriously difficult problem that has hampered previous efforts. This work represents a significant step towards realizing the "bitter lesson" by replacing a major handcrafted heuristic (tokenization) with a learned component.
+
+- **Empirical Rigor:** The experimental evaluation is thorough and convincing. The authors conduct carefully controlled comparisons against strong baselines (BPE Transformer, MambaByte, SpaceByte) by matching both data and computational (FLOPs) budgets. The consistent outperformance of the 2-stage H-Net across different model scales is a powerful result.
+
+- **Generality and Robustness:** The paper convincingly demonstrates the model's advantages beyond standard English text. The superior performance on Chinese, code, and DNA sequences validates the claim that a learned chunking strategy is more generalizable than fixed heuristics. The improved robustness to textual perturbations is another key benefit of operating directly on bytes.   
+
+- **Strong Ablation Studies:** The authors provide detailed ablation studies that validate their key architectural choices. These studies effectively demonstrate the importance of the smoothing module, the similarity-based routing, and the use of SSMs (Mamba-2) in the outer encoder/decoder layers, strengthening the credibility of the proposed design.
+
+### Weaknesses
+- **Practical Efficiency Concerns:** The paper candidly acknowledges that the current implementation can be up to 2x slower during training and has dynamic memory usage, which can be unpredictable. This is a significant practical hurdle for widespread adoption and large-scale training, as it complicates hardware optimization and resource allocation.
+
+- **Uncertainty and Potential Fragility at Extreme Scale:** While stability is demonstrated up to 1.3B parameters, the fact that larger scales are left as future work raises questions about the fundamental robustness of the mechanism. The complex interplay between the main prediction loss and the auxiliary ratio loss could introduce unforeseen instabilities at much larger scales (e.g., 70B+). This limitation implies that the current mechanism, while effective, might not yet be a "fundamental" solution but rather one that is proven to work within a specific regime.
+
+- **Need for Stronger Evidence on Principled Operation:** This is the most critical weakness. The paper's core claim is that it introduces a principled, end-to-end chunking mechanism. However, the primary evidence comes from ablation studies showing that removing a component (e.g., the smoothing module) degrades the final performance metric (BPB). This demonstrates that the components are necessary for good performance, but it does not sufficiently prove that they are working as theorized. For instance, it is unclear whether the performance gain is due to the smoothing module correctly interpolating uncertain boundaries, or if it's acting as a complex, yet effective, form of regularization. The visualizations of learned boundaries are a good first step, but more direct, quantitative evidence is needed to establish that this is a truly fundamental innovation rather than a highly effective, scale-specific heuristic.
+
+- **Hyperparameter Sensitivity:** The ratio loss weight, $\alpha$, is fixed at 0.03 for all experiments without an accompanying ablation study.1 The model's performance and learned compression ratio could be highly sensitive to this value, potentially requiring extensive tuning for new domains or modalities. This replaces one form of tuning (tokenizer design) with another, potentially more opaque one.
+
+### Questions
+To further strengthen my assessment and address the concerns about the mechanism's fundamental nature, I would appreciate the authors' response to the following questions:
+
+- **Evidence for Principled Operation:** Beyond the final performance metrics in ablation studies, can you provide more direct evidence that the core modules are functioning as hypothesized? For example:
+    - **Routing Module:** Can you analyze the relationship between the cosine similarity scores and human-annotated semantic/syntactic boundaries? Does the "w/o cosine routing" variant learn a different, perhaps less interpretable, chunking strategy, or does it fail to learn any consistent strategy at all?
+    - **Smoothing Module:** Does the smoothing module primarily act on low-confidence boundaries ($P_t \approx 0.5$), as intended? Could you provide statistics on the distribution of $P_t$ values and show how the EMA application correlates with them? This would help differentiate its role from being a general regularizer.
+
+- **Scaling and Stability:** Could you elaborate on the potential stability challenges at scales significantly larger than 1.3B parameters? Have you observed any trends in the training dynamics (e.g., the interplay between the ratio loss and the main loss) that might suggest future issues, and do you have any hypotheses on how to mitigate them? Proving the mechanism's fundamental nature requires confidence in its scalability.
+
+- **Hyperparameter $\alpha$:** Could you provide more intuition on the choice of $\alpha=0.03$? How sensitive is the model's final performance and, more importantly, the stability of the learned compression ratio to this hyperparameter? An ablation, even a small one, would be very valuable to understand the robustness of the training process.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The authors propose a tokenizer-free architecture that dynamically segments sequences by jointly learning context and content dependent boundaries alongside the language modeling objective. Their model is hierarchical, enabling it to capture multiple levels of abstraction, from finegrained details to higher-order structure. In experiments on English, the architecture demonstrates increased robustness at the character level compared to BPE-based tokenizers, and the authors further report improvements for Chinese, code, and DNA sequences.
+
+### Strengths
+- The paper addresses an important limitation of many tokenizer-free architectures: training instability when boundary predictors must make discrete decisions (with or without supervision). Their proposed architecture is elegant in how it handles segmentation via the novel routing and smoothing mechanism. 
+- The paper is well written with lots of ablations, detailed discussions on different architectural and experimental choices that potentially aid reproducibility.
+- Their experimental results are great to see, they demonstrate improvements over traditional BPE in downstream tasks, with robustness on character-level tasks, code etc. This speaks directly to the benefits of their dynamic tokenization strategies.
+
+### Weaknesses
+- Of course, this paper is not framed as a multilingual one, but the authors do claim improvements in other languages, and only evaluate on Chinese. While the improvements are notable, many recent frontier LMs are trained on web data across several languages. Do you have insights on how your architecture scales in a multilingual setting, when it is very common to have very distinct tokens mixed in individual sequences?
+- In addition to what I mentioned above, I am particularly curious about the potential challenges of scaling HNET experiments to a truly multilingual setting involving languages with distinct scripts, varying data sizes, and diverse linguistic structures. When data is highly imbalanced across languages or domains, how robust is the quality of the learned segmentation? Even if prior ratios are fixed to guide boundary prediction convergence, could the quality of learned segmentation degrade as language-specific data becomes more limited, given that boundary learning is inherently context-dependent? I will be interested to hear your thoughts on this.
+- Why are there no comparisons to BLT (https://arxiv.org/pdf/2412.09871) and the dynamic token pooling paper (https://arxiv.org/abs/2211.09761)? At the very least, there is some similarity in architectural designs with the dynamic token pooling paper.
+-  There’s also no discussion about how well the model handles out-of-domain sequences, and I don’t mean big shifts going from natural language to DNA or code, but more subtle, realistic shifts like moving to scientific text or just long-tail words in the pretraining data. What kind of segmentations are observed? Are they optimal?
+
+### Questions
+- Any thoughts on how your model performs at really small scales <700M . I know that there seems to be more value these days in training models at larger scales, just curious if you have any thoughts.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+4

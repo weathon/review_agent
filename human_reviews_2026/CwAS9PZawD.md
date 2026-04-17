@@ -1,0 +1,174 @@
+# Distilled Protein Backbone Generation
+
+- Decision: Reject
+- Scores: 4, 6, 8, 4
+
+## Abstract
+Diffusion- and flow-based generative models have recently demonstrated strong performance in protein backbone generation tasks, offering unprecedented capabilities for $\textit{de novo}$ protein design. However, while achieving notable performance in generation quality, these models are limited by their generating speed, often requiring hundreds of iterative steps in the reverse-diffusion process. This computational bottleneck limits their practical utility in large-scale protein discovery, where thousands to millions of candidate structures are needed. To address this challenge, we explore the techniques of score distillation, which has shown great success in reducing the number of sampling steps in the vision domain while maintaining high generation quality. However, a straightforward adaptation of these methods results in unacceptably low designability. Through extensive study, we have identified how to appropriately adapt Score identity Distillation (SiD), a state-of-the-art score distillation strategy, to train few-step protein backbone generators which significantly reduce sampling time, while maintaining comparable performance to their pretrained teacher model. In particular, multistep generation combined with inference time noise modulation is key to the success. We demonstrate that our distilled few-step generators achieve more than a 20-fold improvement in sampling speed, while achieving similar levels of designability, diversity, and novelty as the $Prote\'ina$ teacher model. This reduction in inference cost enables large-scale $\textit{in silico}$ protein design, thereby bringing diffusion-based models closer to real-world protein engineering applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper presents a method for accelerating flow-based protein backbone generation models by applying a score distillation technique, specifically Score Identity Distillation (SiD). The authors adapt SiD, originally from the vision domain, to distill a pre-trained protein generator (Proteína) into a few-step model. The key challenge addressed is successfully combining the distillation process with the low-temperature sampling (inference-time noise scaling) required to maintain high designability in protein structures. The resulting distilled model achieves a significant (e.g., >20x) speedup while maintaining comparable designability, diversity, and novelty to the original teacher model.
+
+### Strengths
+The primary strength of this work is the successful application of an acceleration technique to the challenging domain of protein generation. While the method (SiD) is not novel, its adaptation is non-trivial. The authors demonstrate how to make score distillation compatible with the low-temperature sampling crucial for protein designability, which is a valuable practical contribution. The paper shows promising results, achieving a significant speedup while preserving the key quality metrics of the generated backbones.
+
+### Weaknesses
+1. **Weak Motivation**: The central motivation—that generation speed is a practical bottleneck for large-scale protein discovery—is not well-supported. The paper claims this limits discovery pipelines needing thousands of samples. However, even the "slow" teacher model (e.g., ~1 hour for 600 samples, based on the paper's reported times) is already orders of magnitude faster than the subsequent wet-lab validation. This makes the 20x speedup less impactful for this specific use case. The motivation would be stronger if framed in a different context, such as large-scale in silico screening or other inference-time scaling scenarios where generation speed is the true bottleneck.
+2. **Limited Novelty & Incomplete Related Work**: The work is an application of an existing method (SiD). This is acceptable, but the paper lacks a comprehensive overview of other recent advances in few-step diffusion generation (e.g., MeanFlow, Shortcut Models, Align your Flow, Flow Map Matching). The authors should discuss these alternatives and provide a clear justification for why SiD is the most suitable choice for this specific task over other potential distillation or fast-sampling methods.
+3. **Clarity of Presentation**: The core algorithms for training and inference are relegated to the appendix. For clarity and reproducibility, it would be much better to include algorithm boxes in the main paper to describe the full training and inference procedures.
+
+### Questions
+In Eq (4), what is the intuition behind the hyperparameter $\alpha$? While Appendix C provides an ablation study, the main text should briefly explain its role in balancing the loss terms and how it was set in practice.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This work presents application of Score identity Distillation with the low temperature sampling needed to generate designable protein backbones, achieving a 20x reduction in inference time.
+
+### Strengths
+- Highly novel. First work that I am aware of that looks at distillation coupled with low temperature sampling.
+- Very clear in the methods in terms of the difficulty in translating image distillation methods to proteins due to the required precision of the local structure.
+- Data free scheme makes the method a lot more generalizable and not dependent on certain weighting and clusterings.
+- Strong few step performance in Table 1 with 20x speed up.
+
+### Weaknesses
+-  The introduction is a bit misleading. Proteina does not have an equivariant architecture. Proteina also does not use IPA or need triangle layers neither of which are essential for de novo design. Proteina shows that without triangle operations nearly identical de novo accuracy can be achieved too.
+- Sampling speed is important but the speed of current models is quite fast already. Speed up is important still but the claims that all existing models are too slow are overblown. From Geffner et al. Proteina can generate tens of thousands of proteins per hour. Distilled Proteina can do hundreds of thousand per hour so it is a important improvement but the introduction is a bit too overzealous. 
+- Eqn 3-5 could be presented a bit mroe lcearnly given its the central technical point. The Appendix is clearer but the presentation could greatly help the understanding.
+- The framework was claimed to work on diffusion and flow based models while identical under gaussian prior, the work would benefit from also applying SiD ontop of Genie2 given it is the slowest model in its class.
+
+### Questions
+- What is the fake score loss?
+- Proteina also shows that it can be trained for backbone motif scaffolding. Does this SiD framework hold for conditional tasks given all the core flowmatching aspects remain the same?
+- Does this distilaltion framework work on IPA-based architectures like Genie2?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The authors take a published protein structure generation method and try to adapt it for few-step distillation methods. They show that standard techniques are not successful due to low-temperature sampling adaptions that are necessary for strong performance. After iterating different design decisions, they show that with their modified SiD methodology they can reduce the sampling time by more than 20 times while still retaining similar performance.
+
+Contributions:
+
+[C1]  Demonstrate the challenges of adapting few-step distillation methods to generative models that use low-temperature sampling
+
+[C2] Develop a new distillation scheme that overcomes these challenges and investigate it in detail.
+
+### Strengths
+[S1] Detailed Failure Analysis: instead of just presenting the working final algorithm, the authors clearly demonstrate all the things that did not work as well as modifications that were necessary to make it work, making the paper a very useful practical resource.
+
+[S2] Empirical perfomance: the 20x sampling time acceleration with preserved performance is impressive and useful in practical applications.
+
+### Weaknesses
+[W1] The authors cearly describe that their fold class metrics are lower than for the pretrained model; a more detailed analysis of what the failure model for the model here is and what folds it underrepresents might be interesting.
+
+[W2] The authors limit their evaluations only to unconditional generation, but in practical applications researchers are actually interested in more complex conditional tasks, for example motif scaffolding. The extent to which the distilled model can perform these more complex conditional tasks is not described or validated.
+
+### Questions
+[Q1] Recently there has been a lot of work on all-atomistic structure generation such as La-Proteina, Protpardelle and others. In these cases, scheduling of different low-noise schedules etc can get a lot more complex. Do you think your approaches would generalise to these settings or do you expect further complications there?
+
+[Q2] You show that the one step performance is significantly worse than the multi-step performance due to the missing noise injection. Do you think this is a fundamental limitation of these models or there is a way to get truly one-step generators?
+
+[Q3] As shown in previous works lower temperature sampling restricts you to sampling from a specified subset of your data distribution that has better in silico scores, but with higher temperature you more closely sample from the original data distribution which manifests itself in better FPSD scores etc. Since you distill at a specific temperature, has your model lost the ability to sample from the full data distribution? Is there any way to preserver/recover it?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a significant advancement in the field of protein design, successfully bringing deep generative models closer to practical applications. Through an innovative distillation framework, it effectively addresses the sampling speed bottleneck of existing diffusion and flow-matching models while maintaining high-quality generation. This work holds considerable promise for large-scale protein discovery and engineering applications, opening new avenues for future research in protein design methods. The proposed methodology is clearly articulated, and its effectiveness is thoroughly validated through extensive experiments. Despite minor shortcomings in specific metrics, the overall contribution is positive and substantial.
+
+### Strengths
+1. The paper successfully adapts score distillation for protein backbone generation, overcoming previous failures. It specifically tackles the challenges of protein structure sensitivity and the need for low-temperature sampling with a novel "few-step distillation + noise scaling" approach, which is a significant methodological contribution.
+
+2.  The most prominent advantage is the dramatic reduction in sampling time—over 20-fold improvement. This is crucial for de novo protein design, which often requires generating thousands to millions of candidate structures for evaluation. This speedup makes large-scale in silico protein design practically feasible and enables tighter integration with iterative design-test exploration cycles.
+
+### Weaknesses
+1. Limited Scope of Protein Types for Evaluation: The paper primarily focuses on "unconditional protein structure generation and fold class conditional generation" and a single case study for biological plausibility. There is a lack of diverse experimental evaluations across a broader range of protein types, sizes, or specific functional classes. This limited scope makes it challenging to fully ascertain the generalizability and reliability of the proposed distillation framework for real-world protein engineering challenges involving various protein scaffolds or targeted functions.
+
+
+2. Lack of Detailed Error Analysis for "Undesignable" Structures: The paper notes that one-step generators produce "almost no designable samples" and that even few-step generators need noise scaling to improve designability. While the problem is identified and addressed, a more detailed analysis of the types of structural errors that lead to "undesignable" outcomes in sub-optimal configurations could provide deeper insights into the limitations of distillation for protein backbones and guide future improvements.
+
+3. Dependency on Pre-trained Teacher Model Quality: The entire distillation process relies on the performance of a pre-trained teacher model (Proteína's Mng-tri model). The effectiveness of the distilled generator is inherently capped by the capabilities and potential biases of this teacher. If the teacher model has limitations or exhibits certain failure modes, these could potentially be inherited or even amplified in the distilled, faster generators, which might not be fully explored in the current evaluation.
+
+### Questions
+None
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2

@@ -1,0 +1,179 @@
+# Privacy Leakage via Output Label Space and Differentially Private Continual Learning
+
+- Decision: Reject
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Differential privacy (DP) is a formal privacy framework that enables training machine learning (ML) models while protecting individuals' data. As pointed out by prior work, ML models are part of larger systems, which can lead to so-called privacy side-channels even if the model training itself is DP. We identify the output label space of a classification model as such privacy side-channel and show a concrete privacy attack that exploits it. The side-channel becomes highly relevant in continual learning (CL) as the output label space changes over time. We propose and evaluate two methods for eliminating this side-channel: applying an optimal DP mechanism to release the labels in the sensitive data, and using a large public label space. We explore the trade-offs of these methods through adapting pre-trained models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper studies privacy leakage in publishing output label space, and proposes algorithm of differentially private(DP) continual learning(CL) algorithm. The basic idea is that the output label space is privacy side channel that can leak information on the training data. In the case of continual training, this is a severe issue. The authors use methods from private partition selection to generate a private output label space, then propose multiple continual learning algorithms that take the output label space into consideration. Experiments are conducted to compare different label space constructions and DP CL algorithms.
+
+### Strengths
+- The observation of output label space as a privacy side channel is novel and interesting.
+- The experiments are extensive.
+
+### Weaknesses
+- I do not quite follow the concept of "output label space". The authors say it is "the set of labels that a model outputs". But over what input? Is it all possible output labels that the model can produce? For ordinary classifiers like logistic regression or Vit used in this paper, the output space is known in advance; in the end the output is a distribution on each possible class. The authors proposes a scenario where the learning has multiple phases, and in each phase new labels are included gradually. Does this scenario has practical applications? It seems that for each phase ("task" in the paper) we need to release a model; of course in this way the output space will be revealed,  but why does this have to be a privacy side channel? Prop 4.1 suggests that revealing the labels of the training data leaks privacy. Of course this is true, but this is because you are releasing part of the input, it has nothing to do with the ordinary DP training algorithms. After all, the model does not have to fit on all training samples. More clarification on the motivation and use case of the output label space is highly appreciated.
+- The contribution seems to be limited. There are 2 constructions of private label space, but they both seem to come from the existing work [1]. There are also 2 DP CL algorithms, one is compute the embeddings for the labels, the other is to use PEFT. It looks like this work just combines existing ideas, and novelty/technical contribution is limited.
+
+[1] Desfontaines, D., Voss, J., Gipson, B., & Mandayam, C. (2022). Differentially private partition selection. Proceedings on Privacy Enhancing Technologies, 1, 339-352.
+
+### Questions
+When I check the code, I can only see "The requested file is not found." Can you double check if the repo is working?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper focuses on privacy leakage in differentially private continual learning. Existing DP-CL methods use the entire privacy budget for training weights, which protects weights under DP guarantee. However, the output label space, which is naively derived from sensitive data, can lead to a huge privacy leakage. Therefore, the author proposes two methods to address this: spending part of the privacy budget on releasing labels and leveraging a large public prior label set independent of sensitive data. Both theoretical analysis and experiments with pre-trained models on CL benchmarks demonstrate that both methods effectively eliminate the privacy leakage while maintaining utility under various continual learning scenarios.
+
+### Strengths
++ Important topic
+
+### Weaknesses
+- Strong assumptions
+- Presentation needs improvement
+
+### Questions
+1. In line 121, “eliminate” was incorrectly written as “elimiate”. The author should carefully check the whole paper for similar errors.
+
+2. The definition of task-level DP assumes each data point only appears in one task, and then they get privacy guarantees through parallel composition. However, when a user's data spans multiple tasks, the parallel composition no longer holds, and the privacy safeguard requires reassessment.
+
+3. In the first method $S_{learned}$, the privacy budget was divided between selecting class labels and training weights. For model training, the allocated privacy budget is reduced. I am wondering how much this impacts the model performance? And in the experiments, the grid search for the budget division is purely heuristic and lacks theoretical analysis. The author should discuss how to optimally allocate the privacy budget to enhance utility.
+
+4. In the second method $S_{prior}$, it relies on a large data-independent prior label that covers all or most private labels. However, in many real-world scenarios, such a public dataset may not exist. The paper's experiments simulate this by “artificially enlarge the label space,” thereby sidestepping the most critical challenge in real-world scenarios—how to construct such a dataset and the related costs. The author should add some discussion about this.
+
+5. In the $S_{prior}$, when the dataset label is not in the prior label set, these unmatched labels are remapped or simply dropped. The paper does not discuss how the label noise introduced by such remapping or dropping affects model performance and privacy.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper identifies the output label space in continual learning (CL) as a potential privacy side-channel, showing that releasing the set of available labels can leak sensitive information even from DP-trained models. To mitigate this, the authors propose two strategies: (1) spending part of the privacy budget to privately release labels via an optimal DP partition-selection mechanism, and (2) operating within a large, public, data-independent label space. They adapt DP cosine classifiers and DP PEFT ensembles to evaluate both approaches on CIFAR-100 and ImageNet-R, showing that private label release generally achieves better utility–privacy trade-offs.
+
+### Strengths
+* Privacy side-channels are an important and underexplored topic. This is often overlooked in Differential Privacy research and real-world deployments. Showing that model architecture itself can leak data is a meaningful contribution. 
+* The label-space leakage in continual learning is well-motivated and clearly demonstrated.
+* Mitigation strategies are theoretically sound and consistent with DP best practices.
+* The paper is well written and easy to follow, with clear threat models, definitions, and reproducibility details. I wasn't very familiar with the continual learning space, but was able to understand the setup easily.
+* Most reported results seem intuitive and correct.
+
+### Weaknesses
+* The methodological novelty is somewhat limited. Both mitigation strategies (DP partition selection, data-independent priors) are well-known; the contribution lies mainly in _applying_ them to CL. While this is valuable, it makes the work more incremental than conceptual.
+* Figure 3 results are a bit puzzling: for the Cosine Classifier, the accuracy of the label-oracle baseline barely changes between $\epsilon=1$ and  $\epsilon=8$, suggesting either the DP noise has little effect or the privacy accounting isn’t tight enough to show a trend. This deserves clarification.
+* The experiments lack comparison to existing DP-CL baselines, which would contextualize how severe the leakage is in prior methods.
+
+### Questions
+Figure 4 (CIFAR-100): the first point left of the red dashed line shows nearly all labels (>99%) released, yet accuracy drops by more than 5%. Can you clarify why this could be the case? I would suggest plotting "maximum possible accuracy" given the available labels and the exact test set class composition.
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper identifies and rigorously analyzes a previously overlooked privacy side-channel in differentially private (DP) machine learning: the **output label space** of a classifier. The authors demonstrate that even if model weights are trained under DP guarantees, **directly revealing the set of labels observed during training** can completely break DP—especially in **continual learning (CL)** settings, where the label space evolves over time.
+
+The core contribution is twofold:
+1. **Problem Identification**: The paper formalizes how releasing the empirical label set (e.g., all classes seen up to task *t*) violates DP, using a simple but devastating membership inference attack (Fig. 1).
+2. **Mitigation Strategies**: Two DP-compliant alternatives are proposed:
+   - **S_learned**: Use a DP mechanism (based on private partition selection) to release a noisy subset of labels, consuming part of the privacy budget.
+   - **S_prior**: Use a fixed, data-independent public label space (e.g., from pre-training), remapping or dropping private labels as needed.
+
+The authors instantiate these strategies within two practical DP-CL frameworks leveraging pre-trained ViTs:
+- A **cosine similarity classifier** that accumulates DP-noisy class prototypes.
+- A **PEFT ensemble** that fine-tunes lightweight adapters per task under DP-SGD.
+
+Experiments on Split-CIFAR-100 and Split-ImageNet-R show that both strategies successfully close the privacy loophole while maintaining utility, with trade-offs depending on privacy budget, label distribution (e.g., "blurry" tasks), and model choice.
+
+### Strengths
+1. **Novel and Important Insight**: The identification of the output label space as a privacy side-channel is both simple and profound. It exposes a critical flaw in prior DP-CL work that assumed protecting model weights was sufficient. This has broad implications beyond CL (e.g., any DP classification with unknown label sets).
+2. **Rigorous Formalization**: The attack and non-DP nature of naive label release are formally proven (Prop. 4.1). The proposed solutions are grounded in established DP theory (private partition selection) and accompanied by formal privacy proofs (Prop. 4.2, Appendix C).
+3. **Practical and Well-Evaluated Solutions**: The two mitigation strategies are realistic and well-motivated. The use of pre-trained models aligns with state-of-the-art DP and CL practices. Experiments are thorough, covering idealized and realistic ("blurry") CL settings, and include ablations on privacy budget allocation and public label space size.
+
+### Weaknesses
+1. **Limited Scope of Baselines**: The comparison to prior DP-CL methods is indirect (via the identified flaw). A direct empirical comparison to, e.g., Desai et al. (2021) or Hassanpour et al. (2022)—even if flawed—would strengthen the practical impact claim.
+2. **Assumption on Public Pre-training**: The reliance on public pre-training data (ImageNet-21k) is standard but increasingly debated. A brief discussion on the implications if pre-training data were private would be valuable.
+3. **Scalability of S_prior**: While S_prior avoids privacy budget splitting, using a very large public label space (e.g., 1000×) may incur computational overhead (e.g., in the cosine classifier). The paper notes memory scales with |O_t| but doesn’t quantify runtime costs.
+4. **Minor Clarity Issues**: The definition of "blurry tasks" could be clarified earlier. The distinction between task-wise adjacency and standard DP adjacency is well-handled in the appendix but could be streamlined in the main text.
+
+### Questions
+As described in weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

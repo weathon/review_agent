@@ -1,0 +1,207 @@
+# Self-supervised Learning for Incomplete Multimodal Wearable Sensor Data
+
+- Decision: Reject
+- Scores: 6, 4, 2, 4
+
+## Abstract
+Foundation models, a cornerstone of recent advancements in machine learning, have predominantly thrived on complete and well-structured data. However, wearable sensor data frequently suffers from significant missingness, posing a substantial challenge for the training of generalist models in this domain. This paper introduces Adaptive and Inherited Masking (AIM), a novel self-supervised learning (SSL) approach that learns robust representations directly from incomplete data without requiring explicit imputation. Leveraging AIM, we develop AIM_FM, a foundation model pre-trained on 40 million hours of fragmented multimodal wearable sensor data. We find that with AIM this model exhibits improved scaling and performance across a diverse range of tasks as compared to current state-of-the-art wearable-sensor foundation models trained on imputed data. Critically, AIM_FM maintains high performance even under targeted missingness scenarios (e.g., absent sensors, contiguous missingness). We will release our metabolic study dataset with reproducible training+evaluation code.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+In this study, the authors design a self-supervised pretraining method to pretrain on a large-scale dataset from wearable sensors. The key claim is that most existing studies have not considered the data missing issue. The key contribution of this paper lies in two aspects, the first is the adaptive self-supervised pretraining method, and the second is the large-scale pretraining experiments. For evaluations, the authors design generative, classification and regressive tasks to compare with baseline models.
+
+### Strengths
+1. This paper targets a practical and important problem in the domain of multimodel wearable data. 
+
+2. In experiment, the authors utilize large-scale data for model training. The scale is impressive. 
+
+3. The figures are clear and make this paper easier to understand.
+
+### Weaknesses
+The masking pretraining strategy has been there for a while, as a result, even though this paper claims their adaptive attention masking design in novel, concerns remain for the novelty contribution. 
+
+During the model training process, will the training data be complete data (without missing) or data with missing? 
+
+In the ablation study, it seems the adaptive masking does not introduce significant improvement. 
+
+More detailed explanations of experimental settings. For example, are the data for training and testing come from different subjects? Are the data from watch, smartphone, or other wearable devices? 
+
+The current baselines are not the state-of-the art. I would like to suggest the authors to do a thorough literature review. If time permits, please compare with or discuss these more recent SOTA studies: “Crosshar: Generalizing cross-dataset human activity recognition via hierarchical self-supervised pretraining”,  “UniMTS: Unified Pre-training for Motion Time Series”. These work also focus on self-supervised pretrianing in similar application scenarios.
+
+### Questions
+The masking pretraining strategy has been there for a while, as a result, even though this paper claims their adaptive attention masking design in novel, concerns remain for the novelty contribution. 
+
+During the model training process, will the training data be complete data (without missing) or data with missing? 
+
+In the ablation study, it seems the adaptive masking does not introduce significant improvement. 
+
+More detailed explanations of experimental settings. For example, are the data for training and testing come from different subjects? Are the data from watch, smartphone, or other wearable devices? 
+
+The current baselines are not the state-of-the art. I would like to suggest the authors to do a thorough literature review. If time permits, please compare with or discuss these more recent SOTA studies: “Crosshar: Generalizing cross-dataset human activity recognition via hierarchical self-supervised pretraining”,  “UniMTS: Unified Pre-training for Motion Time Series”. These work also focus on self-supervised pretrianing in similar application scenarios.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces AIM, a self-supervised framework for large-scale pretraining on incomplete multimodal wearable sensor data, eliminating the need for explicit imputation. The approach combines inherited (real-world) and artificial masks to improve robustness to missingness, leading to AIM_FM, a foundation model trained on 40 million hours of sensor data. The model outperforms existing wearable SSL baselines (e.g., LSM, LIMU-BERT) across generative, classification, and regression tasks and demonstrates strong robustness under targeted missingness scenarios.
+
+### Strengths
+1. This paper addresses a highly practical and timely challenge—developing large-scale foundation models for time-series wearable data—making it an important direction for real-world deployment.
+
+2. The use of 40 million hours of pretraining data is unprecedented and gives the work a distinctive position in the field.
+
+3. The manuscript is clearly written and easy to follow.
+
+### Weaknesses
+1. Please discuss additional recent works in multimodal time-series learning that handle missing modalities without explicit imputation (e.g., FlexMoE [1], FuseMoE [2]). Furthermore, techniques such as mTAN [3] and Neural ODEs[4] naturally handle irregular sampling and in-sample missingness, and could provide useful baselines or points of comparison.
+
+2. The algorithmic novelty appears somewhat limited, as the paper mainly engineers existing methods--applying reconstruction loss only on artificial masks---and prior work has proposed native support for missing modalities without imputation. Thus, the methodological contribution feels incremental rather than conceptually new.
+
+3. The scaling laws presented appear closely aligned with those already established in LSM. While the inclusion of a comparison in Figure 4 is helpful, the contribution seems like an extension of prior scaling analyses.
+
+4. For the extrapolation task—which is more similar to time-series forecasting—standard baselines such as Chronos [5], TimesFM, and MoiRai  should be included for a more comprehensive evaluation. Instead of retraining Chronos, the authors could perform zero-shot forecasting to assess how pretrained models generalize under similar conditions as a litmus test. Currently, many of baselines are variants of the proposed approach, making improvements somewhat expected. Broader comparisons would strengthen the paper’s empirical rigor. Additionally, the recently released Chronos-2  supports variable covariates and could be a relevant comparison in future revisions.
+
+5. Is a learnable mask necessary? Representing time series as quantized tokens—similar to Chronos [5]
+ or MAESTRO [6]—and reserving distinct symbols for different types of missingness (e.g., type 1 vs. type 2) could be a strong ablation to demonstrate the utility of the learnable mask.
+
+6. Given that one of the paper’s major contributions is the large-scale pretraining dataset and its promised release upon acceptance, this work may be better suited as a dataset/benchmarking paper. Nevertheless, it offers a valuable community resource for researchers lacking access to large-scale wearable data.
+
+References :
+
+[1] FlexMoE, Neurips 2024
+
+[2] FuseMoE, Neurips 2024
+
+[3] mTAN, ICLR 2021
+
+[4] Latent ODEs for Irregularly-Sampled Time Series, Neurips 2019
+
+[5] Chronos, TMLR 2024
+
+[6] MAESTRO, Neurips 2025
+
+### Questions
+Please see weaknesses.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes a self-supervised learning framework for incomplete multimodal wearable sensor data, introducing a method named AIM that extends masked autoencoding to handle missing signals without explicit imputation. The method combines inherited and artificial masking strategies to model missingness patterns directly during pre-training. The approach is evaluated on a multimodal health dataset with generative and predictive downstream tasks.
+
+### Strengths
++ The problem is relevant and timely, given the prevalence of incomplete sensor data in wearable and healthcare contexts.
++ The paper provides a systematic experimental setup with reconstruction and regression/classification tasks to validate model performance.
++ The integration of generative and predictive evaluation is methodologically sound, providing a holistic assessment of the learned representations.
+
+### Weaknesses
+- The proposed method primarily combines existing ideas from MAE-based reconstruction and masking strategies (inherited/artificial masking). While practically useful, it does not introduce a fundamentally new self-supervised objective or architecture.
+-  The evaluation relies heavily on a single dataset. To claim generalizability across sensor modalities, additional experiments on multiple benchmark HAR datasets would be necessary.
+- Performance gains over baselines are moderate and may not justify publication at a top venue without broader validation or deeper theoretical insights.
+-  The paper does not sufficiently compare with the most recent SSL methods for multimodal HAR. Such comparisons are crucial for situating the contribution within the current state of the art.
+
+### Questions
+1. How generalizable is AIM across domains or datasets with different missingness structures?
+2. Would combining AIM with cross-modal alignment objectives further improve robustness?
+3. Can the authors justify why their adaptation of MAE is preferable over recent SSL methods explicitly designed for multimodal sensor data?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on self-supervised learning for wearable sensor data, specifically, SSL-based pre-training for sensor data with missing values. A new model named  Adaptive and Inherited Masking (AIM) is proposed. Built upon AIM, AIM_FM is proposed as a foundation model pre-trained on 40 million hours of fragmented multimodal wearable sensor data. AIM_FM presents good performance under missingness scenarios.
+
+### Strengths
+1. The paper addresses a practical problem setting, i.e., SSL-based pre-training for sensor data with missing values.
+
+2. The paper shows clear motivation and presentation.
+
+3. Reproducibility seems to be guaranteed.
+
+### Weaknesses
+1. The technical contributions and innovations seem to be marginal. Filling missing data through autoencoding is a well-known SSL approach. What is the specific and unique technique contribution of AIM compared to these approaches in general machine learning, rather than just for wearable sensor data?
+
+2. What does "Multimodal" mean? Does this mean different types of sensors? The method seems to be lacking special designs for different modalities and simply focus on the input as a whole.
+
+3. According to Table 3: Classification Task Results, Resnet significantly surpasses other methods in Activity Recognition (20), which needs more discussion.
+
+### Questions
+please refer to the weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

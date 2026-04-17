@@ -1,0 +1,190 @@
+# FOCUS: Efficient Keyframe Selection for Long Video Understanding
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 4, 6
+
+## Abstract
+Multimodal large language models (MLLMs) represent images and video frames as visual tokens. Scaling from single images to hour-long videos, however, inflates the token budget far beyond practical limits. Popular pipelines therefore either uniformly subsample or apply keyframe selection with retrieval-style scoring using smaller vision-language models. However, these keyframe selection methods still rely on pre-filtering before selection to reduce the inference cost and can miss the most informative moments.
+
+We propose FOCUS, Frame-Optimistic Confidence Upper-bound Selection, a training-free, model-agnostic keyframe selection module that selects query-relevant frames under a strict token budget. FOCUS formulates keyframe selection as a combinatorial pure-exploration (CPE) problem in multi-armed bandits: it treats short temporal clips as arms, and uses empirical means and Bernstein confidence radius to identify informative regions while preserving exploration of uncertain areas. The resulting two-stage exploration-exploitation procedure reduces from a sequential policy with theoretical guarantees, first identifying high-value temporal regions, then selecting top-scoring frames within each region. Extensive experiments across four long-video question-answering benchmarks and four popular MLLMs demonstrate that FOCUS delivers substantial accuracy improvements while processing less than 2% of video frames. For videos longer than 20 minutes, it achieves an 11.9% gain in accuracy on LongVideoBench, demonstrating its effectiveness as a keyframe selection method and providing a simple and general solution for scalable long-video understanding with MLLMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes FOCUS (Frame-Optimistic Confidence Upper-bound Selection), a training-free, model-agnostic keyframe selection method for long video understanding with multimodal LLMs (MLLMs). To address the prohibitive token cost of processing all frames, FOCUS formulates keyframe selection as a combinatorial pure-exploration (CPE) problem in a multi-armed bandit setting, where short temporal clips are treated as arms. It employs a two-stage exploration–exploitation strategy: first using optimistic confidence upper bounds (UCB) to identify promising clips, then selecting top-scoring frames within them. Evaluated on LongVideoBench and Video-MME, FOCUS processes <2% of frames yet achieves consistent gains over uniform sampling and SOTA retrieval-based methods, e.g., +11.9% accuracy on videos >20 minutes. The method is simple, theoretically grounded, and plug-and-play compatible with existing MLLMs
+
+### Strengths
+The paper introduces FOCUS, a training-free keyframe selection method that formulates the task as a combinatorial pure-exploration bandit problem. It partitions the video into clips (arms), uses optimistic confidence upper bounds to identify informative regions with minimal sampling, and then selects top frames within those clips. This two-stage exploration-exploitation strategy enables MLLMs to achieve strong performance on long-video QA benchmarks while processing fewer than 2% of frames. It significantly outperforms uniform sampling and existing retrieval-based methods, especially on videos over 20 minutes.
+
+### Weaknesses
+- The concept of ACF and the calculation of $r_t$ in Figure 1 require further explanation, which will help readers better understand the motivation of the paper. 
+
+- This pre-filtering process before keyframe selection undermines the goal of identifying the most informative keyframes from all frames. The findings are interesting, but it is not certain whether the two-stage ARM selection proposed in the article will fall into the same limitations.
+
+- Lack of experimental results on MLVU, a commonly used long video understanding benchmark.
+
+- Minor Weaknesses
+  - Line 36: multimodal LLMs (MLLMs) -> multimodal large language models (MLLMs)
+  - Line 107: multimodal LLMs -> MLLMs
+
+[1] Zhou J, Shu Y, Zhao B, et al. Mlvu: A comprehensive benchmark for multi-task long video understanding[J]. arXiv e-prints, 2024: arXiv: 2406.04264.
+
+### Questions
+- FOCUS first partition the timeline into $M$ non-overlapping fixed-length clips. Does this destroy the spatiotemporal consistency of the video? Which makes it difficult to capture continuous segments with high information density?
+
+- As discussed in the Limitation section, FOCUS assumes that each frame of the video is independent, which is completely contrary to the nature of the video. Does this limit FOCUS’s applicability to short videos?
+
+- Table 1 lacks the experimental results of other frame selection methods, such as AKS and Q-Frame, based on the same baseline.
+
+- The paper provides a visualization of FOCUS's superiority over uniform sampling in Figure 3. It is meaningful to include the negative aspects of FOCUS, which helps readers better understand its limitations.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces FOCUS, a training-free and model-agnostic keyframe selection method for long-video understanding with multimodal large language models (MLLMs). FOCUS frames keyframe selection as a Combinatorial Pure Exploration (CPE) problem under a multi-armed bandit (MAB) formulation, treating short temporal clips as “arms.” By applying a Bernstein-style upper confidence bound (UCB-V) and a two-stage coarse-to-fine exploration scheme, the method efficiently identifies query-relevant temporal regions before selecting keyframes within each. Experiments on LongVideoBench and Video-MME, across four MLLMs (GPT-4o, Qwen2-VL, LLaVA-OV, and LLaVA-Video), show that FOCUS achieves 3–6% accuracy improvements over uniform sampling and comparable or slightly higher performance than recent training-free methods (AKS, Top-K), while processing only ~2% of frames.
+
+### Strengths
+- **Conceptually elegant and efficient.** The formulation connects keyframe selection with variance-adaptive exploration in MABs, offering a lightweight theoretical lens for efficient inference. The two-stage batched procedure is practical and easily parallelizable, reducing GPU cost by 40–60% compared to AKS.
+
+- **Training-free and modular.** The pipeline is plug-and-play, requires no fine-tuning, and integrates smoothly into existing LVLM inference workflows.
+
+- **Empirically consistent.** Evaluations span multiple datasets, video lengths, and MLLM architectures, with consistent accuracy and efficiency trade-offs (Table 1–4).
+
+- **Clear presentation.** The paper is well-written with informative figures and pseudocode; Algorithm 2 is easy to follow.
+
+### Weaknesses
+- **Incremental novelty.** The “combinatorial pure-exploration bandit” framing is conceptually sound but reuses standard UCB-V principles with minimal adaptation to video reasoning. Similar adaptive sampling ideas have appeared in AKS, Q-Frame, T* and Frame-Voyager.
+
+- **Weak theoretical substance & Limited methodological depth.** The regret bound assumes i.i.d. frame rewards and bounded noise, which do not hold in temporally correlated videos. The theoretical claim does not extend to frame-level optimality, limiting its practical significance. Despite the theoretical motivation, the final algorithm reduces to a fixed two-stage heuristic controlled by α and lacks adaptive or learnable exploration scheduling.
+
+- **Missing core ablations.** The paper does not isolate contributions from key components—coarse vs. fine stages, confidence bounds vs. mean-based selection—so the source of improvement remains unclear.
+
+- **Incomplete experimental comparison.** Evaluation omits recent reasoning-driven or event-centric baselines (e.g., Q-Frame, Logic-in-Frames ...), providing only partial evidence of superiority.
+
+- **Lack of robustness and qualitative analysis.** No systematic study of failure cases, sensitivity to α or clip length, or behavior on complex multi-event queries is provided, leaving generalization uncertain.
+
+### Questions
+- Include ablation studies disentangling the effect of each module (coarse/fine, α, confidence radius).
+- Compare against stronger or more diverse baselines (Q-Frame, Frame-Voyager, Logic-in-Frames, VSLS, $T^{*}$, Nar-KFC, TimeSearch).
+- Evaluate robustness on longer and more diverse benchmarks, such as MLVU and LVBench (general), Ego4D/ EgoSchema (egocentric reasoning), and OVO-Bench / HLV-1K (reasoning).
+- Analyze failure cases and provide qualitative insights on when FOCUS fails (e.g., multi-event reasoning).
+- Consider extending the method with lightweight learnable scoring or adaptive thresholding to move beyond static heuristics.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces a novel, training-free, and ""model-agnostic"" algorithm for efficient video processing by sampling the most relevant frames. Addressing the limitations of long videos and the short context windows of many Multimodal Large Language Models (MLLMs), the method leverages principles from Bandits research to select frames without relying on external models, unlike approaches such as AKS. The algorithm employs a coarse-to-fine-grained exploitation strategy, demonstrating improved performance over uniform sampling, top-k selection, and the model-based AKS method across various models (Llava, Qwen, GPT-4o) and benchmarks (Video-MME, LongVideoBench). A key advantage is its significantly higher efficiency and reduced GPU hours, as it avoids additional model inference. The method also includes an adjustable hyper-parameter, alpha, to manage the trade-off between accuracy and computational cost (number of frames processed).
+
+### Strengths
+- The method seems quiet effective in selecting the frames.
+- Seem to work well across different MLLMs
+- Better accuracy over the AKS method while improving efficiency.
+
+### Weaknesses
+- The authors present the method as model-agnostic; however, they appear to leverage BLIP for frame relevance scoring to compute their latent frame-level utility. Even if only 1% of the frames are processed through BLIP, it still relies on a model, making the claim of model-agnosticism questionable. This point should have been better explained in the paper. 
+- Lack of comparison with training-based method.
+- Could have added more benchmarks such as MLVU, NextQA. MVBench
+- Typos, abstract "within each region On two long-video"
+
+### Questions
+Can you clarify the BLIP usage in your method? If that's the case, why BLIP and not another text/vision encoder such as Siglip? Do you have any ablations?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper presents FOCUS (Frame-Optimistic Confidence Upper-bound Selection), a training-free and model-agnostic keyframe selection approach designed to improve long-video understanding in multimodal large language models (MLLMs). The authors formulate keyframe selection as a combinatorial pure-exploration problem within a multi-armed bandit framework, leveraging empirical means and Bernstein-style confidence bounds to balance exploration and exploitation. A two-stage coarse-to-fine procedure is further proposed to enable efficient and parallel computation. Experiments on LongVideoBench and Video-MME demonstrate consistent accuracy gains across multiple MLLMs. Overall, the paper provides an efficient and theoretically grounded solution to long-video understanding under tight token budget constraints.
+
+### Strengths
+1. The paper is original in formulating keyframe selection for long-video understanding as a combinatorial pure-exploration multi-armed bandit problem. This is a novel and reasonable perspective that provides new theoretical and algorithmic insights for researchers working on efficient video representation and token budgeting.
+2. The proposed two-stage coarse-to-fine procedure effectively addresses the non-parallelizable nature of sequential arm-pulling and updating, providing a practical solution that improves efficiency with minimal performance loss. This design is both elegant and empirically effective.
+3. The paper also shows strong theoretical grounding and empirical validation. The theoretical analysis is clear and complete, and the experiments are comprehensive, covering multiple benchmarks and models. The results align well with the theoretical claims, reinforcing the soundness and significance of the contribution.
+
+### Weaknesses
+1. In Section 2.2, the paper assumes that “frame-level utility within the same arm share the same distribution.” It is unclear how this assumption is ensured in practice, especially regarding how the M non-overlapping fixed-length clips are partitioned. For instance, when the video contains shot changes or scene transitions, it is not clear how these are handled or whether the authors explored alternative segmentation strategies.
+2. The experiments are limited to LongVideoBench and Video-MME, both of which focus on long-form video QA. Evaluating the method on datasets with different characteristics—such as spatial reasoning benchmarks (e.g., VSI-Bench) or shorter video datasets—would provide a better understanding of the method’s generalizability and potential limitations.
+3. I am curious about how the number of clips (M) affects performance and efficiency. Since the method’s core formulation relies on partitioning videos into M fixed-length clips, an ablation study on M (and possibly related hyperparameters) would make the analysis more complete.
+4. There are a few minor typos (e.g., a missing period around line 025). The authors are encouraged to carefully proofread the paper to minimize such small errors.
+
+### Questions
+As mentioned in the Weaknesses section, I believe additional ablation studies would greatly help clarify the method’s behavior and limitations. In particular, it would be valuable to see how different choices of M (number of clips) or other hyperparameters affect both performance and efficiency.
+Additionally, it would be interesting to explore how the proposed method performs on spatially focused video understanding tasks, where temporal redundancy is less dominant. Such experiments could provide insights into the generality and potential boundaries of the FOCUS framework.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

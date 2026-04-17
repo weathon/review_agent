@@ -1,0 +1,172 @@
+# TopoAlign: A Framework for Aligning Code to Math via Topological Decomposition
+
+- Decision: Reject
+- Scores: 6, 4, 4, 6
+
+## Abstract
+Large Language Models (LLMs) excel at both informal and formal (e.g. Lean 4) mathematical reasoning but still struggle with autoformalisation, the task of transforming informal into formal mathematical statements. Autoformalisation helps pair the informal reasoning of LLMs with formal proof assistants which enable machine-verifiable generation and mitigate hallucinations. Yet, the performance of current Math LLMs is constrained by the scarcity of large-scale corpora, particularly those containing pairs of informal and formal statements. Although current models are trained to generate code from natural language instructions, structural and syntactic differences between these and formal mathematics limit effective transfer learning. We propose TopoAlign, a framework that unlocks widely available code repositories as training resources for Math LLMs. TopoAlign decomposes code into docstrings, main functions, and dependency functions, and reassembles these components into analogues that structurally mirror formal statements. This produces structurally aligned code data that can be used for training Math LLMs without requiring additional human annotation.  We train two state-of-the-art models, DeepSeek-Math and Herald, and evaluate them on the minif2f, Putnam, and ProofNet benchmarks. TopoAlign provides substantial gains for DeepSeek-Math, improving performance by 17.77% on BEq@10 and 68.82% on typecheck@10. Despite introducing no new mathematical knowledge, our framework achieves gains of 0.12% and 1.09% for Herald on BEq@10 and typecheck@10, respectively, demonstrating that training on aligned code data is beneficial even for specialized models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes TopoAlign, a framework that decomposes code into docstrings, main functions, and dependency functions, and reassembles these components into analogues that structurally mirror formal statements. This produces structurally aligned code data that can be used for training Math LLMs without requiring additional human annotation.
+
+### Strengths
+1. The writing is clear and easy to follow
+2. The idea of drawing a structural analogy to programming code to generate alignment data is novel, solving the bottleneck in training data.
+3. The ablation study is thorough.
+
+### Weaknesses
+1. The code and data do not seem to be available, making reproduction difficult.
+2. The choice of base model seems outdated. Perhaps training on newer Qwen models might better demonstrate the effectiveness of the training data.
+3. Formal languages like Lean 4 are statically and dependently typed, making type correctness paramount. This represents a fundamental mismatch in the analogy the framework is built upon.
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+Autoformalisation from natural language to formal math (Lean 4) is bottlenecked by scarce parallel NL–FL data. This work decomposes code into (i) docstring → informal statement, (ii) main function → formal statement, and (iii) dependency functions → supporting lemmas; builds function-level dependency trees via AST/BFS; filters repositories by tree depth/breadth; augments or synthesizes docstrings via an LLM; introduces Code Autoformalisation (CAF) training mixing aligned code with formal math.
+
+### Strengths
+- Introduces a plausible structural bridge between code and formal math and operationalizes it at scale  (324.5M tokens).
+- Demonstrates consistent improvements across multiple benchmarks and two model families, with meaningful gains for a non-specialized model (DeepSeek-Math).
+- Thoughtful qualitative error analysis identifying type-related failure modes.
+
+### Weaknesses
+- no comparison to alternative structural alignments (e.g., file-level, call-graph without filtering), or to other synthetic data methods like ATLAS/student–teacher under the same budget.
+- LLM-produced summaries may encode solution intent differently from natural informal statements; details missing.
+
+### Questions
+- Any contamination checks ensuring no overlap with evaluation sets (via code comments, problem text, or Lean entities)?
+- How were the 4,000 code/math samples selected for TopoAlign runs? Random? Balanced by tree properties?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces TopoAlign, a framework that structurally aligns programming code with formal mathematical statements (e.g., in Lean 4) to address the scarcity of training data for autoformalization. By decomposing code into docstrings (informal statements), main functions (formal statements), and dependency functions (supporting lemmas), TopoAlign enables Math LLMs to learn compositional patterns from code. The authors also propose Code Autoformalisation (CAF), a training task that mimics autoformalization using aligned code. Experiments on benchmarks like MiniF2F, ProofNet, and Putnam show consistent improvements in both syntactic and semantic metrics.
+
+### Strengths
+* This paper leverages widely available code repositories as a scalable source of training data for formal mathematics, addressing a key bottleneck in autoformalization.
+
+* The author conduct comprehensive experiments across multiple benchmarks and models, with clear ablation studies and qualitative analysis.
+
+### Weaknesses
+* The author assumes that the structure of an algorithm’s implementation (code topology) directly maps onto the logical and topological structure of the underlying mathematical theory. Real-world code often includes implementation noise (e.g., I/O, logging, dynamic memory management, exception handling) that are irrelevant to the formal mathematical concept and could introduce poor alignment.
+
+
+* The alignment process heavily relies on the quality of the informal documentation (comments, docstrings, function names) within the codebase. If the code is poorly documented, the resulting informal side of the data pair will be low-quality or nonsensical.
+
+* The method is evaluated primarily on autoformalization; its applicability to other reasoning tasks (e.g., theorem proving) is not fully explored.
+
+* Improvements for HERALD are small (e.g., +1% BEq@10), suggesting diminishing returns for models already optimized for formalization.
+
+
+* The following duplicate references should be merged into a single entry:  
+Zenan Li, Yifan Wu, Zhaoyu Li, Xinming Wei, Xian Zhang, Fan Yang, and Xiaoxing Ma. Autoformalize mathematical statements by symbolic equivalence and semantic consistency. Advances in Neural Information Processing Systems, 37:53598–53625, 2024a. Zenan Li, Yifan Wu, Zhaoyu Li, Xinming Wei, Xian Zhang, Fan Yang, and Xiaoxing Ma. Autoformalize mathematical statements by symbolic equivalence and semantic consistency. In Advances in Neural Information Processing Systems (NeurIPS) 2024, 2024b. URL https: //arxiv.org/abs/2410.20936. NeurIPS 2024 conference paper; code available online.
+
+### Questions
+* How does TopoAlign perform on out-of-distribution or non-Lean formal systems (e.g., Isabelle, Coq)?
+
+* Is there any evidence that TopoAlign helps in downstream theorem proving (beyond autoformalisation)?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces TopoAlign, a framework to address data scarcity in mathematical autoformalization. It leverages code repositories by decomposing them into docstrings, main functions, and dependencies. This creates a large, structurally-aligned dataset. The authors use this for a CAF task, mixing aligned code with real math data. Experiments show this method improves generalist models (DEEPSEEK-MATH) and modestly improves specialist models (HERALD) by transferring structural and problem-solving skills from code.
+
+### Strengths
+Creatively uses abundant code repositories to solve the critical data bottleneck in formal mathematics.
+
+The structural alignment between code and formal math is intuitive and well-justified.
+
+Effectively demonstrates the method's value on DEEPSEEK-MATH, and includes a key ablation study on the optimal code-to-math data ratio.
+
+### Weaknesses
+As shown in Table 1, gains on the already specialized HERALD model are marginal, especially on MiniF2F-test, ProofNet and Putnam, suggesting the method is better for initializing models than pushing the state-of-the-art.
+
+There is a fundamental semantic gap between its code data source and the target domain of formal mathematics. The model, trained on weakly-typed Python, fails to learn critical type distinctions, such as confusing a logical integer Z with a natural number N. The paper hypothesizes this could be fixed by using strongly-typed languages like Java or C++, but this solution may be flawed. It incorrectly equates computational type systems (like Java's int, for memory safety) with logical type systems (like Lean's Z, for abstract proof). The concepts a model would learn from Java are not the same as the required mathematical concepts. This represents a deep semantic gulf between programming paradigms and logical reasoning that simply changing the source language cannot bridge.
+
+### Questions
+none
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

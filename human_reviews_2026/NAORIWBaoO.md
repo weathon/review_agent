@@ -1,0 +1,178 @@
+# Gradient-Based Program Synthesis with Neurally Interpreted Languages
+
+- Decision: Accept (Poster)
+- Scores: 6, 2, 6, 8
+
+## Abstract
+A central challenge in program induction has long been the trade-off between symbolic and neural approaches. Symbolic methods offer compositional generalisation and data efficiency, yet their scalability is constrained by formalisms such as domain-specific languages (DSLs), which are labor-intensive to create and may not transfer to new domains. In contrast, neural networks flexibly learn from data but fail to generalise systematically. We bridge this divide with the Neural Language Interpreter (NLI), an architecture that learns its own discrete, symbolic-like programming language end-to-end. NLI autonomously discovers a vocabulary of subsymbolic primitive operations and uses a novel differentiable neural executor to interpret variable-length sequences of these primitives. This allows NLI to represent programs that are not bound to a constant number of computation steps, enabling it to solve more complex problems than those seen during training. To make these discrete, compositional program structures amenable to gradient-based optimisation, we employ the Gumbel-Softmax relaxation, enabling the entire model to be trained end-to-end. Crucially, this same differentiability enables powerful test-time adaptation. At inference, NLI's program inductor provides an initial program guess. This guess is then refined via gradient descent through the neural executor, enabling efficient search for the neural program that best explains the given data. We demonstrate that NLI outperforms in-context learning, test-time training, and continuous latent program networks (LPNs) on tasks that require combinatorial generalisation and rapid adaptation to unseen tasks. Our results establish a new path toward models that combine the compositionality of discrete languages with the gradient-based search and end-to-end learning of neural networks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces the Neural Language Interpreter (NLI), a novel architecture that learns a discrete, symbolic-like programming language and a differentiable interpreter end-to-end. The model is evaluated on several compositional generalization benchmarks and demonstrates strong out-of-distribution performance, particularly when combined with gradient-based search at test time.
+
+### Strengths
+- Neuron-symbolic is an important research area
+- The model shows impressive compositional generalization results
+- Using a neural executor is a nice idea, which is similar to a world model
+
+### Weaknesses
+- Gumbel-softmax has been applied to many research areas to publish papers. However, it seems that no influential results have been produced by Gumbel-softmax. I doubt the impact of this paper, too.
+
+### Questions
+Are there any influential applications of Gumbel-softmax in any area? Could you give me some examples?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+In this work the authors advance a new program induction framework that involves the synthesis by a transformer of a series of tokens representing a program. The sequence is then put through a Gumble Softmax to enforce its discrete nature and then passed to the decoder, which is a recurrent network that processes each token in the program and evolves a particular state then produces an output. In order to ensure generalization, test time optimization is performed in order to optimize the program to match the given examples. This technique is significantly better than other similar techniques such as TTT or LPN when it comes to generalizing to programs of novel lengths or composing programs together in simple domains, and remains competitive in more realistic settings.
+
+### Strengths
+The idea of this paper is simple and clear
+
+The results in Section 5.1 are compelling, and demonstrate that in contexts where generalization is paramount, NLI performs very well, and generates programs that are interpretable.
+
+### Weaknesses
+The main weakness of this paper is the fact that NLI’s outperformance of baselines is not demonstrated in any nontrivial domain. Section 5.4 demonstrates that NLI has competitive performance in real settings, but in no setting does it's unique generalization ability as described in Section 5.1 lead to an overall improvement. Ideally, some nontrivial domain or a modification of an existing one should be identified where compositionality and generalization are key so NLI can demonstrate its better performance. (e.g., filter an existing domain’s dataset such that the training dataset contains items of length <k and the test dataset contains items of length >k)
+
+Minor:
+
+334-335: use a term other than baseline performance here, “baseline" is also what you are using to describe the techniques you compare against.
+
+### Questions
+Why average across the different input embeddings? This seems to reduce the expressivity of the model.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper considers the program-by-example program synthesis setting. It presents the Neural Language Interpreter (NLI) which is an approach that aims to combine the complimentary strengths of symbolic and neural program synthesis methods. The aim is for NLI to learn its own discrete programming language from the training data.
+
+NLI uses an Encoder-Decoder architecture, where the latent space represents a program and consists of T vectors (representing the maximum program length), where each vectors can be one of K values (representing the number of different symbols in the learned programming language). One of the K values is the “skip” command which allows for the generated program to be of varying length.
+The encoder maps example input-output pairs to a program, while the decoder sequentially executes the generated program’s commands to make a prediction on a new input.
+
+NLI makes use of the Gumbel-Softmax trick and is trained with a VAE-like objective, where the latent distribution regularization loss (referred to as the encoder loss) is designed to encourage primitives to be reused.
+
+At test time, the encoder can be used to provide an initial prediction of the target program. Afterwards, due to the differentiability of the decoder, NLI can optimize its program using gradient optimization in order to improve its prediction accuracy.
+
+The method demonstrates good program length extrapolation and good performance on novel composition tasks.
+
+### Strengths
+Getting around the limitations of symbolic methods, by learning a DSL appears to be a promising direction. The paper represents an important step towards this goal. The method appears to be novel and a creative combination of existing ideas. Apparently novel ideas include: the VAE-like architecture for program synthesis, the discrete program latent space, as well as the test-time gradient optimisation of the initially proposed program.
+
+### Weaknesses
+Presentation: There are two important details missing from the main text. First, the encoder loss is not specified in section 4, and only a high-level intuition is provided. This makes it difficult to evaluate whether this is a key part of the method and an important innovation. Second, when discussing the custom suite of benchmarks in section 5, an explanation of the basic operations is missing, making it difficult to evaluate the difficulty of the benchmarks.
+
+While the limitations are discussed, a more comprehensive analysis would be beneficial to the paper. Currently, the paper comes across as a proof-of-concept that this is a promising direction, but the lack of clearly outlined limitations, coupled with limited evaluation weakens its broad claims.
+
+### Questions
+Could ground truth program representations be incorporated into the latent space supervision? Perhaps at a later stage of training?
+
+Reconstruction loss: would it not help to also reconstruct all training pairs to make sure the program covers all examples?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces Neural Language Interpreter (NLI), a neurosymbolic technique for program induction, which is based on having a neural network predict an intermediate program and interpreting it differentiably. Notably, the intermediate program representation is learned, so the architecture isn't fixed to a particular DSL! The predicted program is then refined using a neural executor. The paper then compares NLI to several baselines, establishing its general effectiveness. In particular, the paper emphasizes the ability for compositional generalization, and boasts strong results on OOD-generalization when compared to baselines.
+
+### Strengths
+The proposed method is original, sound, and well-described. 
+
+The OOD generalization results in Table 1 are compelling.
+
+The ablation in section 5.2 solidifes the method, giving clear evidence for why it improves better than the baselines.
+
+While NLI doesn't outperform every other method on the DeepCoder benchmark, performance is convincing. 
+
+Comparisons to existing work are done well, and the authors demonstrate a good understanding of the literature.
+
+### Weaknesses
+Further explanations of the learned intermediate language and differentiable interpreter would help the paper significantly (e.g. content from Appendix D could be partially reflected earlier in the paper, like in Section 5.1.1). I'd recommend partially using the extra page for camera-ready for this, since a lot of the paper's space is already well-allocated. 
+
+Commentary/explanations of DeepCoder benchmark performance would also help. While the results support some scalability, it seems further work might need to be done before the approach scales successfully, especially to more general programs (e.g. arbitrary Python programs). 
+
+The authors self-identified limitations, e.g. parameterized functions in particular (and especially limitations like this which effect expressivity).
+
+### Questions
+The paper makes an argument that the internal representations are more flexible and effective than hand-designed DSLs. Further analysis/experimentation of this point could prove interesting. 
+
+While an intermediate symbolic program is predicted, it isn't explicitly manipulated like the approaches cited in section 6 paragraph 1 would do. Accordingly, it seems that the overall approach still leans to neural processing. Have the authors considered doing symbolic manipulations of the intermediates? Since the intermediate representation is relaxed, this may not be explicitly possible, but it still seems like this representation could be interpreted/manipulated in some way. For example the analysis in Appendix D is quite interesting, and building on this could be a promising direction for future work.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4

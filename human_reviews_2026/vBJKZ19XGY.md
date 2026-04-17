@@ -1,0 +1,204 @@
+# Multi-Head Low-Rank Attention
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6
+
+## Abstract
+Long-context inference in large language models is bottlenecked by Key--Value (KV) cache loading during the decoding stage, where the sequential nature of generation requires repeatedly transferring the KV cache from off-chip High-Bandwidth Memory (HBM) to on-chip Static Random-Access Memory (SRAM) at each step. While Multi-Head Latent Attention (MLA) significantly reduces the total KV cache size, it suffers from a sharding bottleneck during distributed decoding via Tensor Parallelism (TP). Since its single latent head cannot be partitioned, each device is forced to redundantly load the complete KV cache for every token, consuming excessive memory traffic and diminishing TP benefits like weight sharding. In this work, we propose Multi-Head Low-Rank Attention (MLRA), which enables partitionable latent states for efficient 4-way TP decoding. Extensive experiments show that MLRA achieves state-of-the-art perplexity and downstream task performance, while also delivering a 2.8$\times$ decoding speedup over MLA. Code is available at https://github.com/SongtaoLiu0823/MLRA. Pretrained weights, along with the training and evaluation data, are available at https://huggingface.co/Soughing/MLRA.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes Multi-Head Low-Rank Attention (MLRA), a novel attention mechanism that addresses the inefficiency of Multi-Head Latent Attention (MLA) under tensor parallelism (TP). MLRA decouples the KV cache into a base path (shared across devices) and a low-rank path (sharded across devices), reducing per-device KV cache memory to d_h + 3d_h/h with TP4, compared to 2d_h for MLA and 2d_h/g for GQA. The method compresses attention projections into low-rank shared subspaces while preserving model accuracy. 
+The authors use small-scale pretraining experiments to achieve state-of-the-art performance with 2.8 speedup compared with MLA.
+
+### Strengths
+The paper improves the performance of LLM inference of KV cache transfer and memory bandwidth using tensor parallelism. The MLRA architecture decomposes latent representation into base and low-rank parts, enabling effective sharding and parallelization. I like the derivations in Section 3.
+
+The authors compare MLRA with (MHA, MQA, GQA, MLA, GLA, and TPA) with LLAMA-3 models. The results show good performance. The advantage across different scale 354M -> 1.3B -> 2.9B show robustness.
+
+The paper is well organized with clear figures. The equivariance analysis is a nice.
+
+### Weaknesses
+Limited large-scale validation: Although results up to 2.9B parameters are convincing, it remains unclear whether the same gains will persist at tens-of-billions scales (e.g., LLaMA-3-70B). The authors mention this as future work but do not provide any scaling projections or memory–throughput modeling beyond the small regime.
+
+Complexity of math: Sections 3.1–3.3 are mathematically dense and may hinder accessibility. A higher-level pseudocode could improve clarity and readability.
+
+Ablation on α and rank: We wish to know α and rank would affect the final performance; ablations would help a lot.
+
+Reproducibility: The paper references public implementations (FlashMLA, SGLang), but MLRA’s own kernel is not yet open-sourced, opensource them all would help.
+
+### Questions
+What is the overall advantage of head-wise TP in MLA over different parallelisms like data parallelism or sequence parallelism?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes a new attention mechanism, MLRA, which is TP-friendly latent attention. They especially introduce low-rank attention paths that can be sharded across GPUs (distributing them across lower-cost GPUs is also possible for this). They evaluate the proposed methods in sufficiently large scales and showed good performance and quality.
+
+### Strengths
+- Paper is well-written and has good structure to explain their methods (detailed specification of dimension is quite helpful).
+- Motivation is highly clear, and proposed algorithm is quite well-aligned.
+- They compared various attention mechanisms in large scaled settings.
+
+### Weaknesses
+- What and why do you think MLRA improves the model quality fundamentally? 
+- Could you elaborate more about throughput results of GQA? Why does it have lower and lower throughput with much longer sequences (due to custom Triton kernel or only using TP?)
+- Some studies regarding the effects of different DP and TP degree would be valuable to compare these attention mechanisms. 
+- In Figure 2 experiment, why does Shard approach have higher training loss?
+- It'd be good to add explanation for GLA to Appendix as well.
+
+### Questions
+See above Weakness parts.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes Multi Head Low-Rank Attention (MLRA), a dual-path attention mechanism designed to optimize LLM inference under Tensor Parallelism (TP).
+MLRA introduces a dual-path architecture, including a base path similar to MLA, and a low-rank path that splits KV cache into smaller vectors for partition.
+Experiments on models up to 2.9B size show that MLRA achieves lowest perplexity with faster decoding speed than GQA and MLA.
+
+### Strengths
+- The problem is well-motivated since MLA's latent vector cannot be sharded across TP devices, leading to sub-optimal speed when multiple GPUs are available.
+
+- MLRA is designed with the constraints of tensor parallelism paradigms. The integration with system-level optimizations is a major strength.
+
+- Extensive experiments demonstrate MLRA‘s superior performance, achieving higher efficiency compared with SOTA attention implementations like GQA and MLA.
+
+### Weaknesses
+- Long context tasks: The optimization of KV cache becomes more important under long context scenarios. Adding some long-text tasks (like tasks from LongBench/RULER) can better demonstrate the effectiveness of MLRA.
+- Model architecture: The experiments are based on LLaMA-3 architecture. MLRA should be validated on other architectures (e.g., Qwen) to prove generality. Considering the pre-training setting, it's understandable if the author can not complete this experiment during the rebuttal period.
+
+### Questions
+- Ablation of the dual-path: I'm curious about the specific contribution of each path (e.g., disabling one path at inference time), providing deeper insights into the mechanism.
+- For MLA, existing implementations often employ simple data parallelism. The authors should discuss the comparison between MLRA and MLA in this scenario.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper tries to address the long‑context decoding bottleneck in LLMs, repeatedly loading large key–value caches from off‑chip memory by proposing Multi‑Head Low‑Rank Attention (MLRA) a dual‑path attention mechanism that works with tensor parallelism. MLRA keeps a base path that compresses the KV cache into a single latent head (maintaining model quality) and adds a low‑rank path that compresses the KV cache into h tiny latent heads that can be sharded across devices to enable TP.
+
+### Strengths
+1. The paper does a good job of outlining how different mechanisms behave when sharded (Table 1), which shows MLRA achieving 1.5 dₕ per device with 4‑way TP, below GQA’s 2 dₕ target and lower than MLA/GLA under the same conditions.
+
+2. The authors formalize translation equivariance for RoPE (§2.2–§2.3; Theorem 1), explaining why post‑RoPE projections typically break it and hence using partial RoPE so MLRA maintains a (semi) equivariance property (§3.1–§3.3).
+
+3. Efficiency: Long‑context latency and throughput are reported with realistic parameters: MLRA is 1.05–1.26× faster than GQA and ≈ 2.8× faster than MLA for 128K–2M tokens (Figure 4), and achieves the highest decoding throughput from 1K–16K tokens. This is supported by Arithmetic‑intensity analysis in Table 2 explaining why MLRA remains competitive under memory‑bound decoding.
+
+4. The paper goes over architecture/training hyperparameters (Tables 5–11), provides an initialization ablation (Table 13), and derives the decoding procedure (Eqs. 10–13), making it easier to reimplement these experiments.
+
+### Weaknesses
+1. Scale:  The paper's primary motivation is to enable efficient inference for production-scale models but the  experiments only extend to 2.9B parameters. This creates a significant gap since it's uncertain how architectural complexity introduced by the the dual-path design will scale. At 70B scale with 80 layers, it's unclear whether the base path still maintain quality advantages, or will the low-rank path dominate. The paper shows that naively sharding MLA hurts quality (Figure 2, 354M model), but this is at a very small scale, which  again, might not translate to bigger models, where the per-layer capacity is much higher. Table 3 shows MLRA's advantage over MLA shrinks from 1.3B (14.414 vs 14.355) to 2.9B (12.998 vs 13.115). This suggests diminishing returns, and more experiments are needed to confirm the same.
+
+2. Marginal gains: Perplexity (2.9B): 13.115 to 12.998 (0.9% relative improvement, within noise for many tasks). Downstream accuracy improves from 55.46% to 57.06%. On individual datasets (Table 3), MLRA wins 3/6 but differences are often <1%.
+Decoding speedup over MLA is strong (2.8×), but over GQA is modest (1.05-1.26×). The magnitude of these improvements may not justify the proposed increase in architectural complexity.
+
+3. Section 3.3 proposes running the base path on H100 and sharding the low-rank path across cheaper RTX 4090s, but does not provide any experimental validation.  The heterogeneous deployment is positioned as a key advantage, but needs more validation. The arithmetic intensity analysis (Table 2) shows the low-rank path has much lower AI (~h/p+6 vs. ~2h for base path), which suggests potential bottlenecks.
+
+4. Efficiency analysis is missing some important calculations: TP overhead is not completely accounted for. There's no measurement of all-gather/reduce-scatter communication costs. All experiments focus on decoding (Figures 4-5), but prefill is also memory-bound for long contexts and it would be helpful to compare prefill costs as well.
+
+5. Experimental methodology: MHA/MQA/GQA/MLA/GLA use N(0, 0.02) for W_O while TPA and MLRA use zero initialization. The reasoning for this difference has not been called out. The ablation (Table 13) shows large effects: MLA with zero initialization degrades 0.363 perplexity points on average, which makes makes it unclear how much of MLRA's gains come from architecture v/s initialization. There's also no indication of multiple training runs or error bars. Figure 3's training curves could be noisy single runs and it's unclear how reliable these trends are. Downstream results (Table 4) show differences of 1-2% which could be within noise
+
+6. Only 6 downstream tasks are evaluated on (Table 4), all knowledge/reasoning tasks. It would have been very helpful to also include long-context tasks (SCROLLS, ZeroSCROLLS, needle in haystack), instruction following (MT-Bench), coding (HumanEval). Since MLRA targets long-context inference, evaluation on long-context benchmarks should be essential.
+
+### Questions
+1. Are there any preliminary results at larger scales (7B, 13B, or beyond)? Even partial training runs or fine-tuning experiments would help strengthen the paper's claims.
+
+2. Is there any theoretical or empirical argument for why the dual-path design should scale favorably? For instance, does the rank r need to grow with model size, or can it remain constant?
+
+3. The improvements over MLA are consistent but modest (0.9% perplexity, 1.6% accuracy). Are the results in Tables 3-4 from single training runs or averaged over multiple seeds? If single runs, can error bars be added? Did the authors conduct significance tests? Given the small differences, are the improvements statistically significant at p<0.05? If the authors ran multiple seeds at smaller scale (354M), what was the variance? This would help assess whether 2.9B differences are meaningful.
+
+4. Section 3.3 proposes running the base path on H100 and sharding the low-rank path across RTX 4090s, but provides no experimental validation, have the authors actually implemented and tested this setup?
+
+5. Table 13 shows the paper used zero initialization for W_O in TPA and MLRA, but N(0, 0.02) for other methods, is this cherry-picked or is there a principled reason? How does MLRA perform with N(0, 0.02) initialization? The ablation shows large effects for other methods (0.3-0.5 perplexity points).
+
+6. Figure 2 shows naive sharding hurts quality, motivating the dual-path design. Did the authors explore intermediate designs? What about 2, 4, or 8 latent heads instead of h?
+
+7. The paper claims thatMLRA is TP-friendly but doesn't measure communication costs. Can the authors profile the all-gather/reduce-scatter operations? What fraction of total latency is communication vs. computation? In Figure 4, GQA uses TP=8 while MLRA uses TP=4. For fair comparison, can the paper also show GQA with TP=4 (which should reduce its communication overhead)?
+
+8. The paper motivates MLRA for long-context inference but evaluate only on standard benchmarks. Have the authors tested on long-context tasks like SCROLLS, LongBench, or needle-in-haystack up to 100K+ tokens? Figure 4 shows decoding latency up to 2M tokens. Can you provide quality metrics at these lengths? Does MLRA maintain advantages?
+
+9. All efficiency results focus on decoding (Figures 4-5). What is MLRA's prefill latency and throughput compared to baselines? Since prefill is also memory-bound for long contexts, can MLRA help there too. Are there any results to validate this?
+c) For end-to-end inference (mixed prefill + decode), what are the overall speedups in realistic scenarios (e.g., RAG with 50K context + 2K generation)?
+
+10. Throughput evals: Figure 5 shows one batch size (128) with mixed DP/TP strategies. Can the paper also provide a comprehensive evaluation varying both batch size (1, 16, 32, 64, 128, 256) and sequence length? The paper uses DP=8 for MLA vs. TP=4/DP=2 for MLRA. Is this comparison reasonable? What if MLA also used TP=4/DP=2?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

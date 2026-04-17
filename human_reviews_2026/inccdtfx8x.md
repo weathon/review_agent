@@ -1,0 +1,191 @@
+# GPG: A Simple and Strong Reinforcement Learning Baseline for Model Reasoning
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 2, 4
+
+## Abstract
+Reinforcement Learning (RL) can directly enhance the reasoning capabilities of large language models without extensive reliance on Supervised Fine-Tuning (SFT). In this work, we revisit the traditional Policy Gradient (PG) mechanism and propose a minimalist RL approach termed Group Policy Gradient (GPG). Unlike conventional methods, GPG directly optimizes the original RL objective, thus obviating the need for surrogate loss functions. By eliminating the critic and reference models, avoiding KL divergence constraints, and addressing the advantage and gradient estimation bias, our approach significantly simplifies the training process compared to Group Relative Policy Optimization (GRPO). Our approach achieves superior performance without relying on auxiliary techniques or adjustments. As illustrated in Figure 1, extensive experiments demonstrate that our method not only reduces computational costs but also consistently outperforms GRPO across various unimodal and multimodal tasks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes a minimalist reinforcement learning framework, Group Policy Gradient (GPG), which directly optimizes the original policy-gradient objective without relying on surrogate losses, reference models, or KL constraints. The method mitigates the gradient-dilution issue caused by all-correct or all-wrong samples within a group through a group-mean baseline, an unbiased scaling factor,  and a valid-sample ratio threshold. This design simplifies the RLHF training pipeline while maintaining effectiveness.
+
+### Strengths
+1. The paper proposes a minimalist reinforcement learning framework (GPG) that directly optimizes the original policy-gradient objective, removing the need for surrogate losses, reference models, and KL constraints. This design substantially simplifies the reinforcement fine-tuning process.
+2. The paper clearly derives GPG from the original policy gradient theorem. The analysis of the “reward bias” problem is thorough, and the introduction of the AGE and thresholding mechanisms provides an unbiased—but variance-controlled—implementation under the absence of surrogate losses and KL constraints.
+3. The experiments are extensive, covering both mathematical reasoning and multimodal benchmarks, demonstrating the method’s generality. GPG outperforms GRPO and other baselines on multiple datasets, and its comparison with DAPO highlights its data efficiency.
+
+### Weaknesses
+1. While the paper highlights that GPG avoids surrogate losses and KL constraints, it provides limited theoretical comparison with existing methods regarding the objective formulation, convergence properties, or stability guarantees. The current justification primarily relies on empirical evidence (e.g., the claim that “adding KL degrades performance”) without analytical support.
+
+2. The experiments are mainly conducted on mathematical and visual reasoning datasets. It would be beneficial to include broader tasks, such as general QA and code-generation datasets to demonstrate generality.
+
+3. No code or implementation link is currently provided.
+
+### Questions
+1. Could you provide additional theoretical analysis or intuitive explanation of why the proposed objective (direct policy gradient with group normalization) may accelerate convergence compared to surrogate-based methods? For instance, does removing the KL term implicitly allow for larger policy updates or better credit assignment?
+
+2. It remains unclear whether GPG maintains stability in generating longer responses (e.g., multi-step or chain-of-thought reasoning). Could you analyze performance stratified by response length or reasoning complexity to clarify whether the method remains robust compared with GRPO/DAPO in more difficult reasoning tasks?
+
+3. Is there any principled guidance on how to choose the hyperparameter?  For example, $\beta_{th}$. How sensitive is the training process or convergence speed to its value?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This submission proposes GPG, a minimalist RLHF/RFT approach that directly optimizes the original policy-gradient objective without relying on surrogate losses, critic/reference models, or KL constraints. To address gradient dilution when groups are entirely correct or entirely incorrect, the paper introduces three key components: a group-mean baseline, an accurate gradient estimation (AGE) factor $\alpha=\frac{B}{B-M}$ that rescales gradients when the effective batch shrinks, and a minimum valid-ratio threshold with accumulation/resampling. Experiments cover mathematical reasoning and several multimodal tasks, with ablations on $\alpha$, thresholding, and group size. Overall, the method is simple and practical, and it improves upon GRPO-like baselines in the reported settings.
+
+### Strengths
+1. The work gives a clear and simple alternative to GRPO-style training. It treats the "all-correct/all-wrong" group issue as a key problem and fixes it with light tools (group mean, AGE, a small threshold/accumulation rule). These parts keep the method close to plain PG while cutting engineering overhead from reference/critic/KL. 
+
+2. The paper explains why using data-dependent normalization can add reward bias and why removing it helps. It shows an unbiased estimator and an equivalent multi-device implementation via loss scaling. The AGE factor is tied to the share of valid samples; the appendix explains the distributed averaging equivalence in a direct way.
+
+3. The authors test both unimodal math tasks and several multimodal tasks (visual reasoning, geometry QA, classification, grounding), and shows consistent gains over GRPO. The ablations over $\alpha, \beta_{th}$, and group size are helpful to read. A brief comparison against adding a KL constraint is also reported.
+
+### Weaknesses
+- The design largely follows established ideas in variance reduction, importance weighting, and baseline correction. While the engineering is simple and effective, the overall contribution reads more like a practical consolidation and optimization of an existing paradigm rather than a breakthrough in theoretical framework.
+
+- The paper proves unbiasedness and shows distributed equivalence, but it does not give variance bounds, stability, or convergence guarantees. The settings of $\alpha$, $\beta_{\text{th}}$, $G$ are chosen by ablations. Adding even light bounds or citing close results and mapping assumptions would strengthen the theory.
+
+- The current evaluation focuses on math reasoning and a few multimodal tasks. Adding code-generation benchmarks (e.g., HumanEval, MBPP, APPS) and general QA benchmarks (e.g., ARC, HellaSwag, TruthfulQA) would better show generality and the case for “replacing GRPO.” Results are mostly pass@1/accuracy; please also report pass@k and multi-seed mean +(-) std to reflect stability. The simplicity advantage can be further strengthen if the authors can include computational results like runtime and VRAM usage.
+
+### Questions
+See weaknesses above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This manuscript proposes GPG, a minimal post-training algorithm for LLM reasoning. The authors argue that a minimal REINFORCE objective with group-wise mean reward as baseline can outperform other algorithms with PPO/GRPO-style surrogate objective, reference models, KL divergence constraints, or critic. They also propose a simple technique, AGE, to remove those examples with no contribution to the gradient and reduce the bias of gradient estimation.
+
+### Strengths
+* The method is simple, but the experimental results are surprisingly good. 
+* The authors conducted broad experiments across different task domains.
+
+### Weaknesses
+**Major:** 
+* There is no theoretical grounding for stability without the surrogate objectives, constraints, and critic. After reading this paper, the reviewer still cannot understand why this simple algorithm would work. The reviewer is not saying that the authors should provide some theorems and prove them, but I think it is important to provide some understanding about:
+    * What problems and challenges the previously proposed techniques are trying to deal with, and why they are needed in previous practices.
+    * Under what circumstances the simple algorithm would work, and what the failure cases are. The reviewer is not doubting the experimental results provided by the authors, but supposes that this simple algorithm will encounter failures such as divergence and mode collapse. To convince people and make a large impact on the community, the authors should be very specific about the scope of this simple algorithm.
+
+* The authors provided comparisons of RL algorithms in Table 2 and 14 to better understand their differences (which is nice), but it is not reflected in the experiments. To truly understand the discrepancies and the contributions, the authors should:
+    * Provide evaluation results of each of the algorithms mentioned in Table 2. Maybe part of them are already presented in Table 3 or 4, but the reviewer finds it hard to get a clear understanding because the evaluated algorithms are not explained. 
+    * Equally importantly, it would be better if the authors could provide ablation studies on each of the four factors mentioned in Table 2, i.e., degrading gradually from PPO to GPG. The reviewer believes this will help the readers better understand the mechanism of each factor and why this simple algorithm works.
+
+**Minor:**
+* The main experiments are provided in pass@1. The reviewer is interested in pass@3, 5, etc.
+* DAPO has already proposed to remove the KL constraints and introduced dynamic sampling, where the latter is very similar to the AGE technique proposed in this paper. The authors should either be clear that these are not novel contributions of this paper, or provide an intuitive analysis of why the removal of KL constraints and the introduction of dynamic sampling have different motivations than the previous work.
+
+### Questions
+Please refer to the weaknesses. If the authors can address them properly, the reviewer may consider raising the score accordingly.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper introduces Group Policy Gradient (GPG), a simplified reinforcement learning (RL) algorithm designed to improve reasoning in large language models (LLMs) and multimodal models. Building on policy gradient methods, GPG eliminates the need for both a critic model and reference model, while directly optimizing the original RL objective rather than a surrogate loss (see Section 2.2). The method normalizes rewards at the group level and incorporates an Accurate Gradient Estimation (AGE) correction (Equation 7) to handle bias introduced by invalid samples. Extensive experiments demonstrate that GPG achieves superior results over GRPO and PPO across multiple unimodal reasoning benchmarks (e.g., AIME24, AMC23, MATH-500) and multimodal reasoning tasks (e.g., visual reasoning, grounding, classification) — see Tables 4–8. Overall, GPG is presented as a minimalist yet strong baseline for RL-based reasoning, offering better performance with reduced computational cost (see Table 9).
+
+### Strengths
+Originality: The paper’s originality lies in revisiting classical policy gradient formulations (Section 2.1–2.2) to develop a direct optimization approach that avoids surrogate losses. Unlike PPO and GRPO, GPG fully removes the need for a critic and reference model (Table 2), and introduces a theoretically motivated correction term (AGE, Equation 7) to address gradient estimation bias. This balance between conceptual simplicity and empirical strength is a novel contribution to RL for reasoning.
+
+Quality: The experimental design is comprehensive and sound. GPG is evaluated across diverse tasks and scales, from 1.5B to 7B LLMs (Tables 3–4) and from unimodal to multimodal settings (Tables 5–8). The paper controls for fairness by using the same hyperparameters as GRPO (Section 3.1), demonstrating clear performance gains. Additionally, ablations on normalization (Fnorm) and resampling thresholds (β_th) provide insight into the method’s behavior (Section 3.4, Table 11).
+
+Clarity: The paper is clearly structured, with intuitive explanations of the GPG mechanism and its differences from existing methods (Table 2). Equations (5)–(8) and Figures 2–3 effectively illustrate the derivation and behavior of the algorithm. The visualizations on page 5 show variance reduction and adaptive correction, supporting the theoretical claims. However, the write-up, particularly the introduction, could benefit from additional polishing. Additionally, the layout of the submission should be improved (e.g., on first page there is no space after the table caption).
+
+Significance: The approach’s simplicity makes it reproducible and scalable. By removing KL constraints and critic networks, GPG significantly lowers the barrier for applying RL to reasoning tasks. The empirical results — particularly the improvements on reasoning-heavy datasets (AMC23: +22.3% over SimpleRL, Table 4) — suggest the method could serve as a new baseline for RL-based fine-tuning in both language and vision-language models.
+
+### Weaknesses
+Limited Theoretical Depth: While the paper provides a compelling intuitive justification for GPG, the theoretical analysis is shallow. The AGE correction is empirically validated but not formally proven to ensure unbiasedness under stochastic sampling.
+
+Ablation Scope: The ablation studies mainly focus on hyperparameters within GPG (e.g., group size, normalization), but lack comparisons to alternative simplifications such as ReMax or DAPO variants without dynamic batching. This makes it difficult to isolate whether improvements come primarily from AGE, normalization, or the removal of surrogate losses.
+
+Evaluation Scale: The experiments are limited to ≤7B parameter models due to compute constraints (Section 3.5). The authors acknowledge this, but it raises questions about the method’s scalability to larger models (e.g., 70B or multi-billion-parameter MLLMs).
+
+Reward Design Simplification: The authors employ binary accuracy rewards (1.0/0.0) for math reasoning (Section 2.2), which may not generalize to tasks with continuous or ambiguous reward signals. The paper could benefit from demonstrating robustness under more complex reward formulations.
+
+### Questions
+Normalization Effect: In Table 1, normalization with Fnorm = std{R(o)} improves performance. Could the authors clarify whether this acts primarily as a variance reduction mechanism or indirectly biases the gradient toward higher-reward samples?
+
+Scalability: How does GPG perform with larger-scale LLMs (e.g., >70B) where group sampling is more diverse? Are communication overheads from multi-GPU gradient aggregation (see Section A.1) significant in such settings?
+
+Reward Generality: Would GPG remain stable with dense or continuous rewards (e.g., reward models for factuality or helpfulness) instead of discrete accuracy-based rewards?
+
+Relation to PPO Variants: How does GPG compare to ReMax and Reinforce++ (Hu, 2025) in terms of both variance and convergence rate? Including such baselines would clarify its contribution to the broader RL-for-LLMs landscape.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

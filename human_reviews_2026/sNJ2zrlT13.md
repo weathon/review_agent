@@ -1,0 +1,147 @@
+# Reweighted Flow Matching via Unbalanced OT for Label-free Long-tailed Generation
+
+- Decision: Reject
+- Scores: 4, 4, 2
+
+## Abstract
+Flow matching has recently emerged as a powerful framework for continuous-time generative modeling. However, when applied to long-tailed distributions, standard flow matching suffers from majority bias, producing minority modes with low fidelity and failing to match the true class proportions. In this work, we propose Unbalanced Optimal Transport Reweighted Flow Matching (UOT-RFM), a novel framework for generative modeling under class-imbalanced (long-tailed) distributions that operates without any class label information. Our method constructs the conditional vector field using mini-batch Unbalanced Optimal Transport (UOT) and mitigates majority bias through a principled inverse reweighting strategy. The reweighting relies on a label-free majority score, defined as the density ratio between the target distribution and the UOT marginal. This score quantifies the degree of majority based on the geometric structure of the data, without requiring class labels. By incorporating this score into the training objective, UOT-RFM theoretically recovers the target distribution with first-order correction ($k=1$) and empirically improves tail-class generation through higher-order corrections ($k > 1$). Our model outperforms existing flow matching baselines on long-tailed benchmarks, while maintaining competitive performance on balanced datasets.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposed a re-weighting strategy via Unbalanced Optimal Transport (OT) for Label-free Long-tailed Generation. The main contribution of this paper is to leverage the unbalanced OT theory to quantify the degree of majority based on the geometric structure of the data, without requiring class labels. Then, this score can be used as the weight to balance the data distribution during training. The experimental results demonstrate the the proposed method can successfully alleivate the long-tailed problem.
+
+### Strengths
+1. The topic of this paper is important. The long-tailed problem exists during the training. Alleviating such a problem is essential.
+
+2. This paper connects the OT and unbalanced OT to improve the flow-matching paradigm, which is interesting. 
+
+3. The experimental results demonstrate the validity of the proposed method.
+
+### Weaknesses
+The major weakness of this paper is that the experiments are not sufficient.
+
+Concretely, 
+
+1) Lacking some related work that alleviates the long-tailed generation for diffusion [1]. Although the paradigm shifted from diffusion probabilistic models (DPMs) to FM, the ODE has changed, and FM`s FID is better than DPM. But the author can show the FID gain to further enhance their contribution.  
+
+2) Lacking the necessary experimental setting. For example, how many timesteps are used in the reverse process in this paper? The FID on CIFAR-10 is over 10, which is high. To better illustrate that the proposed method can alleviate the long-tailed problem, the author can make an ablation study about timesteps (E.g., T=50, T=100, T=200, T=500) to show the upper bound of the model. 
+
+3) Lacking the necessary ablation study for solvers. This paper used the dopri5 ODE solver, but the mainstream solver in FM is the Euler solver [2]. The author should present an ablation study to illustrate why they abandoned the mainstream solver.
+
+[1] LONG-TAILED DIFFUSION MODELS WITH ORIENTED CALIBRATION. Zhang et al. ICLR 2024.
+
+[2] Scaling Rectified Flow Transformers for High-Resolution Image Synthesis. Patrick Esser et al. ArXiv:2403.03200
+
+### Questions
+Then, I have two questions about this paper:
+
+1. How to prove that the increase in FID is from the increase in diversity after alleviating the long-tailed problem instead of from the increase in image quality in the head classifier?  The motivation for this question comes from Fig. 4 and Fig. 7, which show that the proposed method appears to increase the model's likelihood of generating a head classifier sample. Since these samples dominate the dataset, the model will tend to perform better for them. This can also lead to an increase in FID since FID measures both the diversity and quality of images.
+
+2. Does the proposed method support the CFG? Although this paper focuses on the unlabeled setting. CFG remains an important strategy that can be applied in an unlabeled setting. For example, the condition is an image too. Thus, we have to explore the influence of the proposed method on CFG.
+
+To sum up, the proposed method in this paper is interesting, combining OT and UOT into the FM. But the experiments are not sufficient to support this paper. Meanwhile, there remain some questions that will influence the feasibility of the proposed method for training large diffusion models, such as i2i diffusion (e.g., SD 3.5). Therefore, I rate it as marginally below the acceptance threshold. But would not mind if paper is accepted. If the author could clarify these concerns, I am willing to increase my score.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper is about generative AI, in particular on image generation. The paper proposed an Unbalanced Optimal Transport method aimed at circumventing the problem of data imbalance during the training process. As imbalanced data may affect the training of a generative AI and in particular, introduce bias toward the long-tailed minority class, it is a critical problem in the field. The paper tries to address this problem via an inverse weighting strategy and tests show some improved results such as lower FID.
+
+### Strengths
+Strengths include the creation of UOTRFM method to reduce bias towards the long-tailed minority class, better FID in experiments, and the fact that the method does not induce too much extra computational time (7%).
+
+### Weaknesses
+The biggest weakness is that it requires the training to start from scratch to take into account class imbalance, as the paper acknowledges at the end, this may reduce the applicability of the method in real-world. The other weaknesses include that, while the proposed method had better FID, by visual inspection, quality of the generated images is not always better than those of comparison methods, though some images given by the proposed method look cleaner and less noisy, but it seems not all the generated images are visually better than those from other methods. 
+Another weakness is the selection of appropriate k seems ad-hoc, it is unclear why for a k>10, FID goes up in Figure 6(a).
+
+### Questions
+A better elaboration of the role or meaning of correction order k will be helpful. Is k related to the order of moments of the underlying distribution of the data? 
+What is the relationship between k and tau? As displayed in Figure 6(b) and (c), it seems there are some relationships between k and tau. And according to the paragraph starting at line 465, why a larger tau, which, according to the paper, giving better match for the UOT marginal density, does not lead to a smaller FID in the plots?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+This paper introduces UOT-Reweighted Flow Matching (UOT-RFM), a framework for improving generative modeling under class imbalance without using labels. The general motivation is that standard flow matching suffers from majority bias, producing low-quality or underrepresented samples for minority modes. To address this, the authors build on Unbalanced Optimal Transport (UOT) to compute couplings between mini-batches and define a majority score, a label-free measure derived from the density ratio between the UOT target marginal and the data distribution. During training, the flow matching loss is reweighted by the inverse of this score raised to a power k, which the authors claim corrects majority bias and enhances tail generation. The paper reports improvements on long-tailed CIFAR-10-LT and CIFAR-100-LT, where UOT-RFM yields lower FID and higher recall than OT- or independent-coupling baselines. The method performs comparably on balanced datasets. While conceptually interesting, the empirical validation is limited to small-scale experiments and does not rigorously test the estimator or the theoretical assumptions that motivate the reweighting.
+
+### Strengths
+### **Strengths**
+
+- The paper identifies a concrete and relevant limitation of flow matching, namely its bias toward majority modes when trained on long-tailed data, and proposes a simple label-free correction mechanism based on reweighting.
+- The method integrates cleanly with existing flow matching pipelines and is easy to implement, which makes it accessible for future work.
+- The idea of computing a majority score through unbalanced optimal transport couplings is conceptually neat and connects geometric properties of the data with reweighting in an unsupervised way.
+- The experimental results, though small in scale, show promising trends, including improved recall and better alignment with class proportions, while maintaining reasonable computational efficiency.
+
+### Weaknesses
+### **Weaknesses**
+
+- The experimental scope seems too limited for a venue like ICLR. All evaluations are performed on CIFAR-10-LT and CIFAR-100-LT at 32×32 resolution, with proxy labels from a pretrained classifier. There is no evidence that the method scales to higher-resolution datasets or other modalities. The absence of larger-scale tests or statistical confidence intervals makes the empirical validation insufficient to justify the claims. This is my main critique of the work in its current form. 
+- Perhaps I do not understand this point well, but it seems the estimator for the majority score is not examined very well. Specifically, there is no analysis of whether it truly captures head versus tail dominance. Since this estimator underlies the central idea of the paper, its unverified behavior weakens the overall contribution.
+- The recall-precision trade-off observed in the results is not analyzed. Precision consistently drops when recall improves, but the paper does not investigate which classes are affected or whether this change is visually or statistically acceptable.
+
+### Questions
+### **Questions**
+
+-Can the authors provide empirical evidence that the majority-score estimator correlates with head and tail dominance, for example through visualization, correlation statistics, or controlled toy experiments?
+- How does the method perform on larger and more realistic datasets, such as ImageNet-LT or Places-LT, and can the authors report multiple seeds and confidence intervals for FID, precision, and recall?
+- Would using a feature-space distance rather than pixel-space distance in the UOT computation improve the majority-score quality and model performance?
+- How sensitive is the approach to the parameters? Specifically, does the over-correction regime that improves recall also consistently degrade precision, and if so, can it be balanced systematically?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

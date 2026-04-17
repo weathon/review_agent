@@ -1,0 +1,142 @@
+# TokenTune: Dual-Level Utility Estimation for Scalable Data Selection in Instruction Tuning
+
+- Decision: Reject
+- Scores: 6, 4, 2
+
+## Abstract
+Recent studies indicate that data quality is more important than quantity for fine-tuning of large language models (LLMs). However, existing data selection methods face two key limitations. First, they lack an effective utility estimation function: sample-level utility computes the score for entire examples but ignores which tokens are actually useful, while token-level methods drop tokens with multiple valid answers and thus remove valuable learning signals. Second, these methods are inefficient because they require full-dataset inference to compute utilities, making them prohibitively expensive at scale. To address these challenges, we propose ToneTune, an efficient data selection framework for instruction tuning. The key idea of TokenTune is a dual-level utility function that operates at both the token and sample levels. At the token level, it identifies learnable tokens that still provide strong gradient signals and multi-answer tokens that preserve diversity under incomplete supervision. At the sample level, it derives a utility score directly from token signals, avoiding redundant full-dataset inference. To further scale, TokenTune employs a two-stage design. In the selection stage, a multi-armed bandit adaptively prioritizes informative clusters, from which high-utility samples are chosen using the sample-level score. In the training stage, the token-level utility guides gated optimization: learnable tokens strengthen supervision, while multi-answer tokens preserve diversity. Extensive experiments across 7 benchmarks show that TokenTune significantly outperforms state-of-the-art methods, improving average performance by +3.8% while using only 5% of the full training data and reducing overall training time by 8-10×.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses efficient data selection for instruction-tuning LLMs. The authors observe that existing selection methods either score at the sample level and ignore which tokens within each example are actually useful, or compute token-level utility but require full-dataset inference, which is too expensive at scale. To overcome this, they propose TokenTune, a framework using a dual-level utility score operating both at the token and sample levels: at the token level they identify “learnable tokens” and “multi-answer tokens” that still carry strong gradient signals and ensure diversity; at the sample level they derive a utility score from aggregated token signals, avoiding full-dataset inference. They also design a two-stage selection pipeline: clustering/information-prioritization followed by sample-level selection.
+
+### Strengths
+Introduces a thoughtful dual-level scoring concept, recognizing the importance of token-level signals in data utility.
+
+The method addresses a real practical challenge: full-dataset scoring is expensive, so they pragmatically avoid it via aggregated token signals.
+
+Demonstrates meaningful empirical gains (e.g., +3.8% on average using ~5% data) which is impressive in the instruction-tuning context.
+
+The presentation is clear and the pipeline appears implementable for practitioners.
+
+### Weaknesses
+Token-level scoring may introduce selection bias: by focusing on “learnable tokens” and “multi-answer tokens”, rare but valuable tokens or edge cases might be under-selected. The paper currently provides limited analysis of diversity/coverage of selected subset.
+
+Some hyperparameter choices (thresholds for token utility, clustering size, budget ratio) are not fully justified or ablated, which may impact reproducibility.
+
+While selection uses ~5% of data, it remains unclear how this scales with pool sizes much larger than used in the experiments (e.g., millions of examples) and whether the method maintains its advantage.
+
+### Questions
+Could you provide a detailed breakdown of compute cost: (a) token-level scoring time, (b) clustering/selection time, (c) fine-tuning time for selected subset vs full dataset? 
+
+How robust is the token-level utility scoring to different model architectures or sizes? If the downstream fine-tune target model is much larger (or a different family) than the one used to estimate token signals, does performance degrade?
+
+Have you analysed the selected subset in terms of diversity: e.g., task types, token vocabulary coverage, rare vs common tokens, difficulty levels? Could there be bias in selecting only “easy/high-gradient” tokens?
+
+What is the sensitivity of results to budget ratio? If they selected 10% vs 2.5% vs 1% of the data, how does performance scale?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper presents TokenTune, a method to select informative data samples and prune out uninformative tokens from those selected data samples. Their solution is a hierarchical pruning method that selects samples and tokens based on the learning gain (the amount of information to learn from it, measured by the loss between the current and reference models) and the answer uncertainty (the ambiguity of a token which could lead the model to different answers, measured by an evidential Dirichlet distribution over the logits) -- both of which are metrics that they propose. They use a multi-armed bandit to select data: the data is clustered, the bandit learns to select a cluster based on a cluster score, and then samples are selected based on the token-level utility and the sample-level utility. Their experiments show that TokenTune is model agnostic, efficient, and effective.
+
+### Strengths
+- The problem is interesting
+- The dual nature of the solution is creative
+- The experimentation covers many datasets and baselines.
+- The takeaways are well organized
+
+### Weaknesses
+- No error bars reported in the tables
+- The LLMs chosen are all the same size, not sure how the performance would vary with smaller and larger models
+- I might be missing something but I could not find the experimentation details for the MAB (hyperparameters)
+
+### Questions
+1. Is there any literature that supports the definition of Answer Uncertainty (equation 2). Why does the digamma function help measure the ambiguity of tokens?
+2. I might be mistaken, but if you prune out unimportant tokens for fine-tuning, does that effect the ability of the LLM to generate grammatically correct English? Does your current evaluation reflect that?
+3. Could you elaborate on the influence score $I_i(t)$? What does it mean, how is it defined, and how is it initialized?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a data selection methods for LLM fine-tuning that considers both sample-level and token-level utility functions. It first scores tokens with two metrics named "Learning Gain" and "Answer Uncertainty," derives sample utilities from these signals, schedules selection with a multi-armed bandit over clusters, and then applies token-aware training (with cross-entropy loss for learnable tokens and a self-distillation loss for ambiguous tokens). The proposed method is evaluated over two base models (Llama3.1-8B and Qwen2-7B) on several benchmarks.
+
+### Strengths
+- The motivation that data selection should consider both sample-level and token-level utilities makes sense.
+- The authors conducted extensive experiments for evaluating the proposed method.
+- The empirical results demonstrate a good trade-off between efficiency and efficacy.
+
+### Weaknesses
+- The method introduces multiple components: two token-level utilities (Learning Gain and Answer Uncertainty), a sample-level utility constructed from token signals, clustering with a bandit scheduler, and token-aware training with self-distillation. However, **the paper does not sufficiently justify why these choices are preferable to alternatives**. Additionally, the large number of components also introduce many hyperparameters. It is unclear how these hyperparameters are selected. And how sensitive is the method with respect to all the hyperparameters.
+  + *Token-level utilities.* Please articulate selection principles (e.g., “estimate marginal performance improvement per token under a compute budget”) and show that LG and AU are faithful estimators of those principles. Why these two and not, for example, entropy/MI/gradient-norm/curvature/variance-of-loss across augmentations or checkpoints? A small ablation replacing AU with entropy or temperature-scaled entropy, and replacing LG with gradient-norm or loss delta under adversarial/noisy perturbations, would clarify uniqueness.
+  + *Sample-level utility.* The current definition reads ad hoc. Give a semantic interpretation (e.g., “expected marginal improvement per token budget”) and explain why the chosen normalization is appropriate.
+  + *Clustering + bandit.* Specify how you embed and cluster data (embedding source, distance metric, k, preprocessing), and why UCB over clusters (vs. e.g., Thompson sampling). Provide a sensitivity analysis on k, UCB parameters, and update cadence.
+  + *Self-distillation loss.* Please explain why self-distillation loss is used for the "ambiguous" tokens.
+  + *Hyperparameters.* The paper should (i) list all hyperparameters in one table with default values and search ranges; (ii) state the selection protocol (validation objective, budget, and compute); and (iii) report robustness via one-factor-at-a-time curves.
+- The mathematical notations are broken here and there. For example, what is $t_{i,j}$ and $l_t$ in Eq (1)? In Def 2, the logits should be written as a function of $t_{i,j}$. The switch from LG to $\Delta l_{i,j}$ should be explicitly defined. What is $\Delta l_{4i, j}$ in Eq (2)? The letter $t$ is overridden for different things.
+
+Overall, the paper currently reads as a collection of plausible components without a sufficiently principled thread tying the choices together. The writing needs significantly improved to convincingly articulate the design choices of the proposed method.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2

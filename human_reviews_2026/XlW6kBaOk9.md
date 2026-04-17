@@ -1,0 +1,210 @@
+# Just-in-time and distributed task representations in language models
+
+- Decision: Reject
+- Scores: 2, 4, 2, 8
+
+## Abstract
+Many of language models' impressive capabilities originate from their in-context learning: based on instructions or examples, they can infer and perform new tasks without weight updates. In this work, we investigate *when* representations for new tasks are formed in language models, and *how* these representations change over the course of context. We study two different task representations: those that are ''transferrable''---vector representations that can transfer task contexts to another model instance, even without the full prompt---and simpler representations of high-level task categories. We show that transferrable task representations evolve in non-monotonic and sporadic ways, while task identity representations persist throughout the context. Specifically, transferrable task representations exhibit a two-fold locality. They successfully condense evidence when more examples are provided in the context. But this evidence accrual process exhibits strong *temporal* locality along the sequence dimension, coming online only at certain tokens---despite task identity being reliably decodable throughout the context. In some cases, transferrable task representations also show *semantic* locality, capturing a small task ''scope'' such as an independent subtask. Language models thus represent new tasks on the fly through both an inert, sustained sensitivity to the task and an active, just-in-time representation to support inference.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper investigates the temporal dynamics of transferrable task representations in in-context learning by extracting "task vectors" from few-shot prompts and evaluating their ability to restore task performance in zero-shot settings. The authors claim to discover that transferrable representations activate sporadically at specific tokens (primarily the colon in `Q:A` format) despite task identity being continuously decodable, and that these representations exhibit temporal and scope locality.
+
+### Strengths
+- Comprehensive experimental design spanning 30 tasks across multiple and recent model families (Gemma V3, Qwen3) and sizes
+- Clear distinction between task identity decodability and transferrable task representations, operationalized through different experimental protocols
+- Extensive ablations examining task vectors across different numbers of examples ($k$-shot) and different token positions
+- Honest acknowledgment of methodological limitations in the discussion section
+- Well-designed progression from simple to longer-generation and mixed-generation tasks to probe scope limitations
+
+### Weaknesses
+**Lack of novelty beyond prior work:** The paper's central methodology—extracting task vectors from the last token position before answer generation—directly replicates Hendel et al. [1]. The finding that this extraction works at the colon token in `Q:A` format is unsurprising given that Hendel et al. demonstrated the same for separator tokens ($\rightarrow$), and Todd et al. [2] further established attention heads as carriers of task information. The "sporadic activation" finding reduces to confirming that task vectors work at positions already identified in prior work and fail elsewhere, which is not a novel insight about representation dynamics.
+
+---
+**Overstated claims about "just-in-time" dynamics:** The claim that representations form in a "just-in-time" manner is misleading in my opnion. The paper only probes 4-5 format tokens (`Q`, `:`, `A`, `\n`) rather than systematically examining all token positions throughout the sequence. This sparse sampling cannot support strong claims about temporal dynamics. The paper presents the observation that only the colon token yields transferrable representations as evidence of sporadic activation, but this simply confirms the extraction position from prior work [1-2] rather than revealing dynamic formation processes.
+
+---
+
+**Evidence accrual is trivial:** The finding that task vectors extracted from higher-shot prompts transfer better (Figure 3A) is nearly repetitive--models perform better with more examples, so naturally extracted representations reflect this improvement. This doesn't constitute a novel insight into representation dynamics. The paper doesn't explain why 2 of 14 tasks (COUNT_COLOR_IN_3, COUNT_FRUIT_IN_3) don't show evidence accrual despite behavioral improvement, leaving the generality of findings unclear.
+
+---
+
+**Scope locality cofounded by method:** The decay of recontextualized performance over longer generation (Figure 5) is acknowledged by the authors (page 9) to potentially result from activation patching destroying earlier task state information. Alternative methods using additive injection [2] might not show this decay. Yet this limitation is relegated to a brief discussion rather than being prominently addressed as a methodological confound. The finding is presented as an insight about task representation when it may primarily reflect intervention method limitations.
+
+---
+
+**Missing critical related work:** The paper misses citation of Saglam et al. [3] which proposes _Learnable Task Vectors_ computed as weighted sums of attention heads with layer-specific, causally optimized parameters. This work can be seen the extension of Todd et al., and the omission is problematic given the conceptual overlap.
+
+---
+
+**No discussion of use cases or applications:** The paper provides no discussion of how their findings about representation dynamics could be applied practically. What are the implications, e.g., for prompt engineering, model steering, interpretability, or ICL improvement? Without connecting the observations to actionable insights or applications, the work remains a descriptive study with limited practical utility. 
+
+---
+**References**
+
+[1] Hendel et al. _In-context learning creates task vectors._ In Findings of the Association for Computational Linguistics: EMNLP 2023.     
+
+[2] Todd et al. _Function vectors in large language models._ In ICLR 2024.    
+
+[3] Saglam et al. _Learning task representations from in-context learning._ In Findings of the Association for Computational Linguistics: ACL 2025.
+
+### Questions
+Could the authors clarify how their findings extend beyond prior work establishing that task vectors are optimally extracted from separator tokens  [1-2]? Specifically, what novel insights about ICL mechanisms emerge from observing that the colon token works while other format tokens do not, given that prior work already identified separator tokens as the key extraction point?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies transferable task representations in LLMs—vector representations that can restore task context in another forward pass of the same model. Using Gemma-V3 and Qwen3 families and multiple ICL datasets, the authors extract task vectors, run patching (recontextualization) experiments, and compare against few-shot accuracy. They conclude that transferable task representations exhibit strong locality—appearing sparsely at output tokens—whereas task-identity representations are distributed across many tokens. Long-context generation and combinatorial settings further suggest scope-related locality, where recontextualization restores only subtasks. Overall, the work characterizes where task-relevant information resides and when it transfers in LLMs.
+
+### Strengths
+1. The paper clearly distinguishes two representation types: an inert task-identity signal that persists across the context versus a transferable signal that activates sporadically at key tokens.
+
+2. The long-context and combinatorial experiments are interesting: recontextualization underperforms few-shot learning in these settings, sharpening the boundary between recognizing a task and transferring it across positions.
+
+### Weaknesses
+1. Terminology and exposition. Several terms are under-defined (e.g., “temporal,” “scope”), and “recontextualization experiments” is non-standard. Adopting established phrasing such as patching experiments would improve clarity and align with prior work.
+
+2. Novelty relative to prior art. Key observations—(i) that effective task vectors are distributed across multiple tokens have been suggested before (Dong et al.) Please spell out the precise differences and contributions relative to these works.
+
+3. Potentially misleading claim in §3.3. The statement that restored task contexts “support longer generation to some extent … suggesting automatic segmentation into multiple tokens” seems overstated.
+
+4. In Fig. 5, some tasks (e.g., antonym×3, reverse×3 in panel A) show nearly uniform performance under recontextualization.
+There is no direct evidence that mixed-generation tasks are decomposed into multiple distinct token-level representations. Stronger analyses (e.g., multi-site patching or ablations across heads/layers) would be needed to support this claim.
+
+### Questions
+I would increase my score if either (1) or (2) is convincingly addressed—and especially if you demonstrate a more advanced task-vector patching setup (e.g., multi-vector and multi-head/site).
+
+1. Alternative extraction methods :  Can you compare against task-vector extraction methods beyond Hendel et al.? Prior work reports that a single task vector can be insufficient and proposes multi-vector approaches (Tikhonov et al.).
+
+2. Multi-head / multi-site patching :  Some results indicate that single-head, single-site patching is not enough and that aggregating across heads/layers improves recontextualization (Dong et al.). Can you run—or at least discuss—multi-head / multi-site patching?
+
+3. Model class generality : Do these findings (e.g., sparse transferability) extend beyond Transformers to non-Transformer LMs such as RNNs?
+
+References : 
+1. Hendel et al., "In-Context Learning Creates Task Vectors"
+2. Tikhonov et al., “One Task Vector is not Enough: A Large-Scale Study for In-Context Learning.”
+3. Dong et al., “Understanding Task Vectors in In-Context Learning: Emergence, Functionality, and Limitations.”
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper investigate how the task vectors in ICL change across context. On one hand, the task information is represented and can be decoded in many tokens after the first few tokens, showing a continuous pattern along the sequence dimension. On the other hand, when the representions are transferred onto a zeroshot promt to recontextualize and elicit performaing the task, only a few key tokens’ representation can successfully achieve this, showing a sporadic pattern. The paper has done comprehensive experiments to demonstrate this phenomenon and refers this as just-in-time computation. Moreover, the authors also explore transferrability on ICL tasks where the model needs to generate multiple words. They find mixed tasks tend to be represented separately instead of as a combined task.
+
+### Strengths
+- The paper is well written and the presentation is clear.
+- The paper studies longer generation tasks, where there are multiple output words. This is not well-studied by previous research.
+- The experiments are comprehensive and the details are handled very well, which makes the results reliable.
+
+### Weaknesses
+The paper is mainly about observing an interesting phenomenon, however, I find this phenomenon (mainly for temporal locality) seem to be explained by recent works on circuit analysis for ICL:  https://arxiv.org/abs/2410.04468 and  https://arxiv.org/abs/2504.00132 . These works provide deeper understanding about underlying mechanisms behind ICL, and based on their findings, the sequence dimension locality phenomenon emphasized by this paper is somewhat expected. 
+
+This paper finds that the task is represented in most tokens throughout the context (after the first few tokens), but only the representations on key tokens (the colon tokens) are transferrable. Transferrable means, when patched onto the zeroshot prompt the model can predict the correct answer.  For non-key tokens, e.g., “A”, the non-transferrability is demonstrated by both (1) patching representation corresponding to“A” (given enough context) to the same layer’s representation corresponding to last colon token of a zeroshot prompt and (2) patching from “A” (given enough context) to the same token “A” in zeroshot prompt. The authors find in both cases the patching does not work, the accuracy is almost zero. This can be explained in terms of the underlying mechanism of ICL. For (1), the given context asks the model to predict colon after “A”, so when patched to the last position the model would follow this context. Because the whole residual stream is patched, not only the task information is transferred, but also template information. If patching in very early layers, both information is missing and the model still cannot do the job. For (2), the last token is colon, so the model would look for occurrences of colon in previous context to aggregate task information. After patching, the task information is only on token “A”, so it is not used or moved to the last position (the colon). See the findings in the mentioned papers. Therefore, the non-transferrability probably results from patching without knowing the model’s circuit.
+
+Given the huge volume of papers these days, it is understandable that the authors do not know some of them. I also understand this can be disappointing. It would be interesting to see some further experiments though. For example, can we identity a task information subspace and only do patching on this subspace to avoid carrying other undesirable information? More specifically, the representation of “A” combines task information, the current token “A”, the information that requests model to follow the template and predict colon. Can we only patch the task information to the last colon of the zeroshot promt? It would be insteresting to identify such subspaces which are not well-studied by previous research.
+
+### Questions
+- Question:
+   - In Figure 5b, on the right, the recontextualization accuracy for output units after the immediate one is almost zero, but why is the accuracy for recontextualization on the left is non-zero? Does that mean the accuracy on the left is computed by averaging the accuracy for each output unit instead of considering each prediction as correct only when it’s correct on all output unit?
+
+- Suggestions:
+   - See last paragraph of weaknesses
+   - Maybe can try expand the circuit analysis to multi-output setting, which will probably show different mechanisms for the two types of multi-output tasks, longer- and mixed-generation tasks.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper investigates how and when large language models (LLMs) form task representations during in-context learning (ICL). The authors focus on “transferrable” task representations—vector representations that can reconstruct task contexts in another model instance even without the full prompt. Through representational and transfer analyses, the study reveals that such representations evolve non-monotonically and sporadically across the input sequence, differing from more stable, high-level task category representations that persist throughout the context. The results show that as more examples are added, the transferrable representations effectively condense task evidence, correlating with improved ICL performance. However, this evidence accumulation process is highly localized—appearing only at specific tokens—indicating that models compute task-specific representations “just in time.” Additionally, these localized representations often correspond to minimal semantic subtasks, while more complex or composite tasks rely on temporally distributed representations. Overall, the paper provides a detailed characterization of the temporal and semantic locality of task representations in LLMs, offering new insights into the mechanisms underlying in-context learning.
+
+### Strengths
+1.	The paper provides a detailed and original analysis of when and how task representations emerge and evolve during in-context learning, revealing non-monotonic and sporadic development patterns that have not been systematically studied before.
+
+2.	The identification of transferrable representations—those that can restore task contexts across model instances—is a notable conceptual contribution that advances understanding of task encoding in LLMs.
+
+3.	The paper is overall well-written.
+
+### Weaknesses
+1.	I don’t see any obvious weakness of this paper.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

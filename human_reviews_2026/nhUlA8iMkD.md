@@ -1,0 +1,233 @@
+# Don't Overthink it. Preferring Shorter Thinking Chains for Improved LLM Reasoning
+
+- Decision: Reject
+- Scores: 2, 4, 4, 8, 4
+
+## Abstract
+Reasoning large language models (LLMs) heavily rely on scaling test-time compute to perform complex reasoning tasks by generating extensive "thinking" chains. While demonstrating impressive results, this approach incurs significant computational costs and inference time. In this work, we challenge the assumption that long thinking chains results in better reasoning capabilities. We first demonstrate that shorter reasoning chains within individual questions are significantly more likely to yield correct answers---up to $34.5$% more accurate than the longest chain sampled for the same question. 
+Based on these results, we suggest _short-m@k_, a novel reasoning LLM inference method. Our method executes $k$ independent generations in parallel and halts computation once the first $m$ thinking processes are done. The final answer is chosen using majority voting among these $m$ chains. 
+Basic _short-1@k_ demonstrates similar or even superior performance over standard majority voting in low-compute settings---using up to $40$% fewer thinking tokens. 
+_short-3@k_, while slightly less efficient than _short-1@k_, consistently surpasses majority voting across all compute budgets, while still being substantially faster~(up to $33$% wall time reduction). 
+Inspired by our results, we finetune an LLM using short, long, and randomly selected reasoning chains. We then observe that training on the shorter ones leads to better performance. Our findings suggest rethinking current methods of test-time compute in reasoning LLMs, emphasizing that longer "thinking" does not necessarily translate to improved performance and can, counter-intuitively, lead to degraded results.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper challenges the prevailing assumption that longer "thinking chains" and increased test-time compute lead to better LLM reasoning. The authors' central claim is that for a given question, shorter reasoning chains are significantly more likely to yield a correct answer.
+
+Based on this observation, the paper proposes short-m@k, an efficient inference method. This method executes k independent generations in parallel but halts all computation as soon as the first m (fastest) thinking processes are complete. The final answer is then determined by a majority vote among these m short chains.
+
+Through extensive experiments on four models and four reasoning benchmarks, the authors show that short-m@k (particularly short-3@k) consistently outperforms the standard majority@k baseline, achieving higher accuracy while also being substantially faster. The paper also provides an analysis of backtracking behavior and demonstrates that finetuning an LLM on a dataset of short reasoning trajectories (S1-short) improves performance and efficiency over training on long or random trajectories.
+
+### Strengths
+1. **Practical and Efficient Method:** The short-m@k method is simple to implement, practical, and highly effective. The results showing that short-3@k *simultaneously* improves accuracy and reduces wall-time (up to 33%) over the standard majority@k baseline are significant for practitioners.
+2. **Multi-faceted Analysis:** The paper doesn't just present a method; it also provides a multi-dimensional analysis of why it works, including sample size (k), thinking compute (Fig 3), and wall time (Fig 4) is excellent.
+
+### Weaknesses
+The primary weakness of this paper is the significant lack of novelty. Many of the core findings, while presented as new, closely overlap with recently published work. The paper would be substantially stronger if it properly acknowledged this context and framed its contribution as an extensive validation and practical application of these emerging ideas, rather than as a set of de novo discoveries.
+
+1. **Core finding (shorter is better):** The observation that shorter reasoning chains are more likely to be correct has been independently identified and discussed in prior work, such as [1] and in public discussions around methods like Laconic decoding [3].
+2. **The short-m@k method:** This method is presented as a novel contribution. However, short-1@k is functionally equivalent to the "shortest@n" strategy (or Laconic decoding [3]). The short-m@k generalization with an early-exit mechanism is a straightforward and efficient engineering optimization, but not a fundamental  innovation.
+3. **Difficulty Analysis:** The finding in Section 5.1 (that harder questions require more thinking, but shorter answers are still preferred within any difficulty bracket) is almost identical to the analysis presented in Figures 3 & 4 of  [1].
+4. **Backtrack Analysis:** The analysis in Section 5.2, which finds that correct paths have fewer backtracks, strongly mirrors the concept of "thought-switching" and "under-thinking" from  [1]. Both papers essentially find that incorrect (longer) paths get lost in inefficient, shallow exploration, whereas correct (shorter) paths are more direct and focused.
+5. **Finetuning Analysis:** The idea of training models on shorter/preferred trajectories (Section 6) is also not new.  [2] already explored this concept, albeit using DPO instead of SFT. The core principle of preferring shorter, more efficient reasoning paths during training is the same.
+6. **Oversimplified Conclusion on Training:** The conclusion that "training on shorter reasoning sequences can lead to better reasoning models" (Section 6) needs to be nuanced. This has a trivial counterexample: training on the absolute shortest sequences (e.g., length 0, direct answers) would cause performance to collapse. The paper does not adequately discuss this trade-off or the risk of  preferring shorter chains.
+
+**References:**
+
+[1] Wang, Yue, et al. "Thoughts are all over the place: On the underthinking of o1-like llms." NeurIPS 2025.
+
+[2] Chen, Xingyu, et al. "Do not think that much for 2+ 3=? on the overthinking of o1-like llms." ICML 2025.
+
+[3] Dimakis, Alex. (2025, Feb 2). X Post. https://x.com/AlexGDimakis/status/1885447830120362099
+
+### Questions
+My main questions are for clarification on the finetuning experiment in Table 4:
+
+1. **Data Creation:** How were the S1-short/long/random datasets created? The paper states 10 responses were generated per example. Was this simple generation, or was rejection sampling used to ensure the final answer in the trajectory was correct?
+2. **Truncation:** What was the maximum generation length used during training and evaluation? Were any samples truncated during training or inference? If so, what was the truncation ratio?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies the benefit of shorter reasoning chains for LLMs. This contradicts the tendency in some recent papers to extend the reasoning chain to achieve better results.
+The first experiment compares chains of different lenths for the same question. Across different (large) models, shorter chains correlate with higher accuracy (picking the shortest chain is better than average and than the longest chain). Based on this observation, the authors propose a simple method to exploit these trends: run k chains in parallel, and once the first m are done, terminate and use majority over those first m. For m=1 and 3, this leads to good results especially with smaller k. With larger k, majority vote sometimes becomes better. The last part is a further evaluation of the short chains. They find that harder questions do need longer chains than simpler questions, in general. Another experiment looks at the frequency and length of backtracking, and finds a correlation between performance and fewer number of backtracks as well as longer backtracks. Finally, they show that finetuning a model on shorter trajectories leads to better outcomes.
+
+### Strengths
+- the observation that for a single question, shorter chains are better, is interesting. At least in part this seems to stem from fewer backtracks. The observation about training on shorter trajectories I interesting and makes sense, too.
+
+- the proposed method is simple and seems to perform well.
+
+- experiments are performed with very large models.
+
+### Weaknesses
+- given that other concurrent and prior works have explored the relation between chain length and accuracy, I am wondering what exact insights of this paper go beyond prior / concurrent work. Probably the proposed selection method. Which of the other insights?
+
+- There are a few questions I still have (see below). Based on the answers to those and the above one I am willing to reconsider my score.
+
+### Questions
+- Sec. 4.3: How were the plots in Fig. 3 generated? Were the models terminated after the specific compute budget? If yes, did you terminate all parallel chains or did you run them in sequence and just didn't do the last ones if budget was over? Or how did you get majority results for a specific budget?
+
+- Sec 5.1: I did not fully understand the setup here. How exactly did you split the questions. By accuracy of one specific model? Or per model? Or average? 
+
+- The shorter chain observation is interesting. The experiments are done with fairly large models, I wonder whether the observations also have to do with model size, i.e., the stronger models can do with shorter chains?
+
+- This is what I was also wondering about Section 6. The teacher and student model are fairly similar (same size). Would the short trajectories of the 32B model also work well for architecturally different models?
+
+- sometimes, the 1@k performance goes down as k grows. Does this mean the model generates more wrong short sequences? This seems to happen more for R1-670B and the QwQ-32B model. Does this have something to do with certain properties of the model?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper studies a counter-intuitive claim: within a single question, shorter thinking chains are more likely to be correct than longer ones. Based on this observation, the authors propose short-m@k, an early-termination inference scheme that stops generation once the first m reasoning trajectories finish. Experiments are fairly comprehensive and indicate that short-m@k yields efficiency benefits while preserving or sometimes improving accuracy.
+
+### Strengths
+- The proposed short-m@k inference scheme sounds like a pragmatic knob to trade inference time for accuracy, and the compute/time reduction angle is appealing.
+- The empirical evaluation is broad: multiple reasoning LLMs, multiple math datasets, compute/time/accuracy slicing.
+
+### Weaknesses
+**W1. Prior work draws almost the opposite conclusion.** For example,  [1] explicitly encourages longer trajectories and then uses self-consistency voting over longer chains. This paper reports the opposite monotonic trend. The authors do not directly reconcile this contradiction. Clarifying this contradiction is necessary before readers can interpret the result as a generally valid principle.
+
+**W2. The novelty is unclear.** The related work section itself (line ~141 *More relevant to our work…*) already cites multiple recent works that are extremely close in core conclusion. Several of these already suggest “shorter is often better”. I am not convinced what new conceptual contribution this paper adds beyond bundling those observations and re-running them under a unified evaluation protocol. The paper needs a much sharper novelty claim and direct head-to-head comparison to the most similar baselines.
+
+[1] “Chain-of-Thought Reasoning Without Prompting”, NeurIPS 2024, Wang et al.
+
+### Questions
+see weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper challenges the view that longer reasoning chains improve LLM performance, which is a widely held assumption in reasoning LLM research. The authors analyze multiple reasoning benchmarks using leading models and find that shorter reasoning trajectories are significantly more likely to yield correct answers. Based on these findings, they propose short-m@k, an inference method that executes k parallel generations and halts once the first m finish, selecting answers by majority vote. Experiments show that short-1@k matches or exceeds majority voting while reducing compute by up to 40%, and short-3@k improves accuracy. Finetuning on shorter reasoning chains further improves performance and efficiency.
+
+### Strengths
+* The study focuses on an important topic in reasoning LLMs by challenging that longer chains enhance reasoning.
+* The proposed short-m@k framework introduces an elegant parallel decoding mechanism. This approach is well-motivated by the authors’ empirical findings and leads to measurable compute and time savings.
+* The authors validate across four major reasoning models and multiple benchmarks, combining performance, compute, and wall-time analyses. Additional fine-tuning experiments support the generality of their claims.
+
+### Weaknesses
+* The paper primarily provides empirical evidence without formal analysis of why shorter chains outperform longer ones. Also see questions.
+* The proposed method assumes access to batch inference resources; its effectiveness under memory-constrained or latency-constrained conditions remains unclear. Evaluation in sequential or streaming inference settings could provide further robustness evidence.
+
+### Questions
+* Several previous works claim that a medium CoT length would achieve the best performance [1], instead of the shortest one as stated in the paper. The authors may conduct more experiments using some smaller models or easier datasets to determine whether the phenomenon only exists in complex tasks or large models.
+* How sensitive is short-m@k to the choice of m and k across different task complexities? Would dynamic selection during inference outperform static hyperparameters?
+* Does fine-tuning on short reasoning chains risk reducing a model’s capacity to handle genuinely long reasoning problems (such as tasks that require long-context modeling)? Are there observable trade-offs in general reasoning robustness?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a simple method short-m@k to select relatively short reasoning chains from LLM generations, and show that even with short-1 and short-3, the accuracies can surpass those from majority@k. The authors have also fine-tuned an LLM using the reasoning chains of different lengths, and it turned out that the short data (S1-short) leads to the best performance.
+
+### Strengths
+-	The experiments are based on the most difficult challenging task set, such as AIME 2025, HMMT etc., which represents the frontier of LLM reasoning performances.
+-	It seems easy to implement the proposed methods and to replicate the experiments on other models. 
+-	The topic is a core issue faced by most reasoning LLMs.
+
+### Weaknesses
+-	In general, the findings of this paper are a bit empirical, which lacks theoretical insights, or interpretations from case-by-case analysis, about *why* shorter reasoning trajectories are more beneficial than longer ones. Also, questions like *how much longer* the thinking process should be for harder tasks can be asked.
+-	The S1 data seems very an important one to validate the results, but its nature and how it is constructed seems not introduced as all. I understood that this is from other folks’ work, but giving more context to your method would really encourage readers outside the field. (I did not realize the existence of works like S1 until its recent publication, and TBH, it is not realistic for all reviewers to carefully track down the origins of any cited dataset through bibliography)
+-	As the authors have pointed out, the fine-tuning experiments are limited to only one model on one task.
+
+### Questions
+Can the authors provide more details about the “batch decoding” mentioned at line 650, as it seems particularly important to your implementation? Thanks.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

@@ -1,0 +1,205 @@
+# Trajectory Graph Copilot: Pre-Action Error Diagnosis in LLM Agents
+
+- Decision: Reject
+- Scores: 4, 6, 4, 6
+
+## Abstract
+Large language model(LLM)-based agents have demonstrated exceptional performance across a wide range of complex interactive tasks. 
+However, they often struggle with long-horizon interactive tasks common in domains like embodied AI. The complexity and vast action spaces in these settings lead to compounding errors, where a single suboptimal action can derail an entire trajectory, causing the agent to exhaust its limited step budget on inefficient or unrecoverable paths.
+To overcome this without costly fine-tuning, we draw inspiration from software debugging, where execution logs are analyzed to preemptively catch errors. We propose Trajectory Graph Copilot , a novel framework that acts as a ``copilot'' for LLM agents by diagnosing potential action errors before they are executed. At its core, Gebugger models historical trajectories as a probabilistic graph and uses a Graph Neural Network to identify sequential action patterns that frequently lead to failure. Functioning as a proactive diagnostic sandbox, our method provides early warnings on potentially flawed actions, prompting the agent to self-correct. This pre-action error diagnosis prevents costly mistakes, significantly enhancing the agent's ability to complete long-horizon tasks successfully.
+The extensive experiments on four benchmarks with three LLM agents demonstrate a $14.69\%$ pass ratio improvement on average.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper aims to address the issue of compounding errors in LLM agents, where a single suboptimal action can derail an entire trajectory. To achieve step-level action error detection, the authors draw inspiration from software debugging and propose a graph-based method called Trajectory Graph Copilot. They use actions as nodes and observations as edges to construct a graph, then train a mapping function to probe potential errors through GNNs. Experiments conducted across representative LLM agent environments (AlfWorld, TextWorld, ScienceWorld, and TravelPlanner) validate the effectiveness of the proposed method in error detection.
+
+Overall, I think this paper targets an important problem in LLM agents. However, the contributions to methodology in this work are still insufficient.
+
+### Strengths
+1. This paper targets error diagnosis in LLM agents and formulates a probabilistic graph model to address the step-level action error detection. The key idea is interesting.
+
+2. The proposed Trajectory Graph Copilot pipeline makes sense.
+
+3. The overall logical flow for paper writing is clear.
+
+### Weaknesses
+1. This work constructs an action-centric graph, employs GNNs with message passing, and regards action error detection as a trajectory node classification task. The core contributions appear limited when compared to several related works that also employ graph-based approaches [1–2] or GNNs [3].
+
+2. The relationship between Gebugger and Trajectory Graph Copilot is unclear. While Gebugger is described as a diagnostic module for error detection in the Introduction, it is referred to as the graph construction component in Section 3, which creates confusion.
+
+3. The authors claim to "shift the paradigm from post-hoc trajectory analysis to proactive, step-level error diagnosis" (Lines 49–50). However, describing the process as "debugging" may be misleading, as it still relies on post-hoc analysis of executed trajectories. A more appropriate analogy might be a "compiler," which performs pre-action error checking, aligning better with the intended proactive approach.
+
+4. It is difficult to see how the theoretical analysis in Section 4 directly addresses any specific concerns related to the proposed method. Moreover, this analysis is not supported by experimental validation, which weakens its impact and makes the section less convincing and insightful.
+
+
+[1] Lee et al., DHRL: A Graph-Based Approach for Long-Horizon and Sparse Hierarchical Reinforcement Learning. NeurIPS'2022.  
+[2] Yu et al., Scene Graph-Guided Proactive Replanning for Failure-Resilient Embodied Agents. RSS'2024.  
+[3] Wu et al., Can Graph Learning Improve Planning in LLM-based Agents? NeurIPS'2024.
+
+### Questions
+1. The objective of the paper is somewhat unclear. Is the focus solely on error detection, or does it also include error correction? Additionally, the term "feedback evaluation" lacks a clear definition: what exactly is being evaluated and how?
+
+2. The experimental setup involves using LLMs to generate step-level error detection labels, followed by manual selection and filtering. If LLMs are already capable of generating these labels, what is the added value or necessity of introducing the Trajectory Graph Copilot for error detection?
+
+3. Potential issues may occur where an action or observation is outside the defined scope. How does "we use embeddings to search for and retrieve the corresponding trajectory path from the existing graph" (Lines 216-217) work?
+
+4. Experimental results in Table 1 are somewhat confusing. Each dataset is associated with three columns representing different backbone LLMs. It is unclear how these columns relate to the LLMs mentioned in the rows. What's the difference between column-wise LLMs and row-wise backbones?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper “Trajectory Graph Copilot” introduces GEBUGGER, a probabilistic graph-based diagnostic module designed to detect step-level action errors in LLM-based agents performing long-horizon tasks. The key insight is that an LLM agent’s interaction sequence (observation–action–reward trajectory) can be represented as a graph, where nodes are actions and edges encode contextual transitions via observation embeddings.
+
+### Strengths
+- The motivation presented in Lines 44–46 is clear and convincing. The authors correctly identify that learning solely from full-trajectory outcomes provides weak causal signals and fails to pinpoint the origins of errors within long-horizon tasks.
+
+- Its analogy to software debugging is conceptually strong and intuitive. Shifting the paradigm from post-hoc trajectory evaluation to proactive action analysis is an interesting idea. 
+
+- The paper provides a solid theoretical justification showing that graph-based representations achieve lower Bayes risk and improved sample efficiency compared to sequence-based models, which lends analytical depth to the framework.
+
+- The graph-based approach not only achieves higher performance with fewer samples but also functions as a diagnostic sandbox for LLM agents, allowing them to self-correct based on structured error signals. The proposed GEBUGGER module is comprehensively evaluated across multiple environments and agents, consistently demonstrating superior performance.
+
+- Empirically, the framework exhibits robust and significant gains, achieving an average 14.69% improvement in pass ratio across diverse embodied and text-based environments (AlfWorld, ScienceWorld, TextWorld, and TravelPlanner).
+
+### Weaknesses
+- The experiments seem to be conducted only under in-distribution setups (e.g., training and testing on the same environment such as AlfWorld or ScienceWorld). It remains unclear how well the proposed framework generalizes to out-of-distribution settings, which is critical since classification-based agents often overfit to specific training domains.
+
+- More ablation and sensitivity analyses are needed to isolate the contribution of each module in the proposed pipeline. For instance, how does the model behave when the in-context feedback is intentionally perturbed or incorrect? Such studies would clarify the robustness and causal contribution of each component.
+
+- The paper introduces six error categories (Appendix B.1) but does not provide sufficient intuition or empirical justification for their design. How were these categories derived, and how exactly does the model distinguish among them?
+
+- The term “step-level” is used repeatedly (e.g., step-level diagnosis, step-level feedback), yet a formal definition is missing. Clarifying whether it strictly refers to each action-observation pair or another temporal granularity would improve precision.
+
+- Notation clarity can be improved. For example, the variable a is used for both action pairs and aggregated messages, and the meaning of T in Equation (1) is ambiguous (possibly referring to trajectory sets). Additionally, the interpretation of v_j \in T but not \in A needs clarification.
+
+- The paper mentions “more generalized representation” and “partial observation” (L150–151) but does not concretely describe how these notions are implemented or measured within the model.
+
+- The baseline selection could be modernized. Comparing primarily against TF-IDF (1988) and BERT (2019) limits the empirical impact; including or at least discussing more recent GNN-based or retrieval-augmented approaches would strengthen the experimental section.
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+LLM-based agents perform impressively but remain brittle on long-horizon interactive tasks such as embodied AI or complex planning. Small early mistakes can cascade into full-trajectory failures. Existing methods mostly apply post-hoc refinement or trajectory-level rewards, offering little insight into which step-level actions caused failures. Trajectory Graph Copilot is introduced to proactively diagnoses potential action errors before execution. Its core module, GEBUGGER, represents past trajectories as a probabilistic graph and employs a GNN to detect patterns associated with failure. It then issues early-warning signals so the LLM can self-correct via reasoning. The paper then provides a theoretical analysis on the bayes risks under two assumptions for graph-based representations and sequence-based representations. Experiments on multiple tasks reveals that GEBUGGER consistently outperforms text-classification, retrieval and RAG-based baselines.
+
+### Strengths
+- The paper provides a novel conceptual framework that reframes error diagnosis in LLM agents from post-hoc trajectory repair to pre-execution error prediction. The proactive copilot design provides real-time diagnostic warnings before the agent acts, preventing cascaded errors in long-horizon tasks.
+- The paper provides comprehensive experimental results on four benchmarks and show consistent gains.
+- The paper provides detailed ablation studies confirming design choices and stability where the results show directed BERT-based graphs perform best and that feedback integration steadily increases task success.
+
+### Weaknesses
+- **Synthesized labels from stronger models and manual labeling:** The major concern of this paper is that it involves a pre-defined label space with LLM synthesized labels as supervision. The paper even reported manual filtering on the generated labels which reduces the transparency of the approach (see line 896-899). Apart from these, the approach relies on other complicated engineering. For example, they reported utilizing preprocessing on the texts (see line 158-160). All these could undermine the effectiveness of the proposed method and requires further experimental comparisons to solidify.
+- **Assumption 2 too strong without evidence:** The theoretical analysis is depended on assumption 2 where it states that “the sequence representation U is not a deterministic function of S” and “… correlated with environment-specific artifacts and not conditionally independent of Y given X”. This indeed is too strong and might depend on model long-context capability. In contrast to BERT models used as a baseline in the paper, models like Qwen or Llama might be a more robust “context filter” that extracts relevant information from the environment feedbacks. It requires experimental validation to confirm.
+- **Unequal amount of supervisions used for baselines and GEBUGGER:** The comparison in experiments reveals potential fairness and supervision imbalance. GEBUGGER uses a graph-constructed dataset with explicit step-level error labels synthesized and curated, while several baselines (e.g. RAG, retrieval, LLM-as-judge) rely on few-shot or zero-shot inference without labeled training. Thus, the claimed accuracy gap might not come from architectural superiority.
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Trajectory Graph Copilot (TGC), a framework that proactively diagnoses potential errors in LLM agent actions before execution. The core component, GEBUGGER, models historical trajectories as probabilistic graphs using Graph Neural Networks (GNNs) to identify action patterns associated with failure. Instead of post-hoc corrections or fine-tuning, TGC acts as a “diagnostic sandbox,” warning agents about risky actions and prompting self-correction. Experiments on four benchmarks (AlfWorld, TextWorld, ScienceWorld, and TravelPlanner) and three LLMs (GPT-4o-mini, Qwen2.5, Gemma3) show a 14.69% average improvement in task completion rates over baselines.
+
+### Strengths
+1. This method shifts from post-hoc to pre-action error diagnosis, which is a useful conceptual advance.
+
+2. Provides theoretical analysis demonstrating lower Bayes risk and sample complexity compared to sequence-based baselines.
+
+3. Tests across multiple environments and agents, showing consistent improvements.
+
+4. The “copilot” design fits naturally into existing LLM-agent frameworks without retraining the base model.
+
+### Weaknesses
+1. There is lack of explicit explanations of predicted errors, and why this method systematicaly improves overthe baseline. It would be good to show some quantative examples how this method makes improvement.
+
+2. This method requires labeled trajectory datasets with fine-grained error annotations, which may be difficult to scale.
+
+3. Some comparisons lack detailed justification or variance analysis, what's the variance of the results?
+
+4. While graph structure variants are tested, the effects of feedback integration mechanisms (e.g., prompt formatting, feedback text) are only briefly analyzed.
+
+### Questions
+Will more delibrate prompting-based LLM agent baselines perform as well as adding this GNN-based prediction module?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

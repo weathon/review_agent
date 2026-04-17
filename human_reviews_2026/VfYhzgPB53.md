@@ -1,0 +1,176 @@
+# A diffusion model on toric varieties with application to protein loop modeling
+
+- Decision: Reject
+- Scores: 2, 4, 6, 2
+
+## Abstract
+The conformation spaces of loop regions in proteins as well as closed kinematic linkages in robotics can be described by systems of polynomial equations, forming real algebraic varieties. These are formulated as the zero sets of polynomial equations constraining the rotor angles in a linkage or macromolecular chain. These spaces are essentially stitched manifolds and contain singularities. Diffusion models have achieved spectacular success in applications in Cartesian space and smooth manifolds but have not been extended to varieties. Here we develop a diffusion model on the underlying variety by utilizing an appropriate Jacobian, whose loss of rank indicates singularities. This allows our method to explore the variety, without encountering singular or infeasible states. We demonstrated the approach on two important protein structure prediction problems: one is prediction of Major Histocompatibility Complex (MHC) peptide interactions, a critical part in the design of neoantigen vaccines, and the other is loop prediction for nanobodies, an important class of drugs. In both, we improve upon the state of the art open source AlphaFold.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper presents a novel generative model for protein loop modeling, a challenging task due to the geometric constraints imposed by fixed loop start and end points. The authors frame this problem as learning a distribution on a toric variety, which is the manifold of valid loop conformations.
+
+The core contribution is a diffusion model that operates directly on this constrained manifold. Instead of diffusing in Euclidean space and learning the constraints, the model diffuses in the local tangent space of the variety. This tangent space is elegantly defined as the (n-6)-dimensional null space of the loop closure Jacobian matrix. A score model is trained to predict noise in this tangent space. To ensure the denoising steps remain on the manifold (i.e., the loop remains closed), the authors employ the R6B6 algorithm as a projection function to map predicted movements back onto the variety.
+
+The method is evaluated on two biological problems: modeling MHC-bound peptides and nanobody CDR3 loops. On both datasets, the proposed model, when used to refine AlphaFold predictions, achieves a lower mean and median backbone RMSD than the open-source AlphaFold 2 and AlphaFold 3.
+
+### Strengths
+The paper’s primary strength is its novel formulation of constrained generative modeling. Applying diffusion models to complex, non-Euclidean manifolds such as toric varieties is nontrivial and valuable. Using the Jacobian’s null space as the local tangent space for diffusion is mathematically sound and elegantly builds kinematic constraints into the model architecture.
+
+### Weaknesses
+- Methodological Opacity and Questionable Robustness: The R6B6 algorithm is central to the method: it is the projection function that enforces manifold constraints. Yet it is treated as a black box and merely cited. A reader cannot understand or reimplement the core mechanism without mathematical detail. The authors should provide a mathematical description of the R6B6 algorithm and the toric variety used here. If they prefer to keep this as an empirical paper, they must compensate with additional experiments demonstrating robustness.
+
+- Limited Scope and Generalization Concerns: The model is trained on very small datasets (N = 636 for MHC, N = 570 for nanobody/antibody) and tested on similarly small sets (N = 78, N = 21). The nanobody training set is restricted to lengths 14–16. These facts raise concerns about overfitting and generalization. It is unclear whether the complex, specialized model learned a generalizable manifold-diffusion process or largely memorized the conformational landscape of its small training sets.
+
+### Questions
+1. To substantiate the claims in Tables 1 and 2, please provide histograms comparing the full RMSD distributions for all generated samples from your model, AF2, and AF3. Summary statistics alone are not sufficient to assess distributional differences.
+
+2. When computing the SVD of the closure Jacobian, is there a clear elbow at rank 6? Please show singular-value plots so readers can judge whether a meaningful null space exists or whether the null space is effectively trivial.
+
+3. In Algorithm 1, the Closure function selects six pivots for the R6B6 solver based on the “largest components in $\Delta\zeta_t$". What is the theoretical or empirical justification for this heuristic? How sensitive is the reported 95% success rate to this pivot-selection strategy?
+
+4. I do not think AlphaFold alone is a sufficient baseline. The authors should provide ablations, such as a diffusion model trained on the same small datasets in Euclidean space (with AF-based refinement and pLDDT scoring), or a non-diffusion model constrained to the toric variety. These comparisons would help justify the need for manifold constraints or a diffusion model.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces a novel diffusion model on toric varieties specifically designed for generating conformations of geometrically constrained molecules like protein loops and closed kinematic linkages. The method uses a Jacobian and the R6B6 algorithm to ensure the diffusion process remains on the algebraic variety, avoiding singular states. The model demonstrates good performance on MHC-bound peptide interactions and nanobody loop predictions.
+
+### Strengths
+The proposed algorithm outperforms the open-source AlphaFold (AF2 and AF3) predictions.
+
+The paper was clearly written, and I deeply appreciate that the authors addressed some limitations in Section E.
+
+### Weaknesses
+In both experiments in Tab 1 and 2, it seems the experiment has a relatively small scale (<1e3 number of data, <100 test data). And the improvement is relatively small.
+
+### Questions
+In section E, it seems the algorithm will have trouble when projecting the tangent vector back to the manifold itself. May I ask why you have such difficulty, is it from R6B6 algorithm or from toric variety? I am curious since in Tab. 7 lower right, you use exponential map on torsional space and then there is no such difficulty.
+
+It seems this paper focus on a special type of question: protein generation with a loop. It seems AlphaFold, the main competitor, is a more general model. May I ask if there are other works that specially focuses on this problem (protein with loops)? If nobody did this research before, is it because that the problem is less important than general protein generation problems?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The authors proposed a diffusion model that operates directly on toric varieties to generate protein loop conformations while rigorously enforcing loop closure constraints. Instead of diffusing in Euclidean or unconstrained torsional spaces, the method computes the Jacobian of loop-closure constraints and uses its null space (via SVD) to define valid tangent-space directions for denoising; proposed moves are then projected back to the variety using the R6B6 algebraic loop-closure solver. Architecturally, the score model is SE(3)-equivariant on a heterogeneous graph, and outputs torsional updates expressed in the variety’s tangent basis. Experiments on MHC class I peptides and nanobody CDR3 loops report median RMSD improvements over open-source AlphaFold baselines (≈15–16% for MHC; ≈13% for nanobody CDR3) when selecting top-confidence structures after AF-based refinement. Ablations highlight sensitivity to the maximum noise scale and the number of denoising steps, with ~20 steps and σ_max≈π/10 giving the best trade-off. Limitations include frozen side-chain conformers and occasional step failures near singularities, mitigated by step-size reduction.
+
+### Strengths
+Casting loop modeling as diffusion on the constraint manifold is a principled advance that bakes physics/kinematics into the generative process, reducing invalid states and sampling waste. Using the Jacobian null space to span feasible motions and R6B6 to project perturbed torsions preserves end constraints exactly, even near stitched-manifold regions with singularities. Consistent RMSD improvements vs. AlphaFold starting structures for two biologically salient tasks (MHC peptides; nanobody CDR3), with clear reporting of medians/means and a simple post-hoc AF scoring pipeline.
+
+### Weaknesses
+Reliance on AlphaFold pLDDT to pick winners introduces a selection bias and makes it hard to disentangle where the gain truly comes from (diffusion vs. AF rescoring). Freezing side chains risks steric clashes and may undercut accuracy for longer/charged residues; no integrated side-chain generative module is provided. Training/splits emphasize specific loop lengths (e.g., MHC 9–10-mers; CDR3 14–16), and it’s unclear how performance scales to very long loops, multiple loops, or loops with ligand contacts. RMSD is the sole endpoint; missing are physical/energetic plausibility checks (clashes, Ramachandran, rotamer quality) and functional metrics (e.g., MHC binding pose recoveries vs. known anchors).
+
+### Questions
+1. Beyond RMSD, what biophysical or functional motivations drove the move to toric-variety diffusion (e.g., better capture of anchor residues in MHC, antigen-contact geometries in CDR3)?
+2. Why prioritize MHC I and nanobody CDR3 first—were these chosen for availability, difficulty, or expected industrial impact?
+3. you choose the six largest components in Δζ to define unknowns—did you compare against conditioning-aware choices (e.g., maximizing the 6×6 submatrix conditioning) to reduce singularity hits?
+4. When AF pLDDT is not used for reranking, how do the diffusion ensembles perform under independent quality measures (e.g., MolProbity, clashscore, torsion distributions)?
+5. For cases with large improvements, do conformations better reproduce known functional contacts (MHC pockets, CDR3–antigen interfaces), or are gains primarily geometric?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+The paper proposes a score‑based diffusion method for loop regions in proteins. The state is parameterized by backbone torsion angles, and loop closure is enforced by solving a 6R inverse‑kinematics (IK) system at every step (R6B6). The forward noise is sampled in the tangent space of the “variety” defined by loop‑closure constraints (obtained as the null space of a 6×n Jacobian), then a “projection” step uses R6B6 to return to the feasible set (Fig. 2; Sec. 3.2–3.3; Alg. 1–2). On MHC‑I peptides (78 cases) and nanobody CDR3 loops (21 cases), the method starts from AlphaFold (AF) structures, generates ensembles for the loop only, refines candidates with AF again, ranks by pLDDT, and reports RMSD improvements vs. AF2/AF3 baselines (Tables 1–2).
+
+### Strengths
+- **Important problem & plausible inductive bias.** Constraining to torsion angles and enforcing loop closure echoes successful practice in small‑molecule torsional diffusion and docking (Jing et al., 2022; Corso et al., 2023).
+- **Operational use of IK (R6B6).** A polynomial IK solver guarantees closed chains when a solution exists (Cao et al., 2023), and the paper documents practical guards (pivot selection; step‑size reduction; ~95% success during inference, Appx. E).
+- **Empirical promise.** On two datasets, the best‑of‑ensemble after AF re‑ranking shows median RMSD improvements vs AF2 and AF3 (Tables 1–2).
+- **Good connections to classical geometry.** Use of Plücker coordinates / Jacobians aligns with standard robot kinematics practice (e.g., Murray–Li–Sastry).
+
+### Weaknesses
+1. Misuse/overclaiming of “toric variety.” To call a space toric, one needs a torus action and monomial structure; no such structure is demonstrated. Use “real algebraic subvariety of the $n$‑torus” or similar, unless a toric proof (fan/monomial map) is provided (Cox–Little–Schenck).
+2. Tangent space derivation and singularities. Formalize the constraint map $F$ and state assumptions under which IFT yields. Provide a separate treatment near $\mathrm{rank}(P) < 6$. As context, variety‑like conformational spaces can have non‑manifold topology (e.g., cyclo‑octane: union of a sphere and a Klein bottle), underscoring the need to reason about strata and singularities.
+3. Projection/retraction properties of R6B6 step. If R6B6 is used as a “projection,” give (local) existence/uniqueness, continuity, and ideally differentiability results, or at least an error bound showing it behaves as a retraction for small steps (see Absil–Mahony–Sepulchre, Ch. 4). Today’s text states “closest solution” but no metric on periodic angles or tie‑breaking provides uniqueness.
+4. Score/forward mismatch. Either (a) redefine the forward kernel as the pushforward through the R6B6 map and train the correct score, or (b) justify a small‑step approximation providing provable bounds that the Gaussian‑tangent score suffices. Without this, the reverse dynamics are not those of the stated forward process (Song et al., 2021).
+5. Sampling rule lacks derivation. Provide a derivation of Alg. 2’s $\Delta \tau$ update from a particular SDE/ODE (VE or VP) and show training–sampling compatibility (cf. Song et al., 2021; EDM design rules).
+6. Baselines not protocol‑matched. Please include AF2/AF3 ensemble baselines with equivalent number of candidates, refinement, and ranking (AF can stochastically sample diverse states; Del Álamo et al., 2022). Also report statistical tests / CIs for Tables 1–2, and ablations (no R6B6, no AF re‑refinement, different pivot criteria).
+
+### Questions
+1. Toric or not? Can you prove the loop‑closure set is a toric variety (torus action, monomial parametrization/fan), or will you revise the terminology? (Sec. 3.1).
+2. Tangent space rigor. Please define $F$ and prove $DF =P$, then state IFT conditions under which $T_x mathcal{V} = \mathrm{ker}P(x)$ holds; clarify the argument under Eq. (1)–(2) (p. 5).
+3. “Projection” properties. For the R6B6 step, can you show local single‑valuedness, continuity, and/or a first‑order accuracy bound making it a (local) retraction? If not, please avoid “projection” terminology or define the metric.
+4. Forward/score consistency. How do you reconcile training on the Gaussian tangent score with sampling that uses the R6B6‑transformed perturbation? Any theorem or bound (small‑step limit) ensuring equivalence? (Alg. 1–2).
+5. Sampling update derivation. From which SDE/ODE is $g(t)$ derived (VE or VP), and how do you ensure consistency with the training loss? Please provide the derivation in the appendix.
+6. Protocol‑matched baselines. Please include AF ensemble sampling (e.g., altered MSA depth, dropout) with the same number of candidates and AF re‑refinement + ranking, and report paired tests/intervals.
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2

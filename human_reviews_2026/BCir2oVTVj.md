@@ -1,0 +1,221 @@
+# Symmetric Sinkhorn Diffusion Operators
+
+- Decision: Reject
+- Scores: 6, 6, 4, 6
+
+## Abstract
+Smoothing a signal based on local neighborhoods is a core operation in machine learning and geometry processing. On well-structured domains such as vector spaces and manifolds, the Laplace operator derived from differential geometry offers a principled approach to smoothing via heat diffusion, with strong theoretical guarantees. However, constructing such Laplacians requires a carefully defined domain structure, which is not always available. Most practitioners thus rely on simple convolution kernels and message-passing layers, which are biased against the boundaries of the domain.
+
+We bridge this gap by introducing a broad class of *smoothing operators*, derived from general similarity or adjacency matrices, and demonstrate that they can be normalized into *diffusion-like operators* that inherit desirable properties from Laplacians. Our approach relies on a symmetric variant of the Sinkhorn algorithm, which rescales positive smoothing operators to match the structural behavior of heat diffusion.
+
+This construction enables Laplacian-like smoothing and processing of irregular data such as point clouds, sparse voxel grids or mixture of Gaussians. We show that the resulting operators not only approximate heat diffusion but also retain spectral information from the Laplacian itself, with applications to shape analysis and matching.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper presents a unified framework for constructing diffusion-like operators on diverse data modalities, ranging from geometric domains such as meshes, point clouds, and voxel grids to more abstract settings like Gaussian mixtures and graphs. The approach is based on a symmetric Sinkhorn normalization of a positive kernel, yielding a mass-preserving, symmetric, and positive operator that behaves analogously to a Laplace-type diffusion without requiring an explicit manifold or mesh structure. This formulation generalizes classical heat diffusion to unstructured data while retaining desirable spectral and stability properties. The authors provide theoretical analysis of the symmetric Sinkhorn scaling, including convergence guarantees and connections to bi-stochastic Laplacian normalization. They also present a practical, GPU-accelerated implementation that integrates efficiently with modern deep learning toolkits. Experiments span multiple representations and tasks such as spectral analysis, diffusion of signals on shapes, and 3D shape correspondence, demonstrating consistency across modalities and competitive runtime scaling. The method is positioned as a general-purpose, geometry-agnostic building block for differentiable diffusion and attention-based architectures.
+
+### Strengths
+The paper presents a conceptually elegant and well-formulated approach to defining diffusion operators on arbitrary data domains through symmetric Sinkhorn normalization. Its key strength lies in the 'unification': a single construction that consistently yields mass-preserving, symmetric, and positive diffusion-like operators across diverse modalities, including meshes, point clouds, volumetric grids, Gaussian mixtures, and graphs.
+
+The theoretical presentation is clear and rigorous, with well-defined axioms, proofs of existence and convergence for the symmetric Sinkhorn scaling, and insightful connections to bi-stochastic Laplacian theory. A practical GPU implementation integrates smoothly with differentiable programming enviromnents, emphasizing scalability.
+
+Empirically, the paper demonstrates qualitative and quantitative behavior across multiple tasks, such as spectral analysis, shape diffusion, and correspondence learning. Runtime comparisons are included.
+
+### Weaknesses
+While the paper is theoretically solid and clearly presented, its empirical scope is somewhat narrow relative to the breadth of its claims. Most demonstrations focus on proof-of-concept tasks that illustrate the behavior of the proposed operator rather than establishing concrete advantages over strong Laplacian-based or diffusion-network baselines. As a result, the practical impact of the method (especially in settings where Laplacian discretizations are already available or efficient!) remains somewhat speculative. A more systematic comparison on downstream learning or signal-processing tasks would strengthen the case for real-world applicatons.
+
+Although the authors provide convergence guarantees for the symmetric Sinkhorn scaling, the broader connection between the proposed operator and established continuous LB theory is discussed only qualitatively. Readers interested in manifold consistency or spectral convergence may find the theoretical positioning somewhat ambiguous. Similarly, while the symmetric Sinkhorn normalization is conceptually neat, its novelty relative to prior work on bi-stochastic Laplacian normalization could be articulated more sharply.
+
+Finally, the experimental section could benefit from clearer quantitative evidence of robustness, e.g., under sampling noise, geometric deformation, or varying kernel bandwidths to support the claimed generality across modalities. The applications showcased are visually convincing but not always deeply analyzed in terms of quantitative metrics or ablation study.
+
+### Questions
+The experimental results convincingly illustrate consistency across data modalities but remain limited in terms of downstream validation. Are there concrete scenarios, such as non-manifold geometries, corrupted meshes, or learning-based applications operating with point clouds in very high dimensions (think of learned latent spaces) where the symmetric Sinkhorn formulation offers measurable advantages over classical Laplacian or graph-diffusion approaches (see e.g. "Latent functional maps" for an example)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Symmetric Sinkhorn Diffusion Operators, a new method for normalizing a family of “discrete diffusion operators” – which includes graph Laplacian variants. By extending Sinkhorn scaling to include a mass matrix (M), the proposed normalization provides the first graph-Laplacian that is mass preserving and does not experience ringing artifacts. By the Sinkhorn approach, it is also bi-stochastic. The flexibility of choosing M allows for adaptation across different data representations (graphs, point clouds, voxel grids, Gaussian mixtures). Experiments show it is spectrally similar to the original graph-Laplacians (exponential), effective for mass-preserving interpolation, and can be incorporated to NNs, specifically DiffusionNet (Sharp et al) for improved gains.
+
+### Strengths
+•	Main: A new flavor for the graph-Laplacian is proposed with several desired properties (see below). It can be plugged wherever graph-Laplacians appear, in manifold learning and even in specialized NN architectures (e.g. DiffusionNet).
+
+•	Clear mathematical formulation: The paper rigorously defines diffusion operators and provides formal guarantees (Theorems 4.1–4.2) ensuring convergence and symmetry under a discrete measure.
+
+•	Elegant unification: The approach unifies multiple normalizations (row, symmetric, spectral) under a single operator framework that generalizes diffusion to arbitrary discrete measures.
+
+•	Mass preservation and bi-stochastic symmetry: The operator Q adresses a long-standing trade-off in graph-Laplacian normalization, providing an operator that is symmetric stochastic - and also preserves mass.
+
+•	Implementation simplicity: Algorithm 1 (symmetric Sinkhorn normalization) is GPU-friendly, requires only matvecs with (S), and converges in a few iterations.
+
+•	Cross-domain generality: Through the choice of M, The same procedure works on diverse data structures: graphs, voxels, Gaussian mixtures. 
+
+•	Solid connection and extension of continuous theory:  Including an extension of current theory, including fixed-scale limits, and generalizing to a family of smoothing operators.
+
+•	Numerical demonstrations: Mass preservation as well as cross-data types spectral consistency is clearly shown.
+
+### Weaknesses
+See questions below.
+
+### Questions
+1.	How does Algorithm 1 compare numerically to standard bistochastic Sinkhorn scaling? Is it any different? Would the incorporation of M affect it in terms of convergence rate and stability? 
+
+2.	How sensitive is the method to errors in the estimated mass matrix (M) (e.g., when PCL sampling density estimation is noisy due to finite samples)? I would gladly raise my score if error bounds derivation + empirical demonstrations would be in place.
+
+3.	From your experiments - are there guidelines for M construction when transitioning between data types (e.g. mesh to PCL), that keep spectra consistent between data types?
+
+4.	Please add at least one more example for spectral consistency (Fig. 3) and shape interpolation (Fig. 5). Appendix is fine.
+
+5.	Please report limitations of the method. For instance - mass preservation might be restrictive in some cases: Consider the shape deformations presented in [1]. Such extreme deformations cannot accommodate mass preservation while keeping the shape intact. Another limitation is the fact that we do not know exactly the relation between Q's spectra and the graph-Laplacian's.
+
+Writing:
+
+1.	Could the authors clarify their positioning w.r.t. the prior work on Sinkhorn scaling for Laplacians and kernels (Marshall & Coifman, 2019; Wormell & Reich, 2021; Cheng & Landa, 2024)?
+
+2.	Although it is clear by observation - please state clearly in the text how mass preservation (or any other desired property) is shown in the numerical experiments. 
+
+3.	Please justify the use of DiffusionNet for correspondence - as it would be more natural to start with classification or segmentation.
+
+4.	The authors may wish to mention iterative flow formulations where mass preservation is achieved by alternating between applying a Laplacian operator and a mass-normalization step. A prominent example is cMCF [2] ("area-normalized"). 
+
+[1] Brokman et. al 2024 "Spectral Total-Variation Processing of Shapes - Theory and Applications" ACM Transactions on Graphics (TOG)
+
+[2] Kazhdan et. al 2012 "Can mean-curvature flow be modified to be non-singular?" Computer Graphics Forum, Vol. 31.
+
+### Soundness
+4
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes an approach to generalize heat diffusion operators to unstructured geometric data by transforming symmetric similarity matrices into mass-preserving diffusion operators using a symmetric variant of the Sinkhorn algorithm. Some of the writing is not clear, including the gaps they bridge. Visualizations are good. Experimental results and comparisons to other method are less convincing, appear to yield marginal improvements. Some aspects of the experiments are not clear as well.
+
+### Strengths
+1.	Thorough theoretical analysis.
+2.	Sufficient number of visual experiments in both main paper and appendix
+3.	Nice looking visualizations
+
+### Weaknesses
+1.     Editing and clarity, not clear what gapped are exactly bridged. Some parts may be too heavily written with LLM's.
+2.     Hard to see a significant novelty presented here, the field is very mature and heavily researched.
+3.     The authors claim "Most practitioners thus rely on simple convolution kernels and message-passing layers, which are biased against the boundaries of the domain.” However, it is not biased if Neumann boundary conditions are taken under consideration.
+4.	Runtime results compare between GPU method and CPU method, unfair comparison. 
+5.	Worst quantitative results than competitors
+6.	Lack of quantitative comparisons
+7.	Table 1: left is right and vice versa (remark)
+8.	Distinction between structured and unstructured domain is unclear
+9.	No quantitative evaluation of the results of figures 4, 5, just visual. There are qualitative metrics that can be applied.
+10.	In figure 3 – the font of the graph is too small and not visible (remark)
+
+### Questions
+1.	Can you add quantitative aspect to your visual results, more than general intuition?
+2.	Can you explain why did you compare yourself to these specific methods in the visual experiments?
+3.	Can you implement your method on CPU or other methods on GPU for fair runtime comparison?
+4.	Splits your article to known and the innovative parts
+5.	Cite the most relevant references related to the mentioned methods 
+6.	Find an example to demonstrate the superior of your method
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper characterizes key properties of Laplacian and diffusion operators which make them useful for various tasks in geometry processing, in a general formalism based on the idea of smoothing. It then proposed a Sinkhorn-algorithm-based way of computing operators with these properties. This replaces convolution-like operations which can produce artifacts at boundaries - or when used with unstructured representations of geometric objects - with alternatives that can perform better. It also does not require computing or truncating Laplacian eigenfunctions on a mesh. The authors study the functional limit of their proposed approach, and prove convergence in a certain limit as the point cloud approximates the true continuous geometry. They show experimentally that the resulting operators can be used for pose interpolation and other shape analysis tasks in computational geometry.
+
+### Strengths
+This is a good paper. Its strengths include:
+* **Comprehensive and well-presented low-level details in the writing.** The authors introduce the properties they want, and develop a clean algorithm for computing operators that satisfy those properties.
+* **Presenting the discrete case, which is simpler, first.** This is a good structure, as it allows the reader to gradually ease in to the material, before heavier formalism is introduced.
+* **Characterizing continuum limits, and not just graph and mesh based operations.** This is important, as it shows that the operators are principled and will not degenerate under mesh refinement.
+* **High-quality figures.** As is often the case in a paper at the intersection of machine learning and computer graphics, the authors take the actual graphics seriously.
+* **Fast convergence of the proposed method.** The authors are able to get results in as few as 5-10 Sinkhorn iterations, which is at least one order of magnitude less than I would have expected.
+* **Flexible downstream use.** This includes the ability to recover Laplacian eigenmaps as shown in Fig.3, and interpolation use such as in Fig.5.
+* **Inclusion of actual wall-clock runtime comparisons.** Comparisons like this are important in practice, because they illustrate in precise terms how long the techniques used take to work, and speed can be very important for various geometry processing applications.
+
+Please also note that, since my qualifications for reviewing this paper rest mainly on using similar technical tools for completely different purposes, I am unable to evaluate the novelty of this work within geometry processing. I therefore defer evaluations on this aspect to other reviewers and would be interested to know their views in discussion.
+
+### Weaknesses
+The main issues include:
+* **Confusing medium-level structure.** This paper could have been written in the following form: Section 1 - intro, Section 2 - background and prior work, Section 3 - the problem, Section 3.1 - new proposed operators on graph, Section 3.2 - new proposed operators in general, Section 3.3 - computation, Section 4 - results. Instead, the authors first present that they do on a graph, then present it in general, without cleanly and clearly stating what is the problem in a manner that is separate from stating what is the method.  While I ultimately understood that the problem at hand is "develop a characterization of smoothing operators that behave well even in the presence of boundaries or unstructured representations of geometry, and make them computationally tractable", it would be good to have a reminder at the beginning of Section 3 and Section 4 that this is the goal, otherwise it is unclear where the formalism is headed.
+* **Please remind readers what is a Metzler matrix**. I've written several papers about using Laplacian eigenmaps for certain machine learning purposes, and know the abstract machinery well, but did not recognize this specific technical term. I suspect many other readers may miss it too.
+* **The two-dimensional plots presented are far too small and are therefore not accessibility friendly or readable on paper.** I cannot read what is in Figure 3(e) or Figure 3(j) because the font is tiny. Please redo this figure to make its fonts the same size as the surrounding text.
+
+### Questions
+Two key questions:
+* **Do you have any idea why Sinkhorn is so fast in this setting?** This is much faster than uses in optimal transport that I have worked with, which is typically at minimum hundreds of iterations.
+* **I am confused about Table 1.** This shows that the two Q-DiffNet variants, which are the authors' proposal, perform better on the SHREC19 benchmark, but worse on FAUST and SCALE. I have many questions: (1) Why are there no error bars - are all the methods deterministic? (2) How much of a difference does 2.1 vs. 1.6 on FAUST make? (3) How strong is the absolute performance - what kind of score would be considered "solved" for these benchmarks? (4) If the proposed method is weaker than baselines on this benchmark, is there some other characteristic which makes it desirable anyway, such as being faster?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3

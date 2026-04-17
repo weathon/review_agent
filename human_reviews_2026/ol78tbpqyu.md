@@ -1,0 +1,183 @@
+# Steering and Rectifying Latent Representation Manifolds in Frozen Multi-modal LLMs for Video Anomaly Detection
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 4, 6
+
+## Abstract
+Video anomaly detection (VAD) aims to identify abnormal events in videos. Traditional VAD methods generally suffer from the high costs of labeled data and full training, thus some recent works have explored leveraging frozen multi-modal large language models (MLLMs) in a tuning-free manner to perform VAD. However, their performance is limited as they directly inherit pre-training biases and cannot adapt internal representations to specific video contexts, leading to difficulties in handling subtle or ambiguous anomalies. To address these limitations, we propose a novel intervention framework, termed SteerVAD, which advances MLLM-based VAD by shifting from passively reading to actively steering and rectifying internal representations. Our approach first leverages the gradient-free representational separability analysis (RSA) to identify top attention heads as latent anomaly experts (LAEs) which are most discriminative for VAD. Then a hierarchical meta-controller (HMC) generates dynamic rectification signals by jointly conditioning on global context and these LAE outputs. The signals execute targeted, anisotropic scaling directly upon the LAE representation manifolds, amplifying anomaly-relevant dimensions while suppressing inherent biases. Extensive experiments on mainstream benchmarks demonstrate our method achieves state-of-the-art performance among tuning-free approaches requiring only 1\% of training data, establishing it as a powerful new direction for video anomaly detection. The code will be released upon the publication.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces SteerVAD, a novel tuning-free framework for video anomaly detection (VAD). It proposes an active intervention paradigm that steers the internal representation manifolds within a frozen multi-modal large language model (MLLM). The method first identifies the most task-aligned attention heads, termed Latent Anomaly Experts (LAEs), via a gradient-free Representational Separability Analysis (RSA). It then employs a lightweight Hierarchical Meta-Controller (HMC) to perform context-aware, anisotropic scaling on the LAE features, dynamically rectifying their geometry to enhance separability between normal and anomalous events. The framework is calibrated with only 1% of the training data and achieves state-of-the-art performance among tuning-free methods on standard benchmarks.
+
+### Strengths
+1. Novel Paradigm: The core idea of actively steering latent manifolds to overcome pre-training biases is highly innovative and represents a significant conceptual shift in the field.
+
+2. Comprehensive Evaluation: The paper provides thorough experiments, including ablation studies, hyperparameter analysis, and cross-dataset/cross-model generalization tests, which robustly support the claims.
+
+3. Compelling Visual Evidence: The t-SNE visualizations offer clear and intuitive proof that the proposed method effectively disentangles the feature manifolds.
+
+### Weaknesses
+1. Marginal Practical Gain: While achieving SOTA, the absolute performance improvement over very recent strong baselines (e.g., +0.43% AUC over HiProbeVAD on UCF-Crime) is modest. This small margin raises questions about the practical advantage and cost-effectiveness of the method's added complexity compared to simpler probing-based approaches.
+
+2. Limited and Misleading Interpretability: The claim of enhanced interpretability is not fully substantiated. The provided "post-hoc explanation" is essentially standard video captioning by the MLLM and does not elucidate the internal decision process of the HMC or the reasons behind its specific steering actions. The HMC itself remains a black box, offering no insight into why a scene is deemed suspicious or how the specific rectification strategy is chosen.
+
+3. Questionable Efficacy of the RSA Module: A significant methodological concern arises from the performance of the features selected by the proposed RSA. As shown in Table 2, a simple linear classifier on these RSA-selected LAE features ("Linear Probing") achieves only 81.33% AUC. This is substantially lower—by over 5% AUC—than the 86.72% achieved by HiProbeVAD (Table 1), which also operates by probing internal MLLM features. This result critically undermines the premise that RSA effectively identifies the most powerful "anomaly experts" within the model. It suggests that alternative feature selection or probing strategies might yield a stronger baseline, potentially making the subsequent complex intervention of the HMC less necessary or justified.
+
+4. Unsubstantiated Claims of Robustness: The paper attributes its cross-dataset generalization ability to the HMC. However, the HMC is a complex, context-aware module trained on a very small (1%) calibration set. This introduces a non-trivial risk of overfitting to the specific calibration data, which could paradoxically harm generalization. To credibly claim that the HMC improves robustness, a direct comparison is essential. The authors should provide the cross-dataset generalization results (as in their Table 10) for a strong baseline like HiProbeVAD. Without this comparison, it remains unclear whether the observed generalization is a property of the HMC or is already achievable by a simpler, more robust probing method, which would be a significantly more efficient solution.
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This work addresses video anomaly detection (VAD) through a novel multi-modal large language model (MLLM)-based paradigm. The core contribution lies in mitigating the representational bias of MLLMs caused by the domain gap between pre-training web-scale data and downstream video tasks. Using a frozen MLLM, the authors propose a tuning-free framework combining representational separability analysis (RSA) and hierarchical meta-controller (HMC). RSA identifies anomaly-discriminative representations, which HMC subsequently refines through representation manipulation. The method is evaluated on UCF-Crime and XD-Violence datasets.
+
+### Strengths
+1. The paper is well-structured and clearly articulated.
+2. The tuning-free approach is novel, by leveraging pre-trained representations through selection and scaling.
+3. Ablation studies on RSA and HMC effectively validate the design choices.
+
+### Weaknesses
+1. Limited Ablation on Calibration Set: The rectified representations heavily depend on HMC tuning via the calibration set. However, the paper lacks critical ablation studies on: 1) Diversity: Performance impact of varying calibration set compositions (e.g., random subsets, different sizes); 2) Class Balance: Sensitivity to ratios of normal/abnormal videos in the calibration set.
+2. Fair Comparison Issues: Table 1 should include parameter counts for specific backbones (especially Multimodal VAD series) to enable fair evaluation. The observed performance drop when switching from InternVL3 to Qwen2.5VL underscores this need in Table 11.
+
+### Questions
+1. Although the MLLM remains frozen, feature modification via HMC may risk knowledge forgetting. The authors should discuss whether this occurs.
+2. It is required to use frame-level labels to supervise the training? Or if the method can operate with coarser (e.g., video-level) annotations.
+3. The paper omits evaluation on unseen anomalies in the same dataset (i.e., anomaly types absent from the calibration set), instead of cross-dataset evaluation in Table 10.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces SteerVAD, a tuning-free framework that performs video anomaly detection by actively steering and rectifying the latent representation manifolds of frozen multi-modal large language models. Instead of fine-tuning or relying solely on prompts, SteerVAD analyzes and adjusts the internal geometry of MLLM representations to reduce bias and ambiguity. It identifies anomaly-sensitive attention heads through a Representational Separability Analysis and dynamically refines them using a Hierarchical Meta-Controller that performs context-aware, anisotropic scaling of latent features.
+
+Experiments on UCF-Crime and XD-Violence show that SteerVAD achieves state-of-the-art tuning-free performance, reaching 87.15% AUC and 83.02% AP with only 1% of labeled data and no backbone updates. The framework offers strong interpretability, computational efficiency, and provides a new geometric perspective for adapting frozen MLLMs to complex video understanding tasks.
+
+### Strengths
+1. The paper introduces a fresh and well-motivated idea — geometric steering and rectification of latent representation manifolds in frozen multi-modal LLMs — offering a new paradigm for tuning-free adaptation.
+2. The proposed RSA and HMC modules are conceptually clear, lightweight, and technically sound. They enable dynamic, context-aware control over latent representations without modifying the backbone parameters.
+3. SteerVAD achieves state-of-the-art performance among all tuning-free methods on UCF-Crime and XD-Violence, approaching fine-tuned models while using only 1% labeled data.
+4. The method provides both geometric and semantic interpretability through manifold visualization and text-based explanations, while maintaining low computational and memory cost.
+5. The approach is broadly applicable to other tasks involving frozen MLLMs, demonstrating promising potential beyond video anomaly detection.
+
+### Weaknesses
+While the paper presents an innovative and well-designed framework, several conceptual and methodological issues remain unclear.
+1. The assumption that video datasets form closed and bounded manifolds is theoretically strong and may not hold in practice. Real-world video data are inherently open-set and dynamic, so the claimed manifold topology should be regarded as an approximation rather than a strict property.
+2. The paper assumes an invariant conditional distribution $P(Y|V,Z)$ between training and testing, which is questionable in anomaly detection. Even if the anomaly types remain consistent, the visual and contextual variations across instances can cause significant distributional shifts, and the authors do not discuss how SteerVAD handles such variability.
+3. The distinction between training-free and tuning-free paradigms is not clearly defined, leading to potential unfairness in the comparisons. Most baselines in Table 1 are training-free, while SteerVAD involves training a small number of additional parameters. The authors should clarify the conceptual difference between these settings, separate the result categories.
+
+Overall, the paper would benefit from a more precise theoretical justification of its assumptions, a clearer comparison protocol, and a deeper discussion on robustness under distributional variation.
+
+### Questions
+1. The authors assume that video data form a closed and bounded manifold that allows for well-defined geometric steering. Could you clarify how this assumption is justified in practice? In particular, how does SteerVAD behave if the underlying video distribution is open-set or exhibits non-manifold structures? Would your RSA and HMC modules remain stable under such violations?
+2. The paper claims that the conditional distribution $P(Y|V,Z)$ is invariant between training and testing. This seems questionable given the high intra-class variation in anomaly content and context. Could you provide empirical evidence or theoretical reasoning to support this invariance? Alternatively, have you evaluated SteerVAD under distribution shifts (e.g., unseen anomaly appearances or environmental changes)?
+3. In Table 1, most baselines are training-free, while SteerVAD involves learning a few additional parameters. Could you explicitly define how you distinguish between training-free and tuning-free?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper aims to address the limitations of using frozen multi-modal large language models (MLLMs) for tuning-free video anomaly detection (VAD), particularly pre-training biases and contextual ambiguity. The authors propose SteerVAD, a novel active intervention framework. The method first employs a gradient-free Representational Separability Analysis (RSA) to identify internal attention heads that are most discriminative for VAD, termed Latent Anomaly Experts (LAEs). Subsequently, a lightweight Hierarchical Meta-controller (HMC) is trained on a minimal data subset (1% of the training data). During inference, the HMC uses a global context vector and LAE features to generate dynamic signals that perform targeted, anisotropic scaling on the LAE's representation manifolds. This intervention actively separates the representations of normal and anomalous events. The method achieves state-of-the-art performance among tuning-free approaches on the UCF-Crime and XD-Violence benchmarks.
+
+### Strengths
+1.The paper proposes a novel paradigm shifting from "passive feature reading" to "active geometric intervention." It elegantly addresses pre-training bias by identifying LAEs via RSA and applying dynamic, context-aware rectification using the HMC. This core hypothesis is strongly supported by t-SNE visualizations (Figure 4), which show the feature space transforming from "entangled" to "linearly separable," and by attention heatmaps (Figure 5, 9, 10), which confirm this geometric reshaping leads to a semantic "re-focusing."
+
+2.The method exhibits exceptional efficiency. In terms of data, it requires only 1% of the training data for calibration. For parameters, the trainable HMC and Scorer total only 0.52M (< 1MB). In terms of training cost, the entire calibration process takes less than 30 seconds on a single GPU. This extremely low adaptation cost makes it highly valuable for deployment and scaling in the MLLM era.
+
+3.SteerVAD achieves SOTA performance on both UCF-Crime and XD-Violence. Ablation studies (Table 2) demonstrate the necessity and superiority of both the HMC's dynamic context-aware design and the RSA expert selection strategy. Finally, the method shows excellent performance in cross-domain (Table 10) and cross-model (Table 11) generalization experiments, proving its robustness as a model-agnostic paradigm.
+
+### Weaknesses
+1.There is a conceptual contradiction in the paper's theory. The theoretical foundation (Sec 3.1, Appendix A) emphasizes the need to model complex, non-convex, and entangled manifolds, which is confirmed by visualizations in Figure 2. However, the RSA metric (Eq. 1) used to discover these structures is a simple, linear metric based on centroids and variance, which implicitly assumes the manifolds are Gaussian-like and convex. This use of a simple linear metric to solve a complex non-linear problem weakens the convincingness of RSA. RSA may just be a slightly better heuristic rather than a robust metric that truly understands manifold geometry.
+
+2.The method's foundation, the selection of LAEs, lacks a critical stability analysis. The entire LAE discovery process relies on a minimal (1%) calibration dataset. The paper provides no evidence that this selection process is robust. If a different 1% random sample of data were used, would the chosen K=4 "experts" be completely different? If the LAE selection is highly sensitive to data sampling (i.e., unstable), the method's foundation is fragile, which would weaken the rationale for all subsequent interventions.
+
+3.The core mechanism, the HMC, suffers from a "blindness" problem in its design. According to the design (Sec 3.4), the HMC generates all intervention signals ($s_{global}$ and $g_i$) based solely on the global context vector $c$. This means the HMC is completely "blind" when deciding how to "stretch" or "compress" the local feature $h_i$, as it does not take $h_i$ itself as an input. This design makes a very strong, unverified assumption: that the global context $c$ already contains all information needed to correct $h_i$. The paper does not justify why this intervention is reasonable, nor does it compare it to a more intuitive, "Local-Aware" design (e.g., where the intervention signal $g_i$ is determined by both $c$ and $h_i$).
+
+### Questions
+1.Can the authors justify the use of a simple, centroid-based linear metric (Eq. 1) to identify experts in the complex, non-convex, and entangled manifold structures described in Sec 3.1 and Figure 2? Is there evidence that this simple metric is sufficient and not just a marginally better heuristic than layer selection?
+
+2.Was any stability analysis performed on the LAE selection? If the 1% calibration set is re-sampled, how much do the resulting Top-K LAEs vary? How can we be confident the method's foundation is not fragile and dependent on a lucky 1% split?
+
+3.What is the rationale for designing a "blind" HMC that only uses the global context $c$ to generate intervention signals, without seeing the local feature $h_i$ it is supposed to be rectifying? Have the authors compared this against a "Local-Aware" HMC (e.g., $g_i = \text{LGM}(c, h_i)$) to justify this strong design assumption?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

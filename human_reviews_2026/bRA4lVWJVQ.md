@@ -1,0 +1,168 @@
+# Spotlight on Token Perception for Multimodal Reinforcement Learning
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6
+
+## Abstract
+While Reinforcement Learning with Verifiable Rewards (RLVR) has advanced the reasoning capabilities of Large Vision-Language Models (LVLMs), most existing methods in multimodal reasoning neglect the critical role of visual perception within the RLVR optimization process. In this paper, we undertake a pioneering exploration of multimodal RLVR through the novel perspective of token perception, which measures the visual dependency of each generated token. With a granular analysis of Chain-of-Thought (CoT) processes, we uncover two key insights: first, token perception in a rollout trajectory is sparsely distributed,  where only a small fraction of tokens have high visual dependency for visually-grounded reasoning; second, different trajectories exhibit significant divergence in their overall visual dependency. Based on these observations, we propose **V**isually-**P**erceptive **P**olicy **O**ptimization (**VPPO**), a novel policy gradient algorithm that explicitly leverages token perception to refine the learning signal. Specifically, VPPO achieves this through a dual mechanism: it reweights a trajectory's advantage by its overall visual dependency, and focuses policy updates exclusively on perceptually pivotal tokens. On a comprehensive suite of eight perception and reasoning benchmarks, VPPO demonstrates substantial gains over leading open-source RL-tuned models, with its effectiveness consistently validated across 7B and 32B model scales. Our findings not only establish a new token-level perceptual perspective for analyzing multimodal RLVR but also present a novel and effective optimization strategy to significantly enhance the multimodal reasoning capabilities of LVLMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents VPPO, a novel policy gradient algorithm for multimodal RL that improves LVLM reasoning by explicitly incorporating token-level visual perception. It identifies visually dependent tokens and trajectories to refine learning signals through advantage shaping and gradient filtering. VPPO demonstrates significant performance gains on diverse benchmarks, backed by theoretical analysis and extensive ablations.
+
+### Strengths
+1.The paper introduces a fresh and critical perspective by analyzing and leveraging token-level visual perception in multimodal RL, addressing a clear gap in existing "modality-agnostic" methods. The insights into sparse token dependency and heterogeneous trajectory grounding are well-motivated.
+2. VPPO consistently achieves new state-of-the-art results on a comprehensive suite of challenging multimodal reasoning benchmarks, showing substantial accuracy gains over leading baselines across different model scales (7B and 32B). This robust performance is a key highlight.
+
+### Weaknesses
+1.the additional computational cost of a second forward pass for token perception calculation needs more detailed quantification across different model scales (e.g., specific training times or throughput comparisons for 32B models). 
+2. Evaluation is restricted to reasoning-intensive benchmarks. The method's generalizability to other multimodal tasks, larger model scales, and different architectures remains unexplored, particularly given its reliance on a specific image perturbation strategy.
+
+### Questions
+Please refer to the Weaknesses section above for details.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces Visually-Perceptive Policy Optimization (VPPO), a novel reinforcement learning algorithm for multimodal reasoning that addresses the inefficiency of uniform learning signals in existing approaches. The authors identify that current multimodal RLVR methods fail to distinguish between tokens with different visual dependencies, leading to suboptimal learning. VPPO introduces two key mechanisms: (1) Token-level Gradient Filtering (TGF) that focuses updates on visually-dependent tokens, and (2) Trajectory-level Advantage Shaping (TAS) that reweights advantages based on overall visual dependency. Evaluated on eight benchmarks using Qwen2.5-VL models, VPPO achieves 19.2% and 7.6% average accuracy improvements for 7B and 32B models respectively.
+
+### Strengths
+- Thorough analysis: The paper provides excellent insights into token-level visual dependency distributions and their impact on RL learning.
+
+- Strong empirical results: Consistent improvements across 8 benchmarks and 2 model scales demonstrate robustness.
+
+- Faster convergence: Figure 5 shows VPPO not only achieves better final performance but converges faster
+
+### Weaknesses
+I see no major weakness. Thanks for the authors' hard work.
+
+### Questions
+I am not an expert in this area, and I am willing to discuss with other reviewers.
+- After applying the proposed method, will the model diminish its capability on general visual language tasks, such as VQA?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces VPPO, a variant of GRPO that encourages rollouts with higher visual dependence. It adopts a framework similar to PAPO, contributing several additional insights. It gives a proper measurement of visual dependence for each rollout and reveals two valuable insights with empirical evidence. Building upon these, it proposes two tailored adaptations to GRPO that cover both micro and macro hierarchy. Finally, comprehensive and detailed experiments validate the proposed modules, forming the paper as a coherent and insightful work.
+
+### Strengths
+1. **Well-presented Paper** The paper conducts a step-by-step and coherent exploration, from intuitive motivation, empirical evidence, tailored solutions, and comprehensive experiments. Each part is presented clearly and soundly.
+2. **Insightful Empirical Findings**. The paper introduces a measurement for visual dependence. Building on this metric, the paper demonstrates that only a small proportion of tokens are highly visually dependent, and the overall visual dependency is varied across rollouts. This metric and findings might inspire further research.
+3. **Theoretical Guarantee**. The paper proves that VPPO constructs a lower-variance policy gradient estimator, guaranteeing overall training stability.
+4. **Comprehensive Experiments**. There are very comprehensive experiments studying various aspects of the proposed methods. They collectively validate the effectiveness and robustness of VPPO.
+
+### Weaknesses
+1. **Solid yet Expected Contributions**. Despite the overall high quality, VPPO inherits the framework from PAPO and makes incremental improvements. This leads to the paper's contributions being sufficient but not groundbreaking.
+2. **Minor Gaps between Insights and Solutions**. For the first insight, the paper demonstrates that highly visually dependent tokens are sparsely distributed across rollouts. VPPO then computes gradients exclusively yet evenly on top-ranked tokens. The paper does not discuss the reason behind adopting the discrete binary mask instead of a continuous soft mask based on the dependent value. For the second insight, the paper shows that the overall visual dependency is varied across rollouts. However, it lacks an empirical link between visual dependency and reasoning quality. Additionally, the amplification term is a bit confusing: in cases where a rollout exhibits a high visual dependency but yields incorrect results, the term would amplify discouragement, which somewhat misaligns with motivation.
+
+### Questions
+1. As in weakness 2, why do you adopt a discrete binary mask operation instead of a continuous soft mask based on the dependent value?
+2. What are the intuitive benefits of the amplification term on the advantages? Why do you choose not to reflect the overall visual dependency on the reward term?
+3. Can you further clarify the formulation difference between VPPO and PAPO?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper explores how tokens generated during visual reasoning influence the post-training of large language models. The core motivation is to understand which reasoning tokens are most affected when noise is introduced into the image. Through empirical analysis, the authors find that a small subset of tokens plays a disproportionately important role in the reasoning process, and accurately predicting these tokens is essential. Building on this insight, they propose a method for visual reasoning that is validated through experiments and ablation studies.
+
+### Strengths
+1. The paper is well written and formatted nicely; it is easy to understand the core message of the paper.
+2. The authors present a well-informed set of experiments and ablations that help show the effectiveness of their method.
+3. The paper's motivation is well rooted in recent literature evaluating the effectiveness of reasoning traces during post-training of LLMs [1,2].
+
+[1] Beyond the 80/20 Rule: High-Entropy Minority Tokens Drive Effective Reinforcement Learning for LLM Reasoning
+
+[2] TreeRL: LLM Reinforcement Learning with On-Policy Tree Search
+
+### Weaknesses
+1. A key concern is the sensitivity of the proposed method to the Entropy Loss parameter introduced for DAPO. This parameter requires careful tuning to achieve optimal performance.
+
+2. While the authors cite [1] and acknowledge related work in LLM reasoning, the claim that “in the multimodal domain, a pivotal token is not just a logical fork but a critical moment of visually grounded reasoning” lacks sufficient support, as no direct comparison is made with those prior methods.
+
+3. It would have been valuable to include results comparing VPPO, GRPO, and DAPO on the 32B model, as this could provide deeper insight into their relative effectiveness at scale.
+
+### Questions
+1. The sensitivity of the method to the entropy loss hyperparameter appears to stem from VPPO being built on top of DAPO. A crucial experiment would be to substitute DAPO with GRPO within VPPO to observe how the results change. This would help disentangle the specific contributions of VPPO from those of the underlying policy optimization algorithm.
+
+2. Additionally, following [1], are the tokens with the highest KL divergence also the ones with the highest entropy? Clarifying this connection would help align the findings with recent literature and enhance the interpretability of the pivotal token analysis.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

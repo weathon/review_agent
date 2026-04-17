@@ -1,0 +1,196 @@
+# SWE-Mirror: Scaling Issue Resolving Datasets by Mirroring Issues Across Repositories
+
+- Decision: Reject
+- Scores: 6, 4, 6, 6
+
+## Abstract
+Creating large-scale verifiable training datasets for issue-resolving tasks is a critical yet notoriously difficult challenge. Existing methods on automating the Gym environment setup process for real-world issues suffer from low success rates and high overhead. Meanwhile, synthesizing new tasks within existing Gym environments leaves the vast pool of real-world issue-resolving history untapped. To maximize the utilization of existing Gym environments and also the rich data of issue-resolving history on GitHub, we introduce SWE-Mirror, a pipeline that distills a real-world issue’s semantic essence, mirrors it into another repository with a configured Gym environment, and re-animates it as a verifiable issue-resolving task. SWE-Mirror reuses existing Gym environments along with the vast pool of issue-resolving history hosted on GitHub to construct a large-scale dataset of mirrored authentic and verifiable tasks. Applying SWE-Mirror to 40 repositories across 4 languages, we have curated a dataset with 60,671 issue-resolving tasks and demonstrated the value of our dataset by training and evaluating coding agents at various scale. Post-training experiments show that models trained with the dataset exhibit improvements in issue-resolving capabilities. Furthermore, by extending the dataset size to over 12,000 high-quality trajectories, we established a new state-of-the-art (SOTA) among Qwen2.5-Coder-Instruct based LLMs on the OpenHands agent framework, which increases the resolve rate on SWE-Bench-Verified by +21.8% for the 7B model and +46.0% for the 32B model and validates the effectiveness of our approach.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses the challenge of constructing large-scale, verifiable datasets for issue-resolving tasks. The authors propose SWE-MIRROR, a pipeline that mirrors real-world issues into repositories with pre-configured Gym environments, enabling verifiable task synthesis without costly environment setup.
+
+### Strengths
+- The motivation is sound — SWE-MIRROR is proposed to address the limitations of existing SWE training data construction methods.
+- Experimental results show that models trained with SWE-MIRROR outperform the baselines.
+
+### Weaknesses
+- The repository diversity is relatively low, which may pose risks to the model’s generalization ability.
+- The paper lacks an analysis of the diversity of synthesized issues. For example, are the synthesized issues more diverse in terms of issue types compared to those within a single real repository? Such an analysis would help better understand the effectiveness of SWE-MIRROR.
+- In Table 4, the ablation study on training data is conducted only on a subset of 512 trajectories; it remains unknown whether the gap between synthesized and real data would widen as the dataset scales up.
+
+### Questions
+- When constructing a large amount of data for a single repository, would the LLM overfit or memorize that repository’s content, thereby harming generalization?
+- In the Task-Mirroring stage, why is the test generated before the patch, rather than generating the patch first and then the test?
+- In line 295, why do you “keep the model’s only the last 5 observations’ content from environment in the context”?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper studies the problem of scaling training data for real-world SWE tasks. Manual curation and filtering of SWE environments using human PRs is inefficient and not scalable. The paper thus proposes a synthetic approach which mirrors issues in other repositories in existing gym-environments. While the approach for synthetic curation is similar to some prior works, the results and cross-lingual generalization is interesting.
+
+### Strengths
+* The results for cross-lingual generalization is interesting.
+
+* The paper shows the power of synthetic data for SWE training. While their are prior works like SWE-Smith and R2E-Gym which also use synthetic data for SWE training, the proposed approach is interesting.
+
+* The final performance on SWE-Bench Verified is impressive.
+
+### Weaknesses
+* Table 2 lacks comparison with recent methods on also scaling SWE tasks [1]. While the authors mention it in the end in related work, I feel its important to provide a discussion early on on the comparison with other methods for scaling SWE tasks.
+    * This seems especially relevant in context to recent works like SWE-Smith and R2E-Gym which have similar motivation as the paper (L51) i.e. "scaling SWE tasks manually or through human written PRs alone is not scalable".
+    * Similarly, in Sec. 3.4 when the authors evaluate the impact o f synthetic data on SWE training mentioning "Synthetic data quality is competitive with real data", it will be useful to also analyze how the proposed synthetic data compares with prior synthetic data generation methods for SWE tasks.
+
+* As mentioned in L182-188, the "A different agent-Mirror
+Agent takes the abstract description for semantic context and the file paths and function names from the test.patch as a strong structural prior. Its objective is to surgically modify the application’s source code to specifically cause the new test case to fail". This seems very similar conceptually to SWE-Smith which also mnodifies the existing codebases to cause new bugs to appear.
+
+* Similarly the "Mirroring Problem Statement" in L189-196 seems very similar to the backtranslation approach in SWE-Smith and also in some part with R2E-Gym which also generates new problem statements given ground truth patch, relevant files and context etc.
+
+* Finally, task verification is also similar to other works like SWE-Gym and SWE-Smith.
+
+* Is the 52.2 reported in Table 3, pass@1 or Best@K with test-time scaling?
+
+* Also another concern for Table 3 will be that prior works use worse teacher models for RFT on SWE trajectories. Thus, it will be important to analyze the performance improvements under the same teacher model. This might help to disentangle and emphasize the role of data quantity for SWE training - which is the main contribution of the paper.
+
+References:
+[1] R2E-Gym: Procedural Environments and Hybrid Verifiers for Scaling Open-Weights SWE Agents, 2025
+
+[2] SWE-smith: Scaling Data for Software Engineering Agents, 2025
+
+### Questions
+Please see the weaknesses section for some additional questions.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper targets the scaling bottleneck of building verifiable issue-resolution datasets. Authors introduce SWE-Mirror, a pipeline that mirrors real GitHub issues from one repo into another repo that already has a configured Gym. Authors further release a dataset, SWE-MIRROR-60K, has 60k validated tasks across 40 repos and 4 languages. Post-training Qwen2.5-Coder (7B/32B) on collected agent trajectories improves results on SWE-Bench-Verified and Multi-SWE-Bench-Flash.
+
+### Strengths
+- Authors address an important bottleneck (building verifiable Gym environments) in SWE benchmarks:.  
+- The dataset is useful for the community and the LLMs trained on that show strong empirical results.
+- The paper is easy to follow.
+
+### Weaknesses
+- It is unclear how the method ensures there is no data contamination or overlap with existing SWE-Bench repositories. I think clarifying how mirrored issues are checked against known evaluation repositories would strengthen the paper.
+
+### Questions
+1. Is the post-training phase in Section 3.1 based on supervised fine-tuning using the collected trajectories?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper targets a very concrete bottleneck in software-engineering (SWE) agent research: creating large, verifiable, real-world–like issue-resolving tasks without having to set up a new Gym / execution environment for every single GitHub issue. Current approaches either (i) synthesize problems inside a small number of Gyms (high scale, lower realism) or (ii) automate Gym setup for real issues (high realism, very high engineering/storage cost). To address this, the authors propose to “mirror” an issue/PR from a source repo into a target repo that already has a Gym. For that, they:
+
+1) Collect real, “mirrorable” PRs/issues for each target codebase using GitHub search + LLM filtering. 
+2) Mirror the issue in three LLM-driven steps: (i) generate a test.patch that would detect the issue in the target repo; (ii) generate a mirror.patch that actually injects the issue in the target repo; (iii) generate a problem statement consistent with SWE-bench style; and
+3) Verify with three runs (mirrored, mirrored+tests, mirrored+tests+fix) and strict transition rules (effective tests, effective fix, no regressions, no flakiness). Only tasks that pass the filters are kept.
+This results in a dataset with 60,671 validated tasks across 40 repos / 4 languages, with deduplication on F2P tests and patch content; Python is the majority but non-Python is non-trivial. 
+
+Following, they train Qwen2.5-Coder-Instruct-7B and -32B on \~12k agent trajectories (~ 6k newly generated by strong proprietary LMs on SWE-MIRROR + ~6k from SWE-rebench). They evaluate on SWE-Bench-Verified and Multi-SWE-Bench-Flash, outperforming several comparable open-source baselines and showing a clear scaling curve w.r.t. number of trajectories and that their error masking training strategy is better than “response only” or “error pruning”.
+
+The contribution is 3-fold: 
+1) a new paradigm for scaling SWE datasets (mirror instead of synthesize or setup new gym), 
+2) a large dataset of 60K+ verifiable tasks, and 
+3) empirical evidence that this data actually makes open models better at agentic coding and follows scaling laws.
+
+### Strengths
+- The paper is very explicit about the real blocker: not lack of real issues, but lack of reusable, configured, verifiable environments. This is aligned with recent SWE-rebench / SWE-Gym / Multi-SWE-bench discussions, so the motivation is strong and timely.
+- The proposed idea is conceptually neat and have a potential for big impact in the code agents community, by finding a path between building more gyms and creating synthetic issues. 
+- Large dataset (60,671 tasks) with strong emphasis on verifiability: Size is comparable to or bigger than other recent SWE agent datasets, but the authors keep the verifiable property (hidden tests, pass/fail transitions, no regression), which is what the community currently values most for training & RL. This clearly increases the practical value of the release. This answers the usual criticism of LLM-generated SWE data (“is it actually executable?”).
+- Non-Python coverage and cross-lingual experiment. Most current SWE agent work is Python-only. The paper actually shows that training on Rust/Go/JS still helps Python SWE-Bench-Verified, which is a nice, non-obvious result and makes the dataset more generally useful.
+- Informative ablations show the dataset is not just large, it is useful at increasing sizes, and the proposed error-masking training strategy wins more as data grows.
+
+### Weaknesses
+- Claim about “new SOTA among Qwen2.5-Coder-Instruct–based LLMs” is slightly narrow. In Table 3, the proposed model (52.2%) is far above base Qwen2.5-Coder-32B (6.2%), so that part is solid. But the same table shows Qwen3-Coder at 69.6% under OpenHands, i.e. a newer base family already higher. The paper should make its claim narrower and explicit (“…for models trained from Qwen2.5-Coder-Instruct, not for newer Qwen3 models”). It seemed too strong the claim of SOTA results.
+- Related to that, evaluation table mixes unlike baselines. On Table 3, the proposed SWE-MIRROR-LM-32B (52.2%) is compared to Qwen3-Coder (69.6%) and to very recent large systems under possibly different scaffolds. The main text says “we established a new SOTA among Qwen2.5-Coder-Instruct based LLMs on OpenHands”, which is true, but the table, as written, can be misread as “we’re competitive with the best open models”, which is not the case. The paper should separate clearly: (i) within-family comparison (Qwen2.5-Coder-Instruct), (ii) same scaffold comparison, and (iii) head-to-head with strongest open models.
+
+### Questions
+- It would be interesting to have a broader discussion, even some categorization, on the cases the pipeline failed to mirror. We may lose important cases there, no? 
+- Can you explain better the reasoning behind the choice of models as baselines on table 3? Are them with the same backbone model? Qwen2.5-Coder. Do they allow me to compare how good is your dataset compared to other gyms? 
+- Is there a risk of data contamination on your data? 
+- You could discuss a bit the licensing of the code you are using, on the ethics statement. 
+
+Typos:
+- (line 251, table 2 legend) “stastics” -> “statistics”
+- (line 226) “must fixes somethings”
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4

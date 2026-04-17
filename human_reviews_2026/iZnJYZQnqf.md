@@ -1,0 +1,182 @@
+# TuneAhead: Predicting Fine-tuning Performance Before Training Begins
+
+- Decision: Reject
+- Scores: 2, 4, 6, 6
+
+## Abstract
+Fine-tuning large language models (LLMs) is compute-intensive and error-prone: model performance depends sensitively on data quality and hyperparameter choices, and naïve runs can even degrade model performance. This raises a fundamental question: Can we predict fine-tuning performance before training begins? We present TuneAhead, a lightweight framework for pre-hoc prediction of fine-tuning performance. TuneAhead encodes each fine-tuning run as a meta-feature vector that combines static dataset descriptors with dynamic probe features from a short simulated run. A gradient-boosting predictor maps these features to performance predictions, while SHAP-based attributions provide interpretable diagnostics that reveal which specific features are driving performance. Across 1,300+
+fine-tuning runs on Qwen2.5-7B-Instruct, TuneAhead consistently outperforms strong baselines such as ProxyLM and Early-Stop Extrapolation. On a held-out test set of 370 runs, by defining ‘success’ as exceeding a performance threshold, it accurately predicted 89.4% of successful runs (110/123) and 91.0% of failure runs (225/247), enabling practitioners to proactively avoid
+costly unsuccessful runs before training begins. This leads to computational savings of 58.4% in total.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces TUNEAHEAD, a framework to predict the fine-tuning performance (specifically, MMLU score) of a large language model (LLM) before a full, computationally expensive training run is completed. The core idea is to encode each potential fine-tuning run as a "meta-feature" vector. This vector is a hybrid, combining static features (model-agnostic dataset properties like lexical and semantic diversity) and dynamic features (model-specific metrics like loss decay and gradient stability, extracted from a short 100-step "probe run"). A gradient-boosting model (LightGBM) is trained on these features to predict the final performance score. The framework also uses SHAP-based attributions to provide interpretable diagnostics for predicted failures. Based on over 1,300 fine-tuning runs on Qwen2.5-7B-Instruct , the authors show that TUNEAHEAD accurately predicts performance, outperforming several baselines and enabling practitioners to proactively avoid costly, unsuccessful runs.
+
+### Strengths
+The paper tackles a very practical and important problem. The feature set is constructed with diverse explainable attributes and achieves good results. The diagnostics also provides useful understanding for the decision.
+
+### Weaknesses
+1. Please explain "recent fine-tuning dynamics tools (e.g., LENSLLM) provide useful macro-level guidance" (line 111). What do you mean by "fine-tuning dynamics tools"? I can't relate something from LENSLLM to this one.
+2. Why define A as a parameter-efficient fine-tuning algorithm? (line 135) I think it's more natural to say A is a general fine-tuning method.
+3. Will different choices of embedding model affect the compute of pairwise cosine distance greatly? (Line 228)
+4. When you write LossDecay(D_i, H_j), please define "slope" and "LinReg" (although it's understandable). I think a more formal definition is necessary when you write formulas. Otherwise, you should use descriptive words (line 248). I also doubt if the linear regression can be improved, as the loss usually descends in a convex curve instead of a linear curve.
+5. Too many details are put in the Appendix (including the definition of 14 meta-features (I think at least describing each of them without formal formulas should be in the main text, as this is the core contribution), the setup of experiments).
+6. It's weird to label "success" using "MMLU score exceeds 55%" (line 304). The paper states that "it's chosen only to balance cases for illustration"; what's the clear objective to achieve this? What do you mean by "balance cases"?
+7. I don't understand the baselines from their names. What is Loss-Rate (Linear) and Reference-PPL (Linear)? (Line 309-310)
+8. You claim that your method outperforms "scaling-law predictors" and "proxy models"; can you point out explicitly what the corresponding baselines are?
+9. Can you elaborate on the differences between ProxyLM and your method (it seems that the difference is they use proxy models but you use the target model)? Will they save more compute, and are they more generalizable to other models?
+10. What's the variance of the MMLU score? I doubt that if the variance is large, ACC@kpp (defined as the fraction with |P_{i,j} - R_{i,j}| <= k) is valid. For example, if the variance is 5, then the perfect prediction (using Rij as a predictor) will have a bad score.
+11. Table 2 only shows the proposed method without baselines. It's hard to judge if the results are good. 
+12. I think this paper's core contribution lies in the comprehensive feature selection. Using tree models (LightGBM) and SHAP to diagnose is not novel (e.g., ProxyLM already implements this). So, to judge if this paper is good, we need to focus more on if the feature selection is efficient and effective. Therefore, please add more discussion on this in the main text and also make a more detailed efficiency analysis for computing these metrics.
+13. Overall, I think this paper needs a great revision; the current version is hard to follow, with too many unclear details and descriptions.
+14. The fine-tuning performance is only tested on MMLU, which may be biased.
+
+### Questions
+I put many questions in weakneeses. Please refer to that part.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a pre-hoc prediction of fine-tuning performance. They make each fine-tuning run as a meta feature vector and use a lightGBM to map these features to an estimated final performance score. SHAP-based feature attributions offer an interpretable explanation of which factors drive the performance.
+
+### Strengths
+* Beyond just predicting a number, the method provides insights into why. a predicted outcome is high or low. This level of interpretability is valuable for practitioners. 
+* Although not exhaustive in terms of model family generalization. The authors curated a meta-dataset of 1300 runs on Qwen 7B. 
+* The work is valuable for llm practitioners, but would require further results and experimentation mentioned in Future work.
+
+### Weaknesses
+* As noted in the limitations, a key concern is how well the approach generalizes beyond the specific experimental setup. The paper’s meta-dataset, while large, is concentrated on instruction-tuning data evaluated via MMLU and primarily uses one base model family (Qwen)
+* The solution in its current form lacks out-of-the-box transferability to new model families. The predictor must be trained on a meta-dataset of past runs for each new base model or significant training setup change. 
+* The evaluation focusses on predicting MMLU accuracy, even though this is reasonable to some extent. Focusing on benchmarks used to evaluate the current generation of models would be better
+
+### Questions
+1. Which meta-features do you suspect are general vs. model-specific?
+2. How was the choice of a 100-step probe determined? Was there experimentation with shorter or longer probes, and how does that affect prediction accuracy? In practice, if someone can only afford, say, 10 steps or 50 steps for the probe, does the performance degrade significantly?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces a predictor trained on meta-features that encode each fine-tuning run. This predictor leverages a combination of static dataset descriptors and dynamic probe features (extracted from a short, simulated run) to predict the final performance of a full fine-tuning task.
+
+### Strengths
+1 The framework can identify unpromising fine-tuning runs before full training begins, enabling substantial computational savings.
+
+2 The framework achieves high predictive accuracy by effectively combining static dataset descriptors with dynamic probe features.
+
+3 A robust attribution analysis of the predictive features is conducted in the paper.
+
+### Weaknesses
+1 There appears to be a mismatch in the experimental design. The models are fine-tuned on instruction-following datasets, but their performance is evaluated on MMLU, which primarily measures general knowledge and reasoning rather than instruction-following fidelity. The evaluation should arguably include benchmarks that directly measure instruction-following capabilities.
+
+2 The study's generalization appears limited. The experiments do not yet constitute a comprehensive
+validation across model families, scales, and task distributions.
+
+### Questions
+Regarding the meta-dataset's construction, were the source datasets too similar in their distribution? The framework's robustness might be improved by considering a more diverse range of data construction methods.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper tackles the problem of predicting the outcome of fine-tuning a large language model before actually running the full fine-tune. The authors propose TuneAhead, a framework that encodes each candidate fine-tuning run as a meta-feature vector composed of (1) static dataset descriptors (e.g. dataset size, lexical and semantic diversity, duplication, base-model perplexity on the data) and (2) dynamic probe features obtained from a short, low-cost probe fine-tuning run (100 steps) on the dataset. A lightweight gradient-boosted tree model (LightGBM) is trained on a large meta-dataset of past fine-tuning experiments (over 1,300 runs on Qwen2.5-7B) to predict the final fine-tuned performance (evaluated here on MMLU accuracy). The model also uses TreeSHAP to provide interpretable explanations of its predictions, highlighting which features (e.g. unstable initial loss, low data diversity) contribute to a predicted failure or success.
+
+The paper's contributions are: (1) Formulating fine-tuning outcome prediction as a pre-hoc meta-learning task to enable early "go or no-go" decisions and dataset ranking before expensive training. (2) The TuneAhead framework that combines static data features with dynamic probe signals, yielding accurate performance predictions and human-interpretable diagnostics via SHAP values. (3) Experiments demonstrating that TuneAhead consistently outperforms strong baselines (scaling-law extrapolation, early training loss extrapolation, proxy models like ProxyLM) on predicting final accuracy. On a held-out test set of 370 runs, it correctly identifies ~89% of successful fine-tunes and ~91% of failures (using a success threshold of 55% MMLU accuracy), leading to an estimated 58% reduction in wasted compute by avoiding doomed runs. The authors further show a practical case study where TuneAhead's diagnosis not only predicts outcomes but also provides actionable insights to improve fine-tuning results.
+
+### Strengths
+* **Highly Practical Problem & Impact:** The paper addresses a very relevant problem of avoiding wasted computation on fine-tuning runs that will likely fail. This has strong practical significance given the cost of large-LM training. The proposed solution, TuneAhead, demonstrates it can save ~58% of compute by preempting unsuccessful runs.
+
+* **Novel Framework with Interpretability:** The approach is a novel combination of ideas: by fusing static dataset descriptors with dynamic early-run signals, the authors create a richer predictor than prior methods that used only one or the other. This hybrid feature space is original and effective, as evidenced by large performance gains over baselines. Importantly, the inclusion of SHAP-based explanations is a strength as it converts the predictor's output into actionable insights (example identifying low data diversity or unstable gradients as causes). This diagnostic capability increases its usefulness.
+
+* **Comparisons to Relevant Baselines:** The paper's experimental evaluation spans 1300+ fine-tuning runs with Qwen2.5-7B-Instruct, with comparisons to multiple baseline approaches drawn from literature (scaling laws, early curve extrapolation, small proxy models, etc.). TuneAhead consistently outperforms all baselines by a good margin. The authors also conduct ablations showing that removing static or dynamic features hurts performance, thus confirming the synergy.
+
+* **Actionable Case Study Demonstrating Significance:** A standout strength is the case study where TuneAhead's diagnosis is used to improve a fine-tuning outcome. The authors show that for a run predicted to fail due to instability and data issues, adjusting the hyperparameters (lowering learning rate, etc.) and cleaning the dataset (removing duplicate/outlier examples) led to a good jump in final accuracy. This demonstrates that TuneAhead is not only predicting outcomes but also enabling targeted interventions.
+
+### Weaknesses
+* **Scope of Evaluation – Limited Base Models/Tasks:** The experiments primarily focus on one base model (Qwen2.5-7B-Instruct) and use the MMLU benchmark accuracy as the measure of success. Although the paper includes preliminary results on two additional settings (a 3B LLaMa and a 500M Qwen model) to show generalization, the scope of tasks is still relatively narrow (mainly academic QA/instruction-following tasks evaluated via MMLU). It remains unclear how well TuneAhead would perform for other types of fine-tuning tasks (e.g. open-ended generation tasks with different metrics, or fine-tuning in other domains like code or vision-language data). The heavy focus on MMLU as the evaluation metric may limit our understanding of the framework’s generality across diverse fine-tuning objectives.
+
+* **Clarity on Meta-Dataset Construction:** The paper could be clearer about how the 1,300 fine-tuning runs were constructed and what the “heterogeneous instruction-tuning sources” were. For instance, did each run fine-tune the base model on a different dataset (or different subset of an instruction corpus), and then evaluate on MMLU? If so, using MMLU accuracy to judge all runs’ success might introduce some coupling (since MMLU itself is a specific evaluation). It’s a bit confusing how success is defined uniformly (as >55% accuracy on MMLU) if the fine-tuning datasets vary in nature - some datasets might not directly aim to improve MMLU performance. In short, the setup for creating the meta-dataset and the rationale for using MMLU as the ground-truth performance for all runs should be explained in more detail to avoid ambiguity.
+
+* **Reliance on a Short Probe Run (Computational Overhead):** TuneAhead is not zero-cost – it requires running a 100-step fine-tuning probe for each evaluated (dataset, hyperparameter) pair to extract dynamic features. While 100 steps is relatively small (the authors estimate <5% of a full run) and clearly yields a big payoff in saved compute, this overhead could still add up if one needs to evaluate a large number of candidate runs. The approach assumes a fixed 100-step probe; it’s not discussed how this number was chosen or how sensitive the predictions are to the probe length. If a scenario allowed only, say, 10 or 50 steps, would the performance degrade significantly? Additionally, if the fine-tuning process is very long or the model extremely large, even 5% might be costly – so this could affect practicality in some settings.
+
+### Questions
+The questions are the same as those listed in the Weaknesses section.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

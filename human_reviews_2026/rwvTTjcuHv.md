@@ -1,0 +1,210 @@
+# Disentangled Skill Representations for Predictive Human Modeling
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 2, 4, 2
+
+## Abstract
+Understanding human skill is essential for AI systems that collaborate with, coach, or assist people. Unlike typical latent variable estimation problems—which rely on single observations or explicit labels—skill is a persistent, compositional, and behaviorally grounded construct that must be inferred from patterns over time. We introduce Skill Abstraction with Interpretable Latents (SAIL), a method for learning disentangled skill representations from naturalistic behavioral data. Our approach produces a skill embedding that is robust to spurious performance fluctuations and captures core, transferable representation of human subskills. Furthermore, SAIL supports skill-informed behavior prediction that generalizes across a variety of contexts. We represent each individual with a persistent skill embedding that controls a blend between expert and novice behavior bases and is trained using counterfactual subskill swaps for disentanglement. This design yields a representation that is both robust to performance variation and structured for interpretability. We demonstrate that SAIL outperforms prior methods across two domains—high-performance driving and baseball batting—producing skill representations that are stable, predictive, and interpretable.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper aims to introduce a method to produce skill embeddings that reflect *human* skill. These representations are designed to be interpretable, composable (learned in terms of preset sub-skills), persistent and individual to each participant, and have strong predictive capabilities. Each skill is learned as a blend of expert and novice behaviour bases and disentangled using counterfactuals. Two datasets were used, racing and baseball; the baseball dataset was augmented in a variety of ways.
+
+### Strengths
+- Good ablation studies.
+- Experimental results seem promising, with a good number of baselines.
+- The use of counterfactuals is an interesting idea.
+
+### Weaknesses
+- The method was difficult to understand since appropriate context isn't given at places. See below for more details. 
+
+- There are several typos that should be addressed. I have listed a few here:
+	- Line 36: missing full stop.
+	- Line 415: "Discussion:" repeated
+
+- I believe that the following prior work are relevant to this paper and should be considered to be mentioned in Related Work (in order of relevance in my opinion): 
+	- [Petangoda, Janith C., et al. "Disentangled skill embeddings for reinforcement learning." _arXiv preprint arXiv:1906.09223_(2019).](https://arxiv.org/abs/1906.09223)
+	- [Hausman, Karol, et al. "Learning an embedding space for transferable robot skills." _International Conference on Learning Representations_. 2018.](https://openreview.net/forum?id=rk07ZXZRb)
+	- [Gupta, Abhishek, et al. "Meta-reinforcement learning of structured exploration strategies." _Advances in neural information processing systems_ 31 (2018).](https://proceedings.neurips.cc/paper/2018/hash/4de754248c196c85ee4fbdcee89179bd-Abstract.html)
+	- [Dave, V., & Rueckert, E. (2025). Skill Disentanglement in Reproducing Kernel Hilbert Space. _Proceedings of the AAAI Conference on Artificial Intelligence_, _39_(15), 16153-16162.](https://ojs.aaai.org/index.php/AAAI/article/view/33774)
+	
+- Section 3, Problem Formulation: 
+	- Line 148: The math notation isn't written well. The notation $D$ and $c$ aren't used in the notation for $\mathcal{D}$ and $\tau_i$ even though the former are referred to when defining the latter.
+	- Is $\mathcal{M}$ a space of functions? I.e., is a skill metric $m\in \mathcal{M}$ a function? 
+	- What is $k$ in $z_s^{(k)}$ denoting? How are the subcomponents composing to create a skill?
+- Line 247: "... can be unstable to train ..." — can you please provide a reference here.
+- The authors don't provide an algorithm that describes the end-to-end process of their method. Having one would help readability a lot. I was generally unable to decipher what overall method is. A lot of different components were described, however I was not able to understand how they all fit together; Figure 1 was not helpful since it is not referred to in the text in an explanatory matter, and it also contains notation that wasn't used in the main text. 
+- Figure 1 refers to some notation (e.g., $z_{donor})$ that isn't explained / defined in the text. 
+ - There is a lack of variance / standard error being reported. Were repeated experiments carried out?
+ - There is a lack of motivation on what / how the learned skill representations can be used. 
+- The number of datasets used isn't sufficient, especially since the Baseball dataset is (self-admittedly) too small and required augmentation. Are there other datasets that could be evaluated on and added to the paper?
+
+### Questions
+- Line 36 - '... from other variables in representation learning...' — what are the 'other variables' referred to here? Could the authors state some examples here by extending the sentence. 
+- Line 40 - It is unclear what 'performance' means here. From reading ahead, this is a technical word from another paper, and it is not used in the usual way the word is used. I think at least adding a reference to this paper is necessary here to indicate this distinction. You could also paraphrase a short definition, or use a footnote to elaborate further.
+- Line 81: "Traditional metrics such..." — traditional metrics of what?
+- Line 152:  I am confused about the comparison of *skill* with *performance*. It isn't apparent why these are concepts that require a distinction made; they are obviously very different concepts (e.g., a skill is something a system has / can learn, and performance measures how good that skill is). Is there a context where performance 
+- Line 169: "... assigns each participant ..." — what is a participant here? Are the trajectories sampled from different individuals? If so, this fact should be reflected in the notation introduced in the Problem Formulation section. 
+	- Are there multiple $z_s$, one for each participant?
+	- Is the number of participants known at training time + is the training data indexed by each participant?
+- Line 183: Is this the lower bound? If so, please give it an Equation number and refer to it in the preceding sentence.
+- Section 3.3:
+	- How is each $d_k$ chosen?
+- For the baseball dataset, what do the results look like with just the original dataset, without the augmentations?
+- Line 476: "Finally, while counterfactual training improves interpretability, it does not guarantee fully disentangled subskills." — In Table 1, SAIL w/o CF had worse disentangle scores. Thus what is the reason for making this claim?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes SAIL (Skill Abstraction with Interpretable Latents), a framework for learning disentangled human skill representations from behavioral trajectories. Each person is modeled with a persistent skill embedding that blends expert and novice behavior bases to predict trajectories. To achieve interpretability, it uses counterfactual subskill swaps that encourage disentangled latent dimensions corresponding to specific subskills. The method is evaluated on two domains, including high-performance driving and baseball batting. Performance evaluation with baselines (SimCLR, β-VAE, and autoencoders) show that SAIL achieves superior stability, predictive utility, and interpretability.
+
+### Strengths
+- Clear formulation of “skill” as a representation problem: The authors explicitly define desiderata (construct validity, predictive utility, interpretability) and design the model accordingly.
+- Innovative use of counterfactual swaps: The disentanglement approach is conceptually sound and provides interpretability beyond standard VAE or contrastive methods.
+- Empirical demonstration across two distinct domains: Evaluating both driving and batting demonstrates cross-domain generality.
+
+### Weaknesses
+- Simplistic definition of expert and novice bases: The method defines the expert basis using a single ‘most expert’ participant and the novice basis via PCA over low-skill trajectories. This is a very simplistic and subjective setup, risking bias and poor generalization if expert behavior is heterogeneous.
+- Weak comparative analysis: The baselines (SimCLR, β-VAE, AE-LC) are generic representation learning methods not optimized for skill abstraction. There is no comparison with recent hierarchical or meta-learning models for human skill, so the claim of superiority is not fully justified.
+- Limited data and validation diversity: Only two domains, including synthetic simulated driving and small baseball batting, are tested. Also, real-world transfer or generalization to unseen participants is not well explored.
+- Counterfactual procedure underexplained: The implementation of subskill swapping is intuitive but lacks quantitative justification, e.g., how sensitive results are to swap probability or latent dimensionality.
+
+### Questions
+- How robust is SAIL to the selection of expert and novice bases?
+- Why were no skill-modeling or hierarchical imitation learning methods included for comparison?
+- How are noisy or correlated subskill metrics handled to prevent interference across latent slices?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a method to learn skill representations from a set of collected human behavior data. To encourage the skill representation to capture essential properties of skills rather than data noise, the authors propose several techniques to make the representation better align with human variations, such as variations across individuals and variations between novices and experts.
+
+### Strengths
+This work, to the best of my knowledge, proposes a novel way to learn representations for human skills. The individual-specific representation, the novice-expert interpolation, and the disentangled skill space provides useful techniques to model different aspects of the human skill space.
+
+### Weaknesses
+There are several weaknesses of the paper, mainly with respect to the disentanglement module, evaluation and presentation clarity.
+
+1. Unlike traditional disentangled representation learning methods which typically are self-supervised, the proposed disentanglement module relies on human labeled subskill metrics.
+
+2. The work claims that the learned skill representation is useful for downstream tasks, but there is no downstream task evaluations.
+
+3. Regarding clarity, multiple places can be improved, including but not limited to
+   1. Fig1 contains many undefied variables, such as $z_{donor}$ and $z_{orig}$.
+   2. The training loss is completely deferred to the appendix, though it's an important component of the whole method.
+   3. Several unclear metrics (see questions part for details).
+
+Minor typos:
+
+1. Table 1, in Behavior prediction (RMSE ↓) row, SAIL w/o CF (2.75) should be bold for Baseball  rather than SAIL (2.76).
+
+2. Line 415, two "Discussion:"
+
+### Questions
+In Table 1, how are composite (Construct, Predictive, Disentangle) scores defined?
+
+For the behavior prediction (RMSE ↓) metric which assesses how well $z_s$ can be used to predict trajectories in the same context from which it was derived. How is the prediction done?
+
+In Table 1, for the baseball environment, why all methods has the same value for "Behavior prediction" and "OOC generalization"?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper models human skill as "disentangled skill representations" and represents individuals with skill embeddings that are blends between experts and novices. It evaluates in driving and baseball batting.
+
+### Strengths
+* This paper evaluates in two distinct domains, which is much better than most papers which only do one.
+* I believe human skill modeling is an important and interesting problem.
+* The blending formulation seems novel.
+
+### Weaknesses
+* The paper's contributions are imprecisely stated to the point of being difficult to understand. For example, the point is repeatedly made that "our goal is to represent skill in a way that abstracts away trial-specific noise". However, this seems much less difficult than the paper seems to imply. For example, a simple average achieves this, or, more relevantly, an Elo score. I'm sure that doesn't satisfy other properties, but the work should more explicitly describe what the entire goal is. 
+
+* The idea to blend novices and experts is novel, but seems to be a rather large assumption. Wouldn't this imply a one-dimensional, or low-dimensional skill structure? And one in which skill behaves somewhat linearly? Is there empirical support to suggest that this is reasonable?
+
+* The modeling and methodology sections are done well, but the results and evaluation are not up to the same standard. First, the "construct validity" section claims much more than it should (construct validity is difficult or impossible to measure in this way). Predictive utility, something that should be the main focus of the entire paper, is given a short paragraph. The results seemed rushed, which was unfortunate.
+
+### Questions
+What are the exact goals and contributions?
+How limiting is the novices-experts blending? Could you blend more than just these two extremes?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

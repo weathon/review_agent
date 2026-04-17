@@ -1,0 +1,240 @@
+# Revisting Node Affinity Prediction In Temporal Graphs
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 2, 6
+
+## Abstract
+Node affinity prediction is a common task that is widely used in temporal graph learning with applications in social and financial networks, recommender systems, and more. Recent works have addressed this task by  adapting state-of-the-art dynamic link property prediction models to node affinity prediction. However, simple heuristics, such as persistent forecast or moving average, outperform these models.
+In this work, we analyze the challenges in training current Temporal Graph Neural Networks for node affinity prediction and suggest appropriate solutions. Combining the solutions, we develop NAVIS - Node Affinity prediction model using VIrtual State, by exploiting the equivalence between heuristics and state space models. While promising, training NAVIS is non-trivial. Therefore, we further introduce a novel loss function for node affinity prediction. We evaluate NAVIS  on TGB and show that it outperforms the state of the art, including heuristics.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This work considers the node affinity prediction on continuous-time dynamic graphs (CTDGs), a more challenging yet realistic task than the conevntional temporal link prediction. Based on some simple analysis regarding the (i) equivalance between heuristic and state space models as well as (ii) failure of widely-used cross-entroy loss, a new NAVIS (Node Affinity prediction model using Virtual State) method was then proposed, with some original designs of global virtual state and using regularized lambda loss. Experiments on large-scale dyanmic benchmark (i.e., TGB) validates the effectiveness of NAVIS.
+
+### Strengths
+**S1**. The overall presentation of this paper is well-written and well-motivated, and thus easy to read.
+
+**S2**. As claimed in the paper, node affinity prediction is a more chellenging yet realistic task compared with the conventional temporal link prediction.
+
+**S3**. The proposed method was evaluted on large-scale dyanmic graph benchmark (i.e., TGB)
+
+**S4**. This work anonymously provide its code to ensure the reproducibility of experiments.
+
+### Weaknesses
+**W1**. There are no discussions about some related work about the inference on weigthed dynamic graphs.
+
+According to the problem statement in Section 2, the proposed method considers weighted dynamic graphs, which each edge assocaited with a weight in addition to a timestamp. Different from conventional temporal link prediction (TLP) on unweighted graphs, there are some prior studies [1-3] consider TLP on weigthed dynamic topology (although they still adopt the data model of discret-time dynamic graphs), which are not discussed in this work. In particular, [1-3] can effectively tackle the wide-value-range and sparsity issues of weigthed dynamic graphs. Can the proposed method handle these issues?
+
+[1] GCN-GAN: A Non-linear Temporal Link Prediction Model for Weighted Dynamic Networks. InfoCom 2019.
+
+[2] An Advanced Deep Generative Framework for Temporal Link Prediction in Dynamic Networks. IEEE Transactions on Cybernetics 2020.
+
+[3] High-Quality Temporal Link Prediction for Weighted Dynamic Graphs via Inductive Embedding Aggregation. TKDE 2023.
+
+
+***
+**W2**. From the perspective of rigirous theoretical analysis, Theorem 1 and Theorem 2 are more likely to be facts rather than theorems, as they are staightforward. For Eq. (11), setting $\phi$ to tanh is just one possible choice of the non-linear activation function. In addition, one can also set $\phi$ to ReLU, LeakyReLU, etc. Will these settings change the main results of Theorem 2? It seems that the issue mentioned in Theorem 2 can be easily handled by first normalizing the input into [0, 1] or [-1, 1] and finally recovering to the original value range for output. Will this simple modification chanege the main results of Theorem 2?
+
+It seems that Theorem 3 was proved only based on a specific toy example, which may not be a rigrious proof to show that there exist infinitely many triplets.
+
+
+***
+**W3**. Some details about the proposed method are missing.
+
+After reading Section 3.2, it remains unclear how to derive a feasble prediction result (e.g., normalized ${\bf \hat x}$) using the new structure defined in (14), as there is no ${\bf \hat x}$ in Eq. (14).
+
+There are no formal equations to explictly describe how to use Eq. (14) to derive feasible outputs for a batch of nodes.
+
+It seems that the final training loss of NAVIS was not foramlly given in tha main paper, which may be a combination of Eq. (16) and (18) with a tunable hyper-parameter.
+
+There is no pseudo-code to summarize the overall training and inference procedures of NAVIS, in which some of the aforemention details can be checked.
+
+
+***
+**W4**. Current experiment setups may not fully validate the effectiveness of NAVIS. Some more further experiments are suggested.
+
+The pre-experiments shown in Fig. 1 were evaluated based on MAE and mean rank, while main experiment results in Tables 1-4 were based on NDCG@10, which may not be consistent.
+
+There seem no parameter analysis to test the effects w.r.t. different settings of hyper-paramters.
+
+There seems no comparison about the training time, inference time, and memory consumption. As NAVIS may potentially result in a better trade-off between the inference quality and effciency of node affinity prediction, some further analysis about its efficiency is reommended.
+
+Table 5 does not provide details about the value range of edge weights. As mentioned in **W1**, wide-value-range issue may make the inference on weigthed graphs more challenging than that on unweighted topology.
+
+
+***
+**W5**. There are no discussion about the limitations of this work and possilbe solutions as future research directions.
+
+### Questions
+See **W1**-**W5**.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The authors consider the task of node affinity prediction in temporal networks, which they describe as more challenging than temporal link prediction because it concerns predicting node affinities for a set of possible neighbour nodes at a future time rather than the existence of only one link. They consider simple yet strong baselines for node affinity prediction; specifically, baselines as simple as predicting a recent ground-truth affinity vector for a future point in time, or a moving average over previous affinity vectors. Then, they argue (and show directly) that linear state space models can capture the heuristics defined by those simple baselines. However, they also show that temporal GNNs that use RNN, LSTM, or GRU memory cells suffer from fundamental limitations such that they cannot learn those simple baselines. To address this shortcoming of TGNNs, the authors develop a GNN based on linear state space models for learning node affinities and call it NAViS. On a range of benchmark datasets from TGB, the authors demonstrate that NAViS outperforms current TGNNs and simple heuristic baselines.
+
+I found the paper well written and the authors' arguments easy to follow. I believe the paper makes a valuable contribution, and I found it refreshing to see that the authors considered the possibility that TGNNs suffer from fundamental limitations, which, once discovered, allowed them to formulate a suitable solution. I was also happy to see that the authors highlighted the importance of "aligning model inductive bias and training objectives with the task", which I believe should be more often in focus than it tends to be.
+
+### Strengths
+- The paper is well written, and the authors' arguments are easy to follow.
+- The authors consider a relevant research question and identify fundamental limitations of TGNNs that prevent TGNNs from learning simple heuristics that are strong baselines in node affinity prediction.
+- The empirical evaluation, including an ablation study, demonstrates the good performance of the authors' proposed method.
+
+### Weaknesses
+- I believe there might be a claim that is not fully substantiated. The authors claim that "any memory-based TGNN that applies standard memory cells cannot represent even the simplest heuristics -- persistent forecasting.", which I agree with. However, they state that "[TGNNs] lack the functional expressivity required for node affinity prediction", which I find questionable. The only thing that was established is that they cannot do so by learning such simple baselines. But it has not been established that this is the only way to make good node affinity predictions.
+- The authors do not discuss the complexity of their approach, leaving it open whether it scales to large-scale networks.
+
+### Questions
+I have a couple of questions about points I did not fully understand when reading the paper, and I hope that the authors can help me clarify them.
+
+1. I am unsure whether the main questions from page 1 were answered: It became clear why heuristics outperform more sophisticated TGNNs, but I do not believe that you answered the question of whether we can push TGNNs to do better. But perhaps I have simply missed the answer. Could you elaborate whether your work suggests ways, or even a general recipe, for how to improve TGNNs for node affinity prediction?
+2. I am curious whether, as claimed in the first point of the contributions, we can really say that NAViS is more expressive than other TGNNs that use memory cells such as RNN, LSTM, or GRU. I believe that, at least in some regards, NAViS is more expressive because it is designed to be powerful enough to represent what linear state space models can do, and you showed that conventional memory-cell-based TGNNs cannot do that. However, I suspect that there are things that memory-cell-based TGNNs can do that NAViS cannot do---is that correct?
+3. Connected to the previous question, is there a way to check whether NAViS actually learns simple heuristics, such as persistent forecasting? Typically, expressivity and learnability are different aspects, and just because NAViS can express something, it doesn't necessarily mean that it can actually learn what is desired in practice. I understand that you used the Lambda Loss specifically to nudge the training in the right direction. Nevertheless, I'm wondering whether you have checked, or whether it is at all possible to check, that NAViS learns what you want it to learn?
+4. L.423 mentions that the performance of current TGNNs "[suggests] an incompatible design choice of TGNNs for future node affinity prediction". What precisely do you mean by "incompatible design choice" here? Does this refer back to using memory cells, or are there other unsuitable design choices you are referring to? I also seem to remember, but may be wrong, that not all of the TGNN baselines build on memory cells. If that's the case, can you speculate what could be a reason for their weak performance?
+5. I am also wondering whether it has been established that those simple baselines, such as persistent forecasting, generally work well in practice? Clearly, the empirical evaluation shows that this is the case at least in the considered networks. However, are there any other arguments to support this? Do we generally expect node affinities to remain quite stable over time, such that those simple heuristics work well? Are there scenarios where we expect a different behaviour, such that conventional TGNNs would perform better than NAViS?
+6. Could you provide an intuitive interpretation of the global vector g? I understand that it maintains previous node affinity vectors, but is that on a per-node basis, or is it a global vector? Would it make sense to think of it similarly to a vector of node centralities?
+
+Minor points
+- It seems like the wording in the abstract is somewhat misleading. The abstract states that the authors "introduce a novel loss function for node affinity prediction", which sounds like they designed it from the ground up. However, section 3.3 states that NAViS is trained with the so-called Lambda Loss, introduced by Burges et al. in 2006. Perhaps it would be appropriate to adjust the wording.
+- The sentence in l.89 seems to end abruptly: "... they fail to recover the shared latent"
+- Typo in l.423 "deign choice"
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper revisits the task of node affinity prediction in temporal graphs, which aims to forecast the future affinity distribution of each node rather than just predicting future links. The authors observe that simple heuristics like Persistent Forecast (PF) and Exponential Moving Average (EMA) often outperform existing Temporal Graph Neural Networks (TGNNs). To address this, they theoretically show that such heuristics can be viewed as linear State Space Models (SSMs) and propose a new TGNN architecture called NAVIS, which integrates a learnable linear SSM with a “virtual global state” to capture global temporal dynamics. The paper also replaces the cross-entropy loss with a ranking-based LambdaLoss to better align with the affinity prediction objective. Extensive experiments on multiple temporal graph benchmarks demonstrate that NAVIS consistently outperforms both heuristic and neural baselines.
+
+### Strengths
+1. The paper explains why existing TGNNs fail to capture simple temporal dependencies and provides a theoretical basis for improving them.
+
+2. The proposed NAVIS model is conceptually simple yet achieves strong and consistent performance across benchmarks.
+
+### Weaknesses
+1. There exists a conceptual gap between the theoretical analysis and the modeling assumptions used in practice.
+Theorem2 argues that standard RNN/LSTM/GRU units cannot reproduce the persistent forecast (PF, i.e., $h_i = x_i$) because their activation functions restrict the output range. While mathematically valid, this result relies on an assumption that the inputs are unbounded and not normalized. If the inputs are bounded, or if a fixed linear readout is added to counteract activation saturation, the expressive limitation may no longer hold. 
+
+2. The design and motivation of the global virtual state $g$ are intuitive but lack precise statistical or identifiability analysis.
+The paper only states that $g$ is ``an aggregation of recent affinity vectors in a buffer`` and claims that ``using recent vectors works well in practice``.
+However, the following points are not clarified:
+(1) What's the specific aggregation operator (mean, exponentially weighted average or  attention？);
+(2) There is no statistical or identifiability analysis showing under what conditions this aggregation can truly extract a global trend rather than just averaging noise. 
+(3) Without (2), it is unclear whether it  models a global latent factor or merely performs temporal smoothing of the previous global affinity distribution.
+Since $g$ is central to the claim that heuristics $\approx$ linear SSMs but still require global trend modeling, a deeper ablation across different aggregators and buffer lengths is necessary.
+
+3. Although the authors acknowledge that parameter size grows as $O(N^2)$ and propose truncation by retaining the top-$a$ affinities for each node, there is no quantitative evaluation of the trade-off between $a$, accuracy, and efficiency. In highly dynamic graphs, where new neighbors emerge or distributions shift, truncation based solely on previous affinity magnitudes may omit critical new relations. 
+
+4. The main comparisons involve TGNNs and heuristic methods, showing consistent improvements, but no experiments include modern nonlinear, selective SSMs or DyG-Mamba[1,2] under the same protocol. Without such baselines, the claim that ``linear SSM-based TGNNs outperform more complex temporal models`` remains context-dependent and potentially overstated.
+
+5. The authors convert several link-prediction datasets into affinity-prediction datasets by temporal aggregation over daily, yearly, or term-based intervals. This transformation smooths the data and amplifies temporal continuity, which inherently favors linear smoothing models like NAVIS. In scenarios with bursty or non-stationary behaviors, such as cold-start or short-term spikes, the benefit may vanish. Evaluation on finer time resolutions or non-aggregated event streams would better test model robustness to abrupt dynamics.
+
+6. While Table7 reports ablations for three core components, the paper omits finer interpretability analyses: (1) distributions and temporal trajectories of the learned gates $z_h$ and $z_s$; (2) feature-attribution or permutation-importance tests for $g$; and (3) quantitative evidence that $g$ captures regime shifts earlier than node-local dynamics. These analyses would strengthen the claim that the virtual global state encodes shared temporal trends.
+
+7. The paper reports only NDCG@10 and trains on top-20 samples. Metrics such as Recall, MRR should be included for a more complete assessment of affinity prediction quality.
+
+[1] DyGMamba: Efficiently Modeling Long-Term Temporal Dependency on Continuous-Time Dynamic Graphs with State Space Models. 
+
+[2] DyG-Mamba: Continuous State Space Modeling on Dynamic Graphs
+
+### Questions
+Please see the weakness above
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This manuscript addresses the task of future node affinity prediction in continuous time dynamic graphs. Unlike future link prediction, the model output a full ranking / affinity vector over all other nodes. The authors observe that simple heuristics (like persistent forecast and moving average) often outperforms more recent Temporal Graph Neural Networks on this task, and attributes this to four main factors: current TGNN memory cells cannot express even the simplest persistence heuristic; common cross entropy loss is misaligned with the ranking nature of affinity; global temporal dynamics are not captured by local sampling; and batching / truncated buffers cause information loss. To address this, the authors propose NAVIS - TGNN style model built as a linear state space mechanism with both per node and virtual global states. On TGB node affinity and on four converted temporal link datasets, NAVIS outperforms TGNN baselines and the strong heuristics.
+
+### Strengths
+1. Clearly distinguishes future node affinity prediction (requiring a full ranking) from future link prediction (binary task).
+2. Proves that simple heuristics are special cases of linear State-Space Models; and that standard RNN, LSTM, and GRU cells are functionally incapable of representing the persistent forecast heuristics.
+3. Extensive experiments on TGB node affinity datasets and four converted link prediction datasets. The results consistently show NAVIS outperforms baselines.
+
+### Weaknesses
+1. All experiments / comparison is against TGNNs and not against the most recent SSM based temporal models on the same TGBN tasks.
+2. Empirical evaluation or ablation study on the performance impact of sparsified affinity prediction pipeline is missing.
+3. Evaluation is performed on 4 link prediction datasets that the authors repurposed using a custom pipeline - releasing the exact scripts is important for reproducibility.
+4. Analysis of ranking loss is limited to small constructed example. Sensitivity to the margin and to batch size would strengthen the empirical section.
+
+### Questions
+1. What is the buffer size, eviction policy, aggregation function and normalization? Is g updated per batch or globally across epochs?
+2. How are candidate sets constructed? What fraction of true next interactions falls outside the candidate set? Please report recall@K of candidate generation and confirm all methods share the same candidates.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

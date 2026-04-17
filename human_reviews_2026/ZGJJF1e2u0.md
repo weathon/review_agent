@@ -1,0 +1,181 @@
+# Preserve and Sculpt: Manifold-Aligned Fine-tuning of Vision-Language Models for Few-Shot Learning
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 8, 6
+
+## Abstract
+Pretrained vision-language models (VLMs), such as CLIP, have shown remarkable potential in few-shot image classification and led to numerous effective transfer learning strategies. These methods leverage the pretrained knowledge of VLMs to enable effective domain adaptation while mitigating overfitting through parameter-efficient tuning or instance-based consistency constraints. However, such regularizations often neglect the geometric structure of data distribution, which may lead to distortion of the overall semantic representation. To overcome this limitation, we propose a novel fine-tuning method, Manifold-Preserving and Sculpting Tuning (MPS-Tuning). Regarding the data distribution in feature space as a semantic manifold, MPS-Tuning explicitly constrains the intrinsic geometry of this manifold while further sculpting it to enhance class separability. Specifically, MPS-Tuning preserves both macroscopic and microscopic topological structures of the original manifold by aligning Gram matrices of features before and after fine-tuning. Theoretically, this constraint is shown to approximate an upper bound of the Gromov-Wasserstein distance. Furthermore, features from the image and text modalities are paired, and pairwise similarities are optimized to enhance the manifold’s class discriminability. Extensive experiments demonstrate that MPS-Tuning significantly improves model performance while effectively preserving the structure of the semantic manifold.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper introduces MPS-Tuning, a novel fine-tuning strategy for vision-language models (VLMs) like CLIP in few-shot settings. It consists of two key components:
+1. Manifold Alignment Regularization (MAR): aligns Gram matrices between pretrained and fine-tuned representations to preserve both global and local manifold geometry, providing a tractable upper bound of the Gromov–Wasserstein distance.
+2. Hierarchical Manifold Sculpting (HMS): enhances intra-class compactness and inter-class separation via multimodal query-support matching, extended to intermediate layers using a “pseudo-forward” projection.
+Extensive experiments on 11 datasets show consistent improvements over state-of-the-art baselines, demonstrating better structure preservation and generalization.
+
+### Strengths
+1. Clear motivation and theoretical foundation: connects manifold preservation with Gromov–Wasserstein distance, offering a principled justification.
+2. Gram-based alignment is simple yet theoretically grounded; HMS integrates seamlessly into VLM pipelines.
+3. Strong and consistent gains on 11 benchmarks and two domain generalization datasets.
+
+### Weaknesses
+1. The paper positions itself as introducing a “manifold-preserving” paradigm, but the actual mechanism Gram matrix regularization is already well explored in representation learning and knowledge distillation. The conceptual framing feels more like re-packaging than a genuine shift in understanding.
+1. The GW upper-bound proof relies on a fixed one-to-one coupling; lacks tightness or empirical verification against true GW distance.
+2. Computational cost not deeply analyzed: local Gram alignment (O(N·M²)) could be expensive; missing runtime/memory breakdown.
+
+### Questions
+1. The ablation studies isolate MAR and HMS but do not show results for MPS-Tuning without α-fusion or with only global alignment. Would these results change the conclusion about the necessity of each component?
+2. How is the proposed “manifold preservation” paradigm fundamentally different from existing Gram-based alignment regularizations?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper introduces MPS-Tuning (Manifold-Preserving and Sculpting Tuning), a fine-tuning framework for few-shot adaptation of pretrained vision-language models such as CLIP. The method treats the feature distribution as a semantic manifold and employs Manifold Alignment Regularization (MAR) to preserve its intrinsic geometry via Gram matrix alignment. Hierarchical Manifold Sculpting (HMS) refines local structures by enhancing intra-class compactness and inter-class separability across multiple layers.
+Extensive experiments demonstrate that MPS-Tuning outperforms state-of-the-art methods, with its effectiveness further validated by generalization studies.
+
+### Strengths
+1. The paper attempts to align the semantic spaces of images and texts from a manifold perspective, and designs two complementary modules — Manifold Alignment Regularization (MAR) and Hierarchical Manifold Sculpting (HMS) — to jointly balance knowledge preservation and adaptation to new domains. It also provides a theoretical foundation for semantic alignment under the Gromov–Wasserstein (GW) constraint.
+
+2. The paper conducts extensive experiments across multiple datasets, along with comprehensive ablation studies, to thoroughly validate the effectiveness of the proposed method.
+
+### Weaknesses
+1. Although the paper claims to constrain manifold alignment through the Gromov–Wasserstein (GW) distance, the metrics and formulations it employs do not appear to have an explicit mathematical correspondence to manifold geometry. Instead, the approach seems more accurately described as aligning semantic feature distributions rather than true manifolds. The use of the manifold concept thus appears somewhat overstretched.
+
+2. Since the proposed GM alignment serves as an upper-bound approximation to the GW distance, it raises questions about potential loss of alignment fidelity—specifically, whether this surrogate can genuinely achieve manifold-level correspondence, such as homeomorphism or homology preservation, or if it merely approximates semantic similarity in feature space.
+
+3. The proposed method is relatively complex, consisting of several loss and sub-loss functions, which leads to considerable computational overhead. Moreover, the paper does not provide strong empirical or theoretical evidence demonstrating the actual effectiveness of the Gromov–Wasserstein (GW) formulation in achieving meaningful manifold alignment.
+
+### Questions
+See weakness.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes Manifold-Preserving and Sculpting Tuning (MPS-Tuning), a novel fine-tuning framework for adapting VLMs like CLIP to few-shot classification tasks. The authors' core argument is that existing methods, which rely on parameter-efficient tuning (PEFT) or point-wise consistency constraints (e.g., $L_2$ or KL loss between features), neglect the geometric structure of the pretrained feature manifold, leading to semantic distortion and overfitting. The combination of the proposed MAR (regularizer) and HMS (objective) allows for fine-tuning a substantial portion of the model while avoiding overfitting. The authors demonstrate state-of-the-art results on 11 few-shot benchmarks, with particularly strong gains in 8-shot and 16-shot settings.
+
+### Strengths
+Novel and Well-Motivated Conceptual Framework: The paper's primary strength is its conceptual shift from point-wise consistency to manifold-level consistency. The idea that preserving relationships between samples (in the Gram matrix) is more important than preserving the exact feature vector of each sample is intuitive and powerful.
+
+Strong Theoretical Grounding: The connection of the MAR loss to the Gromov-Wasserstein (GW) distance (Theorem 1, Appendix B) provides a solid theoretical foundation for the method. While it relies on a simplified upper bound (using a fixed coupling), this is a standard and necessary step to make the concept computationally tractable and provides a principled justification for using Gram matrix alignment.
+
+Excellent Empirical Results: The method achieves new state-of-the-art performance across a comprehensive suite of 11 few-shot datasets (Table 8). It outperforms a very strong and recent set of baselines (e.g., GalLop, TAC, MMRL). The fact that the performance gap widens as the shot count increases (e.g., the 16-shot average is 86.85%, a significant +2.5-3% jump over top competitors) suggests this is a very robust learning framework, not just a 1-shot trick. The SOTA domain generalization results (Table 1) further strengthen this.
+
+Thorough and Convincing Ablation Studies: The authors have done an excellent job of validating their design choices.
+
+### Weaknesses
+The paper is very strong, and my points are primarily requests for clarification rather than major criticisms.
+
+1. Justification of "Pseudo Forward" Mechanism: A key component of the "Hierarchical" sculpting is the pseudo-forward projection (Fig. 3, Eq. 10), which projects intermediate features to the output space by skipping the Attention modules but keeping the $V_{Proj}$ and $FFN$ layers. This is a very specific and unusual design.
+
+Q1: Could the authors provide more intuition or justification for this? Why is this the correct projection? For instance, why skip Attention but keep $V_{Proj}$? Is this based on an analysis of information flow, or was it an empirical design choice that worked well?
+
+2. Clarity on Fine-Tuning Strategy (Appendix D): The paper's method is not a standard PEFT (like LoRA or Adapter) but rather a regularizer for partial fine-tuning. Appendix D details a "hierarchical fine-tuning strategy" where the first 4 layers are frozen, the next 4 have a parallel adapter-like module, and the last 4 are fully fine-tuned. This is a non-trivial number of trainable parameters.
+
+Q2: How critical is this specific tuning strategy to the method's success? The ablations in Table 2 all seem to use this strategy as a base. How would MPS-Tuning perform if applied to a standard full fine-tuning (FFT) baseline, or a standard PEFT method like LoRA? It is difficult to disentangle the gains from the novel regularizer (MAR+HMS) versus the gains from this specific partial-tuning strategy.
+
+3. Complexity of HMS Loss: The Hierarchical Manifold Sculpting (HMS) loss uses a combined support set $\mathcal{S} = \mathcal{Q} \cup \mathcal{T}$, meaning it performs image-image and image-text contrastive learning simultaneously.
+
+Q3: Was this combined support set found to be superior to a simpler approach, such as two separate losses (one for I-I alignment and one for I-T alignment)?
+
+### Questions
+None
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes MPS-Tuning from the perspective of manifold geometric structure preservation for robust few-shot tuning of VLM models. In details, the new method introduces two regularization strategies: Manifold Alignment Regularization (MAR) for preserving the visual manifold geometry and Hierarchical Manifold Sculpting (HMS) for enhancing the discriminability of the multi-level visual representations. With these regularizations, MPS-Tuning enables a direct fine-tuning on the VLM, which improves the data scalability on downstream tasks. Extensive experiments and ablation studies are presented to demonstrate the effectiveness of the method and the validity of each component.
+
+### Strengths
+- The idea of preserving knowledge via manifold structure regularization is intuitive and well-motivated.
+- The proposed method achieves strong performance compared to the state-of-the-art VLM few-shot learning methods, especially when the number of training samples are large (e.g., 16 shots).
+- The paper is solid with extensive experiment results supporting the major claims regarding the effectiveness of MAR and HMS.
+
+### Weaknesses
+- The method has its intrinsic limitation when the number of training samples are small: the Gram matrix is small and insufficient to capture the geometry. As a consequence, the 1-shot and 2-shot accuracies of MPS-Tuning are lower than SOTA methods on several datasets. The author is encouraged to discuss such limitation and potential solution when analyzing the results in figure 4.
+- In Table 2, the ablation study is only conducted under the 16-shot setting, which is insufficient to show the effectiveness of each component. Results of 1, 2, 4, 8-shot learning should be added.
+- (Minor) In table 1 column “-Sketch”, AMU-Tuning achieves the best result and should be marked bold.
+
+### Questions
+- In HMS, why using a pseudo-forward calculation that skips the attention operation to train the intermediate representations can lead to performance improvement? The intermediate representation could be very different to the original ones when the attention scores are not incorporated. Why does the regularization loss still meaningful under the circumstances?
+- I'm just wondering if the partial fine-tuning strategy described in section D could also be beneficial for other VLM tuning methods when the number of shots are large.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3

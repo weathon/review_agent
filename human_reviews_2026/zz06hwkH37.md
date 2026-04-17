@@ -1,0 +1,190 @@
+# Sobolev acceleration for neural networks
+
+- Decision: Reject
+- Scores: 4, 6, 4, 4
+
+## Abstract
+$\textit{Sobolev training}$, which integrates target derivatives into the loss functions, has been shown to accelerate convergence and improve generalization compared to conventional $L^2$ training. However, the underlying mechanisms of this training method remain incompletely understood. In this work, we show that Sobolev training provably accelerates the convergence of Rectified Linear Unit (ReLU) networks and quantify such `Sobolev acceleration' within the student--teacher framework. Our analysis builds on an analytical formula for the population gradients and Hessians of ReLU networks under centered spherical Gaussian input. Extensive numerical experiments validate our theoretical findings and show that the benefits of Sobolev training extend to modern deep learning tasks, including diffusion models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper analyze shallow ReLU networks under a student-teacher framework with Gaussian inputs, deriving exact expressions for population gradients and Hessians. They prove that Sobolev training improves the condition number of the Hessian and accelerates gradient flow dynamics.  While this theoretical analysis offers valuable insights, its practical applicability is constrained by several strong assumptions.
+
+### Strengths
+This paper presents several key strengths, most notably its establishment of the first rigorous theoretical framework for Sobolev acceleration, a phenomenon previously supported only empirically. It offers considerable analytical depth by deriving exact formulas for population gradients and Hessians under a student-teacher setup. The work successfully identifies the improved conditioning of the Hessian as the core mechanism behind the acceleration, providing a clear and compelling explanation. Furthermore, the theoretical findings are substantiated by extensive and systematic experiments that demonstrate the phenomenon's persistence across various architectures, activation functions, and modern deep learning tasks like diffusion models.
+
+### Weaknesses
+The theoretical analysis relies on strong and idealized assumptions, including standard Gaussian inputs and shallow ReLU networks, which limits its direct applicability to real-world scenarios. The practical benefits are also contextualized with a limited baseline, as Sobolev training is compared only against standard L² loss, leaving its advantage over other advanced regularization or optimization techniques an open question. The argument for generalizability beyond the theoretical setting leans heavily on empirical results, as a formal extension to non-Gaussian data or deep architectures is not provided. Finally, while the reported computational overhead is low, a thorough theoretical analysis of the peak memory and computational cost associated with calculating the required derivatives is absent, which is crucial for assessing its practical efficiency.
+
+### Questions
+1. The theoretical results are derived under restrictive assumptions—standard Gaussian inputs, and shallow ReLU networks. It remains unclear whether the conclusions hold for more general data distributions or deeper ReLU networks.
+2. While Sobolev training is compared to L^2 baselines, it would be valuable to include comparisons with other commonly used optimization methods,  regularization techniques or loss functions to better contextualize its benefits.
+3. Some practical data do not follow a standard Gaussian distribution. The relationship between such data and the Gaussian assumption in the theory is not explained, raising questions about the practical relevance of the theoretical analysis.
+4. The reported memory usage and per-epoch runtime for L^2 and H^1 training are remarkably close (Table 1). To better understand the computational overhead of Sobolev training, please provide a theoretical analysis and the peak training memory.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This work presents a theoretical framework proving that Sobolev training accelerates the convergence of Rectified Linear Unit (ReLU) networks. Under a student–teacher framework with Gaussian inputs and shallow architectures, they derive formulas for population gradients and Hessians, and quantify the improvements in conditioning of the loss landscape and gradient-flow convergence rates.
+
+### Strengths
+The paper is well written.
+
+### Weaknesses
+The assumptions (Assumption 2.2 (Two-layer ReLU network) and Assumption 2.3 (Gaussian population)) seem very restrictive.
+
+### Questions
+No question
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper’s main contribution is to provide theoretical guarantees on acceleration when using Sobolev training (Sobolev training adds first-order information to the loss function) for neural networks. The paper formally demonstrates this for the very particular case of ReLU networks with one neuron or multiple neurons in a one hidden layer network – in the case of multiple neurons, the results are on the gradient flow approximation. After the theoretical results, the paper shows multiple experimental results of Sobolev acceleration on settings well beyond the ones in the paper.
+
+### Strengths
+These are the strengths of the paper:
+- The paper presentation of the new theoretical results is overall clear and easy to follow. There is enough description to understand what is going on in the paper.
+- The overall writing of the paper is good and easy to understand.
+- The paper grounds their assumptions on existing works in the past literature.
+
+### Weaknesses
+I have a series of comments, questions and concerns about the paper. I am willing to increase my score depending on the authors' response to them.
+
+
+**>> Comments/concerns/questions:**
+- The work (Cocola & Hand, 2020) is cited as previous work that has studied the convergence of Sobolev training. (Cocola & Hand, 2020) shows results that are probabilistic since they assume Gaussian random initialization of the weight parameters (**note that we are not talking about the data being Gaussian, but the weights being initialized as Gaussian**). This is the type of initialization that:
+  1. is very common in recent theoretical studies on training convergence, such as (Du et al, 2018; Allen-Zu et al, 2019; Arora et al., 2019) – the three works mentioned in the introduction of the paper and which, in the case of the first two, consider networks that are not necessarily shallow.
+  2. is **widely used in practice** (indeed, I am not aware of practical deep learning solutions that do not use random initialization, or even Gaussian initialization).
+Then, what is the motivation for the authors to consider a different, deterministic, and arguably more restrictive type of initialization in their paper? Please note that (Cocola & Hand, 2020) already uses Gaussian initialization for Sobolev training, which is a more practical initialization
+- Have the authors checked that none of the results by (Cocola & Hand, 2020) already indicate that Sobolev training could accelerate training dynamics? Can the authors discuss the possibility of using the results by (Cocola & Hand, 2020) in order to show Sobolev acceleration using Gaussian initialization of the weights? 
+
+- RELUs are not differentiable in their whole domain (they are not at the origin). How is it that one can simply write their gradient in equations like (1) without addressing this issue? How do the authors address the issue of the non-differentiability at the origin during their analysis?
+- It is inconsistent to mention that $w$ is a matrix of dimension $d\times{K}$ in Assumption 2.2 while the statement of Theorem 2.5 refers to $w$ as a vector. Please, clarify.
+- In Theorem 2.10, the function $\lambda(\theta)$ can potentially be zero, in which case, there will not be Sobolev acceleration. This seems to be for the specific value of $\theta = 0$, which means that both $w$ and $w^\*$ are parallel (zero angle, if I am not mistaken). It is possible that this could happen even when $w\neq w^\*$ since both vectors can have different magnitudes. Can the authors make a comment about this case, since this is the case where acceleration may not happen? The $||w^0-w^\*||<||w^\*||$ may help during initialization, but not necessarily during training; can the authors comment on that? Likewise, I am suspicious that something like this also happens in Theorem 2.11, though no specific function of $\theta$ is shown – is this true? Can the authors also make a comment on this?
+- What are $\lambda_1$ and $\lambda_2$ in (2) from Theorem 2.12? They have not been defined before. How do they indicate positive definiteness of $M_3$? 
+- Theorem 2.13 is a linearized system, so **it is not** a general result for **global** convergence. Can the authors clarify this in the paper? If so, the dynamical system in Theorem 2.13 is only valid in a local neighborhood around $w^\*$ (which could be a very small one). This needs to be made explicit and addressed in the paper.
+- The paper’s contribution and focus is theoretical, so I expect the experiments to point towards such results. I understand the authors have tried to do that to some extent in subsection 3.1., but I have an additional suggestion. If we look at the paper, all theoretical results for more than one neuron were done using gradient flows. Gradient flows, as I understood from the authors too, **do not** directly translate to gradient descent (GD) (and even less to stochastic gradient descent (SGD)). Thus, it would be interesting to simulate both the trajectories of the loss of the gradient flow, for which closed-form expressions are known as in (3) from Theorem 2.12., and compare it to the ones one would obtain by GD – both under the same initialization.
+- Again, regarding the experiments, I understand the idea of experimenting settings beyond the one from the theoretical results; however, the experiments on autoencoders and diffusion models seem topicwise very remote from the rest of the paper – they feel out of place and do not seem to contribute to this theoretical paper as much. Moreover, I have two things to point out: 
+  - In the autoencoder experiments, it is mentioned that (Yu et al., 2023) has already studied them. How are the authors’ experiments different from (Yu et al., 2023)? Otherwise, what’s the contribution?
+  - Has anyone ever used Sobolev training on diffusion models before the authors? If not, this is something new and a possible contribution. However, as I mentioned earlier, though being a contribution, it seems very far in scope from the theoretical part of the paper: diffusion models such as DDPM use U-Nets, which are vastly different in architecture than just feedforward ReLUs (like the ones in the theoretical part of the paper)! Indeed, a comprehensive empirical study of Sobolev training (and modifications of it) on different diffusion models could potentially result in its own paper that the authors could as well write and publish.
+
+
+
+**>> Other things:**
+- The first paragraph of the introduction should also mention the use of Neural Operators, which use neural networks for approximating a map between two functional spaces. They have been used in scientific computing applications–e.g., see Fourier Neural Operators and Deep Operator Networks (DeepONets).
+- Lines 037-038: why is capturing the derivatives “an essential feature of many modern applications”? Citations are needed.
+- Lines 066-067: it says that the condition number “governs the convergence rate of many optimization algorithms”. Which algorithms are those? References are needed.
+- Lines 211-222: it is mentioned that the faster convergence for gradient flow “typically reflects a larger minimum eigenvalue of the Hessian”.A citation or a simple case illustrating this claim is needed.
+- In Theorem 2.12, the symbol “$x$” is used as a coefficient. The problem is that this same symbol has been used before to denote the input data to the model. I suggest using a different symbol.
+- The last part of Theorem 2.10 sounds a little bit informal and qualitative: it uses the expression “much more accelerated”. My suggestion is to remove the part after the last comma of the last sentence of Theorem 2.10, and simply say that “there is more acceleration as $\theta$ increases.”
+
+### Questions
+Please, see the Weaknesses section for most of my questions. This is one additional question:
+- What sort of challenges and modifications the authors believe they can do to extend their analysis to networks with more hidden layers?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper intend to establish theoretical guarantees to the phenomenon known as "Sobolev Acceleration", which is the empirical observation that training neural networks with loss functions defined in Sobolev norms (i.e., including derivative of the target function) often leads to faster convergence compared to standard $L^2$-based training.
+
+The authors focus on a one-hidden-layer ReLU neural network and assume that the input data follows a standard Gaussian distribution. The study begins with the simplest case of a ReLU network with a single ReLU neuron ($K=1$). The authors derive an exact analytical expression for the Hessian of the Sobolev loss function, then prove that the condition number of this Hessian is strictly smaller than that of the corresponding Hessian for the $L^2$ loss. This result implies that optimization algorithms such as gradient descent may converge more rapidly when trained with a Sobolev-type loss, due to the improved conditioning of the loss landscape.
+
+The paper further study the dynamics of weight convergence, specifically on how the Sobolev loss influences the convergence rate of the squared parameter error $||w-w^\ast||$, where $w^*$ is assumed to be the true weight parameter of the ReLU network. It is shown that in the general case of more than one ReLU neuron ($K\geq 1$), Sobolev training will lead to a faster decay of the error $||w-w^\ast||$ (i.e., faster convergence of the weight parameter). 
+	​
+
+### Strengths
+1. To the best of my knowledge, this is the first paper that provides a theoretical verification of the Sobolev Acceleration phenomenon for neural networks from an optimization perspective. While the analysis focuses on a simplified setting (Gaussian input and a single hidden-layer ReLU network), it represents a meaningful step forward. Previous work (Lu et al., 2022) studied Sobolev acceleration only in the RKHS regime, rather than directly on neural networks.
+
+2. Despite being primarily a theory paper, the authors include a comprehensive set of numerical experiments that convincingly support their theoretical claims. These experiments span multi-layer ReLU networks with different activation functions, CNN-based denoising autoencoders, and even diffusion models, which go well beyond the simple theoretical setup. Across all cases, the results consistently demonstrate that training with Sobolev loss leads to faster convergence than standard $L^2$-based training.
+
+### Weaknesses
+1. The paper's technical depth appears insufficient for ICLR. The theoretical analysis is restricted to a highly simplified setting, requiring the input distribution to be standard Gaussian and the neural network to have only one hidden layer. Moreover, the core result on Hessian conditioning is established only for network containing a single ReLU neuron, which limits its generality. Although the authors extend the weight convergence analysis to the multi-neuron case, this extension relies on the strong assumption that the true weight vectors $\{w_j^\ast\}$ form an orthonormal basis, which is rarely realistic in practical networks. Overall, these simplifications make the theoretical contributions feel narrow and somewhat lacking in depth relative to the expectations of ICLR-level theoretical work.
+
+2. The paper clearly establishes that the Sobolev loss leads to a smaller Hessian condition number compared to the standard $L^2$ loss. However, the link between this improved conditioning and acceleration in convergence is not thoroughly explained. While the authors briefly mention that optimization algorithms such as gradient descent tend to converge faster when the loss landscape has a smaller condition number, no formal justification or citation is provided to support this claim. It would strengthen the paper to clarify whether this relationship is theoretically well established (and under what assumptions) or to provide references from the optimization literature. Moreover, it remains unclear whether the same argument extends to other optimization algorithms beyond vanilla gradient descent.
+
+### Questions
+I have an additional question:
+
+In the manuscript, you mention that Czarnecki et al. (2017) study the benefits of Sobolev training from the perspective of sample complexity, showing that training with the Sobolev loss function can reduce the sample complexity of training. In contrast, your paper intends to verify the phenomenon of "Sobolev Acceleration" through optimization dynamics, focusing on the improved conditioning of the Hessian and the accelerated convergence of network parameters.
+Could you comment on how these two perspectives (sample complexity vs optimization conditioning) relate to each other? Why is it important to study Sobolev training from the optimization point of view? Furthermore, do any of your theoretical results imply concrete consequences or bounds regarding the sample complexity of training under Sobolev losses?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2

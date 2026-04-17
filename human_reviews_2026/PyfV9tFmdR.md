@@ -1,0 +1,201 @@
+# SpectralGCD: Spectral Concept Selection and Cross-modal Representation Learning for Generalized Category Discovery
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 4, 8
+
+## Abstract
+Generalized Category Discovery (GCD) aims to identify novel categories in unlabeled data while leveraging a small labeled subset of known classes. Training a parametric classifier solely on image features often leads to overfitting to old classes, and recent multimodal approaches improve performance by incorporating textual information. However, they treat modalities independently and incur high computational cost. We propose SpectralGCD, an efficient and effective multimodal approach to GCD that uses CLIP cross-modal image-concept similarities as a unified cross-modal representation. Each image is expressed as a mixture over semantic concepts from a large task-agnostic dictionary, which anchors learning to explicit semantics and reduces reliance on spurious visual cues. To maintain the semantic quality of representations learned by an efficient student, we introduce Spectral Filtering which exploits a cross-modal covariance matrix over the softmaxed similarities measured by a strong teacher model to automatically retain only relevant concepts from the dictionary. Forward and reverse knowledge distillation from the same teacher ensures that the cross-modal representations of the student remain both semantically sufficient and well-aligned. Across six benchmarks, SpectralGCD delivers accuracy comparable to or significantly superior to state-of-the-art methods at a fraction of the computational cost. The code is publicly available at: https://github.com/miccunifi/SpectralGCD.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper proposes SpectralGCD, a multimodal approach for Generalized Category Discovery (GCD) that leverages CLIP’s cross-modal image–concept similarities as a unified representation. Instead of treating visual and textual modalities independently, SpectralGCD represents each image as a mixture over a large task-agnostic concept dictionary, which is then filtered via a novel Spectral Filtering mechanism based on eigendecomposition of a cross-modal covariance matrix derived from a frozen teacher model. The method further employs forward and reverse knowledge distillation to preserve semantic fidelity during student training. Evaluated across six benchmarks, SpectralGCD achieves state-of-the-art or competitive performance with significantly lower computational cost than existing multimodal GCD methods, while maintaining efficiency comparable to unimodal baselines.
+
+### Strengths
+(1) The core idea of using CLIP’s cross-modal similarities as a sufficient representation for GCD is both conceptually elegant and practically effective, grounding classification in explicit semantics and reducing overfitting to spurious visual cues.  
+(2) Spectral Filtering provides an automated, unsupervised way to prune irrelevant concepts from a large dictionary without relying on LLM-generated descriptions or manual curation, improving both representation quality and computational efficiency.  
+(3) The combination of forward and reverse knowledge distillation ensures strong alignment between student and teacher cross-modal representations, which is empirically validated through Spearman correlation and ablation studies.  
+(4) The method achieves state-of-the-art results across diverse benchmarks (fine- and coarse-grained) while being significantly faster to train than other multimodal approaches like GET and TextGCD, making it suitable for real-world deployment scenarios requiring repeated discovery.
+
+### Weaknesses
+(1) It is hard to figure out the novelty as there is many works that constructs hierarchal fine-grained knowledge when performing tasks. Also, the paper assumes access to a “Tags” dictionary derived from benchmark datasets, but it is unclear how generalizable this dictionary is to truly out-of-domain tasks (e.g., medical or satellite imagery). While OpenImages-v7 is tested, both dictionaries are still vision-centric and curated from existing classification datasets. Could the authors clarify whether SpectralGCD would still perform well with a generic, non-vision-specific concept set (e.g., WordNet or Wikipedia titles), and what minimum coverage or semantic alignment is required between the dictionary and the target domain?
+(2) Spectral Filtering relies on computing the full cross-modal covariance matrix G ∈ ℝ^{M×M}, where M is the dictionary size (~20K). For very large dictionaries (e.g., 100K+ concepts), this becomes memory-prohibitive (O(M²) storage). The paper mentions efficiency but does not discuss scalability limits of Spectral Filtering. Did the authors explore approximations (e.g., randomized SVD, Nyström) for larger M, and what is the practical upper bound on dictionary size given current GPU memory constraints?
+(3) The distillation loss uses softmax-normalized similarities σ(zˆi) and σ(zˆi∗), but CLIP’s original logit scaling already includes a temperature τ. The paper sets τ = 0.01 for both teacher and student (Appendix A), yet the distillation loss applies another softmax. This may over-smooth or distort the relative concept rankings. Could the authors justify this design choice and provide ablation results comparing raw cosine similarities vs. softmax-normalized logits in the distillation objective?
+(4) The student only fine-tunes the last transformer block of ViT-B/16, while the teacher is ViT-H/14. This architectural mismatch raises questions about the fairness of distillation: the student has far fewer parameters and less capacity. Would the performance gap between SpectralGCD and TextGCD shrink if both used the same backbone size? Also, why not use a ViT-B/16 teacher for a more direct comparison of the representation learning strategy alone?
+(5) The evaluation protocol follows standard GCD practice, but all benchmarks assume that the unlabeled set contains a known split of Old and New classes (e.g., 50/50 in CIFAR100). How sensitive is SpectralGCD to imbalanced Old/New ratios in the unlabeled data? For instance, if New classes dominate (>80%), does the method still avoid collapsing New clusters into Old prototypes, and how does entropy regularization interact with such shifts?
+(6) The paper claims that cross-modal representations reduce overfitting to Old classes, but Figure 3 and Table 7 show that on Stanford Cars, the “Image Features” variant actually achieves higher Old accuracy (93.4 vs. 92.6) than the cross-modal version. This contradicts the stated benefit. Could the authors explain this anomaly and clarify under what conditions cross-modal representations might sacrifice Old performance for New gains—or vice versa?
+(7) The preparation phase for SpectralGCD (194s on CUB) includes precomputing teacher representations and performing Spectral Filtering. However, if new unlabeled data arrive incrementally (as mentioned in the introduction), does the entire filtering step need to be recomputed? If so, this could undermine the claimed efficiency in dynamic settings. Please clarify whether the filtered dictionary Cˆ is fixed after initial filtering or must be updated with new data.
+(8) The reverse distillation term L_rd = −σ(zˆi) log σ(zˆi∗) penalizes the student for assigning high probability to concepts the teacher deems unlikely. However, if the teacher itself is biased or misaligned with the true semantics of a novel class (e.g., mislabeling a “sparrow” as “eagle”), wouldn’t reverse distillation reinforce this error? How robust is the method to teacher mistakes, especially on fine-grained novel categories where even strong CLIP models struggle?
+
+### Questions
+Please see Weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper addresses Generalized Category Discovery, aiming to find novel categories using limited labeled data. It introduces SpectralGCD, which builds a unified cross-modal representation by expressing images as mixtures over CLIP-derived semantic concepts. A teacher-guided Spectral Filtering selects relevant concepts via a cross-modal covariance matrix, and bidirectional knowledge distillation keeps the student’s representations aligned and semantically sufficient. On six benchmarks, SpectralGCD matches or surpasses SOTA.
+
+### Strengths
+(1) The idea of using the cross-modal representations is interesting.
+
+(2) The paper is clearly written and easy to follow.
+
+(3) The performance is promising.
+
+### Weaknesses
+(1) Using VLMs (e.g., CLIP) for GCD risks data leakage, as these models may have been exposed to images or names of the “unknown” classes. Prior work (e.g., GET) evaluates on splits unseen by CLIP to mitigate this. Please discuss this issue and, if possible, include experiments on CLIP-unseen splits or provide a robustness analysis addressing the leakage problem.
+
+(2) What is the performance when using ViT-B/16 as the teacher or using ViT-H/14 as student? To what extent do the gains stem from distillation from a larger teacher rather than the proposed components? An ablation varying teacher and student capacity (e.g., ViT-B vs ViT-H) would help isolate the contribution.
+
+(3) Please report or elaborate on the zero-shot performance of the CLIP models in Table 1, to contextualize the improvements over zero-shot.
+
+(4) The KD component seems fairly standard and lacks technical novelty. Please clarify the insight beyond common KD practices.
+
+(5) What are the total inference costs compared with multimodal methods (GET, TextGCD) and unimodal baselines (SimGCD)? Latency would clarify efficiency trade-offs, as the proposed approach appears quite complex.
+
+(6) Have you evaluated fine-tuning the text encoder? Reporting this result would be informative.
+
+(7) The abstract states: “Training a parametric classifier solely on image features often leads to overfitting to old classes.” Is this primarily due to the absence of labeled images for the novel classes during training, which biases the classifier toward seen (old) categories? Please clarify more about this issue.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper tackles the problem of Generalized Category Discovery (GCD), where models often overfit to known classes. The authors propose SpectralGCD, a multimodal approach that represents images not by their visual features directly, but as a mixture over semantic concepts from a large dictionary. This "cross-modal representation" is derived from CLIP-based image-concept similarities. The core technical contribution is "Spectral Filtering," a method that automatically prunes the concept dictionary by performing an eigendecomposition on a cross-modal covariance matrix derived from a strong teacher model, retaining only concepts deemed most informative. The learning process for a smaller student model is then guided by a combination of standard GCD losses and a forward-and-reverse knowledge distillation objective to align its representations with the teacher's.
+
+### Strengths
+1. The paper addresses the Generalized Category Discovery  task, focusing on the common problem where models overfit to the labeled "Old" classes and perform poorly on unlabeled "New" classes.
+
+2. Proposed Core Idea: It introduces a novel "cross-modal representation" for each image. Instead of using raw image features, it represents an image as a vector of similarity scores against a large, task-agnostic dictionary of semantic concepts, computed using a pre-trained CLIP model.
+
+3. To refine this representation and reduce noise from irrelevant concepts, the paper proposes "Spectral Filtering." This technique uses a strong teacher model to compute a cross-modal covariance matrix across the entire dataset. Through eigendecomposition (PCA), it identifies and retains concepts that contribute most to the principal components (i.e., high-variance directions) of the concept-similarity space.
+
+### Weaknesses
+1. The primary weakness lies in the justification for "Spectral Filtering". The motivation is to select "task-relevant" concepts. However, the mechanism (performing PCA on the global cross-modal covariance matrix) selects concepts that explain the most variance across the dataset. High variance does not necessarily equate to high discriminative power or task relevance. For example, a common background (e.g., 'sky', 'grass') present across many different classes could easily form a principal component with high variance. The method might then prioritize these non-discriminative concepts. 
+
+2. The paper makes a conceptual leap by equating "high contribution to dataset variance" with "semantic relevance for classification" without providing a strong theoretical or empirical argument to support this crucial link.
+
+3. The paper feels more like a report on a successful engineering recipe than a deep scientific inquiry. This lack of insight limits the paper's contribution. An outstanding paper should not only present a method that works but also provide the understanding that allows the community to build upon its core ideas. SpectralGCD in its current form feels more like a well-tuned heuristic than a principled approach, making it less inspiring for future exploration.
+
+4. In the task of discovering general categories, there has already been similar work [1] that decomposes objects into combinations of various attributes (textual or visual). I believe there needs to be more comparative discussion with the current work.
+
+5. In addition, there has been progress in the discussion on the information represented by the covariance matrix of features in general category discovery. A comparison with those works [2,3] should be made.
+
+
+[1] Dissecting Generalized Category Discovery: Multiplex Consensus under Self-Deconstruction. In ICCV, 2025.
+
+[2] Generalized Category Discovery via Token Manifold Capacity Learning. In Arxiv, 2025.
+
+[3] Continual Generalized Category Discovery: Learning and Forgetting from a Bayesian Perspective. In ICML, 2025.
+
+### Questions
+1. The core assumption of Spectral Filtering is that concepts contributing most to the variance of the cross-modal covariance matrix are the most "relevant". Could you provide a more rigorous justification for this? How does this method distinguish between concepts that are genuinely discriminative and those that are simply common or part of a shared background, which could also lead to high variance?
+
+2. The paper frames the problem as representing an image as a "mixture over semantic concepts." This is an appealing analogy to topic modeling. However, the current implementation simply uses a linear projection on the similarity vector. Did you explore enforcing a probabilistic constraint (e.g., ensuring the representation is a valid probability distribution over concepts) to more closely follow this analogy?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The authors propose a new GCD method inspired by probablistic models.
+
+They model images as mistures over semantic concepts in CLIP embedding space.
+
+They use spectral filtering to filter out irrelevant concepts from a large task agnostic dictionary.
+
+They achieve better accuracy on standard benchmarks than existing unimodal and multimodal approaches to GCD.
+
+### Strengths
+- The idea of spectral filtering on a dictionary of concepts is cute.
+- The paper is quite complex. There are multiple stages to the proposed method. Yet the proposed method is still efficient.
+
+### Weaknesses
+- The authors claim that the dictionary of concepts is task agnostic. But this isn't really true right? There must be some overlap between the dictionary and the concepts of the target dataset. Otherwise it would not work.
+- GCD is useful for discovering concepts in a dataset that do not fit neatly into the existing label set. However, I would argue that the new assumptions that the authors are introducing render the task of GCD meaningless.
+  - In particular, the authors use a Teacher model CLIP H/14 that has been pretrained on all the concepts (both new and old) across all the benchmarks. So the "novel classes" can't really be considered novel. 
+  - It would be more impressive if the authors test their method on datasets that have a smaller conceptual overlap with LAION. e.g. bacteria species classification based on cell cultures.
+
+### Questions
+Minor:
+- It may be helpful to clarify how "New" accuracy is defined for those not familiar with the literature.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

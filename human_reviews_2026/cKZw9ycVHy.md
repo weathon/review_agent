@@ -1,0 +1,159 @@
+# Many-for-Many: Unify the Training of Multiple Video and Image Generation and Manipulation Tasks
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 6, 6
+
+## Abstract
+Diffusion models have shown impressive performance in many visual generation and manipulation tasks. Many existing methods focus on training a model for a specific task, especially, text-to-video (T2V) generation, while many other works focus on finetuning the pretrained T2V model for image-to-video (I2V), video-to-video (V2V), image and video manipulation tasks, \etc. However, training a strong T2V foundation model requires a large amount of high-quality annotations, which is very costly. In addition, many existing models can perform only one or several tasks. In this work, we introduce a unified framework, namely \textit{many-for-many}, which leverages the available training data from many different visual generation and manipulation tasks to train a single model for those different tasks. Specifically, we design a lightweight adapter to unify the different conditions in different tasks, then employ a joint image-video learning strategy to progressively train the model from scratch. Our joint learning not only leads to a unified generation and manipulation model but also benefits the performance of different tasks. In addition, we introduce depth maps as a condition to help our model better perceive the 3D space in visual generation. Two versions of our model are trained with different model sizes (8B and 2B), each of which can perform more than 10 different tasks. In particular, our 8B model demonstrates highly competitive performance in different generation and manipulation tasks compared to open-source and even commercial engines. Our models and source codes will be made publicly available.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The authors propose a "many-for-many" framework, a unified diffusion model trained from scratch to handle numerous (10+) visual generation and manipulation tasks simultaneously (e.g., T2V, I2V, V2V). This approach avoids the high cost of training specialized foundation models. Key technical contributions include a lightweight adapter to unify diverse task conditions and a joint image-video learning strategy. The authors also integrate depth maps as a condition to improve 3D spatial awareness. The resulting models (8B and 2B parameters) demonstrate highly competitive performance, with the 8B version reportedly rivaling commercial systems.
+
+### Strengths
+- The core strength is the shift from single-task models to a single, unified framework. Training one model for over 10 tasks addresses a significant issue of model fragmentation and resource-intensive training.
+
+- The use of a lightweight adapter to harmonize different task inputs, combined with a progressive joint image-video learning strategy, presents a novel and practical method for efficient multi-task learning.
+
+### Weaknesses
+- Sub-optimal Task-Specific Performance: The "jack-of-all-trades" approach, while versatile, does not appear to achieve state-of-the-art  performance on all individual downstream tasks. This suggests the joint training may be averaging performance rather than achieving the desired synergistic effect (where tasks mutually improve one another). This limitation might stem from the difficulty of balancing diverse, and potentially lower-quality, training datasets.
+
+- The main technical contributions (a condition adapter and a joint training strategy) appear somewhat incremental. Given the significant undertaking of training an 8B model from scratch, one might expect a more fundamental innovation in the network architecture itself, moving beyond adapters toward a more deeply unified design to handle the "many-for-many" paradigm.
+
+### Questions
+I am curious about the decision to train the models (especially the 8B version) entirely from scratch, given the immense computational cost. Could the authors elaborate on the rationale for this choice over fine-tuning a strong, existing pre-trained T2V or I2V model (e.g., Wanx)? While leveraging such a model would presumably reduce training overhead and provide a robust baseline, I wonder if the authors found that training from scratch was necessary to effectively implement the "many-for-many" framework—perhaps because existing models are too architecturally specialized to accommodate the 10+ diverse tasks.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a unified diffusion transformer framework that jointly trains multiple visual generation and manipulation tasks, e.g., T2V, I2V, colorization, inpainting, super-resolution. The key contribution is a lightweight conditional adapter that unifies heterogeneous inputs (text, depth, masks, pixels) into a shared latent space, enabling multi-task learning through flow-matching and progressive image–video co-training. Experiments show that their method achieves competitive or superior results to current models.
+
+### Strengths
+The paper targets on unifying video generation and manipulation tasks. The adapter design is practical supporting seamless conditioning across modalities. The multi-task joint training strategy is demonstrated to be able to improve both performance and data efficiency. Ablation studies clearly show the benefits of multi-task learning and depth conditioning.
+
+### Weaknesses
+1. The architectural novelty of the proposed framework is limited. While the paper presents a unified system, its backbone design largely follows existing diffusion transformer paradigms such as SD3. The main contribution lies in integrating known components, i.e. flow matching, 3D attention, and adapter-based conditioning, into a unified training pipeline, rather than introducing new modeling framework.
+2.  Although the results are promising, the evaluation is based on relatively limited datasets (mainly VBench and a small in-house MfM-benchmark with 480 samples across 16 tasks). This raises concerns about the generality and robustness of the model’s performance, especially on open-domain or long-duration video generation benchmarks.
+3. While multi-task joint training is central to the paper, there is no quantitative or qualitative study on whether learning one task negatively affects another. Understanding these interactions would strengthen the multi-task learning claims.
+
+### Questions
+1. How is the adapter output integrated into the DiT pipeline additively in latent space or concatenated as condition tokens?
+2. Are task sampling probabilities fixed or dynamically adjusted during training?
+3. What quantitative gains do Q–K normalization and 3D RoPE bring to training stability?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces MfM (Many-for-Many), a unified framework for visual generation and manipulation. The core contribution is a single diffusion transformer model trained from scratch to handle over ten distinct tasks. Task unification is achieved via lightweight adapters for conditional inputs and by appending task-specific names to text prompts to guide the model’s behavior. The authors demonstrate state-of-the-art performance on the VBench benchmark, outperforming several open-source and commercial models.
+
+### Strengths
+1. The proposed MfM framework is both simple and elegant. The use of a unified adapter for diverse 3D conditions (including pixel data, depth, and masks), combined with task-name conditioning in the text prompt, represents an effective and scalable solution. This approach successfully unifies a wide range of visual generation and manipulation tasks within a single model, eliminating the need for task-specific fine-tuning.
+
+2. The model demonstrates empirically strong performance, achieving the highest average rank on both the VBench-T2V and VBench-I2V benchmarks. The results are well-validated and indicate the robustness of the proposed method.
+
+### Weaknesses
+1. MfM is trained using proprietary data, but the authors do not clearly delineate the extent to which the model’s performance is attributable to the MfM framework itself versus the use of high-quality proprietary data. This ambiguity significantly limits the reference value of this work for the broader research community.
+
+2. Regarding the composition of the training data, the authors mention that the sampling probability for T2I, T2V, and I2V tasks is three times higher than for other tasks. It is unclear whether this is an empirical choice or if there are additional ablation studies or pilot experiments to support this decision.
+
+### Questions
+As an academic paper, providing more detailed transparency regarding the training data would greatly enhance the value of this work. I am particularly interested in whether the authors can more clearly disentangle and demonstrate the respective contributions of the data and the proposed method to the overall performance.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes a unified training framework, "Many-for-Many" (MfM), which aims to train a single deep model from scratch to support over 10 different video and image generation and manipulation tasks (e.g., T2V, I2V, video inpainting, VSR, etc.). The core of the method is a lightweight adapter designed to unify the diverse conditions from different tasks (like pixel data, depth maps, and masks) into a standardized representation. The authors also introduce depth maps as an additional 3D condition to enhance the model's 3D spatial perception and employ a joint image-video progressive training strategy. The paper's main argument is that this multi-task joint training not only enables a single model to perform multiple functions but also actually improves the performance of core video generation tasks by leveraging complementary supervisory signals from different tasks. Experimental results show that their 8B-parameter single model achieves a better average rank on both T2V and I2V tasks on the VBench benchmark compared to existing SOTA specialized models.
+
+### Strengths
+1. Strong Evidence of Multi-Task Synergy: The paper's strongest point is Table 6 . It clearly demonstrates the value of multi-task training. For example, the FLF2V and FLC2V tasks improve the "Dynamic" metric , while VINP and VOUTP boost semantic metrics. This shows the MfM framework is indeed learning a more robust and generalizable video representation.
+2. SOTA Performance with a Single Model: Using the same 8B model, the method achieves the best "Average Rank" on both VBench-T2V and VBench-I2V. This is a very impressive result, considering its competitors (like Wan2.1, Hunyuan) are highly optimized industry models.
+3. Framework Simplicity: The proposed lightweight adapter  is a clean and effective method. It processes all 2D/3D conditions uniformly and integrates them via simple addition into the DiT blocks, offering good scalability.
+4. Potential Data Efficiency: While the total training data (120M videos  + 160M images ) is still massive, the video data usage is an order of magnitude less than competitors like Wan2.1 (1.5B videos) or StepVideo (2B videos). This suggests the framework may have higher data efficiency.
+
+### Weaknesses
+1. Limited Novelty of Components: This is my main concern. While the MfM framework and its training results are novel, the architectural components are largely a combination of existing work. The model backbone is a DiT , the training technique is Flow Matching (RF) , and the stabilization technique is QK-Norm —a combination very similar to recent work (e.g., SD3). The proposed "adapter"  also appears to be just a few convolutional layers. This makes the paper feel more like an excellent engineering and training-strategy victory rather than a paper proposing fundamental architectural innovation.
+2. Lack of Analysis on Key Hyperparameter (Task Sampling Rate): The paper mentions that during training, the sampling probability for T2I, T2V, and I2V was tripled. This is clearly a critical hyperparameter for balancing the model's capabilities, yet there is no ablation study or sensitivity analysis for it. How was this 3x ratio chosen? Is this choice optimal?
+
+### Questions
+Please referring Weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

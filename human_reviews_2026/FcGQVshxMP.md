@@ -1,0 +1,132 @@
+# Talking Points: Describing and Localizing Pixels
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6
+
+## Abstract
+Vision-language models have achieved remarkable success in cross-modal understanding. Yet, these models remain limited to object-level or region-level grounding, lacking the capability for pixel-precise keypoint comprehension through natural language. We introduce a novel framework for pixel level grounding. The framework consists of two complementary components: a Point Descriptor that generates rich, contextual descriptions of individual keypoints, and a Point Localizer that regresses precise pixel coordinates from these descriptions. Unlike prior work that relies on templated prompts or keypoint names, our approach produces free-form, coarse-to-fine descriptions that situate keypoints within their visual context.
+Since there is no available dataset to train such a system, we introduce LlamaPointInPart, a carefully curated dataset of 20K+ image-keypoint-description triplets synthesized from multiple vision-language models, capturing multi-scale information from scene-level context to visual features around the keypoint. 
+For cross-category generalization, we optimize the Point Descriptor on AP-10K via GRPO, using the frozen Point Localizer as a reward model to produce descriptions that maximize localization accuracy.
+To evaluate our results we establish a new evaluation protocol. Instead of comparing the text description produced by our method to the ground truth, we use the localizer to determine how close is the predicted point generated to the ground truth point.
+Experiments demonstrate superior performance compared to baseline models on LlamaPointInPart. 
+The bidirectional nature of our framework enables applications in both keypoint-guided image understanding and language-guided precise localization. Our code and dataset are publicly available at https://matanr.github.io/Talking_Points .
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the core problem of ​​pixel-level vision-language understanding​​ by proposing a novel bidirectional framework, ​​TalkingPoints​​. The framework aims to bridge the gap between dense pixel features and natural language semantics and consists of two complementary components: a ​​Point Descriptor​​, which generates rich, contextual natural language descriptions given an image and a keypoint, and a ​​Point Localizer​​, which regresses precise pixel coordinates from text descriptions. Due to the lack of readily available training data, the authors constructed a large-scale dataset, ​​LlamaPointInPart​​, comprising over 20,000 image-keypoint-description triplets. A key methodological innovation is the use of ​​Gaussian attention masks​​ to achieve pixel-level focus. The paper also explores a ​​Reinforcement Learning (RL)​​ strategy using the localizer as a reward model to optimize the descriptor's generalization to unseen categories. Experiments demonstrate that the method achieves performance close to ground-truth annotations (78.13% mPCK) on the proprietary dataset, significantly outperforming baseline models (e.g., OMG-LLaVA at 31.03%), and shows promise in cross-category generalization tasks. The primary contributions are the proposal of a new task for pixel-level language grounding, a novel method, a new dataset, and a new evaluation protocol.
+
+### Strengths
+- Novelty of Task and Framework:​​ This is the first systematic exploration of a bidirectional task involving free-form language description and localization of pixel-level keypoints. The proposed TalkingPoints framework is cleverly conceived, with the two components being highly complementary and logically coherent.
+- High-Quality Dataset Construction:​​ The pipeline for creating the LlamaPointInPart dataset is rigorous and innovative, synthesizing multi-scale VLMs and a large language model to ensure the richness and diversity of descriptions. The dataset's balance and quality (over 91% localizability) form a solid foundation for reliable experiments.
+- Comprehensive Experiments and Analysis:​​ The evaluation design is reasonable. It not only compares performance but also provides in-depth validation of the core components' effectiveness through ablation studies. The inclusion of comparisons against strong baselines and human annotations strengthens the persuasiveness of the results.
+
+### Weaknesses
+- ​​Generalization and Spatial Dependency:​​ The paper correctly identifies the strong dependence on image spatial context as a major limitation. This severely restricts its applicability in scenarios requiring view or appearance invariance, such as stereo matching or cross-image correspondence. 
+
+- ​​Sufficiency of RL Experiments:​​ As mentioned, the RL experiments were conducted on a data subset, making their results preliminary and indicative. Full-scale experiments on larger datasets, with reports of statistical significance, are needed to firmly demonstrate the effectiveness of this approach.
+
+- ​​Computational Cost Analysis:​​ The framework involves two large models (Descriptor and Localizer). The inference speed and computational cost are not discussed, which is an important consideration for practical applications.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces a novel framework for bidirectional, pixel-level language grounding, a task that aims to bridge natural language with precise pixel coordinates. The authors propose a two-component system: a Point Descriptor that generates rich, multi-scale descriptions for a given pixel, and a Point Localizer that regresses a pixel's coordinates from such a description. Key contributions include the framework itself, a new synthetic dataset of 20K+ image-keypoint-description triplets named LlamaPointInPart, and a reinforcement learning approach for generalizing the descriptor to new categories without textual annotations.
+
+### Strengths
+- The paper introduces a novel problem formulation by shifting vision-language grounding from the common object/region level to the more precise pixel level. This addresses a clear gap in the literature. The creation and open-sourcing of the LlamaPointInPart dataset is an appreciated contribution to enable research on this new task.
+- The proposed two-component framework is technically sound and logically structured for the bidirectional task. The adaptation of an existing architecture via a fixed Gaussian attention mask is a straightforward method to focus the model on pixel-level features. The empirical results show that the model performs well on the proposed dataset.
+- The paper is structured clearly, with a well-defined problem statement, methodology, and experimental setup. The paper is easy to follow, and the provided figures help to illustrate the proposed architecture and data generation process.
+
+### Weaknesses
+1. **Critical Evaluation Bias:** The primary weakness lies in the evaluation methodology. The "Descriptor-Through-Localizer" protocol is inherently biased, as it measures a description's quality based on its compatibility with a single Point Localizer model. This localizer was trained exclusively on the synthetic LlamaPointInPart dataset, learning its specific "machine dialect." This bias is further compounded by the RL fine-tuning, which explicitly optimizes the proposed descriptor to align with this specific localizer. Consequently, the claims of superiority over other models are not justified. This is also illustrated by the surprisingly low performance of human and ChatGPT-5 descriptions (Fig 1 & 7), which likely reflects a stylistic mismatch with the localizer rather than an inherent inferiority of the descriptions themselves.
+2. **Limited Generalization in RL Experiments:** The experiments on cross-category generalization, while a promising direction, have significant limitations.
+    - **Scope:** The generalization task was performed between Bovidae and Canidae—two categories of four-legged mammals with similar body plans. This does not provide strong evidence that the RL method can generalize to truly novel and visually dissimilar categories (e.g., from an animal to a bicycle).
+    - **Performance:** The reported mPCK improvements from RL are modest, therefore questioning the robustness and scalability of the approach for more challenging generalization scenarios.
+3. (minor)**Architectural Constraint of Fixed Attention:** A potential architectural limitation is the reliance on a fixed, symmetric Gaussian attention mask in the Point Descriptor. This assumes the most relevant context is always in an isotropic region around a keypoint. This assumption may not hold for points on elongated structures, thin objects, or part boundaries, where a more flexible and content-aware attention mechanism could be more effective.
+
+### Questions
+1. Regarding the evaluation bias: Have you considered fine-tuning separate “Point Localizer” models on human-generated or GPT5-generated descriptions (or any other evaluation protocol)? This would create a fairer comparison by evaluating each description source with a model adapted to its specific linguistic style and could provide a more accurate measure of their relative effectiveness.
+2. Regarding the RL approach: Could you comment on the scalability of the RL method for generalization? How do you expect it would perform when fine-tuning on a category like "animals" and testing on a visually disparate category like "vehicles" or "furniture"?
+3. The dataset construction relies on SIFT keypoints, which are inherently biased towards high-texture regions. How does the model perform when tasked with describing arbitrary points on smooth or textureless surfaces, and how might this dataset bias affect its real-world applicability?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes Talking Points (TP), a bidirectional framework for pixel-level grounding that (i) generates free-form, coarse-to-fine keypoint descriptions from an image + keypoint (Point Descriptor) and (ii) localizes a keypoint from an image + description (Point Localizer). It introduces LlamaPointInPart, a 20k+ triplet dataset (image, keypoint, description) synthesized from multiple VLMs and fused by an LLM, and evaluates descriptions via localization accuracy using mPCK. The system attains ~78 mPCK, substantially exceeding OMG-LLaVA/DAM baselines on the new test set, and explores GRPO-style RL that optimizes the descriptor using the localizer as a reward model. The authors report modest cross-category gains on AP-10K with RL and discuss limitations around description style bias and spatial dependency.
+
+### Strengths
+1. LlamaPointInPart composes multi-scale descriptions by querying OMG-LLaVA for object context and LLaVA for local appearance, then LLM-synthesizing coherent coarse-to-fine text; balanced sampling spans 64 objects/297 parts.
+2. Unlike prior region/part-level grounding, TP tightly couples language-point mapping with a description-through-localizer metric and architecture tailored to individual pixels.
+
+### Weaknesses
+1. OMG-LLaVA is capable of segmenting object masks, since its training data is for segmentation. The LlamaPointInPart dataset and TP architecture are tailored for point localization. The direct comparisons between OMG-LLaVA and TP are unfair. Comparing TP with a fine-tuned OMG-LLaVA on LlamaPointInPart is valuable.
+2. For keypoint selection, the authors use SIFT with the highest response for keypoint generation. The keypoint validation is necessary but not explained. SIFT detector may choose a point without concrete semantics.  The ratio of semantically rich keypoint in the dataset could be provided.
+3. The Python-generated description of the point location is based on the relative position to the part segmentation. This may be confused with the relative position to the edge of an image.
+
+### Questions
+1. Does TP have the ability to conduct semantic segmentation? How is the performance?
+2. Why does the point localizer only use one kind of features of the OMG-Seg?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

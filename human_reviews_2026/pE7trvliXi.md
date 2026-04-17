@@ -1,0 +1,231 @@
+# Correlation-based Self-Supervision for Few-shot Tabular Learning
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Despite its paramount importance in many real-world applications, e.g., few-shot learning, self-supervision for tabular data remains challenging. The inherently heterogeneous nature of tabular data substantially impedes the generation of pseudo-labels with high fidelity. The commonly utilized random-based selection methodology largely ignores the complex relationships among features and might induce substantial noise into the self-supervision process, especially when the selected features have little relations with others. To address this issue, this paper proposes a simple yet effective solution: utilizing the correlation among original features to qualitatively evaluate the possible quality of pseudo-labels. Accordingly, a correlation-based randomness, rather than pre-defined uniform randomness, is proposed to select features for pseudo-label generation according to their overall correlations towards others. We employ our design in VIME, SCARF, STUNT and SAINT. The experimental results in various few-shot classification tasks reveal significant performance improvements across 50 OpenML datasets, compared to the original design. Code and datasets are available at the supplemental file.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes a correlation-guided feature selection strategy to replace uniform random sampling in self-supervised tabular learning.
+
+### Strengths
+- The paper is clearly written and demonstrates comprehensive and reliable experimental results across diverse baselines and datasets.
+- The paper is well-motivated, illustrated in Figure 1, where the degradation from unrelated features highlights the weakness of uniform feature selection in self-supervised tabular learning.
+
+### Weaknesses
+1. Lack of analysis on why correlation-based selection works
+
+While the proposed correlation-guided feature selection consistently improves performance across SSL baselines, the paper lacks a clear theoretical or mechanistic explanation of why it works.
+The improvement is shown empirically (Sections 4.3–4.5), but there is no analysis linking correlation strength to pseudo-label informativeness, representation consistency, or optimization stability.
+It remains unclear whether the gains stem from mutual-information preservation, noise filtering, or redundancy reduction.
+Without such analysis, the method remains an effective heuristic rather than a principled approach.
+
+2. Incomplete handling of categorical features
+
+The proposed framework processes categorical features using simple encodings (e.g., one-hot or integer), treating all resulting columns equally when computing correlations. However, one-hot encoded columns are linearly dependent and often exhibit artificial negative correlations that do not capture true semantic relations among categories. Consequently, the correlation-based weighting may misrepresent the contribution of categorical features, particularly in datasets with many discrete attributes. The paper acknowledges this simplification but does not analyze its impact or provide strategies to mitigate the resulting bias.
+
+### Questions
+W1, W2
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper presents a novel approach to enhance self-supervised learning for few-shot tabular data.
+
+The research addresses the significant difficulty in applying self-supervised learning to tabular data especially within a few-shot learning context. The fundamental challenge arises from the intrinsically heterogeneous nature of tabular data, which severely hampers the generation of high-quality pseudo-labels. The author's purpose is to propose a simple yet effective solution: to utilize the correlation among original features to qualitatively evaluate the possible quality of pseudo-labels, moving beyond the current homogeneous assumption in tabular learning. The goal is to develop a correlation-based randomness approach to select the most informative features for pseudo-label generation.
+
+Beforehand existing self-supervision approaches for tabular data rely on a random-based selection methodology for generating pseudo-labels or augmented views. This common design suffers from treating different features equally, effectively ignoring the complex and unequal relationships among features. This uniform random selection might induce substantial noise into the self-supervision process, particularly when the selected features have little relation to others. The paper experimentally shows that the efficacy of self-supervision rapidly deteriorates with the introduction of certain unrelated features. For example, introducing just two unrelated features can result in a twenty percent accuracy loss in both the diabetes and cmc datasets.
+
+The core idea is to introduce Correlation-based Randomness to guide the feature selection for pseudo-label generation. It first calculates the averaged absolute values of the correlation coefficients between a feature and all other features to determine its overall association strength. Features with greater overall correlation are assigned a higher probability of being selected. This is logically supported by the notion that features highly correlated with others contain more important information for self-supervision. To mitigate the influence of out-of-distribution or erroneous coefficients, the method employs a group-based selection strategy. Features are first sorted by their average correlation and then equally divided into groups, with the selection probability increasing linearly across the groups. The author argues that this approach works well because it prioritizes the most informative features, which aligns with information theory principles that suggest pseudo-labels independent of inputs constitute noise and result in low-quality models.
+
+The author verifies the method's performance by applying the proposed strategy to four representative self-supervision baselines for tabular data: VIME, SCARF, STUNT, and SAINT. The enhanced variants, denoted with a -P suffix, are evaluated in one-shot, few-shot, and multitask few-shot tasks across more than fifty OpenML datasets. The experimental results reveal significant performance improvements. Specifically, the variants achieve a performance gain on over ninety percent of the evaluated datasets in the one-shot learning scenario, and approximately eighty percent in the five-shot learning contexts. These enhancements are further substantiated by a statistical significance test demonstrating a clear advantage over the original versions. For example, in one-shot learning, VIME-P achieved an average improvement of three point forty-four percent.
+
+The conclusion is that utilizing feature correlation provides an effective mechanism to generate higher quality pseudo-labels, leading to substantial and statistically significant performance gains for few-shot tabular learning models. The main contribution of the paper is threefold: first, it rigorously reveals the limitations of the prevailing uniform random feature selection method in self-supervision for tabular data, showing it introduces significant noise. Second, it proposes a Correlation-based Randomness design, which is a simple and generalizable technique to integrate feature relations into the pseudo-label generation process. Third, it provides outstanding experimental results demonstrating the effectiveness and robustness of the proposed strategy across diverse baselines and datasets.
+
+### Strengths
+The method directly attacks the core logical weakness of current self-supervised tabular methods, which is the assumption that all features contribute equally to the self-supervision task. By introducing Correlation-based Randomness, it ensures that the feature selection process is no longer noise-prone and instead prioritizes features with a high dependency on others, which is critical for generating informative pseudo-labels.
+
+The key contribution is providing a simple yet universally applicable design that can be easily integrated into diverse existing self-supervision frameworks, including generative, contrastive, and meta-learning models. This demonstrated generalizability is a major strength.
+
+### Weaknesses
+The logical explanation is not entirely sufficient regarding the choice of the best metric. While eight correlation metrics are tested, and Pearson correlation is shown to be superior, the justification is largely empirical and post-hoc, attributing its success to its ability to capture linear and non-linear monotonic associations. A deeper theoretical argument is needed to explain why these specific types of associations are fundamentally more critical for few-shot pseudo-label generation than the more general association measures offered by other tested metrics like Maximal Information Coefficient or Distance Correlation.
+
+The paper provides robust evidence by testing the proposed strategy on four diverse baselines across over fifty datasets, with statistical confidence reported for one-shot and five-shot scenarios. However, the scope is primarily few-shot classification. Validation across other few-shot tabular learning tasks, such as regression or time-series forecasting, is not provided and would strengthen the claim of universal applicability.
+
+A concern point is the method's raw reliance on standard correlation metrics. The paper notes that for categorical features, no specific embedding operation is applied. Standard correlation coefficients, such as Pearson, are fundamentally designed for continuous variables. Using them directly on categorical or mixed-type features without a dedicated, domain-aware embedding or a mixed-data specific correlation metric might compromise the logical foundation for certain datasets and limit the optimality of the feature selection. Another concern is the unavoidable pre-computation overhead for the correlation matrix, which, despite being argued as negligible because it is done offline, still introduces an extra computational step that may be non-trivial for very large or rapidly changing datasets.
+
+### Questions
+Given the demonstrated empirical success of Pearson correlation, what is the precise theoretical mechanism that makes its measure of non-linear monotonic associations more impactful for feature informativeness in the few-shot self-supervision context compared to the general association measures offered by non-parametric metrics?
+
+How is the Pearson correlation coefficient robustly and optimally calculated in practice for datasets with a significant number of categorical features, considering the paper stated no specific embedding operation was applied to them? Would adopting a more suitable mixed-data correlation metric not provide a more logically sound and powerful basis for feature selection across all tabular data types?
+
+Since the feature selection probability relies on the absolute value of correlation, what is the impact of explicitly ignoring the direction of correlation positive or negative on the self-supervised task, particularly for models like VIME that use reconstruction or SCARF that rely on contrastive learning?
+
+For scenarios involving massive or streaming tabular datasets where continuous updates or huge pre-computation is a barrier, how can the relatively efficient but still significant O of m squared n complexity of the Pearson correlation calculation be adapted for efficient online or incremental updating of the feature selection probabilities?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the issue in tabular self-supervised learning (SSL) where existing methods degrade pseudo-label quality by randomly selecting features without considering correlations among them. The proposed approach quantifies the information value of each feature by computing its mean absolute correlation with all other features, and uses this to determine feature selection probabilities. Based on this, the authors introduce a correlation-aware randomness and group-based feature selection strategy, which is integrated into existing SSL frameworks such as VIME, SCARF, STUNT, and SAINT. Through extensive few-shot classification experiments on 50 OpenML datasets, the proposed module achieves consistent and significant performance improvements on over 90% of datasets in the 1-shot learning scenario.
+
+### Strengths
+Extensive and consistent performance improvement: The proposed method was applied to four representative SSL baselines—VIME, SCARF, STUNT, and SAINT—and achieved performance gains on over 86–90% of 50 OpenML datasets in 1-shot experiments. Specifically, for VIME-P in the 1-shot setting, it showed an average relative improvement ranging from 1.89% to 15.65%.
+
+Demonstrated robustness: The method consistently improved performance on both synthetic datasets (linear, nonlinear, and non-monotonic relationships) and real datasets with weak correlations (≈0.1) (Table 15), as well as on datasets containing 30% noise (Table 17), demonstrating strong generalization capability. In the few-shot multi-task experiments (Table 8), statistical robustness was ensured by using 100 random seeds.
+
+Simplicity and generality: Without any structural modification to existing SSL frameworks, the paper proposes a lightweight module that effectively guides pseudo-label generation through a simple quantitative metric—the feature correlation coefficient (Eq. 2)—and a group-based selection strategy.
+
+### Weaknesses
+(Novelty)
+Lack of fundamental originality: Measuring feature importance via correlation coefficients is already a well-known basic approach in feature selection research (e.g., mRMR).
+Ambiguous differentiation: The paper claims novelty by using “cumulative correlations” instead of “pairwise correlations,” as done in prior work (e.g., SEFS), but this appears to be a minor modification of existing methods. Moreover, the paper lacks a deep theoretical justification for why this choice is fundamentally superior in the context of tabular SSL.
+
+(Technical Quality)
+
+
+Incomplete core formula: The equation defining the selection probability gi for group i—a key component of the group-based selection strategy—is truncated in the paper (“g_i=r_max−r on Lines 2641–2642). This incompleteness critically impairs the reproducibility of the proposed algorithm and represents a logical gap.
+
+
+Questionable core assumption: The approach is built on the assumption that “features with higher correlations to other features are more informative.” However, such correlations measure redundancy among features, not their predictive relevance to the target variable (Y). Therefore, if a high Ri value reflects information redundancy rather than information value, the core motivation of the method becomes invalid
+
+
+Insufficient quantitative evidence (statistical significance): Table 1 (correlation comparison) and Figure 4 (Win Matrix) show only mean performance across 50 OpenML datasets, without reporting standard deviations or confidence intervals. This omission prevents verification of the statistical significance of the reported improvements.
+
+
+
+(Significance)
+
+
+Limited contribution at the module level: The proposed method merely enhances the feature selection function t(⋅) of existing SSL models, constituting a modular improvement rather than offering a fundamentally new insight or paradigm for the field.
+
+
+Reduced practical value of improvement: The authors themselves note that performance gains are most pronounced in extremely low-label (1-shot) scenarios and diminish as the number of shots increases, implying limited applicability in more realistic settings.
+
+
+
+(Writing & Presentation)
+The omission of the core equation (group-based probability calculation) essential to the methodology severely obstructs readers’ ability to fully understand the paper, representing a critical flaw in clarity and completeness.
+
+### Questions
+Complete presentation of the group-based probability formula
+Please provide the full equation defining the selection probability gi​ for group i (Section 3.2.2, Lines 2641–2642). 
+This is necessary to assess the technical completeness of the method and ensure reproducibility.
+
+
+Sensitivity analysis of ⁡$r_{\min}$ and $⁡r_{\max}​$
+Please include a systematic ablation study showing how changes in the minimum  ⁡$r_{\min}$  and maximum $r_{\max}​$ selection probabilities affect both performance and stability under the group-based selection strategy. This will clarify hyperparameter sensitivity and component robustness.
+
+
+Feature correlation vs. predictive relevance
+Please report statistical analyses relating a feature’s cumulative correlation RiR_iRi​ to its downstream predictive relevance, e.g., feature importance from the final trained model or correlation with the target.
+This will help validate the core assumption that $R_i$ reflects information value (not just redundancy) that improves pseudo-label quality.
+
+
+Statistical significance over 50 OpenML datasets
+For the averages reported in Table 1 and Figure 4, please provide standard deviations or 95% confidence intervals so readers can verify the statistical significance and reliability of the claimed improvements.
+
+
+Comparison with recent SOTA few-shot tabular baselines
+Beyond the original STUNT and SAINT, please include direct performance comparisons (mean accuracy ± standard deviation) against recent SOTA methods such as TransTab and LIFT-ICL to assess how the proposed approach compares with the current state of the art.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+1
+
+### Summary
+This paper tackles self-supervised learning (SSL) for tabular data in few-shot scenarios, where traditional random feature selection for pseudo-label generation often introduces noise due to ignoring feature relationships. The authors propose a correlation-based approach: they compute average absolute correlations (using metrics like Pearson) for each feature, group features by correlation strength, and bias random selection towards highly correlated ones during SSL pretraining. This is integrated into four baselines (VIME, SCARF, STUNT, SAINT) and evaluated on 50 OpenML datasets for 1-shot and 5-shot classification. Results show consistent improvements (e.g., 3.31% avg. accuracy gain with Pearson on STUNT), with Pearson outperforming other correlations. The method aims to prioritize informative features, reducing noise in pseudo-labels.
+
+### Strengths
+1. The motivation is spot-on—tabular data features aren't equal, and random masking/corruption in SSL can hurt when features are unrelated (as shown in Fig. 1b). Using correlations to guide selection is a straightforward fix that makes sense intuitively and empirically.
+2. Applying the method to generative (VIME), contrastive (SCARF), meta-learning (STUNT), and hybrid (SAINT) covers the main SSL flavors for tables. This shows versatility and isn't just a one-trick pony.
+3. 50 datasets from OpenML are a good scale, mixing numerical, categorical, and mixed types. The 1-shot/5-shot focus is relevant for real-world tabular tasks where labels are scarce. Table 1's comparison of 8 correlation metrics is thorough, and the gains (e.g., 90%+ datasets improved in 1-shot) are statistically backed (100 runs, random seeds).
+
+### Weaknesses
+1. The group-based probability (Eq. 3) feels ad-hoc. Why linear increase? Why q = floor(d/10)+1? It's clever for handling outliers (Fig. 3), but lacks theoretical grounding—e.g., no link to mutual information or entropy to justify why this mitigates "erroneous coefficients." More ablation on group strategies (e.g., exponential vs. linear) would help.
+2.  The paper mentions treating categoricals as ordinal without embeddings, but this could bias correlations (e.g., Pearson assumes continuity). For mixed datasets (11/50), how does this affect results? A sensitivity analysis or comparison with one-hot encoding would strengthen it. Also, no discussion on ordinal vs. nominal categoricals.
+3. While Table 1 compares metrics, it sticks to pairwise ones. Tabular data often has higher-order dependencies—why not explore mutual information networks or graph-based feature relations? Pearson wins, but the paper doesn't dig into why (e.g., vs. MIC for non-linear). Plus, correlations assume linearity/monotonicity, which might fail in complex table.
+4 Why does Pearson outperform mRMR/MIC? Is it dataset-specific, or general to tabular SSL?
+
+### Questions
+see  Weaknesses
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

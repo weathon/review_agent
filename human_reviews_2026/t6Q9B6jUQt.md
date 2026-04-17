@@ -1,0 +1,182 @@
+# MorphGen: Controllable and Morphologically Plausible Generative Cell-Imaging
+
+- Decision: Reject
+- Scores: 2, 4, 6
+
+## Abstract
+Simulating in silico cellular responses to interventions is a promising direction to accelerate high-content image-based assays, critical for advancing drug discovery and gene editing. To support this, we introduce MorphGen, a state-of-the-art diffusion-based generative model for fluorescent microscopy that enables controllable generation across multiple cell types and perturbations. To capture biologically meaningful patterns consistent with known cellular morphologies, MorphGen is trained with an alignment loss to match its representations to the phenotypic embeddings of OpenPhenom, a state-of-the-art biological foundation model. Unlike prior approaches that compress multichannel stains into RGB images --thus sacrificing organelle-specific detail-- MorphGen generates the complete set of fluorescent channels jointly, preserving per-organelle structures and enabling a fine-grained morphological analysis that is essential for biological interpretation. We demonstrate biological consistency with real images via CellProfiler features, and MorphGen attains an FID score over 35% lower than the prior state-of-the-art MorphoDiff, which only generates RGB images for a single cell type.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+In this work, the authors propose Morphegen, a generative model to predict the morphological cellular responses to perturbations. They introduce strategies to make this framework compatible with the multi-channel nature of HCS imaging. The authors performed a series of experiments to validate the performance of the method.
+
+### Strengths
+1. This work tackles an interesting problem, namely the application of generative models to HCA images. Indeed, these types of images generally exceed the three channels found in standard RGB images, which requires adapting general-purpose generative models to this kind of data.
+
+2. The paper is well written and easy to follow.
+
+3. The authors present interesting ideas for adapting  latent diffusion models to HCA images.
+
+### Weaknesses
+1. While I find the method interesting, the novelty appears limited, as it mainly consists of adapting Morphodiff to biological images with more than three channels.
+
+2. The related works section lacks several important methods that address the prediction of cellular responses to perturbations [1,2].
+
+3. The proposed baseline is somewhat weak, as the authors only compare their model to Morphodiff and Stable Diffusion, reporting FID and KID scores. Moreover, these metrics are related: FID is typically suited for large datasets, whereas KID is more appropriate when working with fewer images.
+
+4. The evaluation is based on only two datasets, which may limit the robustness of the conclusions.
+
+5. The authors do not provide any schematic to describe the proposed architecture, and such a schematic would greatly facilitate understanding.
+
+References:
+
+[1] PhenDiff: Revealing Subtle Phenotypes with Diffusion Models in Real Images, Bourou et al.
+
+[2] Revealing invisible cell phenotypes with conditional generative modeling, Lamiable et al.
+
+### Questions
+1. It is unclear what the authors mean when they state: “Our model combines a pretrained VAE with a latent diffusion model.” A latent diffusion model already includes a VAE that encodes the image into a lower-dimensional latent representation, where the diffusion process is performed. Do the authors refer to this built-in VAE, or are they introducing an additional one? Furthermore, on which images was the VAE pretrained, and how many channels were used during pretraining?
+
+2. Previous methods [1,2] were already able to generate biologically meaningful images. What improvement does REPA provide in this case? Did the authors perform an ablation study to evaluate the importance of each component?
+
+3. How is the conditioning performed? Which encoders are used to encode the different perturbations?
+
+4. The U-Net used in modern diffusion models already includes self-attention blocks to capture spatial relationships. Does SiT provide any improvement over this? Did the authors compare the two backbones?
+
+5. FID and KID were originally proposed to evaluate RGB image generation. How do the authors apply these metrics to images with more than three channels?
+
+6. I do not understand how Stable Diffusion was used as a baseline, since it does not include any encoder to handle perturbation conditioning. How is this achieved in the proposed setup? Furthermore, Stable Diffusion is trained on natural RGB images, so it seems unreasonable to apply it directly to biological images without retraining. Did the authors fine-tune or adapt the model in any way? What about the text encoder?
+
+7. In Table 1, was the number of channels the same for all methods? Although MorphenGen provides the best FID, the values remain very high. Furthermore, why did the authors not provide standard deviations for the other models?
+
+References:
+
+[1] PhenDiff: Revealing Subtle Phenotypes with Diffusion Models in Real Images, Bourou et al.
+
+[2] Revealing invisible cell phenotypes with conditional generative modeling, Lamiable et al.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper develops MorphGen, a diffusion model for generating cell painting images conditioned on a description of a perturbation and cell type. There are previous approaches for this task, but two key advantages of MorphGen are the ability to natively model all 6 channels of cell painting data and the ability to incorporate cell type conditions.
+
+### Strengths
+•	The work addresses an important problem—predicting perturbation response using cell painting data
+
+•	Extending previous diffusion approaches to natively model the 6 cell painting channels is an important step toward more effective cell perturbation prediction models.
+
+•	FID results are strong, and uncurated images look qualitatively realistic. The way this evaluation is conducted seems really solid.
+
+•	Evaluations using CellProfiler features are important and show that the method captures biologically meaningful aspects of the images.
+
+### Weaknesses
+•	From an ML perspective, the work is more like an incremental step than a paradigm shift. This is a relatively standard diffusion model with a few tweaks to make it work on more channels than the natural images commonly used for training in computer vision applications.
+
+•	From an applications perspective, it seems that out-of-sample prediction is not really evaluated (and maybe not possible with this approach, see next question). This is kind of the main goal of developing such a generative model in the first place.
+
+•	Cell type and perturbation conditioning are not clearly described. How do you represent a chemical or genetic perturbation? Is it a one-hot encoding or the latent space of a chemical encoder? Using a chemical structure-based encoder of some kind seems like a better choice because it allows potential generalization to unseen perturbations.
+
+•	Evaluations don’t really test whether the generated images respect the cell type or perturbation condition. Something like a conditional FID or classification accuracy on generated images would get at this more directly.
+
+•	Important previous work not discussed: LUMIC, Hung et al. 2024. LUMIC uses a related latent diffusion approach, is designed to predict across cell types and can predict held-out perturbations and held-out cell types (though it does not predict all 6 channels like the current work).
+
+### Questions
+1. How do you represent a chemical or genetic perturbation? Is it a one-hot encoding or the latent space of a chemical/gene encoder?
+2. How do you represent the cell type when conditioning the diffusion model? 
+3. Can the model in principle generalize to unseen perturbations or unseen cell types?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper presents MorphGen, a diffusion-based generative model for Cell Painting microscopy images that achieves controllable generation across multiple cell types and perturbations. The key innovation is an alignment loss that guides MorphGen’s internal representations to match those of OpenPhenom (Kraus et al., 2024), a biological foundation model, encouraging the generative model to capture biologically meaningful features. Unlike prior works such as MorphoDiff (Navidi et al., 2025), which compressed six fluorescence channels into RGB and handled only one cell type, MorphGen generates all six channels jointly at higher resolution, thus preserving organelle-specific details essential for downstream morphological analysis. The model uses a latent diffusion architecture (leveraging a pretrained VAE) and incorporates conditioning on both cell type and perturbation. Experiments demonstrate that MorphGen produces morphologically plausible cell images that maintain known subcellular structures. Quantitatively, it significantly outperforms previous state-of-the-art: for example, on a multi-gene test set, its Fréchet Inception Distance (FID) is 35–60% lower than MorphoDiff. Qualitative results show that generated images closely mirror real cell images in texture and morphology. The paper also introduces evaluation metrics like Relative FID (normalised by dataset variability) and uses CellProfiler features to demonstrate that synthetic images capture phenotypic variation. Overall, the contributions of MorphGen are a substantial step toward “virtual cell” models for in silico biological experiments, enabling high-content image generation with controllable conditions and improved biological fidelity.
+
+### Strengths
+- Originality: The paper introduces a new combination of ideas focussed towards microscopy image analysis – diffusion models with a transformer backbone, multi-channel image generation, and alignment to a domain-specific foundation model. This is a creative extension of diffusion models into the biological imaging domain, addressing limitations of previous approaches. The representation alignment loss (adapted from REPA by Yu et al., 2025) is used in a novel way here (with OpenPhenom features) to inject biological priors into the generative process.
+
+- Quality: The technical quality is high. The method is described in sufficient detail, and the experiments are decent; however could be better. The authors compare MorphGen against appropriate baselines (MorphoDiff and even Stable Diffusion repurposed) on multiple datasets. The quantitative gains are impressive. For instance, MorphGen achieves substantially lower FID/KID scores than MorphoDiff across datasets. The ablation studies (in the appendix) lend support that each component (alignment loss, full-channel generation, etc.) has a positive impact. The model outputs are of high resolution and fidelity; Figure 2 and others show that synthetic images reproduce fine subcellular details, which is non-trivial. Additionally, the paper reports not only generative quality metrics but also uses CellProfiler features and a CATE (conditional treatment effect) analysis to ensure that known phenotypic differences under perturbations are being captured – this indicates a quality focus on biological accuracy, not just visual fidelity.
+
+- Clarity: Aside from minor issues noted, the paper is clearly written.
+
+- Significance: This work has practical significance for biomedical imaging communities. By enabling controllable simulation of cell images, MorphGen can be used to generate in silico experiments – for example, creating hypothetical outcomes for perturbations or augmenting datasets for training. The ability to model multiple cell types and stains is particularly significant, as it broadens the applicability (previous models were limited in scope).
+
+### Weaknesses
+While the paper is strong, there are some weaknesses and areas for improvement:
+- Evaluation could be more biologically insightful: The current evaluation leans on aggregate metrics (FID, KID) and visual inspection, with some PCA and correlation analyses in the appendix. However, these don’t fully demonstrate that the generated images recapitulate known biological relationships. For instance, a more direct test would be to see if specific CellProfiler features correlate between real and generated cells from the same perturbation. The paper shows side-by-side PCA of real vs fake and a global correlation matrix, but this is only a coarse validation. It would strengthen the work to quantify, for example, that for each known perturbation, the change in particular CellProfiler features (nuclear size, cell count, etc.) in generated images correlates with that in real images. Moreover, the authors could calculate the recall of known biological relationships between genes based on databases like StringDB, and compare this score between real and generated images. See Celik et al. 2024 (https://doi.org/10.1371/journal.pcbi.1012463).  In short, demonstrating downstream task fidelity (such as predicting drug mechanism or gene function from synthetic images and comparing to real) would make the biological validity more convincing. 
+
+
+- Limited discussion of foundation model choice: The authors use OpenPhenom embeddings to guide the generator. OpenPhenom is a reasonable choice (a well-known cell image foundation model), but the paper doesn’t explore this decision deeply. One concern is that recent analyses suggest such foundation models may be dominated by easy-to-learn signals like cell count (how many cells in the image) rather than subtler phenotypes. If OpenPhenom’s embedding primarily captures cell count or other simple variations, aligning to it might inadvertently make MorphGen focus on those and neglect finer morphological details. There are other biological feature embedding models they could consider – for example, CellCLIP (Lu et al., 2025) aligns Cell Painting images with text descriptions of perturbations via contrastive learning, MolPhenix (Fradkin et al., 2024) aligns images with molecular structures, CLOOME (Sanchez-Fernandez et al., 2023) is a confounder-aware multimodal model linking cell images and chemicals, CWA-MSN learns representations via siamese networks. All of the above provide pre-trained image embedders for cell painting images that have outperformed OpenPhenom in recalling known biological relationships from images. An ablation or comparison using some of these different embeddings (or simply turning off the alignment loss) would reveal how crucial the choice is. It’s possible that OpenPhenom is not uniquely optimal and that other representations might improve or alter the results. Currently, the paper assumes OpenPhenom as a given; examining this would improve the work’s robustness and novelty.
+
+
+
+- Clarity and definition issues: There are a few spots where the paper could be clearer. Terms like IMPA should be defined when first used. Not defining it might confuse readers unfamiliar with that prior work. Similarly, “clean images” is used in line 200. Does this mean images without noise? The authors should specify this to avoid ambiguity. The notation $z_0$ appears without definition (likely the initial noise latent for diffusion sampling), as does F(x) (I assume OpenPhenom). Explicitly stating this would help readers follow the generation process description. Furthermore, Scalable Interpolant Transformer (SiT) is defines twice in lines 163 and 185. These are relatively small weaknesses, but improving them would polish the paper. 
+
+
+- Use of a pretrained VAE not specific to microscopy: The model relies on a pretrained VAE to encode and decode images. This VAE was originally trained on RGB natural images. The authors adapt it for 6-channel input by stacking channels into pseudo-RGB triplets, which is clever. However, the paper does not mention any fine-tuning of this VAE on cell images. Using a VAE not trained on fluorescent microscopy data could introduce a domain gap – e.g., color/intensity distributions in natural images differ from microscopy, and the VAE might not optimally compress/reconstruct cell structures (especially if cell images violate assumptions it learned). It’s a testament to the method that it still works well, but this choice could be a limitation. Perhaps training a custom VAE on Cell Painting (even a smaller one) might further improve quality. At minimum, the authors should clarify what data the VAE was pretrained on and discuss any limitations or justify why this doesn’t harm results. Right now, it’s a bit implicit.
+
+
+- Miscellaneous: I have a few other minor critiques. (1) The paper uses “interpretability” in describing the benefits of full-channel generation. While preserving organelle channels does aid human interpretability of results, the model itself isn’t inherently interpretable in a model-explainability sense. It’s more about facilitating post-hoc analysis. The wording could be tempered to avoid overstating interpretability. (2) The comparison to CellFlux (another recent generative model, possibly via flow matching) is only mentioned briefly in the appendix. If CellFlux is contemporary work, a clearer comparison in the main text would be helpful for completeness. These issues do not fundamentally weaken the work but addressing them would improve the overall presentation and rigour.
+
+### Questions
+- Foundation model alignment: Can the authors provide more insight into the decision to use OpenPhenom embeddings and how sensitive the results are to this choice? An ablation on at least one another cell painting image embedder would be appreciated. For example, if one trains MorphGen without the alignment loss (or with a different embedding space, like CellCLIP), how does the image quality or biological fidelity change?
+- Scope of “biologically meaningful features”: The paper claims that the alignment enforces capturing meaningful patterns. Could the authors elaborate on which phenotypic patterns MorphGen is actually learning? In short, how do we know the model isn’t just learning to generate generic-looking cells plus the correct number of cells, rather than truly phenotype-specific morphologies? Any additional evidence here would strengthen confidence in biological relevance. A comparison between using real and generated images to recall known biological relationships from rxrx3-core would make this paper much stronger.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

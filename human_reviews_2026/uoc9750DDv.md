@@ -1,0 +1,205 @@
+# Active View Selection for Scene-level Multi-view Crowd Counting and Localization with Limited Labels
+
+- Decision: Reject
+- Scores: 4, 2, 2, 6
+
+## Abstract
+Multi-view crowd counting and localization fuse the input multi-views for estimating the crowd number or locations on the ground. Existing methods mainly focus on accurately predicting on the crowd shown in the input views, which neglects the problem of choosing the `best' camera views to perceive all crowds well in the scene. Besides, existing view selection methods require massive labeled views and images, and lack the ability for cross-scene settings, reducing their application scenarios. Thus, in this paper, we study the view selection issue for better scene-level multi-view crowd counting and localization results with cross-scene ability and limited label demand, instead of input-view-level results. We first propose a baseline view selection method (IVS) that considers view and scene geometries in the view selection strategy and conducts the view selection, labeling, and downstream tasks independently. Based on IVS, we put forward an active view selection method (AVS) that jointly optimizes the view selection, labeling, and downstream tasks. In AVS, we actively select the labeled views and consider both the view/scene geometries and the predictions of the downstream task models in the view selection process. Experiments on multi-view counting and localization tasks demonstrate the cross-scene and the limited label demand advantages of the proposed active view selection method (AVS), outperforming existing methods and with wider application scenarios.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper achieves scene-level multi-view crowd counting and localization with limited labeled views. It introduces an Independent View Selection baseline (IVS) that selects views based on view and scene geometries, and an Active View Selection framework (AVS) that jointly optimizes view selection and downstream task models. Experiments on three benchmarks, including CVCS, Wildtrack, and MultiviewX, demonstrate that AVS outperforms existing methods with limited labels.
+
+### Strengths
+**Innovative and effective approach**: AVS first introduces the view selection into multi-view crowd counting and localization with reduced labels, jointly optimizing view selection and downstream tasks, improving scene-level coverage and model accuracy.
+
+**Good performance**: AVS achieves SOTA performance beyond existing methods with randomly selected views in counting, and even comparable with full labels in localization, exhibiting a great generalization ability.
+
+### Weaknesses
+**Heuristic Design and Sensitivity**: The design of the view-scoring function S seems heuristic and implicitly assumes relatively uniform or overlapping camera placement., However, the sensitivity to camera geometries has not been thoroughly examined.
+
+**Insufficient experiments and unfair experimental setups**: In Table 1, IVS and AVS achieve similar CoverRate values, yet exhibit a significant performance gap. The paper does not provide sufficient analysis to explain this discrepancy.
+
+The direct comparison between AVS and SOTA methods (with all views) under 5 views is unfair. The key to demonstrating AVS's utility is to show the "view-to-performance" curve, specifically reporting the K required to achieve SOTA-level accuracy, which truly reflects its annotation efficiency.
+
+**Unclear mechanism**: The random selection of unlabeled views for pseudo-label generation does not account for their information complementarity or redundancy with labeled views.
+
+### Questions
+It is recommended to visualize the full camera layout and explicitly compare selected versus unselected views to better illustrate the behavior and selection characteristics of the AVS strategy. 
+
+The five views in the first few random selection strategies shown in Table 1 are different, but why do they all have a CoverRate of 0.885 in the end?
+
+In Table 1, CoverRate is used to measure the quality of random versus strategy-based view selection. However, as the number of randomly chosen views increases, CoverRate naturally improves and may approach that of guided selection. The authors should identify the specific number of views (K) at which random selection's CoverRate approaches that of AVS.
+
+The method still seems to require labels to calculate the score for the view selection, otherwise how to get the FOV.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper tackles scene-level multi-view crowd counting and localization with limited labels. Given a budget of F annotated frames per camera view and K camera views per scene, the key idea is to identify most informative camera views for scene-level prediction. Specifically, the authors introduce an activate view selection framework, which jointly optimizes view selection and downstream model training in an iterative manner. Evaluations on three multi-view counting datasets show that the proposed method achieves state-of-the-art results.
+
+### Strengths
+* The paper investigates camera view selection in multi-view crowd counting, which could be a promising way to reduce annotation costs.
+* An active view selection framework is proposed to jointly optimizes camera view selection and downstream models, achieving promising results.
+* The proposed method could be applied to new scenes by adaptively selecting optimal camera views.
+
+### Weaknesses
+* Unconvincing results in Table 1. First, it is unfair to compare with previous methods under random view setting. Random view selection inevitably discards potentially informative views, leading to degraded results. For a fair comparison, the authors should compare with existing methods under Uniform setting, where camera views are uniformly sampled. Second, the rationale of computing scene-level counting error remains questionable. Intuitively, using a few input views inherently restricts observable content. Evaluating performance on visible input views is more reasonable. Third, the authors should also conduct experiments on real-world multi-view counting datasets, e.g., CityStreet, DukeMTMC, and PETS2009.
+* The effectiveness of the proposed method requires further justification. Table 7 shows that the proposed view selection strategy only achieves marginal improvement in CoverRate over naïve Uniform baseline. In addition, Tables 17 and 18 indicate that MVSelect could achieve similar performance when provided with more training frames. These results raise concerns regarding the necessity and superiority of the proposed method.
+* High computational overhead. The proposed method requires an iterative process to select K camera views during training, followed by a separate training phase for downstream counting model using finalized camera views.
+As shown in Table 25, this leads to a 6–7x increase in training time compared to MVSelect. 
+* It would be better to include cross-domain evaluations to support the generalization capability of the proposed method.
+
+### Questions
+* Did compared method adopt pseudo labels during training? It appears that pseudo labeling is important to improve performance.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes two view-selection strategies for multi-view crowd counting and localization: IVS and AVS. IVS is geometry-only and greedily selects K views by maximizing a score that combines scene coverage, average distance to cameras, and view diversity. This baseline does view selection, labeling, and downstream model training as separate steps. AVS modifies the same score but replaces the geometric visible region with masks or densities predicted by the current counting/localization model. During training, AVS alternates: select a new view using model-informed scores, label it, retrain the model, and repeat until K views are labeled. Pseudo labels from unselected views are also added to improve cross-scene generalization.
+
+### Strengths
+- Extensive ablation experiments are provided.
+
+- The core idea is motivated and original.
+
+- The method targets a practical labeling/annotation bottleneck and proposes an effective solution.
+
+### Weaknesses
+- The introduction starts abruptly with (“To deal with severe occlusions…”) before clearly stating the task. It should first define multi-view crowd counting and localization.
+
+- The methods section lacks a concise notation summary and problem setup. A short subsection at the start should define the mathematical symbols used, and outline the indices or sets involved in the problem setup. This will make later derivations and formulas much easier to follow and reduce ambiguity.
+
+- The method section is not explained clearly and is hard to follow. For example, in the view-addition subsection, several elements are introduced (“selected frames,” the current view set $V_{select}$, the score $S_g$, the final target $K$, and $S = S_g$ with $N = \emptyset$) before the basic idea is stated. This forces the reader to pause and disentangle the procedure.
+
+### Questions
+- How robust is AVS to early model errors? If the first density maps are bad or miss a region, does the selector get “stuck” where it never chooses views that would have fixed that mistake?
+
+- Why is the final score strictly multiplicative ($S_{sc}$ · $S_{ad}$ · $S_{vd}$) instead of a weighted sum, given that one weak term can zero out an otherwise great view?
+
+- In the counting experiments, the stopping rule is “MAE threshold of 20” What happens if the model never reaches MAE 20 for a hard scene? Do they still add the next view or stop early?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper studies scene-level performance for multi-view crowd counting and localization under limited labeling budgets. It introduces:
+
+• IVS (Independent View Selection): a geometry-based score combining scene coverage, average inverse person–camera distance, and view diversity to greedily pick K views (Eqs. 1–5; Fig. 2–3).  
+
+• AVS (Active View Selection): a joint selection–training loop that augments the score with model-aware terms using a binary mask and density-weighted contributions (Eq. 6–7), and leverages masked pseudo-labels to exploit unlabeled views (Figs. 6–9; Algs. 2–3). 
+
+On CVCS (multi-scene counting), AVS improves MAE to 10.99 with strong coverage (Table 1, Fig. 4). On MultiviewX/Wildtrack (single-scene localization), AVS (with only 3 labeled views) is competitive with or better than prior methods and outperforms MVSelect despite MVSelect using full labels (Table 5).
+
+### Strengths
+1.	Timely, practical problem: focuses on scene-level evaluation and which cameras to label, which addresses a gap in prior multi-view works.
+2.	Interpretable selection criteria with clear ablations for all terms in $S_g/S_{\text{density}}$ (Tables 2 & 9; Fig. 5).
+3.	Effective pseudo-label design tied to geometry/FOV masks; measured gains when used during selection and final training (Tables 4 & 6; Figs. 8–9).  
+4.	Cross-scene counting evidence: CVCS trains on 23 scenes and tests on 8 (multi-scene generalization).  
+5.	Thorough experimental suite: sensitivity to K, F, thresholds, $\lambda$, compute/time (Tables 3, 11–16, 25).
+
+### Weaknesses
+1. Claimed generalization to “novel new scenes” is only partially supported
+
+>	•	The contributions explicitly state: “Our method can apply to novel new scenes, with wider application scenarios…” (bullet 3).  ￼
+	•	Support exists for counting on CVCS (held-out scenes).  
+	•	But not for localization: MultiviewX and Wildtrack are single-scene datasets; training/testing are within the same scene (no cross-scene split).  
+	•	The paper also asserts MVSelect “has a weak generalization ability… not applicable to novel scenes,” yet does not run cross-scene tests for localization to back the novel-scene claim symmetrically.  
+
+
+2.	Related work: strengthen the single-image (“single-shot”) context and connections
+
+> Add a short paragraph explicitly bridging these single-image methods to your frame initialization (which uses DM-Count) and to the label-efficiency narrative, clarifying what is reused vs. what is novel in the multi-view setting.
+
+3.	Section “3” preamble is redundant
+
+> The opening paragraph of section 3 re-explains goals/assumptions already covered in section 1–2 (focus on scene-level; limited labels; calibrated cameras; budgets F, K). 
+
+4.	Use of DM-Count but no DM-Count baseline in tables
+
+>	•	DM-Count is used during initialization to pick frames (and specified again in App. A.2 as trained on NWPU).  
+	•	However, no table reports a DM-Count baseline (e.g., single-view density + simple fusion) in the counting comparisons (Table 1 / Table 7).  
+• Consider adding a baseline that replaces the multi-view model with DM-Count (e.g., per-view density projected to ground plane then fused), to quantify the benefit of multi-view aggregation beyond single-image capacity. At minimum, include an ablation replacing DM-Count with a trivial frame-selector to show your gains are not an artifact of the external model.
+
+### Questions
+1. DM-Count dependency: How much do results change if DM-Count is replaced with (i) uniform frame sampling, (ii) a lighter single-image proxy? (Only Table 16 partially addresses this.)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

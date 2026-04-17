@@ -1,0 +1,201 @@
+# OpenPros: A Large-Scale Dataset for Limited View Prostate Ultrasound Computed Tomography
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4, 8
+
+## Abstract
+Prostate cancer is one of the most common and lethal cancers among men, making its early detection critically important. Ultrasound computed tomography (USCT) has emerged as an accessible and cost-effective method that reconstructs quantitative tissue parameters, which can serve as potential biomarkers for malignancy. However, current prostate USCT faces considerable barriers: limited-angle acquisitions due to anatomical constraints, tissue heterogeneity, proximity to organs and bony pelvic structures, and lengthy processing times. The lack of large-scale, anatomically precise datasets significantly hampers the development of high-quality, efficient, and generalizable methods. To address this gap, we introduce OpenPros, the first large-scale benchmark dataset for limited-angle prostate USCT, designed to evaluate machine learning algorithms for inverse problems systematically. Our dataset includes over 280,000 paired samples of realistic 2D speed-of-sound (SOS) phantoms and corresponding ultrasound full-waveform data, generated from anatomically accurate 3D digital prostate models derived from 4 real clinical MRI/CT scans and 62 ex vivo prostate specimens with experimental ultrasound measurements, annotated by medical experts. Simulations are conducted under clinically realistic configurations using advanced finite-difference time-domain (FDTD) and Runge-Kutta acoustic wave solvers, both provided as open-source components. Through comprehensive benchmarking, we find that deep learning methods significantly outperform traditional physics-based algorithms in inference efficiency and reconstruction accuracy. However, our results also reveal that current machine learning methods fail to deliver clinically acceptable, high-resolution reconstructions, underscoring critical gaps in generalization, robustness, and uncertainty quantification. By publicly releasing OpenPros, we provide the community with a rigorous benchmark that not only enables fair method comparison but also motivates new advances in physics-informed learning, foundation models for scientific imaging, and uncertainty-aware reconstruction—bridging the gap between academic ML research and real-world clinical deployment. The dataset is publicly accessible at https://open-pros.github.io/.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The authors introduced OPENPROS, the first large-scale benchmark dataset for limited-angle prostate Ultrasound computed tomography, designed to evaluate machine learning algorithms for inverse problems. Baseline comparisons proposed based on physics-based approaches and DL-based approaches. Dataset is open source, and seems like quite clinically meaningful in the specific use case. However, several limitations exists. For example but not limited to, it is hard for me to evaluate if it is truly clinically meaningful because I’m lacking the specific domain knowledge, etc.
+
+### Strengths
+1. The proposed dataset size is large.
+2. The authors stated that this dataset is the first one in their specific use case, could be meaningful.	 
+3. The manuscript is well-written.
+
+### Weaknesses
+1. More detailed explanation of the relationships in between USTC, 2D SOS phantoms and ultrasound is needed. I cannot understand the clinical problem behind. Many reviewers have expertise in medical imaging, many also have expertise in prostate imaging, but I guess very limit readers and reviewers understand the relationship among them. For example, although I’m familiar with abdominal imaging and related applications, when I looked at the statement “Our dataset comprises over 280,000 paired 2D SOS phantoms and ultrasound full-waveform data derived from anatomically realistic 3D prostate models generated from clinical MRI/CT scans and ex vivo ultrasound measurements, annotated meticulously by clinical experts.”, I don’t know what does it really mean. 280,000 is a very large number in general, but what about in the context of USTC, 2D SOS phantoms, etc. ? What should I focus? I think this part needs to be emphasized since you are proposing a dataset, and it should impress the readers about the quantity of the data, quality of the data and the clinical meaningfulness about the proposal. Now I don’t feel them. Or, maybe it is purely my lack of expertise. If other reviewers have the similar problem or questions, I would like to suggest you to seek for conferences like MICCAI, or journals like IEEE TMI, MIA etc. I do believe that you put lots of effort into the dataset, but it’s hard for me to really measure it. 
+2. “It contains anatomically realistic 2D speed-of-sound phantoms, organ segmentation labels, and corresponding simulated ultrasound waveforms derived from detailed 3D digital prostate models.” It seems like the data are generated from phantoms not patients, and the ultrasound waveforms were simulated. Therefore, how the study really means in clinical applications might be questionable.
+3. “two data-driven models: CNN-based InversionNet Wu & Lin (2019) and a Vision Transformer (ViT)-based variant Dosovitskiy et al. (2020), referred to here as ViT-Inversion.” No image reconstruction methods related to inverse problems like UNet-like or Diffusion-based models (could be other generative models) introduced.
+
+### Questions
+1. “Our dataset comprises over 280,000 paired 2D SOS phantoms and ultrasound full-waveform data derived from anatomically realistic 3D prostate models generated from clinical MRI/CT scans and ex vivo ultrasound measurements, annotated meticulously by clinical experts.” Have all these patients underwent RP to take the whole prostate out so that you can do the ex vivo measurement? Or it is just ex vivo phantoms measurements?
+2. “In our specific configuration, each SOS map has a spatial resolution of 401 × 161 grid points.” Is the physical resolution the same across different SOS maps?
+3. Is the simulated ultrasound meaningful enough in your use case in comparison to real patients’ ultrasound?
+4. “To best mimic the tissue heterogeneity, we employed Gaussian distributions with given mean values and standard deviations from the tissue database to assign speed of sound in different tissue types.” Do you have any references saying this approach could be reasonable?
+5. When the authors introduced the samples, rather than only mention 280,000 slides, it would be better to also mention how many patients got involved in the study and the dataset, since generally you would like to split the train/test set by patients, not by slides to guarantee the independence.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces OPENPROS, a new large-scale (280,000 samples) benchmark dataset for limited-angle prostate Ultrasound Computed Tomography (USCT) . The authors identify a critical gap in prostate cancer imaging: while USCT can reconstruct quantitative tissue biomarkers like Speed-of-Sound (SOS), it is hampered by anatomical constraints (e.g., the pelvic bone) that create a severe limited-angle acquisition problem . The lack of realistic data has hindered the development of robust reconstruction algorithms.
+
+The primary contribution is the dataset itself, which features a high-fidelity data generation pipeline: 3D anatomical models are derived from real clinical MRI/CT scans (from 4 patients), and these are combined with real ex vivo ultrasound SOS measurements (from 62 prostate samples) . This anatomical ground truth is then used with advanced, open-sourced FDTD and Runge-Kutta wave solvers to generate paired SOS maps and full-waveform ultrasound data 
+
+The paper also provides a comprehensive benchmark, comparing traditional physics-based methods against deep learning models (InversionNet, ViT-Inversion) . The key findings are: 1) DL methods are faster and more accurate at general reconstruction than physics-based methods . 2) Critically, current DL models fail to resolve fine internal prostate structures and exhibit poor generalization to unseen patient anatomies
+
+### Strengths
+1. This is the first public, large-scale dataset specifically for limited-angle prostate USCT.
+
+2. The method of creating phantoms by combining real MRI/CT anatomical structures with ex vivo SOS measurements is a key strength, ensuring high anatomical realism 
+
+3. Providing the FDTD and Runge-Kutta solvers is a valuable contribution that enhances reproducibility and enables future work.
+
+4. The authors are transparent about the failures of current DL methods, particularly in resolving fine details and in OOD generalization , which correctly frames this as a challenging open problem.
+
+### Weaknesses
+1. The most significant weakness is that the 280,000 samples are derived from the anatomical structures of only 4 patients. This homogeneity means models may simply overfit to these 4 anatomical configurations, and the "patient-level" OOD test (train on 3, test on 1) is statistically insufficient to make strong claims about generalization.
+
+2. The paper is heavily motivated by cancer detection and claims the dataset includes "synthetic lesions". However, the entire benchmark and results section focuses only on reconstructing general anatomy . The clinical-facing motivation is completely disconnected from the actual technical evaluation.
+
+3. The use of 2D simulation is a major simplification. It ignores real-world 3D propagation and out-of-plane scattering effects, meaning models trained on this data may not be at all applicable to real 3D clinical systems.
+
+4. There is a contradiction in the text regarding the simulation aperture. The text implies a wide aperture ("entire lateral extent" of 150mm), while Table 3 suggests a 60mm length. Both 60mm and 150mm seem much larger than the clinical probes shown in Figure 2a. This suggests the simulation may be providing more data than a real probe, making the problem artificially easier.
+
+### Questions
+1. The motivation is cancer detection and the dataset claims to have lesions. Why is there no benchmark, metric, or qualitative result related to lesion detection or reconstruction in Section 4?
+
+2. Given the N=4 patient limitation, how can the community be confident that models trained on this data are learning generalizable features of prostate USCT, rather than just overfitting to the 4 specific pelvic bone structures in the dataset?
+
+3. Can you please clarify the actual aperture size used for the 322 receivers? Is it 60mm (Table 3) or 150mm (Section 3.4)? How does this compare to the real-world probes in Figure 2a you aim to model?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors present a dataset (OpenPros) for ultrasound computed tomography (USCT) of the prostate that is generated from 4 anatomical MRI+CT images, expert annotations of different anatomical areas, speed-of-sound measurment, and ultrasound simulation using a wave equation. The authors compare OpenPros to other available USCT datasets and include benchmarks for physics-based and data-driven methods that measure (1) inference efficiency, (2) reconstruction accuracy, (3) and out-of-distribution generalization. Overall the paper is well written, most of the methods are explained clearly, and the paper is reasonably well-justified as a dataset contribution to field. However, there is not much clarity around whether whether the simulated dataset is sufficient to serve as a comprehensive machine learning benchmark for image reconstruction e.g. are 280K examples are derived from just 4 patients, which limits the effectiveness of the presented benchmarks.
+
+### Strengths
+- The paper is very well written and justified
+- The paper does a good job of designing tasks for the dataset that could potentially determine its efficacy. The areas of (1) inference efficiency, (2) reconstruction accuracy, (3) and out-of-distribution generalization are all interesting and important.
+- The paper does a good job of comparing to the USCT literature, including deep learning methods for image reconstruction.
+
+### Weaknesses
+- The dataset size is a severe limitation in my opinion. It is not at all clear why 280K number of samples are needed for machine learning training. Ablation experiments controlling the number of generated samples could help here in showing the increased benefit from more samples, justifying the approach.
+- The metrics in Table 5 are not given enough context. Figure 5 offers some insight into potential benefits of data-driven methods, but this could be better quantified using the annotations. 
+- Additional analysis of the types of representations learned or exploited by models mapping the prostate tissue seems to be important for the community, but not included in the paper. Even an assessment of which views are easily reconstructed, and which fail, would make a significant difference in the quality of the paper and contribution for the ICLR community.
+
+### Questions
+- I am actually unsure about the suitability of this paper for ICLR. Why do the authors think this is important for the ICLR community (typically focused on neural network representations or similar)? To be clear, I think this paper is valuable for the broader machine learning community, but seems better suited for IEEE TCI, APL Bioengineering, or even CVPR or WACV.
+- The paper begins with a discussion of prostate cancer. Is there any evidence that the generated dataset would help in detection of prostate cancer, given that the reconstruction quality (e.g. Fig 5) is so poor?
+- What problem specifically would training on the generated dataset solve?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The authors build 3D digital phantoms of the male pelvis by combining four MRI/CT patient anatomies with 62 ex-vivo prostate SOS maps, resulting in 248 model variants. They then simulate two-dimensional acoustic wave propagation using a finite-difference time-domain solver, producing paired input–output samples: ultrasound waveforms and their corresponding ground-truth SOS maps. By slicing and rotating these models, they generate about 280K 2D examples meant to reflect the geometric and acoustic variability encountered in trans-rectal and trans-abdominal USCT setups.
+
+They also use the dataset to compare some baselines:
+1) classical beamforming,
+2) iterative physics-based USCT inversion,
+and 3,4) two learned models: InversionNet (cnn) and a ViTvariant.
+
+The learned models achieve lower pixelwise errors and run orders of magnitude faster than physics-based inversion, though their outputs remain too smooth to resolve fine prostate boundaries or lesions. Unfortunately out-of-distribution tests, where one patient anatomy is held out, reveal major performance degradation. This i s evidence of poor generalization beyond the limited training anatomies.
+
+### Strengths
+1. Addresses a clinically important and computationally demanding imaging problem
+2. Provides an open and standardized resource that can make it easier for other people to design and evaluate their own models
+3. The selected benchmarks are reasonable and cover both physics-based and learned approaches
+4. The paper is technically good and the simulation details are sufficient, I think, if someone wants to reproduce the results
+
+### Weaknesses
+My main concern: the dataset is based on only four patient anatomies and this is mentioned only deep in the methods and appendix (I think it should be mentioned in the abstract or, worst-case, introduction). The anatomical diversity is therefore extremely limited!
+
+- All simulations are 2D and reconstruct only SOS, ignoring attenuation and density. 
+- The machine-learning component is incremental (standard CNN and ViT baselines) without any more recent architectures or hybrid physics-learning integration. But this is not a major issue because I recognize that the main contribution of the paper is teh dataset.
+- Evaluation focuses on image-level metrics rather than clinically more meaningful goals such as gland boundary accuracy or lesion detection
+- The ex-vivo data used for SOS ground truth may differ from in-vivo conditions. This is not something the paper discusses or tries to quantify.
+
+### Questions
+1) The dataset is generated from four patient anatomies and 62 ex-vivo prostate samples. This needs to become more transparent in the paper -- from the very start.
+2) How were the four patient anatomies selected? Are they representative? Please provide some info about where they come from: healthy, diseased, varied in size, age, pathology?
+3) The paper slices 3D anatomies into many 2D samples. how do you ensure that (almost) identical slices or planes are not split across train/validation/test sets?
+4) The large difference between ID and OOD results suggests overfitting to specific anatomies. This worries me a lot. Maybe the authors can also report confidence intervals across anatomies and make the OOD evaluation a central table in the main paper?
+5) How is the performance affected by sensor or probe minor placement errors or SOS background shifts? A robustness study would help. 
+6) It is not clear to me what will be finally released by the authors. waveforms, SOS maps, code, and 3D phantoms? What about the original MRI/CT data?
+7) in terms of related work, a more SOTA approach would be to use neural operator learning -- something like this https://arxiv.org/abs/2304.03297 . I suggest you discuss this in the conclusions?
+8-9) A couple of more technical questions: 
+the forward model only focuses on SOS. Out-of-plane scattering, attenuation, and density variations are ignored. Have you tried to validate the simulator against 3D k-Wave simulations? How big are the errors when ignoring such things? 
+And how does ex-vivo SOS differ from in-vivo values at body temperature?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3

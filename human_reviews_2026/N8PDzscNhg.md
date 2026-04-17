@@ -1,0 +1,194 @@
+# Variation-aware Flexible 3D Gaussian Editing
+
+- Decision: Accept (Poster)
+- Scores: 6, 8, 6, 4
+
+## Abstract
+Indirect editing methods for 3D Gaussian Splatting (3DGS) have recently witnessed significant advancements. These approaches operate by first applying edits in the rendered 2D space and subsequently projecting the modifications back into 3D. *However, this paradigm inevitably introduces cross-view inconsistencies and constrains both the flexibility and efficiency of the editing process*. To address these challenges, we present **VF-Editor**, which enables native editing of Gaussian primitives by predicting attribute variations in a feedforward manner. To accurately and efficiently estimate these variations, we design a novel variation predictor distilled from 2D editing knowledge. The predictor encodes the input to generate a variation field and employs two learnable, parallel decoding functions to iteratively infer attribute changes for each 3D Gaussian. Thanks to its unified design, VF-Editor can seamlessly distill editing knowledge from diverse 2D editors and strategies into a single predictor, allowing for flexible and effective knowledge transfer into the 3D domain. Extensive experiments on both public and private datasets reveal the inherent limitations of indirect editing pipelines and validate the effectiveness and flexibility of our approach.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes VF-Editor, a novel method for editing 3D Gaussian Splatting (3DGS) scenes directly by predicting attribute variations. Instead of relying on indirect editing through 2D image manipulation, VF-Editor distills knowledge from 2D editors into a native 3D editor. A variation predictor, composed of a variation field generation module and parallel decoding functions, is trained to efficiently estimate attribute changes for each 3D Gaussian. The paper emphasizes the method's flexibility, efficiency, and ability to learn from diverse 2D editing strategies, leading to consistent and high-quality 3D edits.
+
+### Strengths
+-The core idea of directly predicting attribute variations for 3D Gaussians, guided by distilled 2D editing knowledge, is novel and addresses limitations of existing indirect editing methods.
+
+-The design of the variation predictor, with its transformer-based components, is very fast since it is feedforward rather than relying on computationally expensive techniques. 
+
+-The parallel decoding functions promise efficient processing.
+
+-The paper presents some qualitatively impressive results, demonstrating the ability to perform various editing operations (e.g., style transfer, object replacement) while preserving scene details.
+
+### Weaknesses
+-Uses a 2D diffusion prior from models like DDIM has been used in some other 3D scene editing works, such as:
+[CVPR 2023] DiffusioNeRF: Regularizing Neural Radiance Fields with Denoising Diffusion Models
+[NIPS 2024] In-N-Out: Lifting 2D Diffusion Prior for 3D Object Removal via Tuning-Free Latents Alignment
+
+-A more thorough ablation of the different components in VF-Editor (e.g., contribution of the random tokenizer, importance of different loss terms) would be useful.
+
+-While claiming "real-time editing", the paper lacks precise runtime measurements or a performance comparison against other editing methods.
+
+### Questions
+- Many details are missing like dimensions, size, exact steps, what noise model is used, more details on losses, etc.
+
+- Are there specific types of edits that VF-Editor struggles with (e.g., large structural changes, view-dependent effects, highly detailed textures)? What are the failure modes?
+
+- More elaboration on the fundamental difference with prior works that utilise 2D diffusion priors on 3D editing tasks.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+2
+
+### Summary
+The paper introduces VF-Editor, a feed-forward 3D Gaussian Splatting editor that predicts per-primitive variations (position, scale, opacity, color, rotation) to apply edits directly in 3D rather than via multi-view 2D edits and back-projection. It distills knowledge from 2D editors into a variation predictor composed of a transformer-based variation field generator and two iterative parallel decoding functions. This enables fast editing and fine grained control. Most crucially, the method targets reduced cross-view inconsistencies, flexible composition of edits (called by the authors "variation fusion"), and real-time performance. Limitations include ood generalization gaps and occasional local artifacts when relocating primitives.
+
+### Strengths
+The main strength of the paper is a neat problem reformulation: instead of predicting edited Gaussians outright, the proposed pipeline predicts per-primitive variations and composes them with the source. This gives a controllable, native 3D editing interface and sidesteps multi-view back-projection issues. Such a framing, together with the random tokenizer and the iterative, parallel decoders for position versus other attributes, feels fresh within 3DGS editing and is well-motivated by the representation's explicit structure. 
+
+I am no expert in the area, but the technical design looks coherent and lightweight to me, and the training recipe seems well executed to distill multi-source 2D priors into a single feed-forward predictor.
+
+The evaluation is broad and includes competitive quantitative results, as well as targeted ablations that isolate the benefits of iterative decoding and the parallel decoder. There are clear demonstrations of flexible control like strength scaling, locality, and variation fusion. I would have liked to see even more impressive results, but the ones shown in the demo compare very well to prior art nonetheless. The reported runtime (sub-second) and linear decoding complexity with respect to primitive count are also practical positives for interactive use.
+
+In terms of clarity, the paper does a good job with pipeline schematics and equations making the approach easy to follow. 
+
+Overall, to the extent of my expertise and knowledge in the field, I think the paper is a meaningful step that removes a common source of inconsistency in indirect pipelines and could influence further research on 3DGS.
+
+### Weaknesses
+I think there are a couple areas for improvement that are worth discussing. These cluster around data coverage, evaluation, and metodology. 
+
+- The training data is well assembled but perhaps is still small and skewed toward objects, with only a handful of scenes; admittedly the authors note lack of ood support (e.g. new categories or environments), which constrains claims of universality and open-vocabulary editing. A more convincing path may add diverse indoor/outdoor scenes, articulated humans, and CAD-like geometry, and report generalization beyond the curated distributions and six scenes used for training and evaluation. Expanding the test suite and including open-vocabulary or paraphrased instructions would make the generalization story more robust than the current check limited to objects.
+
+- On evaluation, the work relies mainly on CLIP-direction metrics, IS, and an aesthetics score, plus qualitative examples; these are useful but weak proxies for 3D editing fidelity and structural preservation, and can "over-reward" appearance changes that do not respect geometry or multi-view consistency. Adding 3D-aware measures (e.g. normal/geometry preservation for non-geometric edits and multi-view consistency checks) would better support the native 3D claim. A small user study focused on edit correctness and obstruction of original content would complement automated metrics.
+
+- Methodologically, I suggest running a deeper ablation. The random tokenizer and group size choices could introduce sampling variance across runs or scenes; alternative tokenization and sensitivity to Gaussian count would make the lightweight/linear story more compelling.
+
+Finally, some limitations are acknowledged and suggest concrete next steps. Relocating primitives can nudge nearby regions, which hints at limited spatial disentanglement; introducing local attention fields could mitigate this. Overall, the core idea looks promising, but the paper would be stronger with broader scene coverage and out-of-domain tests, 3D-aware metrics and user validation; these seem feasible within the current framework and align with the stated goals.
+
+### Questions
+- If possible, please include a small user study focused on edit correctness and preservation of untouched regions. This would address proxy-metric brittleness and could change the confidence in the method's real-world reliability.
+
+- Can you maybe expand on generalization beyond the current object-centric distribution and clarify scalability limits? A concrete plan or preliminary results on more diverse scenes (indoor/outdoor, cluttered layouts, articulated subjects) would better support open-vocabulary, scene-level editing. Relatedly, how sensitive is performance to the tokenizer's group size and to Gaussian count, and do you foresee adding or removing primitives during editing to reduce spatial entanglement when relocating content?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents VF-Editor, a novel framework for "native" 3D Gaussian Splatting (3DGS) editing. The core idea of VF-Editor is to reframe 3D editing as a feed-forward variation prediction problem. Instead of predicting a new 3D scene, the method learns a single "variation predictor" ($\mathcal{P}_{\theta}$) that directly outputs the change (or variation, $\Delta$) for all attributes of each 3D Gaussian based on a text instruction.
+
+This predictor is trained by distilling knowledge from 2D editors. The training process collects {initial noise}-{instruction}-{edited 2D image} triplets. The resulting system, VF-Editor, can perform 3D edits in ~0.3 seconds.
+
+### Strengths
+Predicting changes (Δ) instead of the final result is a smart and natural fit for 3D Gaussian Splatting. Since 3DGS is made up of explicit, editable primitives, it makes more sense to directly modificate their parameters rather than trying to infer 3D edits indirectly from 2D images.
+
+The feed-forward nature provides a significant speed-up (0.3s) over iterative optimization methods.
+
+### Weaknesses
+Data Dependency: The entire framework is built on offline triplet collection ($\mathcal{L}_{din}$). Table 1 indicates that 28,932 triplets were required for only 20 instructions. This approach seems to scale very poorly for a truly "open-vocabulary" editor. The paper admits in Sec. 4.6 that it does not support "out-of-domain editing" without fine-tuning (Fig. 14). This suggests the model is learning a mapping for a fixed set of instructions, not a general-purpose, compositional understanding of language.
+
+
+Limited Generalization: The "unseen instruction" results in Fig. 7 ("Apply clown makeup") are semantically almost identical to a training instruction ("Turn him into a clown"). This feels less like true zero-shot generalization and more like interpolation within a learned semantic space.
+
+Supervision Quality: The training relies on 2D editors. DDIM is not perfect. If the 2D editor (e.g., IP2P) produces a low-quality or inconsistent edit for a given view, this flawed supervision is baked into the triplet and, by extension, the 3D model. The paper doesn't discuss how it handles or filters "bad" 2D edits during the triplet collection phase.
+
+### Questions
+Since $\mathcal{L}_{din}$ trains on single-view edits, how does the model handle conflicting 2D edits for the same 3D-instruction pair during training? For example, if IP2P produces a red hat from the front view but a blue hat from the side view for the "put on a party hat" instruction, how is the model learn under such data?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents VF-Editor, a native, feedforward approach for direct 3D Gaussian Splatting (3DGS) editing by distilling multi-source 2D editing knowledge into a unified variation predictor network. Instead of using indirect, view-by-view projection-and-reconstruction pipelines prone to cross-view inconsistencies, VF-Editor predicts per-primitive attribute variations (position, scale, opacity, color, rotation) using learned features and incorporates probabilistic flows. The authors introduce a variation field generation module and parallel decoding functions, with extensive experiments demonstrating improved flexibility, consistency, and real-time operation across editing tasks. The paper also provides ablation studies and assesses generalization to unseen data and instructions.
+
+### Strengths
+1. The paper responds to a well-recognized limitation in 3DGS editing: the cross-view inconsistencies inherent to indirect, 2D-edit-then-project pipelines. The authors' framing is accurate and well-motivated, making a convincing case for the need for direct, native 3D editing.
+2. The feedforward variation predictor architecture is novel. The random tokenizer, transformer-based variation field generator, and parallel iterative decoding functions offer a clear path to efficient, scalable editing. The distinction between mean and other attributes in decoding further reflects architectural care to handle attribute coupling.
+3. VF-Editor's distillation pipeline can combine knowledge from diverse 2D editors, such as IP2P for DDIM-based edits and CtrlColor for style/color tasks, with training informed by different datasets. This unification of editing capabilities is practically impactful.
+4. The experiments cover a range of editing instructions, including both qualitative and quantitative reporting (Table 2, Table 4), and address both baseline comparisons and ablations. Figure 3 demonstrates per-instruction failure modes for baselines, while Figures 4–6 visualize the contribution of each architectural choice and VF-Editor's flexibility. Figure 6, in particular, makes the interpretability and composability of the approach tangible, which is a strong point.
+
+### Weaknesses
+1. Although the Related Work section is relatively comprehensive for 3DGS and 2D distillation methods, several highly pertinent and recent methods are missing. In particular:
+    - 3DSceneEditor (Yan et al., 2024) is another fully 3D-based native editing pipeline leveraging Gaussian Splatting. This work should be directly compared with or discussed in Section 2 and as a baseline in Section 4.2/Table 2.
+    - Gaussian Splatting in Style (Saroha et al., 2024), which introduces neural style transfer techniques directly into the 3DGS domain, offering valuable insights for stylization and attribute manipulation. This work should at least be discussed contextually.
+    - ManiGaussian (Lu et al., 2024) and Depth-Regularized Optimization for 3D Gaussian Splatting (Chung et al., 2024) are also relevant for scene dynamics and editing accuracy. Their omission affects the completeness and currentness of the empirical/positional claims, suggesting the need for updated discussion and possibly additional comparative experimentation.
+2. The claims about generalization (Section 4.5, Table 4, Figure 7) are largely limited to within-domain samples or instructions that are semantically related to those seen during training. There is explicit acknowledgment (Line 475)  that the model "does not yet support out-of-domain editing" but no serious attempt is made to systematically characterize the failure modes or boundary conditions of generalization. This diminishes the universality and practical significance of the claimed contributions.
+3. While the structure of the predictor and the use of zero-init linear layers are explained, the choice of the specific architecture (transformer blocks with and without self-attention) and the separation of decoding for position mean vs. attributes is mostly justified by empirical ablation rather than solid theoretical backing. For instance, Section 3.1 references attribute "intercoupling" but does not model it explicitly or provide a concrete analysis of when/why the architecture remains robust to different types of edits. It would strengthen the work to either formalize these choices further or relate them to established results in representation learning or signal decomposition.
+
+### Questions
+See the questions listed above.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

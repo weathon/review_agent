@@ -1,0 +1,207 @@
+# Dual-Stage Frequency-based Denoising for Generative Recommendation
+
+- Decision: Reject
+- Scores: 4, 6, 4, 2
+
+## Abstract
+Generative recommendation has emerged as a promising frontier in modeling the complex and continuously evolving nature of user preferences. However, its practical effectiveness is often undermined by a fundamental yet overlooked vulnerability: its sensitivity to the pervasive high-frequency sequential noise inherent in raw user interaction data from accidental clicks or transient interests. This paper introduces a paradigm shift that explicitly performs frequency-domain modeling to effectively isolate and suppress sequential noise, while further addressing the challenge of frequency-domain sparsity. Specifically, we propose TONE (Two-stage Optimized deNoising for gEnerative recommendation), a generative framework built around a principled two-stage denoising strategy. In the first stage of item codebook construction, we apply ResGMM (Residual Gaussian Mixture Model) to better fit clustering boundaries, thereby alleviating semantic noise and establishing a robust foundation. In the second stage, on the generative model side, we employ a learnable Gaussian kernel to filter context-specific noise. Furthermore, we redesign the residual frequency-domain attention mechanism with explicit separation of real and imaginary components, and introduce a learnable matrix to counteract attention collapse induced by Fourier energy concentration, while preserving expressiveness. Empirical results demonstrate that TONE achieves the new state-of-the-art performance over strong baselines on three widely used benchmarks, achieving notable improvements on the Amazon Beauty dataset, with gains of 8.93\% in Recall@20 and 8.33\% in NDCG@20. Extensive experiments confirm that explicit frequency-domain denoising is key to unlocking a new level of performance and robustness in generative recommendation. The source code is available at \url{https://anonymous.4open.science/r/TONE-9E07/}.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper reinterprets the sequential recommendation problem from a frequency-domain perspective and introduces a model named TONE. The authors argue that conventional self-attention implicitly acts as a low-pass filter that mainly preserves DC components, reducing its ability to model high-frequency sequential variations. To mitigate this limitation, they design three modules: (1) Adapted Gaussian Filtering (AGF), which functions as a learnable band-pass filter to suppress high-frequency noise; (2) Complex Residual Frequency Attention (CRFA), which incorporates phase information in the complex domain for time–frequency fusion; and (3) Rank-Preserving Matrix Learning (RPML), which compensates for the low-rank nature of frequency-domain attention through a learnable full-rank correction matrix.
+
+While the paper presents an interesting attempt to formalize self-attention from a frequency-domain viewpoint, its theoretical justification contains simplifications that limit the rigor of the analysis. The proposed modules are based on well-established filtering and regularization techniques, offering limited novelty beyond their integration. Experiments on three benchmark datasets (Beauty, Software, and LastFM) show moderate improvements over prior frequency-aware baselines such as FMLP-Rec, FEARec, and FamouSRec, though the evaluation scope remains narrow. Overall, the paper provides a clear formulation and readable presentation but contributes only incremental insights in terms of theory and model design.
+
+### Strengths
+1. Conceptual originality – The paper introduces a novel perspective by interpreting self-attention in the frequency domain, bringing signal-processing concepts into sequential and recommendation modeling.
+2. Simple and clear design – The three proposed modules (AGF, CRFA, RPML) are built with straightforward and intuitive operations, making the overall model easy to follow and understand.
+3. Consistent empirical improvements – Across the three datasets presented by the authors (Beauty, Software, and LastFM), the method demonstrates steady performance gains over prior frequency-based models, supporting its basic effectiveness.
+
+### Weaknesses
+1. Bias in Experimental Design – The paper evaluates performance only on three datasets: Beauty, Software, and LastFM. In particular, Beauty focuses on skincare and cosmetic products, where users tend to continue purchasing items suited to their skin type once identified. As a result, this dataset is dominated by long-term (low-frequency) behavioral patterns, making it especially favorable to the proposed approach of suppressing short-term (high-frequency) noise. However, short-term (high-frequency) variations are not necessarily noise in all domains. In domains where users’ transient interests or responses to trends play an essential role in prediction, such high-frequency fluctuations can represent key behavioral signals. Therefore, while the proposed approach may be effective for domains like Beauty, it could be disadvantageous in settings where such dynamic changes should be actively modeled rather than suppressed. Moreover, two datasets (Sports and Toys) used in TIGER are omitted, leaving the evaluation insufficient to verify generality across diverse behavioral patterns.
+
+2. Simplicity and Lack of Originality in Module Design – The paper proposes a frequency-aware architecture to alleviate the limitations of self-attention, but its three components—AGF, CRFA, and RPML—are straightforward combinations of techniques already well established in prior research. The design remains at a compositional level rather than offering structural or theoretical innovation. Furthermore, applying these existing methods does not involve notable technical challenges or domain-specific constraints, making it difficult to recognize this as a meaningful contribution.
+
+3. Insufficient Theoretical Analysis – The theoretical justification provided throughout the paper lacks sufficient mathematical grounding and rigor. For example, Lemma 1 demonstrates that the high-frequency component converges to zero, but it does not provide any basis for claiming that the low-frequency component is preserved. To substantiate such a claim, one must either show that the low-frequency component does not converge to zero, or mathematically prove that it decays much more slowly than the high-frequency component. If both converge to zero, the relative attenuation rate between the two must be quantitatively compared to establish the dominance of low-frequency information. However, no such quantitative verification or empirical analysis is provided, leaving the conclusion of low-frequency preservation insufficiently supported.
+
+4. Reproducibility Concerns – Although the paper states that all code has been released, the anonymous repository contains only a README file and no executable code. This discrepancy between the reproducibility statement and the actual repository content undermines the credibility of the results. Moreover, such omission can be perceived as an intentional workaround, exploiting the fact that few reviewers check the code directly, and thus cannot be viewed favorably.
+
+### Questions
+The main questions directly correspond to the weaknesses discussed above.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the sensitivity of generative recommendation models to high-frequency noise in user interaction sequences by proposing TONE, a dual-stage denoising framework. Stage I employs a Residual Gaussian Mixture Model (ResGMM) for codebook construction to mitigate item semantic noise. Stage II introduces a frequency-enhanced module comprising Adaptive Gaussian Filtering, Complex Residual Frequency Attention, and Rank-Preserving Matrix Learning to explicitly filter high-frequency sequential noise. Experiments on three benchmarks show that TONE achieves state-of-the-art performance, with notable gains of over 8% in Recall@20 and NDCG@20 on the Amazon Beauty dataset.
+
+### Strengths
+1. Originality: Proposes a novel dual-stage frequency-based denoising framework (TONE), which for the first time explicitly and systematically addresses both semantic noise and high-frequency sequential noise in generative recommendation. 
+2. Quality: The methodology is rigorously designed, integrating multiple techniques like ResGMM, adaptive filtering, and complex attention. The experimental section is comprehensive, including comparisons with various baselines, detailed ablation studies, and parameter analysis. 
+3. Clarity: The overall structure of the paper is logical. The abstract and introduction clearly state the motivations and contributions. The framework diagram (Figure 2) effectively illustrates the method's pipeline. 
+4. Significance: If the results are fully reliable, the method provides a powerful new perspective for enhancing the robustness of generative recommendation and demonstrates significant performance improvements on multiple benchmarks, showing practical potential.
+
+### Weaknesses
+1. Credibility of Experimental Results: The magnitude of performance improvement (e.g., +23.83% in NDCG@10 on Software) is exceptionally high, far exceeding typical improvements observed in the field. This strongly suggests the need for extremely rigorous scrutiny of every detail of the experimental setup, including data preprocessing, train/val/test splits, implementation and hyperparameter tuning of baselines. The authors need to provide more convincing evidence to rule out any potential experimental bias. 
+2. Method Complexity: TONE introduces multiple complex components (ResGMM, AGF, CRFA, RPML). While ablation studies validate their effectiveness, the overall framework appears heavy, with high computational cost and model complexity, potentially hindering its ease of deployment in practical systems. The computational efficiency analysis (appendix) shows a ~25-30% increase in training time, which is non-trivial. 
+3. Interpretability of Frequency-Domain Methods: The paper lacks in-depth analysis or visualization of how the frequency-domain operations concretely affect the item sequence representations and model decisions. For instance, which behaviors are identified as "high-frequency noise" and filtered out? What patterns does the frequency-domain attention learn? This limits the reader's understanding of the method's internal mechanisms.
+
+### Questions
+1. To strengthen the credibility of the experimental results, could the authors provide more detailed evidence to ensure that all baseline models (especially TIGER) were compared fairly under identical experimental conditions (including identical dataset splits, preprocessing pipelines, evaluation scripts, and their own thoroughly tuned hyperparameters)? Have you considered running multiple experiments with different random seeds to report the mean and variance of performance? 
+2. What are the computational and memory complexities of the Complex Residual Frequency Attention (CRFA) compared to standard self-attention? Is the method still feasible for processing very long user sequences? 
+3. The initialization of the Rank-Preserving Matrix (RPML) with Gaussian noise seems simple. Have the authors tried other initialization strategies? Is there any experimental evidence regarding its sensitivity to the initialization method or the hyperparameter α? How does it evolve during training? 
+4. Could you provide a concrete case study or visualization showing the changes in a real user sequence before and after processing by AGF and CRFA, for instance, indicating which interactions were identified as "noise" and effectively suppressed by the model?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper proposes a TONE method, aiming to solve the problem of effectively isolating and suppressing the high-frequency sequence noise and semantic noise generally existing in user interaction data within the generative recommendation framework. By introducing a Residual Gaussian Mixture Model and a Residual Frequency-Domain Attention mechanism, the authors design a model capable of better fitting cluster boundaries and filtering high-frequency noise. Experiments conducted on three datasets evaluate the impact of different components, and the results show that TONE is superior to existing state-of-the-art models.
+
+### Strengths
+S1. The paper is well-written, with clear articulation. 
+
+S2. The paper outlines the drawbacks of the traditional generative recommendation framework and mitigates its limitations by designing different adaptive modules. 
+
+S3. The paper provides a theoretical analysis of the TONE module, proving the rationality of introducing the corresponding module in the paper.
+
+### Weaknesses
+W1. There are many garbled characters in the figures of the paper, such as the sequence number in Figure 1 and Figure 2.
+
+W2. The paper mentions many frequency-domain based models in the related work, but none of them are used as baseline models for comparison.
+
+W3. The authors mentioned the existence of semantic noise in the project and attempted to alleviate this problem through the Residual Gaussian Mixture Model. However, they did not use specific experiments to demonstrate that the semantic noise was truly suppressed.
+
+W4. Although the authors provided an anonymous link to the open-source code, there is no specific implementation code inside. This cannot indicate that the paper's method has good reproducibility.
+
+W5. I am very curious why the performance of the baseline methods used in the paper from the past two years are all worse than the performance of the TIGER method, which is the main comparison subject in the paper, such as TokenRec[1] and ContRec[2]. However, the performance shown in their papers is better than TIGER's performance. 
+
+[1] Qu H, Fan W, Zhao Z, et al. TokenRec: Learning to Tokenize ID for LLM-Based Generative Recommendations[J]. IEEE Transactions on Knowledge and Data Engineering, 2025.
+
+[2] Qu H, Fan W, Lin S. Generative Recommendation with Continuous-Token Diffusion[J]. arXiv preprint arXiv:2504.12007, 2025.
+
+### Questions
+All raised questions and suggestions have been pointed out in the "Weaknesses" section of our paper. These questions are for reference only:
+
+Q1. Why were the frequency-domain based models mentioned in the related work not used as baseline models for comparison?
+
+Q2. How to prove that the semantic noise existing in the project is truly alleviated by the Residual Gaussian Mixture Model?
+
+Q3. Why is the performance of the baseline methods used in the paper from the past two years all worse than the performance of the TIGER method, which is the main comparison subject in the paper, but the performance shown in their papers is better than TIGER's performance?
+
+Q4. Since the code link was attached in the paper, why is the content empty?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes TONE, a two-stage framework for generative retrieval that addresses noise issues through frequency-domain modeling. The approach tackles two types of noise: (1) semantic noise in item representations caused by incomplete/misleading metadata, addressed via ResGMM clustering in the codebook construction stage, and (2) high-frequency sequential noise from accidental clicks or transient interests, filtered using frequency-domain attention mechanisms. The authors introduce several technical components including a Complex Residual Frequency Attention (CRFA) module with separated real/imaginary components and a rank-preserving matrix to prevent attention collapse. Experimental results on three benchmarks show improvements over existing methods.
+
+### Strengths
+S1:  The paper clearly identifies and distinguishes between semantic noise and high-frequency sequential noise, providing concrete examples that effectively motivate the proposed approach.
+
+S2: The two-stage approach comprehensively addresses both semantic and sequential noise with specific technical components for each challenge.
+
+S3: The paper includes comprehensive ablation studies showing the contribution of each component and further visualization of attention patterns.
+
+S4: The paper is generally well-written with good visual aids to explain the technical approach.
+
+### Weaknesses
+W1. Misleading framing and/or overclaims. Problem definition (Section 3) is a standard sequential recommendation formulation (see e.g., GRU4Rec). Given identical formulation, "Generative Recommendation" in the title appears to be a pure overclaim to attract attention. Even TIGER, which uses a similar SemanticID formulation, more accurately titled their work as "Generative Retrieval" recognizing the limitations of the paradigm.
+
+W2. Questionable experimental validity and missing baselines. TONE can be separated into codebook improvements and attention module improvements. However:
+
+- TONE's codebook construction method doesn't clearly improve upon baselines. Residual K-means is used by multiple generative retrieval papers building on top of TIGER in 2025, and per Table 2, the proposed ResGMM leads to marginal, likely non s.s. gains (0.0250 vs 0.0249) over this popular baseline on the *single* dataset the authors evaluated. 
+
+- TONE omitted multiple recent papers when comparing sequential modeling approaches in its 2nd stage (Section 4.2). eg just checking ICML'25 accepted papers (https://arxiv.org/abs/2502.13581), on the commonly used Beauty dataset, HSTU (ICML'24) achieves 0.0389 NDCG@10, SPM-SID (2024) 0.0399 NDCG@10, and ActionPiece (ICML'25) 0.0424 NDCG@10 -- all three outperforming TIGER and TONE. 
+
+- The ActionPiece paper reports SASRec achieving 0.0318 NDCG@10 on Beauty, much higher than the 0.0205 reported here, suggesting potential issues with baseline implementations.
+
+W3. No original theoretical contributions: All theoretical analyses are directly quoted from other papers including Wang et al., 2022a and Yue et al., 2025. The paper provides no original theoretical analysis of why ResGMM specifically helps with semantic noise or formal guarantees about the frequency-domain filtering.
+
+W4. Insufficient justification for complexity: The CRFA module is extremely complex with multiple stages (DFT, separation, independent processing, IDFT, residual connections) but lacks clear justification for each component's necessity. CRFA's marginal improvements (see W2) don't seem to justify this complexity.
+
+### Questions
+- Could you explain the discrepancy between your reported baseline results and those in recent papers eg ActionPiece (ICML'25)?
+
+- What is the statistical significance of the 0.0250 vs 0.0249 NDCG@5 improvement of ResGMM over Residual K-means?
+
+- Why were recent 2024/2025 baselines like ActionPiece, HSTU, SPM-SID, Residual-Kmeans for SID, etc not included in the comparison for the Beauty dataset?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,218 @@
+# Query Circuits: Explaining How Language Models Answer User Prompts
+
+- Decision: Reject
+- Scores: 2, 4, 8, 6
+
+## Abstract
+Explaining why a language model produces a particular output requires local, input-level explanations. Existing methods uncover global capability circuits (e.g., indirect object identification), but not why the model answers a specific input query in a particular way. We introduce query circuits, which directly trace the information flow inside a model that maps a specific input to the output. Unlike surrogate-based approaches (e.g., sparse autoencoders), query circuits are identified within the model itself, resulting in more faithful and computationally accessible explanations. To make query circuits practical, we address two challenges. First, we introduce Normalized Deviation Faithfulness (NDF), a robust metric to evaluate how well a discovered circuit recovers the model's decision for a specific input, and is broadly applicable to circuit discovery beyond our setting. Second, we develop sampling-based methods to efficiently identify circuits that are sparse yet faithfully describe the model’s behavior. Across benchmarks (IOI, arithmetic, MMLU, and ARC), we find that there exist extremely sparse query circuits within the model that can recover much of its performance on single queries. For example, on average, a circuit covering only 1.3\% of model connections can recover about 60\% of performance on an MMLU question. Overall, query circuits provide a step towards faithful, scalable explanations of how language models process individual inputs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper investigates the task of finding input-specific circuits (subgraphs of model components) that explain a model's behavior on a given prompt. The paper first identifies issues with applying existing methods for finding and evaluating dataset-specific circuits, and then proposes a new evaluation metric, and a new circuit finding method, which is based on generating paraphrases of the given query and either aggregating the circuits from different paraphrases. Experiments on four datasets indicate that the proposed methods outperform baselines across sparsity levels.
+
+### Strengths
+- This paper addresses an interesting problem, explaining how LLMs make decisions for a given input.
+
+- The paper is written clearly and is relatively systematic. It provides convincing evidence that existing circuit finding methods perform poorly in this setting, and introduces a new metric along with a new method that empirically improves performance.
+
+- The best-of-N method seems sensible to me--it increases the set of prompts used for circuit finding, which could reduce noise. This could also mitigate against some issues with query-level circuit finding I discussed in the Weaknesses section, where a circuit could "hard-code" the model's output for a given query. This method can be thought of as creating a small "capability" dataset composed of paraphrases.
+
+- The experiments are thorough, covering four datasets and several different LMs. The results show that the proposed best-of-N methods outperform the single-query baseline, and the results generally improve with increasing N and with more edges.
+
+- The paper introduces two variants of the best-of-N method, which are faster to run.
+
+- The paper is generally clearly written and I found the presentation to be effective.
+
+### Weaknesses
+_Soundness_
+
+- I think there is a conceptual issue with query-level circuits: if the objective is just to recover the output of model $M$ on a specific input $q$, there is nothing to prevent the method from finding a "constant" circuit that just always outputs $M(q)$, without reflecting the model's underlying computations.
+
+- Similarly, it is unclear to me that NDF (eq. 5) actually captures faithfulness. For the reason mentioned above, it is possible for some query circuit $C_q(q)$ to exactly match the model's output $M(q)$, without being faithful to the model. Specifically, $C_q$ could effectively "hard-code" the model's output, but be invariant to the input. I believe the definition of faithfulness needs to be grounded in some kind of counter-factual notion of faithfulness. See for example [1] for relevant discussion.
+
+- Section 3.3.1 argues that NFS is unstable for MMLU by showing that the score has high variance across number of edges. But this variance could be due to the circuit finding method rather than the metric. This experiment seems to be with query-level circuit finding, rather than task level circuit finding--it seems likely that the variance arises because the method finds different circuits at different N, not because of problems with the metric.
+
+- For this reason, I think it would be very informative to report the NFS score on the paraphrases generated in section 5. This would help understand if the issues identified in Sec. 3 are due to the metric, EAP-IG, or just applying these tools to a single query.
+
+_Contribution_
+
+- One of the stated contribution of this paper is to propose the task of finding input-specific circuits. There is relevant recent work that also studies input-specific circuits (albeit using transcoder features): [2]. I think this paper would benefit from a more extended discussion of that work. In particular, [2] discusses counter-factual experiments for evaluating whether the prompt-level circuits are faithful, which might be applicable here.
+
+- The paper does not give any illustrations of whether the resulting circuits can actually be used to interpret the model.
+
+_Minor comments_
+
+- The name "Query circuits" might be confusing given that "query" also describes a component in the attention mechanism--for example, see https://transformer-circuits.pub/2025/attention-qk/index.html about key-query circuits. A possible alternative could be something like "prompt-level circuits".
+
+- Typo in the abstract: "For example, a circuit covering only 1.3% of model connections can recover about 60% of performance on *an* MMLU questions." Also somewhat unclear to me--does this mean each one circuit for each MMLU question, with no circuit havings sparsity more than 1.3%?
+
+- There is a relevant prior work [3], which introduces an optimization-based method for finding edge circuits. This method mitigates issue with IE noted in section 3.3.2 (ignoring combinatorial effects among edges).
+
+_References_
+
+[1] Geiger et al., 2025. Causal Abstraction: A Theoretical Foundation for Mechanistic Interpretability.
+
+[2] Ameisen et al., 2025. Circuit Tracing: Revealing Computational Graphs in Language Models.
+
+[3] Bhaskar et al., 2024. Finding transformer circuits with edge pruning.
+
+**Summary:** I think the paper proposes a sensible method for an interesting problem, and the paper is generally thorough and clearly written. However, I have a number of doubts about the soundness of the results, given the possibility that query-level circuits can "hard-code" a response; and I feel the paper is missing a number of important baselines (like reporting NFS on paraphrased queries). I am open to increasing my score if the authors can add some discussion of how to address the soundness concerns; add more discussion of the connection to other work on prompt-level circuit finding; and add some of the results I mentioned above.
+
+### Questions
+- In Fig 2a., did you try measuring NFS for capability circuits for MMLU, rather than query circuits? This could reveal if the variance is because NFS is unreliable on MMLU (as claimed in section 3.3.1), or because query circuits have high variance.
+
+- A natural baseline to compare with Best-of-N sampling is to simply generate $p$ paraphrases of query $q$ and then run EAP-IG with dataset $D = \{q_1, \ldots, q_p\}$. This method might be simpler to implement and more general than the methods presented here, which involve interpolating between multiple potentially large score matrices. Is this the "averaging" baseline in Figure 6? It is not clear to me from the description in section 6.1.
+
+
+- For best-of-N sampling, do you also permute the order of the answer choices? Do you also paraphrase the possible answers? I think these changes could both help to reduce the likelihood that the circuit hard-codes an answer (although this will still be a possibility).
+
+
+- Are the results in figure 6 averaged over all of the queries in the dataset? I think it would be helpful to report some of these experimental details in section 6.1 and Figure 6: what is N for best-of-N, and how many examples are in each dataset.
+
+
+- Have you conducted any analysis into the relationship between query-level circuits for a given task (e.g. MMLU marketing)? For example, for a given task, how sparse is the union of query circuits? How much do the different circuits overlap?
+
+- Similarly, have you investigated the relationship between query-level circuits (e.g. for IOI) and task-level circuits? Are task-level circuits simply the union of query-level circuits? If the circuits are disjoint, this would be reason to suspect that the query-level circuits might be spurious.
+
+- Could this method be applied to circuits composed of SAE features, rather than coarse-grained model components, as in [1]?
+
+
+
+[1] Marks et al., 2024. Sparse feature circuits: Discovering and editing interpretable causal graphs in language models
+
+### Soundness
+1
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper attempts to explain a model's output on specific inputs through network connections, i.e., circuits. Unlike functional circuit discovery which focuses on general algorithmic capabilities, this method aims to provide local, query-level explanations. To better evaluate the faithfulness of discovered circuits, the paper introduces an improved evaluation metric (NDF). Two sampling methods are proposed that use paraphrases to help recover model behavior. On MMLU questions, circuits using only 1.3% of the model's connections can recover approximately 60% of the model's performance. However, the gap between "finding sparse subnetworks that preserve performance" and "explaining how the model actually processes this input" remains substantial.
+
+### Strengths
+- The paper is well-structured with clear problem formulation. The distinction between capability circuits and query circuits is well-articulated, and the motivation for local explanations is compelling. The proposed metric is a simple and well-motivated fix.
+- Using paraphrases to provide semantically-equivalent but slightly perturbed samples is intuitive and straightforward. The "lottery ticket" framing helps conceptualize why this approach works. The results are also strong and consistent across diverse benchmarks.
+- The experimental design is thorough. Tests span multiple benchmarks with varying complexity levels, include multiple baselines and ablations.
+
+### Weaknesses
+- Selecting the "best" circuit through empirical search demonstrates that some set of connections can reproduce outputs effectively. However, it's unclear whether this constitutes finding the query circuit that explains how the model actually processed that specific input, or merely identifies one among many possible circuits that happen to work.
+- Functional circuit work (e.g., for addition or IOI) typically provides detailed mechanistic interpretations showing how circuits implement specific computations. This paper doesn't establish such demonstrations for query circuits, no analysis of what roles different nodes/edges play or why discovered circuits work.
+- The general query circuit discovery in this paper bears a strong assumption that there exists a meaningful general query circuit for each input that explains the model's reasoning. However, Is there actually a unique, identifiable circuit the model uses for each query? Or are there multiple valid circuits that could produce the same output? Can we distinguish a true "query circuit" from an arbitrary subset of connections that happens to preserve performance?
+- While the sampling method successfully identifies subnetworks that govern generation abilities, it doesn't provide explanations for how or why they work. The method could succeed even if the underlying theoretical motivation is incorrect, it's fundamentally a search procedure over candidates. Alternatively, it is difficult to determine whether the paper has found the actual query circuit used by the model or a subnetwork storing important knowledge.
+
+### Questions
+Please see weakness.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes a new concept, query circuits, which recover LLM behavior by mimicking the information flow through the network. The authors measure the efficacy of their query circuits by their Normalized Deviation Faithfulness, which looks at the model's recovery on corrupted queries. Finally, the authors propose BoN for circuit discovery, and find that it does much better than previous algorithms for circuit discovery.
+
+### Strengths
+- The paper proposes a natural direction for circuit discovery (looking at local information flow as opposed to global algorithms) and also develops a solid method (BoN) that scales with more compute. 
+- The paper derives a more natural method for BoN and studies many of its derivatives. 
+- The results are promising and suggest that query circuits are recovering meaningful aspects of information flow in the model.
+
+### Weaknesses
+- The discovered circuits are able to recover performance in the network, but they are likely not as interpretable and informative as more global capability circuits. While I don't think this is an inherent limitation, as there are many novel applications that can be explored by having good query circuits, there does appear to be a fundamental limitation in "understanding" LLM behavior if one only uses query circuits.
+
+### Questions
+- Could there be more discussion of how these query circuits might be used in model interpretability? Identifying harmful query circuits (e.g., for jailbreaks) and pruning them + adjusting model behavior would be interesting.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper uses mechanistic interpretability’s circuit discovery for LLMs at the single-query (atomic) level, instead of the frequent capability/dataset level. To analyze these queries/prompts it uses edge-attribution patching methods (EAP,  EAP-IG) on different benchmarks (IOI, arithmetic, MMLU, and ARC). As circuits on the atomic level quickly lead to unstable faithfulness results on symmetric faithfulness (NFS), the paper proposes an updated faithfulness metric (NDF) to evaluate the discovered circuits and also uses multiple samples per query, where it produces different paraphrases of the original query for stabilization.
+It uses GPT-2 Small and Llama-3.2-1B-Instruct and shows the discovered circuits recover ~60% of the model’s behavior with only ~1–2% of edges, where the edge-attribution score matrices from several paraphrases share similar patterns, while at the same time small score differences between paraphrases can change them, highlighting the necessity of using several paraphrases.
+
+### Strengths
+- Analyzing prompts/queries on circuit level is an interesting addition to the interpretability toolbox, highlighting e.g., a model’s in-context learning capabilities. 
+- Similarly, showing that circuits can also be analyzed on an atomic level opens up new avenue and using sampled paraphrasing is a simple yet effective way to overcome brittleness.
+- The paper proposes an updated faithfulness metric tocomparte different prompts/paraphrases per query.
+- The approach is used on real-world datasets (beyond toy datasets).
+
+### Weaknesses
+- The discovered circuits are still to be treated with caution as small shifts in one query paraphrase can highly influence the scores of multiple paraphrases.
+- The paper only uses small models, so the generalizability is somewhat limited here.
+- The method relies in huge parts on previous work from circuit discovery and as such presents only moderate methodological novelty.
+
+### Questions
+Can you quantify variance in circuits across paraphrases for each prompt and task? (That would make the brittleness directly visible.)
+Do the high-scoring edges across paraphrases cluster in specific layers/heads (i.e. is there a consistent “always-on” subgraph)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

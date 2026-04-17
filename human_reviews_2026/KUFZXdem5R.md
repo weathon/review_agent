@@ -1,0 +1,223 @@
+# Towards Efficient Optimizer Design for LLM via Structured Fisher Approximation with a Low-Rank Extension
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 6, 6
+
+## Abstract
+Designing efficient optimizers for large language models (LLMs) with low-memory requirements and fast convergence is an important and challenging problem. This paper makes a step towards the systematic design of such optimizers through the lens of structured Fisher information matrix (FIM) approximation. We show that many state-of-the-art efficient optimizers can be viewed as solutions to FIM approximation (under the Frobenius norm) with specific structural assumptions. Building on these insights, we propose two design recommendations of practical efficient optimizers for LLMs, involving the careful selection of structural assumptions to balance generality and efficiency, and enhancing memory efficiency of optimizers with general structures through a novel low-rank extension framework. We demonstrate how to use each design approach by deriving new memory-efficient optimizers: Row and Column Scaled SGD (RACS) and Adaptive low-dimensional subspace estimation (Alice). Experiments on LLaMA pre-training (up to 1B parameters) validate the effectiveness, showing faster and better convergence than existing memory-efficient baselines and Adam with little memory overhead. Notably, Alice achieves better than 2x faster convergence over Adam, while RACS delivers strong performance on the 1B model with SGD-like memory.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper advocates a structured Fisher Information Matrix (FIM) approximation as a unifying lens for designing efficient optimizers for LLM training. It shows that a range of optimizers/gradient operators—including Adam, Shampoo, normalization/whitening, and SOAP/AdaDiag++—arise as solutions to a Frobenius-norm projection of the empirical FIM onto different structure families. On LLaMA pretraining, RACS/Alice outperform Adam and strong memory-efficient baselines; Alice achieves >2× step-speedup over Adam with comparable memory to GaLore, and RACS delivers strong results with ~SGD-like memory. The contribution is mainly a unifying viewpoint and design methodology, not a definitive theory of LLM optimization.
+
+### Strengths
+1. This paper provides unfied and clear perspective: casting popular methods as structured FIM projections.
+
+2. On C4 pretraining, Alice yields 2.22×–2.82× step-speedup vs. Adam with strong effective throughput; RACS beats multiple memory-efficient baselines (GaLore, Fira, Apollo, Muon) under comparable or lower memory. 
+
+3. The writing is good and easy to follow.
+
+4. Solid theorem analysis is provided.
+
+5. Both pretraining and finetuning experiments are provided, showing the superiority of the proposed method under different cases.
+
+### Weaknesses
+Overall, I believe this is a good paper, some small cons:
+
+1. The font size in some tables and figures are too small for potential readers, for example, Figure 1 and Table 1. It would be better if the font size be larger.
+
+2. The authors may consider adding illustrative figures to accompany the complex mathematical formulations. Visual aids would help readers grasp the core ideas and intuitions behind the proposed methods more intuitively and easily
+
+3. The current experiments are all conducted on models with fewer than 1B parameters. It would be better to see if the proposed method can scale up to 7B model pre-training, as Galore and Fira do. Alternatively, if constrained by computational resources, the authors may consider offering more in-depth discussions or analyses to compensate for the lack of large-scale experiments.
+
+### Questions
+see weaknesses
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes a unifying framework for designing memory-efficient LLM optimizers through structured Fisher Information Matrix (FIM) approximation. The authors show that existing optimizers (Adam, Shampoo, gradient normalization, etc.) can be viewed as special cases of FIM approximation with different structural constraints, and propose two design principles: (1) selecting structures that balance generality and efficiency, and (2) applying a low-rank extension framework. Based on these principles, they introduce two novel optimizers—RACS (achieving SGD-like memory with row-column scaling) and Alice (a low-rank variant of generalized Adam with tracking, switching, and compensation mechanisms)—which demonstrate over 2× faster convergence than Adam on LLaMA pre-training tasks while maintaining low memory overhead.
+
+### Strengths
+1. Originality: The unifying FIM approximation framework is highly original, elegantly connecting diverse optimizers (Adam, Shampoo, normalization, Muon) under a principled theoretical lens. The low-rank extension framework with subspace switching and optimal compensation represents creative innovation beyond existing ad-hoc approaches. The insight linking GaLore to Gadam provides valuable new perspective on existing methods. 
+
+2. Quality: The mathematical formulations are rigorous, with analytical solutions derived for various structural constraints. Experiments are comprehensive and well-designed, spanning multiple model sizes (60M-1.3B) and demonstrating consistent, substantial improvements. The convergence analysis under continuous-time setup adds theoretical grounding.
+
+3. Clarity: The paper is well-structured with logical progression from framework exposition to practical optimizer design. The step-by-step derivation of existing optimizers as special cases effectively illustrates the framework's unifying power. The two design principles provide clear, actionable guidance.
+
+4. Significance: High practical impact—Alice achieves over 2× convergence speedup compared to Adam with minimal memory overhead, addressing critical LLM training efficiency challenges. The framework provides valuable conceptual foundation for systematic optimizer design, moving the field beyond heuristic approaches toward principled methodology. The work opens promising research directions for incorporating model structure and task-specific information into optimizer design.
+
+### Weaknesses
+1. The convergence analysis is limited to continuous-time setup (Theorem H.2), which is a gap given that practical optimizers operate in discrete time. The one-step refinement approximation in Theorem 3.4 for Gadam lacks justification for why this approximation is reasonable or how the error propagates.
+
+2. All pretraining uses only LLaMA on C4. Section K.7 adds GLUE on RoBERTa, but this is insufficient. Generalization to other architectures (GPT, T5, Mamba) and domains (code, multilingual) is unclear.
+
+3. Table 2 shows Alice has 15% throughput drop on 1B models (45,523 vs 53,588 tokens/sec), but lacks breakdown of where this overhead originates. Specifically, no profiling data separates the cost of: (1) EVD approximation via subspace iteration (O(m²r) every K steps), (2) subspace switching with QR decomposition, and (3) per-step compensation computation. Without this profiling, practitioners cannot determine which components to optimize (e.g., increasing K to amortize EVD cost, or simplifying Eq. 14 to reduce compensation overhead) or assess when the 15% penalty is acceptable given 2× step-wise speedup.
+
+### Questions
+Q1. Can you provide convergence analysis for Alice under discrete-time dynamics, including convergence rates in terms of learning rate η, rank r, and switching frequency K, and how the one-step refinement approximation error affects final convergence?
+
+Q2. Can you provide detailed profiling showing time spent on EVD approximation, subspace switching, and compensation computation, and demonstrate how throughput scales with update interval K to help practitioners optimize the 15% throughput penalty?
+
+Q3. Why is random uniform sampling from the complement space optimal in Algorithm 1, and have you compared against informed strategies like gradient-based importance sampling or residual-guided selection using Σ_t from Theorem G.8?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+In this paper, the authors have proposed a unified framework for both memory and computational-efficient optimizers for LLMs. To achieve this goal, the authors have used the structured Fisher information matrix (FIM) approximation. Many existing optimizers, such as Adam and Shampoo, are approximations to the gradient descent update. FIM, on the other hand, is replaced by certain structured forms, such as block diagonal and Kronecker product matrices.
+
+### Strengths
+The strengths of this paper are summarized as follows:
+
+1. This paper has a novel optimizer design. Row and Column Scaled SGD (RACS) introduces a minimal overhead two sided scaling method. It achieves strong results with almost no additional memory. 
+
+2. Empirically, the authors have shown experimental results on different model scales, and they are compared with many baselines, such as the well-known Adam and Galore. The experimental results have shown it has consistent performance improvements.
+
+3. Theoretically, the authors have proved the convergence of Alice under the continuous-time setup.
+
+### Weaknesses
+The weaknesses of this paper are summarized as follows:
+
+1. Theoretically, the authors have given the convergence analysis only in the continuous time setting and “leave the general treatment of the convergence to future work”. It would be better if the authors could give a brief discussion about what else needs to be done, what the difficulties are, and what the differences are with the continuous-time setup.
+
+2. Empirically, the authors only analyze “pre-training LLaMA on the C4 dataset”. It would be better to include more evaluations in a more diverse domain. Also, the model sizes are small. Nowadays, people are more interested in larger LLMs. It would be better to include the experimental results on larger models.
+
+### Questions
+Galore has numerous follow-up works, such as Galore 2 [1], Golore [2], and Sara [3]. Could the authors give a comparison with these works? 
+
+
+[1] DiJia Su, Andrew Gu, Jane Xu, Yuandong Tian, and Jiawei Zhao. "Galore 2: Large-scale llm pre-training by gradient low-rank projection." arXiv preprint arXiv:2504.20437 (2025).
+
+[2] Yutong He, Pengrui Li, Yipeng Hu, Chuyan Chen, and Kun Yuan. "Subspace optimization for large language models with convergence guarantees." ICML'25.
+
+[3] Haochen Zhang, Junze Yin, Guanchu Wang, Zirui Liu, Tianyi Zhang, Anshumali Shrivastava, Lin Yang, and Vladimir Braverman. "Breaking the Frozen Subspace: Importance Sampling for Low-Rank Optimization in LLM Pretraining". NeurIPS'25.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+Memory, sample efficiency, and throughput are key performance metrics for optimization algorithms, and algorithmic development is essential for mitigating the cost of LLM training. This work leverages an insightful lens of Fisher Information Matrix (FIM) preconditioning (Natural Gradient Descent view) to study successful optimizers such as Adam, Shampoo, Muon, and Soap, and unifies them all under this lens by studying the specific structure of FIM approximation (different variants of Kronecker product and block diagonal structure) that each of these optimizers is made of. Interestingly, the update rule of the one-sided Soap algorithm is also derived and analyzed by leveraging block-diagonal structure, and together the one-sided Soap update rule plus the derived structure is referred to as Generalized Adam (GAdam).
+
+Inspired by FIM unification, this work hence argues that exploration of novel structures for FIM approximations is the key design principle for systematically developing new optimizers to further balance the optimizers' performance metrics, especially memory vs sample efficiency. Building on this design principle, the paper proposes two novel optimization algorithms. The first proposed algorithm is called RACS, where the preconditioner is structured as a Kronecker product of two diagonal matrices, and by minimizing the FIM approximation error (measured in Frobenius norm), the two diagonal matrices are derived subsequently. This optimizer hence reduces the second moment memory significantly and matches the memory complexity of AdaFactor (for instance, Adam's second moment needs O(mn) while RACS needs O(m+n)).
+
+Moreover, this work also proposes another novel low-rank optimizer called ALICE, achieving GaLore-like memory while significantly improving both sample efficiency and throughput. ALICE extends the GAdam algorithm (one-sided Soap update rule) to low-rank subspace optimizer settings by maintaining only the top r eigenvectors of the full-rank projection in GAdam, and then the projected gradients are accumulated in the subspace akin to GaLore. Subspace switching and compensation methods are also proposed to account for the residual update term that remains orthogonal to the projection matrix and is wiped out during projection.
+
+The two proposed algorithms are validated on LLaMA pre-training and GLUE benchmarks compared to AdamW, GaLore, Fira, Apollo, and Muon. The reported results indicate that these memory-efficient optimizers (ALICE and RACS) not only match the final validation perplexity of the best baseline but both improve the wall-clock time by a factor of 2 compared to Adam.
+
+### Strengths
+1. The paper is well-presented and clear. The proposed algorithms are derived based on rigorous theoretical principles, and experiments are comprehensive and profile all key performance metrics (throughput, memory, and perplexity) across the LLaMA model family (from 60M to 1.3B). Comprehensive ablations verify the effectiveness of the key algorithmic components introduced for the two proposed optimizers.
+
+2. This paper makes it clear that the most adopted and successful optimizers in deep learning indeed are different choices of FIM approximation. Principled design of optimizers based on exploring the space of FIM approximation structures is a very clever and strong idea. Finding principles for one-sided Soap based on this framework is an interesting contribution.
+
+3. Both proposed optimizers, ALICE and RACS, achieve consistent speedup by a factor of 2 (measured in wall-clock time) and significant memory savings compared to AdamW. These gains represent very strong results, and upon reproduction of these results, the ALICE and RACS algorithms have the potential to be adopted as mainstream optimizers for LLM training based on reported results. Especially considering the benchmark of current state-of-the-art optimizers in similar pre-training settings [1], the speedup of the best SOTA optimizer compared to Adam is around 1.1-1.4, and Muon is among the best-performing optimizers. Interestingly, the paper reports both ALICE and RACS outperform Muon significantly while using less memory.
+
+### Weaknesses
+### Critiques on the FIM Framework (Section 3)
+
+Applying the Shampoo preconditioner directly on gradients can recover spectral normalization (whitening) as well, and hence whitening can be understood without leveraging Proposition 3.3. Moreover, [3] already finds the optimal solution to Equation 2 (line 147), where the optimal R and L are computed as principal singular vectors of reshaped F. Then [3] leverages power iteration for approximating the optimal solution of Equation 2, and hence minimizing the proposed upper bound in Theorem 3.2 does not provide significant additional insight when compared to established results in [3]. For Theorem 3.4, if we assume all D_i are equal, then the structure would be equal to the whitening structure that is used to derive Equation 3, and hence the derivation of Equation 6 appears redundant. Moreover, since GAdam appears to be equivalent to one-sided Soap, and this algorithm is actually discussed in the original Soap paper, the justification for not referring to GAdam as one-sided Soap is unclear. While the derived principle has novelty, the update rule remains the same.
+
+### Novelty of RACS Compared to AdaFactor
+
+If we let the initial S and Q be identity matrices with proper scaling, then one iteration of the fixed point procedure in Equation 11 would indeed recover the AdaFactor update. Moreover, when applying the structure in Equation 10 to gradients as in Equation 1, we can write:
+$\text{Vec}(\Delta W) = -\lambda (S \otimes Q)^{-1/2} \text{Vec}(G)$. Since both S and Q are diagonal, $S \otimes Q$ would be diagonal as well, and hence we can write $\Delta W = -\lambda \frac{G}{\sqrt{V}}$, where $V = qs^\top$. Since Proposition 4.1 shows that q and s converge to the left and right singular vectors of $G^2$ up to scaling factors, this shows that V would be a rank-one SVD approximation of $G^2$, and the iterative fixed point procedure of RACS is essentially a power iteration that approximates those principal vectors. Moreover, the original AdaFactor (Algorithm 4 in [4]) similarly maintains momentum on q and s. Hence, RACS appears to be very similar to AdaFactor. RACS performs 5 iterations of Equation 11, while AdaFactor performs one iteration. Therefore, the novelty of the RACS update rule could be considered limited, as RACS appears to be another rank-one approximation method of the second moment, which AdaFactor has already explored and studied in detail.
+
+### Reproducibility
+
+The code has not been made available, and considering the significant speedup reported in this work and the potential for improving upon the best existing optimizers in the field, making the source code and implementation public would greatly benefit the research community and enable better evaluation of this paper. Even sharing the source code for the 130M setup would be highly valuable.
+
+### Questions
+1. Could the authors please address my critique regarding RACS, and particularly explain the key algorithmic differences between RACS and AdaFactor beyond performing more steps of power iterations? This is indeed a very important concern to address, as AdaFactor does not achieve anywhere close to the RACS speedup compared to AdamW, and having more power iterations as the only key algorithmic component does not seem sufficient to explain these gains.
+
+2. Could the authors please provide a detailed comparison of the compensation step in ALICE to LDAdam? Line 467 mentions Fira as the closest work for compensation, but LDAdam has also made significant contributions regarding this compensation mechanism, which merits discussion and comparison.
+
+3. Proposition 4.1 in this work appears to be a diagonal version of Proposition 1 (Section 3.1 in [3]). It would be interesting to see what additional challenges the proof of Proposition 4.1 introduces compared to Proposition 1 in [3], and how these relate to power iteration convergence.
+
+
+
+[1] Wen, Kaiyue, et al. "Fantastic pretraining optimizers and where to find them." arXiv preprint arXiv:2509.02046 (2025).
+
+[2] Robert, Thomas, et al. "Ldadam: Adaptive optimization from low-dimensional gradient statistics." arXiv preprint arXiv:2410.16103 (2024).
+
+[3] Morwani, Depen, et al. "A New Perspective on Shampoo's Preconditioner." arXiv preprint arXiv:2406.17748 (2024).
+
+[4] Shazeer, Noam, and Mitchell Stern. "Adafactor: Adaptive learning rates with sublinear memory cost." International Conference on Machine Learning. PMLR, 2018.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

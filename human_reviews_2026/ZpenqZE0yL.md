@@ -1,0 +1,146 @@
+# GeoCrossBench: Cross-Band Generalization for Remote Sensing
+
+- Decision: Reject
+- Scores: 6, 6, 2
+
+## Abstract
+The number and diversity of remote sensing satellites grows over time, while the vast majority of labeled data comes from older satellites. As the foundation models for Earth observation scale up, the cost of (re-)training to support new satellites grows too, so the generalization capabilities of the models towards new satellites become increasingly important. In this work we introduce GeoCrossBench, an extension of the popular GeoBench benchmark with a new evaluation protocol: it tests the in-distribution performance; generalization to satellites with no band overlap; and generalization to satellites with additional bands with respect to the training set. We also develop a self-supervised extension of ChannelViT, ChiViT, to improve its cross-satellite performance. First, we show that even the best foundation models for remote sensing do not outperform general purpose models like DINOv3 in the in-distribution setting. Second, when generalizing to new satellites with no band overlap, all models suffer 2-4x drop in performance, and ChiViT significantly outperforms the runner-up DINOv3. Third, the performance of all tested models drops on average by 5-25\% when given additional bands during test time. Finally, we show that fine-tuning just the last linear layer of these models using oracle labels from all bands can get relatively consistent performance across all satellites, highlighting that the benchmark is far from being saturated. We publicly release the code and the datasets to encourage the development of more future-proof remote sensing models with stronger cross-satellite generalization.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces GeoCrossBench, an extension to the GeoBench benchmark designed for evaluating the cross-satellite generalization of remote sensing models. A new evaluation protocol is introduced that measures model performance in-distribution, on satellites with no overlapping bands, and on satellites with additional bands compared to training data. The work also presents χViT, a self-supervised extension of ChannelViT, aimed at improving cross-satellite transferability.
+
+### Strengths
+- Generalization across diverge satellite image sensors is a very important problem that could unlock the use of diverse data and improve the use of newly launched satellites from the get go, this paper advances research towards this important direction by releasing a dataset and proposing an evaluation framework.
+- The evaluation framework presented is sensible and covers train-test discrepancy by separating cases to in-distribution, no-overlap bands and superset of bands which makes sense from an application perspective.
+
+### Weaknesses
+- The limitation of >100M parameter models seems quite restrictive for the task at hand since it excludes the best performing foundation models.
+- The proposed evaluation tasks are limited but can be expanded in followup works.
+- The value of this work depends greatly on the quality of the proposed dataset, it would be nice to see some samples as part of this submission but none were included.
+- Figure captions are not sufficient for understanding the figures, they should be expanded to include all relevant information without requiring the reader to go through the main text.
+- Related work should include works on out-of-distribution performance of deep neural networks and machine learning for remote sensing.
+
+(Minor minor)
+- typo in l.114 "challange"
+
+### Questions
+- Can you explain what are the performance metrics presented in Table 2 and what the * symbol represents?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces GeoCrossBench, an extension of the GeoBench benchmark for evaluating generalization capabilities of remote sensing foundation models across satellites with differing spectral characteristics. The benchmark defines three evaluation protocols: (a) In-distribution performance, (ii) Generalization to satellites with no band overlap, and (iii) Generalization to satellites with additional bands compared to the training set. The authors also propose ChiViT, a self-supervised extension of ChannelViT, designed to improve cross-satellite transfer by encouraging robustness to variations in input spectral bands. Through extensive experiments, the authors find that even strong foundation models (DOFA, TerraFM) fail to outperform general-purpose models (e.g., DINOv3) in-distribution; that performance drops substantially (2-4x) when generalizing to unseen satellites; and that ChiViT yields the best results in the no-overlap setting. They further show that fine-tuning only the last linear layer using oracle labels can partially recover performance, indicating that cross-satellite generalization remains an open challenge.
+
+### Strengths
+1. The paper is well written and interesting
+2. The considered problem (cross-satellite generalization for remote sensing) is relevant as Earth observation systems diversify rapidly.
+3. The proposed self-supervised, band-sampling extension to ChannelViT is an interesting approach to improve transferability.
+
+### Weaknesses
+1. Improvements over DinoV3 are not significant
+2. Metrics between methods show an important variance, making the results difficult to read
+
+### Questions
+**Major comments**
+1. An interesting part of the paper is this paragraph : "One of the reasons for the relatively strong performance of ChiViT compared to other multispectral models might be the trick of sampling of the bands during pretraining. The models might learn to rely less on band-specific features and instead focus on patterns shared across bands, which then improves cross-band generalization performance. Sampling of channels during fine-tuning might also be beneficial." Sadly, this is not tested. Could the authors add a vizualization, or experiments, that could strengthen these claims? I think this would add greatly to the paper.
+
+**Minor comments**
+1. The goal of the paper is to demonstrate that the proposed architecture / training strategy shows better transfer ability than existing approaches. In this context, I believe that Table 2 is unclear. All metrics are very similar, the coloring seems to be global (e.g. column 1 is compared to column 5, is it meaningful?) where I would assume that the performance is only evaluated for one setup (i.e. within a column, and not between columns). There, the most important columns are those in "No-overlap", and indeed, the authors report a better metric than concurrent methods. At the moment, this column is barely stressed, due to the color scheme pointing more towards the in-distribution + superset approaches...
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+GeoCrossBench introduces a benchmarking paradigm (Fig. 1) that evaluates geospatial foundation models (GFMs) on their capacity to fine-tune on classification, semantic segmentation, and change detection downstream tasks such that at those GFMs are tolerant to an input of different spectral bands. The work builds on data from GEO-Bench (Lacoste et al., 2023) by picking those with Sentinel-2 imagery and pairing these with Sentinel-1 (GRD product), cf. Tab. 1. Moreover, the authors provide a benchmark baseline model (Tab. 2) by pre-training a ChannelViT on optical and radar remote sensing imagery at multiple spatial resolutions, cf. Tab. 3. This baseline, termed ChiViT, along with general purpose vision models DINOv2/3 outperform the GFMs considered for testing, Tab. 2.
+
+### Strengths
+The paper is written in plain English, with figures and tables underlining the findings from the experiments conducted. The appendix provides additional details supporting reproduction of the work.
+
+### Weaknesses
+# Soundness
+- 2: fair
+
+# Presentation
+- 3: good
+
+# Contribution
+- 2: fair
+
+# Strengths
+The paper is written in plain English, with figures and tables underlining the findings from the experiments conducted. The appendix provides additional details supporting reproduction of the work.
+
+# Weaknesses
+I appreciate the author's effort towards benchmarking the utility of GFMs. However, the current manuscript resembles just a slight variation of work that has been previously published under the same GeoCrossBench name.
+
+As domain expert in remote sensing I rate the setup of cross-band validation through downstream tasks somewhat problematic given that the bandwidth of a spectral channel is physically relevant. For example biomass (cf. `x-cashew-pantation` and `x-SA-crop-type`) is sensitive to the (normalized) difference of the red and the near-infrared channels. Randomly replacing RGB-channel-fine-tuned inputs with random channels in the invisible range, including wavelength as far off as C-band radar is a bold step that requires careful ablation studies to understand the model's behavior, cf. some questions related below. However, I agree that domain-specific GFMs should meet the expectations to outperform general vision models not tuned towards Earth observation such as DINOv3.
+
+Given the two arguments above, I hesitate to recommend this work for publication at ICLR at its current state: a significant part of the presented work has been published elsewhere, and the benchmark design protocol raises questions about the physical interpretation. From that angle I suggest you avoid terms such as (l19-20):
+> First, we show that even the *best foundation* models for remote sensing (DOFA, TerraFM) [...]
+
+### Questions
+- Did you considered benchmarking the successor of Prithvi, TerraMind?
+- Would you please elaborate on huge jump in performance for DINOv3 frozen vs. full fine-tuning in Tab. 2?
+- How do you explain the DOFA *anomaly* where the performance drops on fine-tuning for the _No-Overlap_ scenario?
+- To improve the quality of the current manuscript, pls consider ablation studies why ViTs work well when trained insensitive to the wavelength of a satellite sensor? Why does texture and spatial structure seem sufficient?
+- By when will you share GeoCrossBench's data, code, and models under which license?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

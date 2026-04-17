@@ -1,0 +1,216 @@
+# EVA: Emergent Human-Like Visual Scanpaths in Hard Attention Models
+
+- Decision: Reject
+- Scores: 2, 4, 4, 6
+
+## Abstract
+Humans recognize images by actively sampling them through saccades and fixations. Hard attention models mimic this process but are typically judged only on accuracy. We introduce EVA, a brain-inspired hard-attention vision model designed to deliver strong classification performance while simultaneously producing human-aligned gaze patterns and interpretable internal dynamics. EVA operates with a small number of sequential glimpses, combining a human-inspired foveal-peripheral glimpse module, neuromodulator-based variance control, and a gating mechanism. On the image classification benchmark CIFAR-10, for which human gaze data is available, we show that EVA achieves a compelling trade-off between accuracy and scanpath similarity, comparable to efficient CNNs and other hard attention baselines. Crucially, we demonstrate that EVA’s learned fixation policy aligns with human scanpaths across multiple metrics (NSS, AUC). Further, its internal recurrent states yield class-specific trajectories in PCA space, revealing structured, interpretable processing dynamics. Ablation studies show that while the CNN backbone drives performance, the gating and neuromodulator modules uniquely enable alignment and interpretability. These results suggest that combining brain-inspired structural modules can yield vision models that are not only efficient and accurate but also transparent and human-aligned, a step toward jointly advancing performance and interpretability.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper presents EVA, a brain-inspired hard attention model that can perform image classification while also producing scanpaths that align with human gaze patterns—without explicit gaze supervision. The experiments show improvements against existing hard-attention baselines on classification and scanpath prediction.
+
+### Strengths
+- The brain-inspired components in the hard attention model is interesting.
+- EVA performs better than previous hard attention models on image classification and scanpath prediction.
+
+### Weaknesses
+- The dataset scale is limited. The experiments are conducted on CIFAR-10 and ImageNet-10, which are relatively small and low-resolution. It is unclear whether EVA can scale to larger datasets, e.g. COCO, SALICON.
+- The presentation of the results of the scanpath prediction is confusing, the content in table is inconsistent with the text in the manuscript. There are multiple ambiguities too. These make it difficult to understand the results.
+- The baselines for both image classification and scanpath prediction are insufficient. More recent models for image classification and scanpath prediction should be compared on larger datasets.
+- The analysis on scanpath prediction is insufficient. Some variants of EVA perform better than EVA, there is no discussion about it.
+
+### Questions
+- What is the reward function?
+- Some ablated EVAs are not clear, what are EVA-Mobile, EVA (CNN only), EVA (gate only), EVA (error only) and EVA (train self-error)? 
+- EVA does not outperform its ablated versions consistently. For example, EVA w/o CNN consistently performs better than EVA, EVA gate only is comparable with EVA w/o CNN. A more comprehensive analysis is needed to better understand the components in EVA.
+- The authors need to explain the gaze policies of center fixed, corner-fixed, and shuffled.
+- DeepGaze III does not achieve higher scores as shown in table 2.
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+- The draft proposes EVA, a lightweight neuro-inspired hard-attention vision model that classifies images by making a small number of sequential glimpses rather than processing the whole image.
+- At each step, it extracts a high-resolution foveal crop plus low-resolution peripheral context, encodes them with a tiny CNN, and updates two cooperating RNNs: a locator that predicts the next fixation and a classifier that integrates evidence.
+- A key idea is an uncertainty-modulated saccade policy—the model widens or tightens its fixation sampling variance based on EMA of prediction error—paired with a pulvinar-style gating mechanism that blends top-down state with bottom-up evidence to stabilize exploration and recognition.
+- EVA delivers good accuracy and computational efficiency while producing human-like scanpaths (quantified with DTW/ScanMatch/NSS/AUC). It passes stress tests where fixing or shuffling gaze degrades performance, indicating the learned policy is genuinely task-useful.
+
+### Strengths
+1. Clean ablations that tie each design choice to both accuracy and scanpath alignment.
+2. Robustness & qualitative alignment: The model shows stable performance under gaze perturbations (degradation patterns consistent with a learned, task-useful policy) and provides qualitative scanpath visualizations that align with salient object regions; useful for interpretation and practitioner trust.
+3. Practical efficiency: Few-glimpse inference yields a solid accuracy/compute trade-off, and the uncertainty-driven exploration + gating are lightweight, easily adoptable ideas for other sequential tasks.
+
+### Weaknesses
+1. Narrow evaluation scope: Results are confined to CIFAR-10 and a curated ImageNet-10 subset. ImageNet-10 is supposedly used only for evaluation, as it contains 20 images per class. There is no justification for the choice or usage of this dataset. Claims about general human-like scanpaths and efficiency don’t transfer without broader tests.
+2. Clarity/consistency gaps: Undefined symbols, figure–text mismatches, and incomplete equations weaken the narrative and justification for the role of every module, like:
+
+A. The figure and equations mismatch
+
+B. $L_{REINFORCE}$ details are missing. The final objective, along with classification loss, is also not described.
+
+C. The significance of foveal and peripheral crops is not explored. There is proper motivation/ role of attention before gating. 
+
+D.The composite SS score is built from ad-hoc weights (including a negative weight for DTW), and the paper does not specify how D/S/N/A are normalized. This makes overall rankings fragile to the chosen scaling and weights, so conclusions about “emergent human-like gaze behavior” may be artifacts of aggregation rather than genuine improvements. 
+
+3. Lack of reproducibility.
+
+### Questions
+1. Due to the figure and context mismatch, it's difficult to follow sections 3.1 and 3.2. 
+Are $x^p_t$ and $x^f_t$ cropped images or vectors?
+How is it concatenated if it's a crop, or how is it passed to CNN if it's a vector?
+$f_t$, which is the output of the CNN, is nowhere mentioned in the equations. Please explain this in detail with the right flow of events. It becomes challenging to understand how foveal and peripheral vision are justified in the face of this confusion.
+
+2. SS weighting is heuristic and self-negating: with DTW as lower-better, weight −0.25 can cancel out other gains. Prefer to invert DTW first (e.g., (1−DTWnorm)×0.25) and keep all weights ≥0.
+
+3. Clarify normalization for D, S, N, A (DTW, ScanMatch, NSS, AUC), and pre- & post-transform ranges.
+
+4. What is w/o error, error only, and train self-error in the ablations?
+
+5. What is the motivation for Eqs. 11–15? What is the output term finally?
+
+6. How is $L_{REINFORCE}$ loss defined in your case? Also, I assume cross-entropy loss is applied for classification. But exactly on what term is it applied? Also, what is y_t?
+
+Minor corrections
+
+1. Define retina, LGN, f_g, (in figure) and correct r_t → h_t.
+2. $f_g$ and $g_t$ in the figure do not match the equations
+3. Table 3 is not referred to anywhere in the text.
+4. Mention the computational requirements and training details, like hyperparameter settings.
+5. Number of random seed experiments conducted and (mean, std) values.
+6. Flops calculated are per glimpse or across all glimpses?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+EVA (Emergent Visual Attention) presents a **hard-attention model** meant to reproduce human-like visual scanpaths. It extends classical recurrent-attention frameworks (RAM, MRAM, Saccader) by adding (1) a foveated CNN backbone, (2) a neuromodulator that adapts fixation variance based on uncertainty, and (3) a pulvinar-style gating unit between recurrent layers. Training uses REINFORCE with only class labels. Results are shown on CIFAR-10, ImageNet-10, and a small gaze dataset (Gaze-CIFAR-10). The authors report improved accuracy/efficiency over older hard-attention baselines and higher scanpath similarity to human gaze trajectories.
+
+### Strengths
+1.  The goal of demonstrating that human-like scanpaths can emerge naturally from task-driven reinforcement learning is well motivated and connects computational attention models with established ideas from active vision and neuroscience.
+    
+2.  The incorporation of neuromodulator and pulvinar-inspired modules provides a biologically grounded mechanism for adaptive uncertainty control and selective information routing, giving the overall model a principled structure.
+
+### Weaknesses
+-   The dataset choice limits the paper’s real-world relevance. Evaluations on small or reduced subsets (e.g., CIFAR-10, ImageNet-10) do not fully reflect the diversity and structural richness of natural scenes in ImageNet-1K, where distinct foreground–background composition and color variation would make scanpath behavior more meaningful and comparable to human gaze.
+    
+-   Figure 3 is difficult to interpret. The visual layout and captioning are unclear. Figure 1 is also confusing; the left portion is not well explained, and the caption does not clearly describe what each component represents. Captions throughout the paper are inconsistently written, reducing overall readability.
+    
+-   The model design relies on CNN-RNN-style sequencing rather than transformer-based attention architectures. Since transformers inherently support sequential and global context modeling, a comparison or discussion relative to such architectures is needed to position the work within modern attention frameworks.
+
+- The experimental scope is narrow. Results are limited to classification datasets, and the paper does not test EVA on tasks where scanpath modeling or attention dynamics would be most relevant (e.g., visual question answering, referring expressions, or object search).
+
+### Questions
+- It is unclear how the Saccader baseline was adapted for the reported experiments. The original Saccader model was designed and trained on high-resolution ImageNet images (224×224 and above) with multi-saccade inference. The paper evaluates on smaller datasets such as CIFAR-10 and ImageNet-10, which differ significantly in scale and visual statistics. Details about how Saccader was reconfigured are missing. Without this clarification, the fairness of the comparison remains uncertain.
+
+- Recent works such as Zero-TPrune (CVPR 2024) [1] and MADTP (CVPR 2024) [2] demonstrate adaptive token selection in vision transformers, achieving spatial efficiency similar in spirit to EVA’s selective attention. It would be important for the authors to clarify how EVA compares to these more recent adaptive-computation baselines, which now represent the standard for efficient attention modeling.
+
+- Please address the points mentioned in the Weaknesses section as well. 
+
+[1]. Zero-TPrune: Zero-Shot Token Pruning through Leveraging of the Attention Graph in Pre-Trained Transformers, CVPR 2024
+[2]. MADTP: Multimodal Alignment-Guided Dynamic Token Pruning for Accelerating Vision-Language Transformer, CVPR 2024
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The authors introduce EVA, a hard attention model that is designed with the human brain as inspiration. Trained with reinforcement learning on class labels, EVA proves to be competitive in object recognition task while being efficient and also aligns well with human gaze even without training explicitly on eye gaze data. These emergent gaze behavior within EVA is claimed by authors to be a significant step towards model interpretability.
+
+### Strengths
+1. Appreciable model design: The model design is technically sound and biologically plausible. EVA’s model design can be a good recipe for other brain-inspired vision models. The authors show that only training EVA on class labels using reinforcement learning can induce emergent gaze behavior, which does serve testament to EVA being biologically plausible, and therefore can further be probed to investigate several cognitive tasks. 
+2. SOTA performance: EVA achieves a reasonable tradeoff between performance and efficiency across several variants. 
+3. Exhaustive experiments: The ablations and experiments are adequate and align with the claims of the paper.
+
+### Weaknesses
+1. Weak motivation: I do not agree with the central motivation for this work that is mentioned in L 49-51  - “We argue that for AI systems to become interpretable and reliable partners, they must not only perform tasks well and share human-like patterns of attention, they also need to have similar structure with human”. Human scan paths are often not interpretable due to noise and inter-observer variability. I am not convinced if exhibiting gaze patterns improves interpretability of EVA. 
+
+2. Claim of interpretability not supported adequately: The claim of “interpretability” has not been explicitly shown in the paper beyond alignment metrics with human gaze behavior and some qualitative examples (which do not showcase interpretability). How do I, as an AI practitioner, interpret these EVA-generated gaze patterns? 
+
+3. Poor readability: The overall content of the paper is somewhat disorganized with some elements begging further elaboration, for instance: (a) In lines 309-320, the authors talk about how “EVA achieves the strongest human alignment in human dynamic scanpath” on the basis of the scanpath metrics in Table 2, but introduce these metrics way later in Sec. 4.2. I suggest moving the material around for easier reading. (b) What is the difference between EVA and EVA-Mobile? I am guessing it is the difference in backbone networks, but this has not been explicitly specified in the text. (c) Additionally, there are missing references in L. 724-725.
+
+### Questions
+1. I have no problem believing DeepGaze-III will not work well on this task, as it is designed for free-viewing behavior, not object recognition. However, I wanted to ask the authors if they considered any other scanpath prediction model to benchmark.
+
+2. Can the authors shed light on the different trends shown in EVA with and without CNN, gate, error etc? Can they also address why EVA-mobile is better aligned with human behavior than EVA?
+
+3. Why is DTW and SM missing for DeepGaze-III in Table 2? 
+
+4. I found it hard to parse Table 2 with only EVA's metrics in bold. It is hard to understand and compare varying metrics of baselines and EVA variants. Why is EVA highlighted in bold even though EVA-mobile is almost 50% better in terms of the composite scanpath similarity metric SS?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

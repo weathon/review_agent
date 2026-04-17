@@ -1,0 +1,171 @@
+# Learnable Spiking Neural P System with Interval Excitation
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Spiking Neural P (SN P) systems are parallel distributed models developed by mimicking bio-nervous systems. Past decades have emerged a lot of efforts on theoretical characterizations and modeling plasticity of SN P systems; however, it still remains challenging that interacts with real-world environments due to the limited expressive capacity and the non-differentiable nature of their excitation mechanism. This paper proposes a Learnable Spiking Neural P System with Interval Excitation (LSNP_IE) for real-valued processing. The proposed LSNP_IE employs an interval excitation mechanism and a potential adjustment module, which improve modeling plasticity and enable excitation stability, respectively. The whole system can be adjusted by surrogate gradients beyond hardware. Experimental results conducted on real-world datasets show that LSNP_IE achieves competitive performance compared to traditional non-spiking and spiking models. Our investigations not only reveal the potential of integrating spiking computations with parallel distributed frameworks, but also support the development of hardware-adapted learning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a Learnable Spiking Neural P System with Interval Excitation (LSNP-IE) that integrates a differentiable learning framework into traditional Spiking Neural P (SN P) systems. The proposed LSNP-IE introduces three main innovations: (1) an interval excitation mechanism that replaces the point-triggered rule with a continuous interval, (2) a potential adjustment module to stabilize and normalize membrane potentials, and (3) a surrogate-gradient-based back-propagation algorithm for end-to-end training. Experiments on two neuromorphic datasets, N-MNIST and MNIST-DVS, show that LSNP-IE achieves competitive or superior accuracy compared to existing spiking and non-spiking baselines.
+
+### Strengths
+1. The paper extends the SN P system toward differentiable and adaptive learning.
+2. The paper is well-structured with clear notation.
+3. The presentation of back-propagation with surrogate gradients through interval excitation and potential adjustment is clear.
+
+### Weaknesses
+1. Evaluation is restricted to small-scale neuromorphic datasets (N-MNIST, MNIST-DVS). These are relatively simple and may not demonstrate scalability to complex or high-dimensional spatiotemporal tasks.
+2. The paper does not report training/inference time, memory usage, or energy efficiency, which are central claims for spiking and membrane computing models.
+3. LSNP-IE uses an MLP-style feed-forward topology only. The absence of convolutional or recurrent structures limits its comparison with advanced SNN architectures.
+4. The study omits recent transformer-based or event-driven spiking frameworks.
+5. Although the model is inspired by neural dynamics, the biological plausibility of the interval excitation mechanism is not discussed or experimentally supported.
+
+### Questions
+1. How does LSNP-IE scale to deeper or convolutional architectures? Could the interval excitation mechanism be integrated into spiking CNNs?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces a model named "Learnable Spiking Neural P System with Interval Excitation" (LSNP IE), which aims to address two core challenges of traditional Spiking Neural P (SN P) systems when processing real-world data: their limited expressive capacity and the non-differentiable nature of their excitation mechanism. The paper tries to discuss three key innovations:
+
+1. Interval Excitation Mechanism: The traditionally strict point-triggered firing condition (where the potential must exactly equal the threshold) is relaxed to an interval. This improves the model's robustness and ensures continuous information flow when handling real-valued (floating-point) data.
+2. Potential Adjustment Module: The paper introduces two normalization-like modules (M1 and M2) to align the input and residual potentials and to shift the fused potential's distribution towards the excitation interval, ensuring firing stability and effective learning.
+3. Surrogate Gradient-based End-to-End Training: The Surrogate Gradient (SG) method is employed to handle the non-differentiable parts of the firing function, enabling end-to-end backpropagation-based training for the entire network.
+
+The authors validate their method on neuromorphic datasets like N-MNIST and MNIST-DVS, reporting competitive performance compared to traditional non-spiking and spiking models. The main contribution of this work lies in bridging the gap between the theoretically-oriented SN P systems and modern deep learning training frameworks, demonstrating the feasibility of applying such models to vision tasks.
+
+### Strengths
+1. Problem-Driven Design. The proposed "interval excitation" and "potential adjustment" modules are well-thought-out. The interval excitation directly addresses the issue of point-triggered firing having near-zero probability in a continuous domain. The potential adjustment module counters the "distributional collapse" or "distributional drift" issues during training, which is crucial for stable learning. The effectiveness of these modules is also validated through ablation studies.
+2. Clear Structure. The paper is well-structured, logically flowing from background to method, experiments, and conclusion. The appendix provides a detailed introduction to WSN P systems and supplementary experiments on the necessity of the potential adjustment module, all of which strongly support the reader's understanding of the paper's core ideas.
+
+### Weaknesses
+1. For the broader audience, SN P systems are a relatively niche concept. The introduction and related work mention that SN P systems possess a "parallel and distributed architecture" and "modularity," hinting at their potential for hardware implementation. However, the paper fails to articulate more concretely what unique advantages this architecture offers over more established SNNs or traditional ANNs for tasks like image classification. This lack of justification might leave readers questioning the necessity of introducing the complexity of P systems.
+2. The potential adjustment module is formally very similar to Batch Normalization or Layer Normalization. While the ablation study proves its necessity, the paper could provide a deeper discussion on its design motivation. Is it merely an engineering trick to "push" the potential values into the firing interval? Did the authors consider other, simpler methods (like clipping or simpler scaling/shifting)? Clarifying this would help in understanding whether this module is a general-purpose solution within the SN P framework.
+3. The paper is somehow a disconnect between its core motivation and its experimental design. It argues that SN P systems offer advantages beyond standard SNNs, but then evaluates the model exclusively on image classification—a task where SNNs are already well-established and highly effective. I think the experiments thus fail to provide a compelling answer to the crucial concern: why should one utilize SN P framework if they do not showcase a experimentally unique capability (e.g., in computational modeling, structured problem-solving) that would justify its additional complexity over SNNs.
+
+### Questions
+1. About the Motivation of SN P Systems: could the authors elaborate on what practical or potential advantages (e.g., in computation, energy efficiency, or scalability) the parallel and modular structure of SN P systems offers for a task like image classification, compared to standard SNNs?
+2. Could you comment on the choice of experimental tasks? Given that a key motivation for SN P systems is their unique structure inherited from P systems, have you considered tasks where this structure might offer a more distinct advantage over standard SNN architectures (beyond visual classifications)? Furthermore, i think provide a comparison or discussion regarding more recent SOTA SNNs on these datasets could be better to contextualize performance of the proposed method.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposes a Learnable Spiking Neural P System(LSNP_IE) to improve the expressive capacity of traditional SN P systems, using the interval excitation mechanism and potential adjustment module. The authors introduce the surrogate gradients, which are widely used in SNNs, to train the SN P system. The performance of LSNP_IE is evaluated on two neuromorphic datasets, N-MNIST and MNIST-DVS.
+
+### Strengths
+1.The paper proposes an innovative SN P system.
+2.The paper has a complete writing structure and clear logic.
+
+### Weaknesses
+1.The experiments lack validation on higher-resolution datasets.
+2.The paper lacks comparative studies with other SN P systems of the same type.
+3.The hyperparameter sensitivity analysis is incomplete.
+4.The experimental results report the standard deviation, but the experimental settings do not specify which random number seeds are used.
+
+### Questions
+1.Why does LSNP_IE perform significantly worse on the scale 16 of the MNIST-DVS dataset compared to the other two scales?
+2.Why are tests not conducted on static images? Can LSNP_IE only be applied to neuromorphic data?
+3.Why is it difficult for existing SN P systems to adopt complex structures such as convolutional layers?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces a Learnable Spiking Neural P (LSNP_IE) system, contributing a novel interval excitation mechanism that enables effective gradient-based training for SN P systems on neuromorphic datasets. It provides a mathematically precise framework and demonstrates competitive performance, representing a step towards bridging the theory of membrane computing with practical learning. However, the work is limited by its use of a simple MLP architecture, which fails to demonstrate scalability, and provides no empirical evidence for the core claimed advantage of energy efficiency, leaving its practical superiority over established spiking neural models unproven.
+
+### Strengths
+1.	It introduces a learnable Interval Excitation Mechanism, effectively solving the "probability zero" firing problem for SN P systems with continuous data, a significant conceptual advance in the field.
+2.	It demonstrates end-to-end gradient-based training for an SN P system, a crucial step towards bridging the gap between their theoretical potential and practical application on real-world tasks.
+3.	It provides a mathematically precise definition of LSNP_IE and supports it with thorough ablation studies (e.g., on surrogate gradients, decay coefficient d) that empirically validate design choices.
+
+### Weaknesses
+1.	The core innovation, the interval excitation mechanism, is essentially a relaxation of a discrete threshold to a continuous one—a well-established concept in traditional SNNs (e.g., the use of surrogate gradients often implicitly does this). The potential adjustment module is a direct analog of Batch Normalization, adapted for membrane potentials. While the application of these ideas to the SN P system formalism is new, the conceptual building blocks are largely borrowed from adjacent fields. The paper does not demonstrate a fundamental theoretical advance in membrane computing itself.
+2.	Using a simple Multi-Layer Perceptron (MLP) is outdated and fails to demonstrate the model's compatibility with modern deep learning architectures. The claim that the framework supports "arbitrary depth" is unsupported, as no deep or convolutional networks are tested. This raises serious doubts about its practical applicability.
+3.	A primary motivation for SN P systems is their purported energy efficiency on neuromorphic hardware. However, the paper provides zero evidence for this claim. There is no analysis of computational complexity, number of spikes, or energy consumption compared to standard SNN baselines. Without this, the work remains a purely theoretical exercise, and its advantage over simpler, more established SNN models is unproven.
+4.	Given that the interval excitation is conceptually similar to the soft-thresholding used in surrogate gradient methods for SNNs, what is the fundamental advantage of the LSNP_IE formalism over a standard, well-optimized SNN with surrogate gradients? The experiments currently show comparable, not superior, performance on simple tasks.
+5.	Lack of Empirical Evidence for Computational Efficiency Claims: A core motivation for spiking models and neuromorphic hardware is energy efficiency. The paper repeatedly mentions this advantage (e.g., "significant energy efficiency advantages," "low-energy implementations") but provides no empirical measurements or estimates to support this claim for LSNP_IE. There is no analysis of the number of synaptic operations (SOPs), spike counts, or any other proxy for energy consumption compared to the baseline models. Without this data, the practical benefit of LSNP_IE for low-power applications remains an unverified assertion.
+
+### Questions
+The paper emphasizes the 'inherently parallel, distributed, and modular structure' of SN P systems as a key differentiator from 'monolithic SNNs.' However, in the presented LSNP_IE, which uses a standard MLP topology, how does this modularity manifest in a way that is functionally different from a standard, layered SNN? Could you specify a concrete computational or representational benefit provided by the membrane/rule formalism in this specific instantiation that cannot be achieved by an SNN?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

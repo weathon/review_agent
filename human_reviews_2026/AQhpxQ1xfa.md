@@ -1,0 +1,182 @@
+# Inducing Dyslexia in Vision Language Models
+
+- Decision: Accept (Poster)
+- Scores: 4, 2, 6, 4
+
+## Abstract
+Dyslexia, a neurodevelopmental disorder characterized by persistent reading difficulties, is often linked to reduced activity of the visual word form area (VWFA) in the ventral occipito-temporal cortex. Traditional approaches to studying dyslexia, such as behavioral and neuroimaging methods, have provided valuable insights but remain limited in their ability to test causal hypotheses about the underlying mechanisms of reading impairments. In this study, we use large-scale vision-language models (VLMs) to simulate dyslexia by functionally identifying and perturbing artificial analogues of word processing. Using stimuli from cognitive neuroscience, we identify visual-word-form-selective units within VLMs and demonstrate that they predict human VWFA neural responses.
+Ablating model VWF units leads to selective impairments in reading tasks while general visual and language comprehension abilities remain intact. 
+In particular, the resulting model matches dyslexic humans' phonological deficits without a significant change in orthographic processing, and mirrors dyslexic behavior in font sensitivity.
+Taken together, our modeling results replicate key characteristics of dyslexia and establish a computational framework for investigating brain disorders.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This papers studies dyslexia and the supposed role of a specific brain area, VWFA, in this disorder, corresponding to impairments in language decoding but not in normal intelligence. To do so, the authors consider a neuronal model, the Vision Language Model, learning associations between words and their visual form. The approach is in three steps: localization, ablation, testing. Neurons with the same typical responses avec the VWFA are localized and the performance of the model with or without the ablation of these neurons are measured. Interestingly, the same deficits but also the same preservation of performances are observed.
+
+### Strengths
+The presentation is clear, the state of the art is well presented. Applications to dyslexia are not so frequent. Results can indeed evoke a certain analogy between the artificial and natural cases.
+
+### Weaknesses
+Nevertheless, the approach is somewhat too superficial and does not discuss enough which conclusions can or cannot be drawn for these observations. Correlation does not mean causality.  In addition, the discussion makes perhaps a too rapid generalization by suggesting that this approach could be extended to other pathologies, including schizophrenia for example.
+
+### Questions
+Could you develop more the limitations of your approach, what it suggests and which kind of conclusion must be considered with caution or associated with more experiments.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a paradigm to localize and lesion VWF-selective units in vision-language models by exploring different ablation protocols, different ways of choosing model units, and benchmarking against different clinical assessments to qualitatively capture core reading-specific deficits while preserving broader cognitive functions--which are key hallmarks of dyslexia.
+
+### Strengths
+The paper does a mostly thorough job of systematically introducing the research question and explaining the various cognitive assessments used to benchmark the models, and it is easy to follow. Developing mechanistic computational models of brain function that represent a rich language of hypotheses that can narrow the scope of experiments to perform ex-silico and observe trends that might be difficult in humans is an important undertaking, and I appreciate the authors' efforts in doing so.
+
+### Weaknesses
+(1) While the paper recapitulates findings from the dyslexia literature on a qualitative basis--such as the selective impairments in reading tasks while comprehension capabilities remain unaffected--I am not entirely convinced if that is enough to validate the framework. I know that there is really less data on brain activity or assessment scores recorded longitudinally from dyslexic individuals, but a subsequent missing quantitative comparison between the models and that data feels like a test whose absence quite strongly undermines my ability to validate the framework. (2) Additionally, could the authors point out how different their work is from the work by AlKhamissi and colleagues (2025)? Is it simply the case that their approach of functional localization is being applied to the visual word form area here? (3) Both vision and language models have been validated, to a large extent, as decent models of the corresponding sensory systems they model due to being able to use model units to explain a large amount of variance in sensory neural responses under different transform classes. A discussion on the same for vision language models which are being used here seems like a pre-requisite before even considering them to analyze brain behavior under some form of dysfunction. For example, do the representation similarity matrices from the brain and these models using some stimulus set show a large degree of convergence? (4) I appreciate the fact that the authors try a variety of different ablation strategies. However, I am curious to know why the authors think that completely ablating model units (effectively, instant cell death) is the computational principle that matches how, say, focal lesions occur in the brain. In the conclusion, the authors state their simulation is "biologically inspired",  but the ablation strategy does not seem to reveal that. (5) The framework, as it is currently set up, misses some nuance associated with modeling brain dysfunction. Dysfunction such as from focal lesions spark a cascade of ischemic processes such as the expansion of the ischemic insult into the surrounding penumbra, plasticity mechanisms, behavioral attention changes, take into account the topographic layout on a systems level, etc. While I don't consider it necessary for the paper to have recapitulated observations around all of these, at least an attempt to think about these as they pertain to dysfunction modeling seems important, and is missing.
+
+### Questions
+Please see the weaknesses section above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes a framework for simulating dyslexia in large-scale vision-language models (VLMs) by identifying and ablating visual-word-form-selective (VWF) units, inspired by the functional role of the human visual word form area (VWFA) in reading. Using cognitive neuroscience benchmarks and targeted interventions in VLMs, the study shows that ablation of selected units impairs reading and phonological performance on tasks such as ROAR, while generally sparing visual reasoning and sentence comprehension. These findings are mostly consistent with human experiments, suggesting the potential of the proposed framework as a tool for modeling brain disorders.
+
+### Strengths
+1. The paper is clearly written and easy to follow. The figures are well-designed and effectively support the reader’s understanding of the main ideas.
+2. Using VLMs for modeling brain disorders is a novel and interesting idea. To my knowledge, no previous studies have explored this direction.
+3. The cognitive benchmarks used in this study are carefully chosen and serve well-defined purposes. The adaptation of these human tests to VLMs is clearly described and supported by sound reasoning.
+4. The inclusion of multiple base models and control conditions (random ablations, model layers, etc) strengthens the study’s rigor, making the results convincing.
+
+### Weaknesses
+1. The core mechanisms in this paper, such as the use of VLMs and the ablation analyses, have been explored in previous neuroscience studies [1]. The authors are encouraged to cite and discuss relevant works to better situate their contributions within the existing literature.
+2. The paper lacks details about the prompts used in the cognitive experiments. This is a crucial omission, as the performance and interpretability of VLMs/LLMs are known to depend heavily on prompt design. The authors should include detailed descriptions or examples of the prompts to enhance transparency and reproducibility.
+3. The paper relies primarily on textual descriptions and lacks a clear mathematical formalization of the proposed framework. Incorporating explicit mathematical statements in the methodology section would improve both the scientific rigor and the reproducibility of the work.
+4. It's appreciated that the authors have provided an anonymous link their source code, but the files in the repository cannot be accessed.
+
+[1] Du, Changde, et al. "Human-like object concept representations emerge naturally in multimodal large language models." Nature Machine Intelligence (2025): 1-16.
+
+### Questions
+1. In Figure 3a, RAVEN accuracy increases notably as the mask size increases from 0 to 6.08%, which seems counterintuitive. Have the authors examined this phenomenon or provided an explanation for this unexpected trend?
+2. In Appendix Figure 6b, PixTral exhibits substantial variation, particularly on the Raven benchmark. Could the authors clarify the cause of this high variability and whether it reflects instability in the model or differences in experimental setup?
+3. It would be helpful if the authors could specify the computational resources required to conduct the experiments. This information is important for assessing the scalability and reproducibility of the proposed approach.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents a computational approach for simulating dyslexia within VLMs by identifying and ablating artificial analogues of the human visual word form area (VWFA). The authors use neuroscience-inspired functional localization to pinpoint visual-word-form-selective units inside transformer architectures and perform targeted ablation to mimic the neural disruptions observed in dyslexic individuals. Ablation leads to substantial reading deficits, measured by clinical benchmarks, while leaving general visual reasoning and sentence comprehension unaffected, thus reproducing the dissociation observed in human dyslexia. 
+
+Critically, the computational lesion predominantly impairs phonological processing with minimal orthographic deficits, paralleling key aspects of developmental dyslexia in the clinic. The framework is benchmarked across multiple VLMs and analyzed for specificity with rigorous controls, and is offered as a platform for causally testing mechanisms of neurodevelopmental disorders using artificial neural networks.
+
+### Strengths
+- The work is original in proposing unit-level functional localization and lesioning inside VLMs to simulate neurobiological disorders. Unlike previous works, the method operates at the level of hypothesized neural substrates and performs causal manipulations aligned with neuroscience conventions rather than coarse-grained connectivity perturbations or behavioral proxies.​
+
+- The experimental design is precise: identification of VWF-selective units via well-established localizer paradigms from human neuroimaging is directly transposed to transformer architectures, and quantitative assessment is conducted with adapted human clinical tasks.​
+
+- Control experiments using random unit ablation convincingly show that only lesioning functionally localized word-selective units produces the desired dissociation, with random ablation causing global performance degradation, establishing the necessity of neuro-informed unit targeting.​
+
+- The work addresses not just cognitive outcomes but fidelity to documented human error types; response analyses detail patterns like misclassification, contextual over-interpretation, ambiguous hedging, and corrupted outputs, directly paralleling error modes seen in clinical dyslexia assessments.​
+
+- The quantitative analysis is comprehensive, including hyperparameter sweeps for mask size, scaling factor variations, and layer-type discrimination, allowing for mechanistic insights into where reading specialization resides within transformer blocks.​
+
+### Weaknesses
+- The identification of VWF-selective units depends on activation statistics from model internals in response to image categories, but does not incorporate human brain recordings! Without direct mapping between artificial and biological VWFA units, the correspondence remains functional rather than structural or neural, potentially limiting claims about mechanisms and transferability.​
+
+- The clinical profiles of dyslexia captured by the ablated models are more purely phonological than in human subjects, who often display mixed phonological and orthographic impairments. The model’s orthographic capacities are notably resistant to ablation, and the observed deficit distribution is less nuanced than seen in patients, raising questions as to whether this reflects architectural constraints or a misalignment in the simulated lesion procedure. The authors acknowledge this, but propose no practical avenues for resolving it within the current model scope?
+
+- The experimental controls, while thorough, operate entirely within model space. There is no demonstration that the artificial VWFA units share structural, developmental, or topological features with their biological counterpart. For example, are the localized units spatially clustered within the transformer, and do their connectivity patterns resemble cortical circuits?
+
+- Evaluation benchmarks are based on image-word discrimination, general nonverbal reasoning, and sentence comprehension tasks, all adapted from clinical settings. Although valid for cross-domain comparison, the complexity of the clinical phenotype is reduced by focusing only on limited aspects (speed of reading is omitted; real-life reading comprehension and development trajectory are not simulated). Dyslexia is developmental, but the ablation is static and does not reflect learning dynamics.
+
+### Questions
+- Can the identification of VWF-selective units be validated by alignment with neural data, for example, through representational similarity analysis with fMRI or MEG signals from human readers? This would strengthen claims of biological realism.
+
+- The phonological deficit induced by ablation is robust, but the orthographic deficit is comparatively minor. Can the lesioning approach be modified to target orthographic processing more effectively, and what does this suggest about the separability of these mechanisms in transformer architectures?
+
+- Are the identified VWF-selective units spatially or functionally clustered within the model, and do they possess unique connectivity profiles? Are there architectural analogues to known properties of the VWFA (position, connectivity) in the cortex that can be drawn from transformer weights or activation maps?
+
+- The current approach is limited to the ablation (silencing) of units. Have the authors considered developmentally inspired interventions, such as training models under restricted input, gradual lesioning, or biased gradient propagation, to better capture the emergence and remediation of dyslexia-like deficits?
+
+- Benchmark choices are justified, but the absence of processing speed (a key diagnostic marker in dyslexia) is notable. Can future work incorporate time-dependent metrics?
+
+- Minor: Visualizations (activation maps via GradCAM, ablated unit distributions) could benefit from more direct comparison to human neuroimaging data or developmental profiles.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

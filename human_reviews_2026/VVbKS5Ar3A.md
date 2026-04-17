@@ -1,0 +1,184 @@
+# Unsupervised Ordering for Maximum Clique
+
+- Decision: Reject
+- Scores: 6, 8, 4, 6
+
+## Abstract
+We propose an unsupervised approach for learning vertex orderings for the maximum clique problem by framing it within a permutation-based framework. We transform the combinatorial constraints into geometric relationships such that the ordering of vertices aligns with the clique structures.  By integrating this clique-oriented ordering into branch-and-bound search, we improve search efficiency and reduce the number of computational steps. Our results demonstrate how unsupervised learning of vertex ordering can enhance search efficiency across diverse graph instances. We further study the generalization across different sizes.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents a novel unsupervised learning approach for the maximum clique problem. Instead of formulating it as a typical binary classification task, the authors frame the problem as one of learning a permutation-based vertex ordering. This learned ordering is then integrated into a classic BnB solver, replacing the traditional degree-based heuristic. The goal is to guide the search more effectively, reduce the number of computational steps, and improve overall efficiency.
+
+### Strengths
+1. By moving away from binary classification and recasting the MCP as a permutation-based ordering problem, the authors provide a new and insightful way to apply UL to this combinatorial problem.
+
+2. The approach is practical as it is designed to be integrated with classic BnB solvers.
+
+### Weaknesses
+1. The reported reduction in computation time appears marginal. For example, in the best-case scenario on the most difficult graphs (n=200, p=0.9), the total time is reduced from 33.6s to 32.7s, which is not a substantial or fundamental improvement. Furthermore, the paper only reports the average time over 100 random instances. The average can be skewed by outliers.
+
+2. The experimental evaluation relies entirely on randomly generated graphs. No real-world datasets are used for testing. It is unclear if the ordering strategy learned on random graphs will generalize to real-world graphs.
+
+### Questions
+1. Could the authors provide a more detailed explanation of Figures 4 and 5?
+
+2. The paper selected MaxCliqueDyn, a 2007 algorithm, as its baseline. While the paper cites several newer, more advanced methods, it only justifies MaxCliqueDyn as representative. Can the authors comment on whether their learned ordering approach is likely to provide a similar speedup for these more modern, state-of-the-art solvers, which may already incorporate more advanced mechanisms than the baseline's simple initial degree sort?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+In the maximum clique problem, the goal is to find a largest vertex set, such that the induced sub-graph is complete. By complementing the edges this is equivalent to the maximum independent set problem. The paper studies the later actually, which allows them not to have to distinguish diagonal and non-diagonal entries in the adjacency matrix. It is an NP-hard problem, which can be solved exactly by a branch and bound search. It consists of the exploration of a search tree, where every node of the tree is associated to a vertex of the graph, and there are two descendants, one where the vertex is included in the solution, and one where it is not. Deciding on an order on the vertices can influence the running time, where at level i of the tree, the i-th vertex in this order is chosen. A similar approach was proposed for the traveling salesman problem in the past.
+
+Concretely, a soft-permutation T is selected which minimizes the inner product of the resulting adjacency matrix with some weight matrix. This weight matrix consists of exponential decreasing weights depending on the Lmax coordinates norm. Ideally a solution to this problem will result in an adjacency matrix an all zero square in the top left corner of the adjacency matrix, representing an independent set.
+
+This soft permutation matrix T is found with a graph neural network. Then some technique is used to transform it into a hard permutation matrix, using a Gumbel-Sinkhorn operator.
+
+Then experiments are conducted on Erdos-Rényi random graphs.
+
+### Strengths
+The paper contributes to an important central problem in combinatorial optimization. It shows that unsupervised learning can help reducing the running time of exact algorithms. This is a direction, which the optimization community has to explore these days.
+
+### Weaknesses
+I would have liked to see experiments on the DIMACS benchmark set.
+
+### Questions
+I have difficulties to judge the work, since it is far from my expertise. I don't know what a soft permutation matrix, I guess it is a stochastic matrix.
+
+You could mention in the introduction that it maximum clique is hard to approximate. No O(n^1-epsilon)-approximation ratio is possible if P != NP.
+
+page 4 line 194. I don't know the word equivariant.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces an unsupervised learning approach for the maximum clique problem (MCP) by framing the task as one of discovering informative vertex orderings, rather than binary node classifications. The method leverages a permutation-based geometric formulation, where the combinatorial constraints of MCP are translated into matrix relationships using Chebyshev distances. The learned ordering is then incorporated into the branch-and-bound (BnB) search in place of traditional degree-based vertex ordering. Experimental results on synthetic Erdős-Rényi graphs show reductions in search steps and computation time.
+
+### Strengths
+1. The paper proposes a clear shift in how unsupervised learning is used for the maximum clique problem: framing MCP as a permutation (ordering) learning task rather than standard vertex-wise classification, resulting in a fundamentally different optimization strategy.
+
+2. The methodology is rigorously constructed, with a detailed introduction of the Chebyshev distance matrix and its role in aligning matrix structure with optimal clique placement. The distinction from permutation-based approaches for problems like TSP is carefully described.
+
+3. Empirical results are detailed and convincing: Table 1 and Table 2 show that for both ( n=100 ) and ( n=200 ) graphs, the clique-oriented ordering consistently beats or matches degree-based and random orderings in steps and computation time for most edge probabilities, and the benefit is especially clear for denser graphs.
+
+### Weaknesses
+1. All experiments are on synthetic Erdős-Rényi graphs. MCP is notoriously harder on structured or sparse graphs and in real-world network scenarios, where the correlation between degree and clique participation can be very weak or non-monotonic. 
+
+2. The only empirical baselines are random ordering and classical degree-based sorting. Actually, graph ordering have been extensively studied in the litearture, and many ordering methods have been explored, such as "Can Graph Reordering Speed Up Graph Neural Network Training? An Experimental Study"
+
+3. The method is only used to initialize MaxCliqueDyn ordering; most of the potential for “deep integration” promised in the conclusion is left unexplored, so the actual scientific contribution lies in proposing a learning-based initial ordering. This is a modest advance unless future work (or additional experiments) make a stronger case for ongoing integration.
+
+### Questions
+1. How does the proposed approach perform on structured or real-world benchmarks beyond synthetic ER graphs? What are the limitations when applied to graphs with strong local patterns, inhomogeneous degree distributions, or scale-free structure?
+
+2. What is the sensitivity of performance to key architectural choices such as GNN layers, the size of the hidden layer, the value of ( $\alpha$ ), Gumbel/Sinkhorn parameters, and the initial feature design? Have alternative feature sets or architectural variants (e.g., using VNN or transformer encoders) been tested?
+
+3. Are there scenarios where the learned ordering “fails” (e.g., is worse than degree-based), and what are the characteristics of these failures?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes an unsupervised learning framework for solving the Maximum Clique Problem by reformulating it as a vertex ordering task. Instead of classifying nodes or using heuristic degree-based orderings, the model learns an optimal permutation of vertices that brings clique nodes to the front of the adjacency matrix. A graph neural network generates a soft permutation matrix trained via the Gumbel–Sinkhorn operator to approximate a valid ordering, while a Chebyshev distance–based loss encourages clique vertices to cluster in the top-left corner. The learned ordering is then integrated into the classical MaxCliqueDyn algorithm, leading to faster search convergence and reduced computational cost without requiring labeled data.
+
+### Strengths
+1. The author presents a novel reformulation of the Maximum Clique Problem as an unsupervised vertex-ordering task, combining permutation learning with classical optimization in an elegant and creative way.
+
+2. Theoretical reasoning and experiments are solid, with clear links between the objective function and clique geometry, and measurable gains in solver efficiency.
+Writing is clear and well structured, with intuitive explanations and effective visualizations that make complex ideas accessible.
+
+3. This paper demonstrates that unsupervised geometric learning can improve the efficiency of deterministic solvers, suggesting a generalizable paradigm applicable to other NP-hard problems such as graph coloring or independent set detection.
+
+### Weaknesses
+1. The evaluation is restricted to synthetic graphs, which, while controlled, do not fully represent real-world graph structures such as social, biological, or citation networks. Including results on more heterogeneous datasets would strengthen claims of generalization and robustness.
+
+2. Although the method performs well on graphs up to 200 nodes, the paper does not explore computational limits for larger graphs, where permutation learning and Sinkhorn iterations may become expensive. An analysis of complexity or scalability curves would add practical depth.
+
+3. The paper could benefit from more detailed ablation experiments to isolate the contribution of each design choice—such as the specific form of the Chebyshev-based weighting matrix or the impact of Gumbel noise magnitude on learning stability.
+
+### Questions
+1. Have the authors tested the model on structured real-world graphs (e.g., citation, protein–protein interaction, or social networks)? Since Erdős–Rényi graphs lack community structure, results on more realistic data could clarify how well the learned ordering adapts to heterogeneous topologies.
+
+2. How does the computational cost of the Gumbel–Sinkhorn iterations scale with graph size? For larger graphs (e.g., >500 nodes), does the model remain efficient, or does the continuous permutation approximation become a bottleneck?
+
+3. Is the proposed ordering applicable to other exact algorithms for the Maximum Clique Problem or to related NP-hard problems (like graph coloring or independent set)? Some experimental or conceptual discussion would help clarify its general utility.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

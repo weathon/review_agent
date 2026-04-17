@@ -1,0 +1,192 @@
+# Contrastive Inverse Reinforcement Learning for Highway Driving Behavior Optimization
+
+- Decision: Reject
+- Scores: 2, 4, 4, 6
+
+## Abstract
+Autonomous driving systems are expected to not only replicate proper human driving behavior, but also adapt to dynamic driving scenarios. Imitation learning (IL) and inverse reinforcement learning (IRL) methods are potential tools to reproduce human behaviors. 
+Traditional IRL methods are not highly sample-efficient and sometimes generalize poorly, especially in autonomous driving with limited vehicle demonstrations and driving behavior distribution shifts. In this paper, we propose a Contrastive Inverse Reinforcement Learning (CIRL) framework that enhances reward learning via self-supervised contrastive representations. The proposed CIRL method improves efficiency and robustness by 1) integrating reward regularization into the contrastive loss and 2) employing momentum encoders to stabilize contrastive feature learning under driving-specific perturbations.
+Furthermore, our approach supports personalized driving policies by modeling individual driving styles using a small number of vehicle demonstration data. Extensive experiments on the NGSIM US-101 and I-80 highway dataset demonstrate that the proposed CIRL framework consistently outperforms state-of-the-art IRL methods, achieving improvements of 12.5\% in human-likeness, 86.2\% in safety, and 17.8\% in generalization to new environments. In addition, the ablation study of key designs further validates the necessity of each key component, confirming that momentum encoding, reward regularization, and learnable similarity functions collectively contribute to CIRL’s robust and generalizable performance in real-world driving scenarios.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes a new method for autonomous driving based on IRL and contrastive learning. To improve the robustness of IRL, the paper integrates reward regularization into the contrastive loss and use momentum encoders. Experiments on the NGSIM US-101 and I-80 highway dataset shows the paper achives better performannce than previous IRL methods.
+
+### Strengths
+1. The idea to combine constrative learning and IRL is novel.
+2. The method achives better performance on the the NGSIM US-101 and I-80 highway dataset.
+
+### Weaknesses
+1. The motivation to use the momentum encoder and how to obtain the augmented states is unclear.
+2. The  NGSIM US-101 and I-80 highway dataset is too simple. Consider evaluating on the more challenging nuplan benchmark.
+3. No driving videos are provided for better understanding.
+
+### Questions
+1. In figure 3, the yellow cluster corresponds to 980 expert scenes, and purple points represent 6000 random scenes. Why not compare the policy generated scenes, which is more related to driving performance?
+2. Does other method uses the constrative features leading to better robustness like GAIL and AIRL?
+3. Address the weakness.
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes the CIRL (Contrastive Inverse Reinforcement Learning) framework for highway driving behavior optimization, aiming to improve the efficiency, robustness, and generalization of IRL methods. Traditional IRL approaches in autonomous driving often suffer from low sample efficiency and poor generalization. CIRL enhances reward learning through the following key mechanisms: (1) integrating an L2 reward regularization term into the contrastive loss to ensure that features are both discriminative and reward-consistent; (2) employing a momentum encoder to stabilize contrastive feature learning, thereby improving the model’s robustness to perturbations in the driving environment.
+
+### Strengths
+(1) CIRL successfully incorporates contrastive learning into the Maximum Entropy Inverse Reinforcement Learning (MaxEnt IRL) framework, significantly enhancing the learned reward function’s robustness and generalization to noise, distribution shifts, and sparse data.
+(2) In experiments on the US-101, CIRL achieves extremely low crash rates (CR) and termination rates (TR) under both general and personalized settings, surpassing all baselines in safety metrics. Moreover, the method maintains high performance even when trained with only a few demonstrations (e.g., 15 trajectories) or a small number of vehicles (e.g., 5 cars), demonstrating excellent sample efficiency.
+
+### Weaknesses
+(1) Introducing an L2 reward regularization term in contrastive learning enforces that the reward values between augmented states are exactly equal. However, in MaxEnt-IRL, only the relative values of the reward function (equivalence class) are meaningful. This constraint on absolute value consistency is theoretically unnecessary and may interfere with the IRL optimization process.
+(2) CIRL defines the similarity function using a learnable weight matrix W. Although ablation studies confirm its superior performance, the paper lacks an in-depth analysis of how W captures a generalized reward structure within the driving state space.
+
+### Questions
+CIRL significantly outperforms human driving demonstrations in safety metrics such as collision rate (CR). Please discuss whether this improvement in safety performance (i.e., the policy becoming safer) comes at the cost of reduced human-likeness (HL) in driving behavior.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper contributes a contrastive IRL algorithm for highway driving behavior optimization. It uses a contrastive loss with reward regularization for representation learning, and a momentum encoder for stabilizing contrastive features. Experiments show that the proposed algorithm achieves strong performance, and ablation studies show that the each key algorithmic component is helpful.
+
+### Strengths
+* Autonomous driving is an important application.
+* The proposed method is simple but achieves strong empirical performance.
+* The writing is generally good, with a well-written abstract, but there are various issues for the latter parts, as discussed below.
+
+### Weaknesses
+The paper starts with a well-written abstract and introduction, but the writing then becomes sloppy at quite a few places, as illustrated below.
+
+In the definition of MDP, "transition dynamics" is not defined, and the sentence for the reward function is awkward and jumps directly to a linear reward function without any explanation, while Figure 1 suggests that a reward network is used so the reward is not linear.
+
+Lines 109-111 mentions that MaxEnt IRL but it is not sufficiently explained and also seems to be unnecessary at this point. MaxEnt IRL is mentioned again in Eq. (5), but the associated distribution is undefined.
+
+Figure 1: "Prior knowledge" appear in the figure, but this doesn't seem to appear in the text.
+
+There are various issues regarding the "Convergence Proof of Eq. equation 4. See Appendix A.2." at line 199. This seems to come from nowhere. Looking at A.2, the presentation needs improvement too. There should be at least a statement on what "convergence" is being proved at the very beginning. The assumption on non-negativitiy of the loss is unnecessary, and the validity of the assumption on the L-smoothness is unclear. In addition, the proof seems to be for gradient descent rather than stochastic gradient descent. Overall, the analysis seems to be done not for the sake of necessity but for the sake of appearance of sophistication.
+
+Algorithm 1 is somewhat cryptic. For example, line 1 is just " Feature Extraction: zq , zk+". The use of a reward network  
+
+Minor comments
+* "reference Huang et al. (2023; 2021)" and similar: "reference" is not needed.
+* Hybrid IRLRen et al. (2024) and similar: reference should be inside brackets.
+* "An expert trajectory is defined as $\zeta$": clarify what exactly is in $\zeta$.
+
+### Questions
+Please refer to weaknesses and clarify if my understanding is incorrect.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes a Contrastive Inverse Reinforcement Learning (CIRL) framework for autonomous highway driving behavior optimization. The method combines self-supervised contrastive feature learning with maximum entropy inverse reinforcement learning (MaxEnt IRL). It introduces (1) a reward-regularized contrastive objective to align learned representations with human behavioral rewards, and (2) momentum encoders to stabilize training and mitigate distributional shifts. Experiments on the NGSIM US-101 and I-80 datasets show that CIRL outperforms state-of-the-art IRL baselines (GAIL, AIRL, MEIRL, Hybrid IRL, EscIRL) in terms of human-likeness, safety, and cross-environment generalization. The ablation studies further confirm the contribution of each module (momentum encoder, reward regularization, and learnable similarity). The paper also demonstrates personalized driving style adaptation with limited demonstrations.
+
+### Strengths
+1. Innovative integration of contrastive learning and IRL with a focus on real-world robustness and sample efficiency.
+2. The reward regularization term aligns latent representations with behavioral semantics, leading to improved interpretability.
+3. The momentum encoder mechanism stabilizes learning and mitigates overfitting under distribution shifts.
+4. Extensive experiments across two realistic driving datasets (US-101 and I-80) demonstrate consistent improvements in human-likeness (+12.5%), safety (+86.2%), and generalization (+17.8%).
+5. Comprehensive ablation studies show the necessity of each design component.
+6. The framework supports personalized driving policy learning from small demonstration sets, a valuable real-world feature.
+7. The paper is empirically strong and demonstrates practical feasibility for autonomous systems.
+8. Code and experimental design are reproducible based on the provided details (assuming release).
+
+### Weaknesses
+1. Theoretical justification is shallow. The connection between contrastive representations and reward function learning is described empirically rather than analytically.
+2. Reward regularization assumption (ℓ² alignment between augmented states) may be unrealistic in dynamic traffic, where slight augmentations can alter intent or safety conditions.
+3. Hyperparameter sensitivity (momentum factor m, β, λ) and robustness analysis are missing.
+4. Statistical significance and variance of results (e.g., over multiple random seeds) are not reported.
+5. Negative sample selection in contrastive training is underspecified, potentially impacting reproducibility.
+6. Reward network architecture and training stability metrics are not provided.
+7. The distinction from EscIRL (2025) and other recent contrastive IRL methods is somewhat incremental.
+8. The dataset scale (20 vehicles training, 20 testing) may be insufficient to generalize to large-scale real traffic patterns.
+9. The convergence proof (Appendix A.2) is standard and does not address the joint optimization of encoders and reward network.
+10. Failure cases or limitations (e.g., over-cautious driving, failure in edge cases) are not discussed.
+
+### Questions
+1. How are negative pairs selected in the contrastive loss? Are they from the same vehicle at different times or across different vehicles?
+2. How sensitive is the performance to the momentum coefficient m and the regularization weight β?
+3. Could the authors provide quantitative comparisons of convergence stability (e.g., variance of training loss across runs)?
+4. Does the reward regularization risk suppressing small but meaningful behavioral differences between similar states?
+5. How does CIRL perform in non-highway or multi-agent dense traffic scenarios (e.g., urban intersections)?
+6. Is there any theoretical link between the learned contrastive embedding and the maximum entropy reward structure?
+7. Would combining CIRL with visual or LiDAR-based state representations (beyond NGSIM trajectories) improve robustness?
+8. How does the personalized driving mode adapt to conflicting driver preferences or inconsistent demonstrations?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

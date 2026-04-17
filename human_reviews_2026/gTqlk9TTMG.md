@@ -1,0 +1,210 @@
+# MR–HCP: Morphology-Regularized Hierarchical Conformal Prediction for TEM of Subcellular Ultrastructure
+
+- Decision: Reject
+- Scores: 4, 4, 6, 6
+
+## Abstract
+Reliable uncertainty quantification is critical for deploying deep learning models in biomedical imaging, where fine-grained structures often exhibit overlapping morphology and ambiguous boundaries. We introduce Morphology-Regularized Hierarchical Conformal Prediction (MR-HCP), a novel framework that combines hierarchical taxonomies with morphology-aware nonconformity to provide compact prediction sets with rigorous coverage guarantees. Unlike existing conformal methods that operate on flat label spaces and probability-only scores, our approach uses a two-stage super$\to$fine calibration and penalizes morphological deviations from class prototypes. We integrate MR-HCP with a YOLOv11 detector to demonstrate an end-to-end pipeline for single-cell TEM analysis. On a curated neutrophil ultrastructure dataset (around 4.9k annotations), the method achieves near-nominal coverage ($0.937$), small average set size ($1.12$), and high singleton accuracy ($0.932$), significantly outperforming Split CP, Mondrian CP, HCC, and APS baselines. On the public Raabin-WBC dataset, it similarly attains strong coverage-set-size trade-offs compared to conformal baselines. Beyond inference, MR-HCP facilitates semi-automatic annotation and dataset reclassification, systematically refining coarse expert labels into fine categories while transparently quantifying uncertainty. Overall, the framework establishes a morphology-aware hierarchical conformal approach for uncertainty-aware classification in biomedical microscopy and provide a principled basis for extending calibrated set prediction to other hierarchical, morphology-rich biomedical settings.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces an MR-HCP framework designed for robust uncertainty quantification in the fine-grained classification of subcellular ultrastructures from TEM images. Specifically, MR-HCP first employs a coarse-grained conformal gate to exclude biologically implausible super-categories and then introduces a novel morphology-regularized nonconformity score to refine the prediction set within the retained super-groups. The framework is implemented in an end-to-end pipeline utilizing a YOLOv11 detector for single-cell neutrophil analysis, achieving superior performance compared with standard conformal prediction baselines.
+
+### Strengths
+1. The integration of HCP with a morphology-aware nonconformity score presents an intriguing approach to addressing a notable gap in the application of conformal methods to complex, domain-specific biomedical imaging.
+2. By incorporating YOLOv11 into the MR-HCP pipeline, the study offers a trustworthy automation solution for TEM analysis.
+3. MR-HCP preserves the finite-sample coverage guarantees of CP while significantly outperforming canonical baselines (Split CP, Mondrian CP, APS) in terms of prediction set size and singleton accuracy.
+
+### Weaknesses
+1. The contribution in terms of novelty appears somewhat limited. The proposed MR-HCP framework seems to extend HCP only by incorporating a simple morphology-aware nonconformity term. In fact, several existing studies have already explored HCP; therefore, the paper should better distinguish its approach from prior HCP-based works. Moreover, the reliance on a hard-gated hierarchical structure (Stage 1) implies that any incorrect prediction at the coarse super-category level cannot be rectified downstream in the fine-class stage, introducing a critical point of failure that may be problematic in complex and ambiguous TEM scenarios.
+2. The morphology regularization depends on handcrafted features and Mahalanobis-based statistics, which restricts the model’s ability to capture subtle non-linear cues essential for fine-grained classification. This reliance also makes the approach fragile and less transferable to new domains without substantial re-engineering.
+3. The writing lacks clarity in several instances. For example, certain symbols in the equations (e.g. \alpha_{sup} and \alpha_{sub} in Eq.(8)) are not clearly defined, which undermines the paper’s readability.
+4. The comparison with current SOTA methods is insufficient. The paper benchmarks only against standard CP baselines and fails to include comparisons with contemporary SOTA approaches, particularly other HCP variants.
+
+### Questions
+1. The current framework uses a hard-gated hierarchy where a Stage 1 error is unrecoverable. Have the authors considered or experimented with a soft hierarchical approach?
+2. The morphology penalty relies on handcrafted features (e.g., area, GLCM) and Mahalanobis statistics, which risks being non-generalizable to other datasets or cell types without extensive feature re-engineering. How about substituting these with learned, deep-embedding features?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces a hierarchical conformal prediction framework that adds morphological features via a Mahalanobis penalty for TEM ultrastructure classification. The application is well-motivated, but the technical contribution feels incremental—essentially adding a handcrafted feature penalty to existing hierarchical CP—and the evaluation on a single small dataset limits the generalizability claims.
+
+### Strengths
+- The problem is real and important: biomedical microscopy needs calibrated uncertainty where expert labels are expensive and ambiguous.
+- Hierarchical conformalization aligned with biological taxonomy makes sense and the coverage guarantees are properly derived.
+- The end-to-end YOLO integration provides a practical workflow for expert triage.
+- Implementation details and pseudocode support reproducibility.
+
+### Weaknesses
+## Major Weaknesses
+
+1. Hierarchical CP already exists [1], and incorporating auxiliary features into nonconformity scores is standard [2]. Your main contribution is the specific additive combination s_λ = (1-π_y) + λr_y with clipped Mahalanobis penalty for TEM. However, you don't justify why additive instead of multiplicative, why clip at 1 instead of smooth transformation, or compare against alternative designs. Prior work on combining nonconformity measures [3] suggests more principled approaches that you don't discuss. The ablations only vary λ but don't isolate morphology vs hierarchy contributions (no morphology-only or hierarchy-only baselines). Additionally, covariance estimation on small per-class samples is problematic—you mention "shrinkage" but don't specify the method or validate Mahalanobis distance reliability.
+
+2. Your coverage guarantees are conditional on successful detection (IoU≥0.5 matching), meaning ~26% of ground truth (matched fraction ≈0.738 in Table 6) gets no guarantees at all. Recent conformal detection work [4] properly handles localization uncertainty, but you sidestep this by only evaluating matched detections. Also unclear: Table 2 shows Vesicles average set size increasing from 1.000 (Stage 1) to 1.536 (Stage 2), which contradicts the expectation that refinement should maintain or shrink sets.
+
+3. The entire evaluation uses one dataset with 38 images (only 5 for testing) of neutrophils. You claim the method is "generalizable" and works "across biomedical and scientific imaging" but provide zero evidence beyond this single cell type. No other microscopy modalities, no other hierarchical classification domains. You compare against basic Split/Mondrian CP and APS but ignore direct comparison with [1] which you cite as the main hierarchical CP work, and other structured CP methods [5] that are directly relevant.
+
+## Minor Issues
+
+- Figure 2 is hard to parse; temperature scaling applied but never validated (no before/after ECE/Brier); no computational cost analysis; image-conditional calibration is just Mondrian CP on image bins with marginal gains (Fig 9c); why 95th percentile for c_y is not justified; Fig 5 qualitative results are cherry-picked without showing failure modes.
+
+### References
+
+[1] Hengst et al., "Hierarchical conformal classification", arXiv:2508.13288, 2025
+
+[2] Vovk et al., "Algorithmic Learning in a Random World", Springer, 2005
+
+[3] Johansson et al., "Regression conformal prediction with random forests", Machine Learning, 2014
+
+[4] Angelopoulos et al., "Uncertainty sets for image classifiers using conformal prediction", ICLR, 2021
+
+[5] Tyagi & Guo, "Multi-label classification under uncertainty: A tree-based conformal prediction approach", COPA, 2023
+
+### Questions
+1. Can you provide evidence of broader applicability with results on at least 1-2 additional datasets (different cell types or microscopy modalities), direct quantitative comparison against [1], and ablations isolating morphology-only vs hierarchy-only contributions? Also explore alternative score combinations (multiplicative, other forms) with principled justification for why additive is optimal.
+
+2. How do you address the coverage gap from detection failures? Can you provide end-to-end guarantees accounting for localization uncertainty, explain what happens to the ~26% unmatched instances, and clarify why Vesicles sets expand from Stage 1 to Stage 2 in Table 2?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes MR-HCP, a morphology-regularized hierarchical conformal prediction framework for classifying subcellular ultrastructures in transmission electron microscopy images. The method operates in two stages, first a super-category conformal gate that filters plausible coarse groups, and then a morphology-aware fine-class refinement using Mahalanobis distance penalties. The authors integrate MR-HCP with YOLOv11 for end-to-end detection and classification. On a neutrophil TEM dataset, MR-HCP outperforms Split CP, Mondrian CP, and APS baselines.
+
+### Strengths
+1. combination of hierarchical taxonomies with morphology regularized nonconformity scores is an interesting approach, which incorporates biological structure into uncertainty quantification.
+2. using per‑class Mahalanobis term is an intuitive way to couple domain shape/size features with probabilistic confidence
+3. Integration with YOLO for end-to-end deployment shows consideration for practical applicability.
+
+### Weaknesses
+1. Most headline numbers (Table 1) are from GT‑crop classification using expert masks (which supply clean morphology features). In practice, those features come from predicted masks. When the detector is introduced, performance degrades sharply (Table 6). 
+
+2. The evaluation of the method is only done on a single dataset with 5 images in the test stage.
+
+### Questions
+see my weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper tackles an important challenge in biomedical imaging: how to quantify uncertainty reliably when analyzing Transmission Electron Microscopy (TEM) images, where subcellular structures often have genuinely ambiguous boundaries. The core insight is compelling—standard Conformal Prediction methods, while offering distribution-free coverage guarantees, miss two key aspects of the microscopy domain: the natural hierarchical organization of biological structures and the rich morphological information (shape, size, texture) that experts rely on for classification.
+
+The proposed solution, Morphology-Regularized Hierarchical Conformal Prediction (MR-HCP), integrates this domain knowledge directly into the conformalization process through two main contributions:
+1. Hierarchical filtering: Rather than treating all classes equally, the method applies a coarse-grained "super-category conformal gate" first to eliminate implausible class families, then performs fine-grained prediction only within plausible groups. This mirrors how domain experts actually reason about these images.
+2. Morphology-aware scoring: The key technical innovation augments the standard probability-based nonconformity score with a morphology penalty term $r_{y}(x)$, yielding: $sλ(x,y)=(1-\pi_{y}(x)) + \lambda r_{y}(x)$. This penalty uses Mahalanobis distance to measure how morphologically atypical a sample is for a given class, effectively catching cases where the model is probabilistically confident but morphologically inconsistent—exactly the failure mode you'd want to avoid in expert-in-the-loop systems.
+
+The authors also demonstrate practical integration with existing object detectors (YOLOv11) through a "detection-aware calibration" protocol, which is a nice touch for real deployment scenarios.
+Results on a neutrophil ultrastructure dataset (~4.9k annotations) show substantial improvements: near-nominal coverage (0.954) with dramatically smaller prediction sets (1.205 vs. 5.85 for APS) and higher singleton accuracy. These gains suggest the approach is capturing something meaningful about the domain structure rather than just tuning hyperparameters.
+
+### Strengths
+1. The main strength of this work is its thoughtful problem formulation. Rather than simply applying Conformal Prediction to a new domain, the authors recognize and address a genuine limitation: standard CP relies solely on probability scores, ignoring rich domain-specific information that experts actually use. The morphology-regularized nonconformity score $sλ(x,y) = (1-\pi_{y}(x)) + \lambda r_{y}(x)$ offers an elegant solution by penalizing predictions that are probabilistically plausible but morphologically atypical. This feels like more than just a domain-specific trick—it provides a template for how other scientific fields could incorporate physical or structural constraints to sharpen uncertainty sets.
+
+2. The technical execution is solid. The authors properly handle the calibration process to maintain coverage guarantees, using separate splits to tune $\lambda$ (on calib.tune) and compute final quantiles (on calib.core), which avoids data snooping. The hierarchical structure makes intuitive sense for this domain, and the two-stage filtering mirrors how experts actually reason about these images.
+
+3. I particularly appreciate the attention to practical deployment. The detection-aware calibration protocol is a smart design choice—rather than calibrating on idealized ground-truth crops, they work with the actual (potentially noisy) detector outputs. This makes the system much more robust for real-world use. The human-in-the-loop framing is also well-considered: auto-accepting high-confidence singletons while flagging ambiguous cases for expert review creates a clear path to accelerating annotation workflows without sacrificing reliability.
+
+4. The presentation is clear throughout. The diagrams (Figures 2-3) and detailed algorithms make the methodology easy to follow, which matters for a paper introducing a fairly involved multi-stage pipeline. The writing effectively motivates each design choice without getting bogged down in excessive formalism.
+
+### Weaknesses
+My main concern is the gap between the method's strong theoretical motivation and what the experiments actually demonstrate. While the framework is mathematically sound and the core idea is appealing, several aspects of the evaluation leave me uncertain about its practical impact.
+
+1. The most troubling issue is the disconnect between idealized and real-world performance. The paper highlights impressive results on ground-truth crops—an average set size of 1.205 with near-nominal coverage. But when integrated into the actual YOLO detection pipeline, things fall apart considerably. The average set size balloons to 4.37, and coverage drops to 0.782, which is a serious violation of the 0.90 target. This suggests the detection-aware calibration protocol isn't sufficient to handle the true distribution shift from the detector. It's unclear whether this is a fundamental limitation of the approach or something that could be addressed with more careful calibration, but either way, it undermines the paper's claims about practical applicability.
+The dataset raises significant generalizability concerns. Looking at Table 10 in the appendix, the calibration set contains only 8 images and the test set only 5. Learning stable class prototypes (the $\mu_y$ and $\Sigma_y$ for each class) from 8 images seems questionable at best. The impressive numbers in Table 1 could easily be artifacts of this small, curated split rather than evidence of a genuinely robust method. There's no validation on external data—different institutions, staining protocols, or imaging devices—which would be the real test of whether this approach generalizes beyond a single lab's carefully collected dataset.
+
+2. The reliance on handcrafted features also feels limiting. The entire morphology component depends on a 19-dimensional feature vector of shape, size, and texture measurements. Both the probability score (from LightGBM) and the morphology penalty (from Mahalanobis distance) are derived from this same feature set, making them likely highly correlated rather than truly complementary. This caps the method's potential at the descriptive power of these 19 features, which seems somewhat dated given the success of learned representations in computer vision. The authors acknowledge this and mention using deep embeddings as future work, but it makes me wonder how much of the improvement comes from the hierarchical conformalization versus just having better features to work with.
+
+### Questions
+1. Regarding the dependency of the nonconformity score's components:
+Thank you for the clear presentation. I have a question about the design of the nonconformity score $s_{\lambda}(x,y)$. Both the probability $\pi_y(x)$ (from the LightGBM) and the morphology penalty $r_y(x)$ (from the Mahalanobis distance) are derived from the exact same 19-dimensional handcrafted feature vector $\phi(x)$.
+
+(a) My concern is that this limits the benefit of the regularization, as both terms may be highly correlated. Did the authors analyze this correlation? Is there evidence that $r_y(x)$ provides substantial new information that isn't already captured by the classifier's (already calibrated) probability $\pi_y(x)$?
+
+(b) The limitations section mentions exploring deep embeddings. Could the authors elaborate on why this wasn't the primary approach? For instance, using a deep model for $\pi_y(x)$ and the 19-d features for $r_y(x)$ would seem to provide two more independent sources of information. Was this alternative explored?
+
+2. Regarding the disconnect in results and the practical failure of the coverage guarantee:
+I am trying to reconcile the excellent headline results in Table 1 (0.954 coverage, 1.205 set size on GT crops) with the practical end-to-end results in Table 6 (YOLO pipeline).
+
+(a) The "Post-tuning pack" result, which seems to be the final recommended model, achieves only 0.782 coverage. This is a severe violation of the 0.90 nominal target. Does this not imply that the 'detection-aware calibration' protocol is insufficient to handle the true distribution shift from YOLO, and that the method's core guarantees do not hold in practice?
+
+(b) I also noticed the "Without T" pack achieved 0.891 coverage, which is very close to the 0.90 target (though at a larger set size). Could the authors clarify why the "Post-tuning pack" (which breaks the guarantee) was chosen as the preferred operating point over the "Without T" pack (which largely respects it)? This choice seems to trade theoretical validity for a smaller set size, which undermines the paper's core premise.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,182 @@
+# Dyna-Mind: Learning to Simulate from Experience for Better AI Agents
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 4
+
+## Abstract
+Reasoning models have recently shown remarkable progress in domains such as math and coding. However, their expert-level abilities in math and coding contrast sharply with their performance in long-horizon, interactive tasks such as web navigation and computer/phone-use. Inspired by literature on human cognition, we argue that current AI agents need ``vicarious trial and error'' - the capacity to mentally simulate alternative futures before acting - in order to enhance their understanding and performance in complex interactive environments. We introduce Dyna-Mind, a two-stage training framework that explicitly teaches (V)LM agents to integrate such simulation into their reasoning. In stage 1, we introduce Reasoning with Simulations (ReSim), which trains the agent to generate structured reasoning traces from expanded search trees built from real experience gathered through environment interactions. ReSim thus grounds the agent's reasoning in faithful world dynamics and equips it with the ability to anticipate future states in its reasoning. In stage 2, we propose Dyna-GRPO, an online reinforcement learning method to further strengthen the agent's simulation and decision-making ability by using both outcome rewards and intermediate states as feedback from real rollouts. Experiments on two synthetic benchmarks (Sokoban and ALFWorld) and one realistic benchmark (AndroidWorld) demonstrate that (1) ReSim effectively infuses simulation ability into AI agents, and (2) Dyna-GRPO leverages outcome and interaction-level signals to learn better policies for long-horizon, planning-intensive tasks. Together, these results highlight the central role of simulation in enabling AI agents to reason, plan, and act more effectively in the ever more challenging environments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper presents Dyna-Mind, a two-stage training framework designed to equip LLMs with the ability of ***vicarious trial and error***, i.e., the capacity to mentally simulate alternative futures before acting, in order to perform better in complex, long-horizon interactive tasks. In Stage 1, the model learns to generate structured reasoning traces from search trees built on real environment interactions, grounding its reasoning in faithful world dynamics and enabling it to anticipate future states. In Stage 2, the model is further optimized via online RL, leveraging both outcome rewards and intermediate feedback from real rollouts to enhance its simulation and decision-making abilities. Experiments on Sokoban, ALFWorld, and AndroidWorld show that RᴇSɪM effectively instills simulation capabilities, while Dyna-GRPO improves policy learning for long-horizon, planning-intensive tasks. Overall, the study underscores the pivotal role of simulation in enabling AI agents to reason, plan, and act effectively in complex environments.
+
+### Strengths
+1. Novel conceptual contribution: the introduction of ***vicarious trial and error*** as a cognitive-inspired mechanism for AI agents is well-motivated by human reasoning literature.
+
+
+2. Clear and systematic framework: the two-stage design, i.e., RᴇSɪM + Dyna-GRPO, provides a coherent pipeline from reasoning grounding to online policy refinement.
+
+
+3. Empirical validation: the experiments on both synthetic, i.e., Sokoban, ALFWorld, and realistic, i.e., AndroidWorld, benchmarks demonstrate solid and consistent performance gains.
+
+
+4. Interpretability: the structured reasoning traces in RᴇSɪM make the agent’s decision process more transparent and analyzable.
+
+### Weaknesses
+1. High computational cost: the proposed pipeline appears quite complex, involving rollouts, value function updates, search tree aggregation, and RᴇSɪM distillation, all of which may be resource-intensive. Consequently, it remains unclear whether the method can scale efficiently to large environments or applications.
+
+
+2. Ablation clarity: more detailed ablation studies would help clarify the contribution of each component, particularly the individual modules within RᴇSɪM and Dyna-GRPO, to the overall performance.
+
+### Questions
+About $S_{t}^{\text{refine}}$, since it consists of $d$ state-action pairs, could its length pose an issue for the LLM input? Specifically, is there a risk that the sequence could become too long for the model to handle efficiently? Is the model performance sensitive to $d$?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+1
+
+### Summary
+The authors present Dyna-Mind, a training framework that teaches a VLM to learn a simulation of the underlying environment and incorporate it into learning. A two-stage training framework is presented, including a method for training agents to produce reasoning traces called Reasoning with Simulations (ReSim), and an online reinforcement learning algorithm called Dyna-GRPO.
+
+### Strengths
+The work is decently situated in the field. The math is extensive. Dyna-GRPO is an interesting implementation of model-based RL. Results are clear and well presented. A relatively large number of environments are used.
+
+### Weaknesses
+The paper is slightly confusing at times, there is slight misuse of the notion of “policy” (see comments below).
+
+### Questions
+There is this notion of the “simulation ability of the policy” and it’s not clear what that means. Typically in RL the policy is not simulating any part of the environment, it only outputs an action.
+
+It would be useful to make an explicit distinction between the environment model and the policy, just as in Dyna-Q. It seems that the LLM is generating entire rollouts, including actions and states? So the environment model and policy are represented by a single LLM?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Dyna-Mind, a two-stage training framework for teaching (V)LM agents to simulate environment dynamics during reasoning.
+In Stage 1 (RESIM), the model learns to generate reasoning traces grounded in real environment rollouts by converting search trees into structured simulations.
+In Stage 2 (Dyna-GRPO), an online reinforcement learning phase further improves both simulation and policy quality using feedback from intermediate and final outcomes.
+Experiments on Sokoban, ALFWorld, and AndroidWorld show that Dyna-Mind enhances long-horizon planning and reasoning compared with existing baselines.
+
+### Strengths
+1. Presents a clear two-stage design that mirrors the human cognitive process of “mental simulation before action.”
+2. RESIM effectively links reasoning traces with real-world dynamics, providing grounded supervision.
+3. Dyna-GRPO adds an elegant reinforcement step that combines intermediate and outcome feedback.
+4. Evaluation covers synthetic-to-realistic benchmarks and uses diverse metrics (success rate, simulation quality, token cost).
+5. Writing and motivation are strong; results convincingly support the claimed improvements.
+
+### Weaknesses
+1. Ablation analysis is incomplete: it is unclear how much gain comes from (a) using real future states vs. (b) stronger aggregation LLMs or A-refine components.
+2. The RESIM data-selection process for choosing “best plans” is under-specified, criteria for simulation quality and filtering are not explained.
+3. Minor presentation issues: inconsistent decimals in tables, unclear “1.0×” unit in Table 1, and a few typos (e.g., planing-intensive 2 planning-intensive).
+4. Lack of discussion about computational cost and scalability of RESIM when applied to larger real-world environments.
+
+### Questions
+The paper proposes a well-motivated and technically coherent framework that bridges reasoning and simulation. Although ablation and data-quality analyses are missing, the idea is novel and the results are promising for advancing long-horizon agent research. Moreover, pleaser refer to the weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper aims to enable a model to make decisions directly through internal simulation during inference, rather than by directly experiencing each option. The authors propose Dyna-Mind, a two-stage framework to achieve this goal. In the first stage, a search tree is constructed to build reasoning trajectories, and a VLM is trained to distill actions based on generated trajectories. In the second stage, reinforcement learning further refines both the decision-making strategy and the model’s simulation capability. Experimental results show that Dyna-Mind outperforms weaker LLMs and previous approaches, including Dyna-Think, and surpasses DeepSeek-R1 in more complex environments.
+
+### Strengths
+1. The paper presents a novel idea that enables the model to simulate the environment during reasoning rather than performing actual physical simulations.
+2. The paper achieves better results not only on Sokoban but also on the other complex environments compared to other LLM methods.
+
+### Weaknesses
+1. This paper presents a comprehensive algorithm with several new proposed components, including ReSim, ReSim distillation, and Dyna-GRPO. However, it is not clear what the motivation is for the design of these components. Overall, the proposed architecture is a bit complicated without clear explanations. For example, ReSim first proposes a tree search-based method to simulate and generate trajectories. However, in Dyna-GRPO, there is another SimRollout approach to do the same thing. In addition, it is also unclear to use three different types of trajectories. Including an ablation study for each component would be more convincing.
+
+2. In the experiments, comparisons should also be made with other search-based methods mentioned in the Related Work section, such as ExACT. 
+
+3. The training process requires several steps, including constructing tree search reasoning in ReSim and generating Rollout/SimRollout in Dyna-GRPO, which increases the training cost. The paper should provide the training computational cost compared to other methods. In addition, the inference computational cost should also be provided for a more complete evaluation.
+
+### Questions
+1. Please address the concerns raised in the weaknesses.
+
+2. The definition of $a^{refine}$ in Line 274 is not sufficiently clear, and it is uncertain whether it is identical to the definition given in Line 275. Do the authors first generate $\tau'_{\text{refine}}$ and then remove the future-state information from it to obtain $\tau'$?
+
+3. In Algorithm 1, the method requires different kinds of rollouts, such as $\tau$, $\tau'$, and $\tau'_{\text{refine}}$​, but without providing an ablation study for using different rollouts in the training. What would be the impact on performance if one of them were removed?
+
+4. What is the reason for the use of distillation? In Table 1, it seems that both ReAct and RESIM can also be evaluated on the OOD test set. What is the reason for not providing these results?
+
+5. In Table 1, what would be the performance if RESIM (without distill) were combined with Dyna-GRPO? Or the Distill(R1)+DYNA-GRPO?
+
+6. In the AndroidWorld experiment analysis, the paper attributes the suboptimal performance to the rollout model (Qwen2.5-VL-72B). It would be beneficial to provide more concrete evidence supporting this claim or modify the method to demonstrate this limitation better.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

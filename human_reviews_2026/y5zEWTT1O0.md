@@ -1,0 +1,128 @@
+# GaussianLens: Localized High-Resolution Reconstruction via On-Demand Gaussian Densification
+
+- Decision: Reject
+- Scores: 4, 6, 4
+
+## Abstract
+We perceive our surrounding environments with an active focus, paying more attention to regions of interest, such as the shelf labels in a grocery store or a family photo on the wall. When it comes to scene reconstruction, this human perception trait calls for spatially varying degrees of detail ready for closer inspection in critical regions, preferably reconstructed on demand as users shift their focus. While recent approaches in 3D Gaussian Splatting (3DGS) can achieve fast, generalizable scene reconstruction from sparse views, their uniform resolution output leads to high computational costs, making them unscalable to high-resolution training. As a result, they cannot leverage available image captures at their original high resolution for detail reconstruction. Per-scene optimization methods reconstruct finer details with heuristic-based adaptive density control, yet require dense observations and lengthy offline optimization. To bridge the gap between the prohibitive cost of high-resolution holistic reconstructions and the user needs for localized fine details, we propose the problem of localized high-resolution reconstruction through on-demand generalizable Gaussian densification. Given an initial low-resolution 3DGS reconstruction, the goal is to learn a generalizable network that densifies the reconstruction to capture fine details in a user-specified local region of interest (RoI), based on sparse high-resolution observations of the RoI. This formulation avoids the high cost and redundancy of uniformly high-resolution reconstructions and enables the full leverage of high-resolution observations in critical regions. To address the problem, we propose GaussianLens, a feed-forward densification framework that fuses multi-modal information from the initial 3DGS and multi-view images. We further propose a pixel-guided densification mechanism that effectively captures details under significant resolution increases. Experiments demonstrate our method's superior performance in local high-fidelity detail reconstruction and strong scalability to images of up to $1024\times1024$ resolution.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces GaussianLens, a framework for efficient, localized high-resolution 3D reconstruction. It avoids the cost of uniform high-resolution models by starting with a coarse scene and then densifying only a user-specified ROI.
+
+### Strengths
+1. The paper introduces a novel and practical problem: on-demand, localized high-resolution reconstruction. This aligns with real-world use cases and smartly addresses the efficiency gap between fast, low-detail generalizable models and slow, high-detail per-scene optimization methods.
+
+2. The results are compelling, showing state-of-the-art quality with significantly lower computational cost.
+
+3. The design is elegant. Pixel-guided densification provides an excellent high-frequency starting point, while the GaussianLens network with its efficient projection-based cross-attention intelligently refines these details into a coherent 3D structure. This directly and effectively tackles the core reconstruction challenge.
+
+### Weaknesses
+1. The paper fails to compare against a crucial baseline: using a feed-forward model for the coarse scene, then running per-scene optimization on the high-resolution ROI. This direct competitor might achieve higher quality, and its absence leaves the trade-off between GaussianLens's speed and optimization-based fidelity unevaluated.
+
+2. The novelty of the projection-based cross-attention is overstated. The technique of projecting 3D points to sample 2D image features is a standard and widely used method in 3D vision. The paper presents this as a novel contribution while failing to cite extensive prior work, weakening its methodological claims.
+
+### Questions
+See Weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes a method to densify and refine initial low-resolution Gaussians to reconstruct local regions of interest (RoIs) in high resolution on demand. The refinement process is guided by cropped regions of high-resolution images, eliminating the need to process entire images and thereby reducing computational cost. Additionally, a pixel-guided densification strategy is introduced to prevent the initial Gaussians from over-covering pixels within high-resolution RoIs, leading to improved reconstruction quality.
+
+### Strengths
+- The paper is well written, and both the methodology and experimental setups are clearly and thoroughly explained.
+- The ablation study is comprehensive, and each component of the proposed framework is empirically validated.
+- The proposed method is flexible and can be applied to various sources of initial Gaussians, whether generated by feed-forward or optimization-based models.
+
+### Weaknesses
+- The proposed approach reconstructs the scene once using low-resolution full images and subsequently refines specific RoIs using cropped high-resolution images. While this strategy aims to reduce the memory and computational costs of full high-resolution reconstruction, its practicality is mainly justified in scenarios with extremely high-resolution inputs or a large number of views that exceed the memory budget. However, recent works such as Long-LRM and LVT [1] have introduced techniques that significantly reduce the computation of multi-view attention—the main bottleneck in feed-forward models. In particular, LVT [1] demonstrates the ability to reconstruct 2K-resolution scenes, which raises questions about the necessity and advantage of the proposed approach in such cases.
+- The proposed framework requires an additional inference step from the fine network each time a new RoI is reconstructed. In contrast, conventional feed-forward Gaussian models generate the entire set of Gaussians in a single forward pass, which can be potentially expensive initially but does not require additional inference thereafter. In the proposed method, while the coarse network inference is relatively lightweight due to lower-resolution inputs, the repeated fine-network inferences for each RoI could introduce notable overhead. This repeated computation may limit the practicality of the method in real-world applications where frequent RoI updates are required.
+
+[1] LVT: Large-Scale Scene Reconstruction via Local View Transformers, SIGGRAPH Asia, 2025.
+
+### Questions
+- Can the proposed method accept 3D RoIs instead of 2D ones? It seems somewhat unrealistic to assume that RoIs are provided as 2D binary masks. In practical scenarios, selecting RoIs directly from the initial 3D reconstruction and projecting them onto each input view would be more reasonable. Could the authors clarify how the method could handle such a setup?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces GaussianLens, a feed-forward framework for localized high-resolution 3D reconstruction that densifies a coarse, low-resolution 3D Gaussian Splatting (3DGS) result within a user-specified Region of Interest (RoI). Starting from an initial low-res reconstruction (e.g., from DepthSplat), the method fuses multi-modal cues, rendering residuals, gradients, and multi-view image features via a PointTransformerV3-based encoder with projection-based image and Gaussian cross-attention, then predicts residual updates to generate a densified set of Gaussians in the RoI. To handle large zoom factors, it further proposes pixel-guided densification, spawning per-pixel Gaussians in the RoI using back-projected depths from the coarse model to preserve fine details. On benchmarks built from RealEstate10K and DL3DV, GaussianLens improves RoI view-synthesis quality over low-res baselines, matches or exceeds uniform high-res models with substantially fewer Gaussians.
+
+### Strengths
+1. Good writing, with clear organization and methodological description.
+
+2. Engineering is solid and the effectiveness is strong.
+
+3. The motivation is clear, and the proposed modules are appropriate for the current pipeline.
+
+### Weaknesses
+1. The pipeline for solving the problem is overly redundant and too engineering-heavy. The paper targets 3D reconstruction of RoI regions under limited resources and high-resolution inputs. However, it employs a two-stage scheme, which first uses DepthSplat to produce a low-resolution 3DGS, then refines and supplements it with high-resolution images. While this leverages the strong capabilities of existing networks like DepthSplat and PointTransformerv3, it may be redundant and inefficient. In principle, a more novel and natural approach would be a single-stage design that performs interaction between the RoI in high-resolution images and the correlated regions in the global low-resolution image during DepthSplat inference, directly inferring Gaussians with different densities rather than post-processing. I consider this the core issue: the foundational pipeline contains substantial redundancy, making the work more incremental and significantly weakening its novelty.
+
+2. The final loss only applies to the RoI, which continually optimizes Gaussians inside the RoI while ignoring background Gaussians. Because RoI Gaussians also influence background areas, especially transition regions, this may enhance the RoI but degrade the background.
+
+3. In real applications, the user’s RoI on a single image is first mapped onto the 3D scene generated by DepthSplat. However, this scene itself may be inaccurate, especially with depth outliers. This can make the corresponding RoI at another viewpoint deviate significantly, leading to performance degradation.
+
+### Questions
+See the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

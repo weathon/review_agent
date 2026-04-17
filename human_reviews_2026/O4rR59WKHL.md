@@ -1,0 +1,216 @@
+# Synthesizing Feature Extractors: An Agentic Approach for Algorithm Selection
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Algorithm selection for constraint satisfaction problems requires extracting features that capture problem structure. Manually designing feature extractors demands deep domain expertise and becomes a bottleneck when facing new problem classes. We present an automated approach using Large Language Models to synthesize executable Python scripts that function as interpretable feature extractors. Given a high-level constraint model in MiniZinc, an LLM agent generates code that constructs a typed graph representation and computes structural properties, such as graph density, variable clustering, and constraint tightness. We validate our approach on algorithm selection across 227 combinatorial problem classes from MiniZinc Challenges (2008--2025). Our synthesized extractors achieve 58.8\% accuracy versus 48.6\% for human-engineered extractors (mzn2feat), and outperform neural baselines by 6.8 percentage points on FLECC and 4.3 points on Car Sequencing while maintaining full interpretability. This demonstrates that program synthesis can automate feature extraction for constraint optimization without sacrificing transparency.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper tackles automated feature engineering for algorithm selection in constraint optimization. Instead of hand-crafted features or neural embeddings, the authors propose using LLMs to generate executable Python scripts that serve as interpretable feature extractors. The scripts take MiniZinc problem descriptions as input and produce graph-based structural features for training algorithm selectors.
+
+Two frameworks are presented: problem-specific (tailored extractors for individual problem types) and problem-generic (universal extractor using standardized bipartite graph representation). Both operate through an agentic LLM workflow that generates, validates, and corrects Python code.
+
+The authors evaluate on algorithm selection across 227 combinatorial problems from MiniZinc Challenge benchmarks using a portfolio of 5 solvers (Gurobi, CPLEX, SCIP, Gecode, OR-Tools). Their LLM-generated features (LLM2feat) achieve 58.8% accuracy versus 48.6% for the baseline human-engineered extractor (mzn2feat). The features show lower correlation, better utilization efficiency, and consistent improvements across different ML models.
+
+The core claim is that LLMs can automatically generate feature extractors that outperform human-engineered ones while maintaining interpretability, democratizing access to algorithm selection techniques.
+
+### Strengths
+**Novel application to constraint programming:** The application of LLM-based feature extractor synthesis to the algorithm selection domain for constraint programming is interesting. The two-level approach (LLM generates code that builds graphs, then extracts features) and the problem-generic framework using universal bipartite graph representation appear to be new contributions to this specific domain.
+
+**Comprehensive evaluation for problem-generic framework:** The problem-generic framework is tested across 227 problems spanning 17 years of MiniZinc benchmarks, which is quite thorough. The comparison includes multiple ML models (RF, AutoSklearn, AutoFolio, LLAMMA) and multiple metrics (accuracy, ranking, Borda scores). However, the problem-specific framework is only evaluated on 3 problem types (VRP, CS, FLECC).
+
+**Consistent improvements:** LLM2feat features outperform mzn2feat [1] across all tested scenarios. The 10+ percentage point accuracy improvements are substantial and hold across different problem types.
+
+**Feature quality analysis:** The correlation analysis, utilization efficiency metrics, and feature importance distributions provide good evidence that LLM-generated features are genuinely better, not just different.
+
+**Practical impact:** The approach could enable algorithm selection for new problem domains where manual feature engineering is prohibitive.
+
+### Weaknesses
+**Limited baseline comparisons:** The evaluations only compare against a single, non-neural baseline (mzn2feat [1]). What about recent deep learning approaches mentioned in the intro (Pellegrino et al. 2025 [4], Zhang et al. 2024 [5])? The claim that interpretable features are essential needs stronger empirical justification against end-to-end learned representations.
+
+**Venue fit concerns:** Given the specialized focus on constraint programming and algorithm selection for combinatorial optimization, this work might be better suited for a venue like the International Conference on Principles and Practice of Constraint Programming (CP) where the audience would have more domain context and the contributions would be more directly appreciated. For a general AI audience at ICLR, the paper needs substantially more background and motivation.
+
+**Missing related work section:** The paper lacks a proper related work section that would help readers unfamiliar with this area understand prior work on automated feature extraction for CSPs and algorithm selection. Without this context, it's difficult to assess the significance of the stated contributions. The brief mentions in the intro are insufficient.
+
+**Overstated novelty claim:** The authors claim "to the best of our knowledge, we have introduced the first framework for the automatic construction of feature extractors for combinatorial problems." However, a cursory search suggests work exists on LLM-based automated feature engineering through program synthesis:
+  CAAFE (Hollmann et al. 2024) [2] uses LLMs to generate synthetic features through code generation with interpretable, human-in-the-loop approach
+  AS-LLM (2024) [3] uses LLMs to automatically extract algorithm representations from code for algorithm selection
+  Broader surveys on LLMs for ML workflows [6] document extensive work on automated feature engineering via LLM code generation
+
+  What appears actually novel is the specific application to CP/algorithm selection with the two-level architecture (LLM→code→graph→features) and the universal bipartite graph representation for the generic framework. The paper should revise claims to accurately reflect what's new.
+
+**Limited domain generalization:** All 227 problems in the evaluation come from MiniZinc benchmarks. The generalizability argument would be much stronger if the authors could demonstrate the approach works on constraint problems from other formalisms or domains beyond MiniZinc.
+
+**Computational cost underspecified:** While "reasonable computational budgets" are claimed, the actual cost of the LLM agent workflow isn't clearly reported. How many LLM calls? What's the total wall-clock time? Cost in API calls?
+
+**Missing ablations:** No ablation on key design choices. What if you skip the error correction loop? What if you use simpler prompts? How sensitive is performance to the JSON schema quality?
+
+**Prompting sensitivity unclear:** The appendix shows low variance across 3 runs for problem-specific extractors, but this is limited. What happens with different prompt formulations? How much prompt engineering was needed to get this to work?
+
+**Unclear baseline representativeness:** The paper uses 5 solvers (Gurobi, CPLEX, SCIP, Gecode, OR-Tools) but doesn't justify whether these represent the state-of-the-art or are the most relevant for the problem types tested. More context on solver selection would help assess the practical significance of the results.
+
+**Writing quality and presentation issues:** Multiple presentation problems hurt clarity: (1) Abstract doesn't adequately specify what kinds of tasks the method is applied to, or what specific datasets (MiniZinc) are considered in the paper. (2) Intro makes broad claims without citations (e.g., lines 40-42 about companies unable to use algorithm selection). (3) Intro lacks concrete examples of the CSPs being addressed. (4) Section 3 reads like technical documentation rather than research methodology. (5) Writing quality notably degrades in Section 4 with unclear exposition.
+
+**Reproducibility concerns:** While a reproducibility statement is included, the reliance on closed-source LLMs (o4-mini, Claude Sonnet 4) and proprietary solvers limits true reproducibility. What happens when these model versions are deprecated? Including at least one open-source LLM (e.g., Llama, Qwen, Mistral) in the evaluation would strengthen the empirical argument and improve long-term reproducibility.
+
+### Questions
+1. Can you clarify your novelty claim? There's prior work on LLMs for automated feature engineering (CAAFE [2], AS-LLM [3], surveys [6]). What specifically is novel beyond applying existing LLM-for-feature-engineering techniques to the CP/algorithm selection domain?
+
+2. Can you provide concrete examples in the intro of specific CSPs you're addressing (e.g., vehicle routing, scheduling) to help readers understand the problem space?
+
+3. How does your approach compare to recent neural approaches [4, 5] in terms of both performance and computational cost? Can you provide head-to-head comparisons on the same benchmark? What's the total computational cost (wall-clock time, LLM API calls, dollars) for generating extractors for all 227 problems?
+
+4. How representative are your 5 baseline solvers of the current state-of-the-art for MiniZinc problems? Why were these specific solvers chosen?
+
+
+## References
+
+[1] Roberto Amadini, Maurizio Gabbrielli, and Jacopo Mauro. "An enhanced features extractor for a portfolio of constraint solvers." In Symposium on Applied Computing, SAC 2014, pp. 1357–1359. ACM, 2014.
+
+[2] Noah Hollmann, Samuel Müller, and Frank Hutter. "Context-Aware Automated Feature Engineering." In International Conference on Machine Learning (ICML), 2024.
+
+[3] Large Language Model-Enhanced Algorithm Selection: Towards Comprehensive Algorithm Representation. arXiv preprint, January 2024. https://arxiv.org/html/2311.13184v2
+
+[4] Alessio Pellegrino, Özgür Akgün, Nguyen Dang, Zeynep Kiziltan, and Ian Miguel. "Transformer-Based Feature Learning for Algorithm Selection in Combinatorial Optimisation." In 31st International Conference on Principles and Practice of Constraint Programming (CP 2025), volume 340 of LIPIcs, pp. 31:1–31:22, 2025.
+
+[5] Zhanguang Zhang, Didier Chételat, Joseph Cotnareanu, Amur Ghose, Wenyi Xiao, Hui-Ling Zhen, Yingxue Zhang, Jianye Hao, Mark Coates, and Mingxuan Yuan. "Grass: Combining graph neural networks with expert knowledge for SAT solver selection." In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, KDD 2024, pp. 6301–6311. ACM, 2024.
+
+[6] Survey: "Large Language Models for Constructing and Optimizing Machine Learning Workflows." arXiv preprint, November 2024. https://arxiv.org/html/2411.10478v1
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This work proposes an LLM-based automated feature extraction framework to address the algorithm selection challenge in combinatorial optimization problems. This method uses LLMs to generate executable Python scripts as feature extractors, combined with symbolic graph structure analysis, implementing a gray-box paradigm to balance automation and interpretability. Experiments on 227 combinatorial problem classes validate the method's effectiveness.
+
+### Strengths
+1. Combines the program synthesis capability of LLMs with classical feature engineering, avoiding the pitfalls of black-box models.
+2. A well-written manuscript with clear content organization.
+
+### Weaknesses
+1. This manuscript claims that "In general, we can use all LLM models as the backend of the agent. But we find our framework is not sensitive to the potential hallucination of LLM." However, the method is evaluated with a limited set of LLMs, making it difficult to support this claim.
+2. Lack of comparative methods: The method proposed in this work is only compared with a method introduced before 2014. It is recommended to include more recent methods for comparison to enhance the persuasiveness of the experiments. Additionally, the paper lacks a thorough survey of related work. It is suggested to include a detailed and qualitative comparison with highly relevant works in the related work section.
+3. Lack of detailed cost analysis: For example, the total time spent on feature extraction using LLM2feat is not provided.
+4. Limited novelty: This work resembles more of a technical report than an academic paper, lacking sufficient innovation and the insights it should provide to the readers.
+
+### Questions
+Please refer to the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents a gray-box approach for algorithm selection. Given a feature selection templates, the LLMs are provided with problem data, json schema, and feature selection template (py script), and it is asked to generate a feature extractor to derive 50 standardized features. The evaluation shows that LLM extracted features are diverse, efficient and with high accuracy. 
+
+In general, this paper is a nice application and study of how LLM agents can be used in algorithm selection pipeline to extract features. The detailed analysis shows its performance benefit comparing to traditional approaches.
+
+### Strengths
+- clear formulation of the problem and quite thorough analysis showing benefits
+- the graybox approach is a nice intermediate for human AI collaboration.
+- simple but effective pipeline
+
+### Weaknesses
+- As I'm not an expert in algorithm selection problem, it is a bit hard to interpret the significance of the result comparing to work in the field. But from the LLM agent design perspective, the design is quite straightforward. While I can see the application value, I would like to read more about how different designs of LLM agents matters, and some analysis behind why these features are more effective than previous approaches beyond observations of they are better (which is very well presented!)
+
+- The problem formulation (section 2) seems a bit disconnected overall, as an non-expert in AS domain, the formulation shows the overall task, but not much details on how features affect AS results. Some more details in this aspect may better highlight the success of LLM-based gray-boxed approach.
+
+### Questions
+Check the weakness section above - can you provide some qualitative analysis on why LLM extracted features are more effective and what information they leverage made the difference.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper leverages LLMs to generate Python scripts as a “gray box” to extract features for combinatorial optimization problems, with the purpose of increasing the interpretability of the feature extractor and reducing human effort. Experimental results on the algorithm selection problem demonstrate the effectiveness and improved feature quality of the proposed method.
+
+### Strengths
+1. The proposed framework is reasonable for improving interpretability.
+2. Experimental results show the improved quality of the extracted features and increased accuracy on the optimization problem to which the features contribute.
+
+### Weaknesses
+1. The performance of the feature extractor is highly dependent on the LLM, which is expected to contain sufficient domain knowledge of the problem and the reasoning ability to select significant features based on the verification results. Without post-training, the range of solvable problems could be limited.
+2. Some details of the pipeline are unclear. From my understanding, the LLM agent is used to generate a script extractor, which is then used to extract features from the problem data to train a solver predictor. During LLM generation, does it receive feedback from the verification results or generate a certain number of candidates for further selection? It seems that the former strategy is used in Figure 1, while the latter is used in Figure 2. If the LLM receives feedback to refine the script, what kind of feedback is it, and how is it provided in the prompt?
+
+### Questions
+1. One purpose of generating the script extractor from the LLM is to increase interpretability. Adding some script examples in the paper or appendix could enhance the illustration of this contribution.
+2. Are there any trade-offs between accuracy and interpretability? For example, if the LLM is directly used to extract features, would the feature quality be better than generating the script extractor?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

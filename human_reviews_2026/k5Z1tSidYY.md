@@ -1,0 +1,216 @@
+# Adaptive Fourier Decomposition-guided Neural Operator Design for Inverse PDE Problems
+
+- Decision: Reject
+- Scores: 4, 6, 4, 2
+
+## Abstract
+Inverse problems, which are generally ill-posed, aim to identify the unknown parameters of a physical system from the observations of its output. A large class of inverse problems for partial differential equations (PDEs) is only well-defined as mappings from operators to functions. However, existing operator learning frameworks either do not explicitly account for the underlying operator space or solve the inverse problems in a Hilbert space. In fact, it has been shown that a Banach space setting for the parameter space would be closer to reality for a wide range of problems. Motivated by this, we introduce AFDONet-inv, a novel neural operator solver whose design is rigorously guided by adaptive Fourier decomposition (AFD) theory, to solve inverse problems for PDEs in a Banach space. Each component of AFDONet-inv's architecture corresponds to an AFD operation in Banach space. Thus, AFDONet-inv is the first neural operator solver for inverse PDE problems whose architectural and component design of AFDONet-inv is fully guided by an established mathematical framework (in this case, AFD theory). This way, AFDONet-inv is mathematically explainable and grounded in the AFD theory and possesses several desirable properties. Extensive experiments demonstrate that AFDONet-inv outperforms state-of-the-art inverse PDE solvers in terms of solution accuracy.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes AFDONet-inv, a novel neural operator architecture for solving inverse PDE problems, grounded in Adaptive Fourier Decomposition (AFD) theory. The architecture features a VAE-style encoder, primal-dual propagation layers, and a dynamic convolutional kernel decoder that adaptively selects poles — all designed to mimic the residual refinement process in AFD. The framework is further supported by convergence guarantees and Banach-space theory, aiming to better capture irregular PDE parameters. Experiments on 2D Darcy flow and nonlinear magnetic Schrödinger problems demonstrate strong performance, with the model achieving state-of-the-art accuracy — particularly notable in the highly ill-posed Schrödinger case.
+
+### Strengths
+* **Principled design grounded in approximation theory**: The AFD-inspired architecture components are directly motivated by mathematical analogs, including convergence theorems for the decoder.
+
+* **Banach-space formulation**: The shift from Hilbert to Banach space is well-justified for capturing sparse or discontinuous parameters, and is executed rigorously.
+
+* **Strong empirical results**: On benchmark inverse PDE problems, AFDONet-inv outperforms several recent baselines, including NAO, NIPS, and MWT, with up to four orders of magnitude lower error.
+
+* **Sound theoretical backing**: The paper provides non-trivial convergence guarantees and links between network residuals and AFD error decay.
+
+* **Well-structured ablation studies**: Component-level analysis supports the role of the dual branch and latent RKBS embedding in improving performance.
+
+### Weaknesses
+* **Incremental novelty**: While the AFD connection is creative, the network architecture builds on established methods (e.g., VAEs, Fourier layers, kernel decoders). The contribution may be viewed as a thoughtful reinterpretation rather than a fundamentally new class of model.
+
+* **Architectural complexity**: The model introduces considerable architectural machinery, including dual encoders, RKBS mappings, and dynamic kernel selection. Practical advantages over simpler, well-tuned baselines remain somewhat underexplored.
+
+* **Limited evaluation scope**: Only two inverse PDE settings are tested, both synthetic. It’s unclear how well the model generalizes to noisy data, real-world scenarios, or broader PDE classes.
+
+* **Theory-practice gap**: The convergence proofs rely on ideal pole selection criteria not explicitly enforced during training. How well the learned model aligns with theory is not demonstrated.
+
+* **Accessibility**: The paper is mathematically dense, especially for readers less familiar with RKBS or AFD theory. Key mechanisms (like pole selection during training) could be explained more intuitively.
+
+### Questions
+1. What specific properties of inverse problems make the Banach-space formulation clearly preferable to standard Hilbert-based approaches?
+
+2. Could a simpler model (e.g., an FNO with dynamic kernel decoding) perform comparably without the full AFD framework?
+
+3. How are poles actually selected during training — do learned filters align with the theoretical maximal correlation criterion?
+
+4. Does mapping into a reproducing kernel Banach space provide measurable benefits over RKHS embeddings or even latent-space MLPs?
+
+5. How does performance scale with the number of decoder poles/layers? Are there efficiency or memory tradeoffs in large-scale settings?
+
+6. Is the model robust to measurement noise or distribution shift, which are common in real inverse problems?
+
+7. Could the AFD-inspired ideas generalize to forward PDE problems or other domains like time-series, or are they inherently tied to inversion?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes AFDONet, an Adaptive Fourier Decomposition Operator Network designed to generalize neural operators beyond Hilbert-space formulations. The authors argue that most existing operator learning frameworks implicitly assume Hilbert-space structures, which rely on inner-product norms and may not capture the true nature of many PDE inverse problems involving sparsity or discontinuities. To address this, AFDONet is formulated within a Banach-space framework and leverages a primal–dual encoder to construct adaptive Fourier bases. This design aims to unify operator learning and inverse PDE solving under a more flexible functional setting. Experiments on both synthetic and PDE-driven inverse problems demonstrate improved reconstruction accuracy and stability.
+
+### Strengths
+The paper is conceptually interesting and theoretically motivated. It formulates neural operators within a Banach-space framework, which provides a more flexible foundation for modeling inverse problems with sparse or non-smooth structures. The proposed primal–dual decomposition is mathematically elegant, offering a plausible bridge between functional analysis and operator learning. Experimental results are consistent and suggest that the adaptive Banach-space formulation can yield more stable and accurate inverse reconstructions under noise or limited-data conditions.
+
+### Weaknesses
+(1) While the theoretical motivation is sound, the practical novelty of AFDONet remains moderate. The core architecture is largely similar to standard operator-learning networks, and the adaptive decomposition mechanism is conceptually close to existing methods. The Banach-space justification, though reasonable, is primarily theoretical and lacks empirical ablation isolating the specific benefits of moving from Hilbert to Banach formulations.
+
+(2) Another limitation is the scope and diversity of experiments. The validation focuses mainly on relatively simple inverse PDE setups. This makes it difficult to assess the generalizability of the proposed framework to more challenging or real-world operator-learning tasks.
+
+(3) The explanatory depth is limited. While the paper emphasizes that existing frameworks rely on Hilbert-space assumptions, it does not provide sufficient quantitative evidence demonstrating how this constraint explicitly limits existing models in practice.
+
+### Questions
+The paper states that “existing frameworks either do not explicitly account for the underlying operator space or solve the inverse problems in a Hilbert space.” Could the authors elaborate on this claim and provide stronger evidence or references supporting it? In particular, which specific operator-learning frameworks are implicitly restricted to Hilbert spaces, and what concrete limitations arise from this assumption in practice?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces AFDONet-inv, a theoretically grounded neural operator framework for solving inverse PDE problems in Banach spaces. Unlike existing inverse operator learning methods (e.g., NAO, NIPS, LNO), which mostly assume a Hilbert-space setting, the authors construct the architecture based on adaptive Fourier decomposition (AFD) theory extended to reproducing kernel Banach spaces (RKBS).
+
+### Strengths
+- Theoretical novelty: Extends AFD from RKHS to RKBS with rigorous mathematical formulation (duality maps, convergence theorems).
+- Explainable architecture: Each network module (encoder, decoder, primal/dual propagation) has a clear correspondence to components in AFD theory, providing rare interpretability in operator learning.
+
+### Weaknesses
+- Over-complex exposition: The paper is mathematically heavy and may overwhelm readers from ML communities without a strong PDE or functional-analysis background; key intuitions could be emphasized more clearly. 
+- Limited generality in benchmarks: Only two inverse problems (Darcy flow, magnetic Schrödinger) are tested; results on more diverse PDEs (e.g., reaction–diffusion, Navier–Stokes) would strengthen claims.
+- Lack of comparison with DeepONet-based inverse solvers: Although the paper cites DeepONet and its variants, there is no direct empirical or theoretical comparison with DeepONet-based inverse operator frameworks.
+
+### Questions
+- Could the authors include additional results or discussion clarifying how AFDONet-inv performs against these DeepONet-based inverse operator methods under similar settings?
+- Could the authors test AFDONet-inv on additional inverse problems such as Poisson, Navier–Stokes, or reaction–diffusion systems? 
+- The current training formulation appears to be fully supervised, minimizing reconstruction loss between predicted and true parameters. Do the authors see a way to extend AFDONet-inv to a physics-informed or semi-supervised formulation, similar to PINNs?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+The submission proposes an operator designed to solve a PDE inverse problem, specifically, it maps the solution of a PDE to the underlying coefficient function that defines the differential operator. The central claim is that these coefficient functions naturally reside in a Banach space rather than a Hilbert space. Building on techniques from reproducing kernel Hilbert spaces (RKHS), the authors generalize the framework to Banach spaces by constructing a representation based on reproducing kernel Banach spaces (RKBS). In this setting, the standard Hilbert inner product is replaced by the dual pairing between a Banach space and its dual (the space of linear functionals on the Banach space).
+The proposed framework involves:
+
+1.	Learning an RKBS as a weighted sum of  N (simpler) RKBS components
+2.	Selecting N poles in the second variable of the RKBS and normalizing the resulting functions
+3.	Learning N residual terms that are used to compute the coefficients of an N-term approximation.
+
+These elements are optimized in a supervised learning setup using ground-truth pairs of PDE solution and PDE coefficient function, combined with several procedures inspired by modified Fourier transforms, where the modifications are themselves learned.
+Empirical evaluations are conducted on two PDE families: the 2D Darcy flow problem and the nonlinear magnetic Schrödinger equation. The proposed method is compared against several neural operator baselines and demonstrates improved accuracy along with faster training convergence.
+
+Overall, the approach is presented as an effort to generalize operator learning to more complex and realistic PDE coefficients while maintaining computational efficiency.
+
+### Strengths
+1.	The paper builds on a solid mathematical foundation, extending operator learning concepts from Hilbert spaces to Banach spaces using reproducing kernel Banach spaces (RKBS).
+2.	Empirical results suggest improved accuracy and faster convergence compared to several existing neural operator methods.
+3.	The proposed framework is, in principle, capable of handling more complex PDE coefficients that naturally reside in Banach spaces rather than Hilbert spaces.
+
+### Weaknesses
+1. The paper is extremely difficult to read. The exposition is disorganized, and the notations are inconsistent and often undefined, making it hard to follow the proposed method.
+
+2. Many of the key operations and quantities are either undefined or internally inconsistent. For example, in Eq. (8), the kernel is introduced as a sum of N simpler kernels, none of which are described. The coefficients are expressed as  $FM(z_p)$, implying that  $FM:\mathbb{R}^r \to \mathbb{R}$. However, in line 250 and Fig. 1, it is stated that  $z_{pi}=FM(\tilde{\alpha})$, where $\tilde{\alpha}$ belongs to a Banach space B, suggesting instead that $z_{pi}\in B$. These contradictions make it impossible to determine the actual mathematical setting. 
+
+3. In the diagram,  $z_{p,i} = FM_i(\tilde\alpha)$  seems to require N distinct operators, but the text later (Eq. 12) implies that $z_{p,i+1}$ is inferred and learned from $z_{p,i}$. These inconsistencies reflect a general sloppiness in notation and formulation that severely harms readability.
+
+4. The validation and experimental sections are vague. Critical details of the datasets, setups, and evaluation procedures are missing.
+
+5. The empirical evidence does not support the central claim that the method better handles functions in Banach spaces:
+
+   a) No demonstration explicitly involves coefficients that lie in a Banach space but not a Hilbert space.
+
+   b) The reported results are presented only as tables, without clear descriptions of the examples, datasets, or data generation process.
+
+   c) The kernels used in the sum of  N terms are not described.
+
+   d) The choice of N and the procedure for selecting or learning these kernels are not discussed.
+
+   e) The paper does not analyze or even comment on the effect of using RKHS versus RKBS in practice.
+
+6. The comparison to other methods is insufficiently described. There is no information about whether competing models use the same architecture size, number of parameters, or training conditions. As a result, the fairness and validity of the reported comparisons cannot be assessed.
+
+### Questions
+1. How is the ground truth generated? For example, are the reference solutions obtained via finite difference, finite element, or PINN-based solvers?
+
+2. How are the products between a function in the Banach space and an element of its dual computed in practice? Are they approximated through random sampling over the spatial domain or by some other numerical procedure?
+
+3. The reported results show only global error metrics. It would be valuable to include, for several representative examples, the spatial distribution of errors, i.e., visualizations indicating where errors tend to concentrate within the domain.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2

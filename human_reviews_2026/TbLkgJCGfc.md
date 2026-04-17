@@ -1,0 +1,187 @@
+# TangleScore: Tangle-Guided Purge and Imprint for Unstructured Knowledge Editing
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Large language models (LLMs) struggle with inaccurate and outdated information, driving the emergence of knowledge editing as a lightweight alternative. Despite their effectiveness in modifying structured knowledge, existing editing methods often fail to generalize to unstructured cases, particularly those involving inherently hard-to-edit knowledge, where the original facts tend to be more resistant to change. To address this, we propose a metric, TangleScore, that quantifies the intrinsic difficulty of editing a given knowledge instance. This difficulty, in turn, strongly correlates with the model’s ability to generalize the edit to paraphrased and related prompts. Building on this insight, we introduce a TangleScore-driven method termed Purge-Imprint Patch Editing (PIPE), an editing framework that adaptively modulates the purge and imprint of knowledge based on TangleScore of the target knowledge to be edited, thus adjusting the editing strength to match the instance's difficulty, thereby enabling more precise and effective model updates. Experiments applying PIPE to four LLMs of varying sizes on two unstructured knowledge editing datasets show that PIPE significantly outperforms previous editing methods by 6.49% in terms of generalization performance. Extensive evaluation show that PIPE also exhibits effectiveness in structured knowledge editing and strong robustness under batch and sequential editing.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper addresses the challenge of unstructured knowledge editing in large language models, where existing methods often fail to generalize due to varying instance-specific editing difficulty. It introduces TangleScore, a metric that quantifies how strongly a fact is entangled with a model’s prior knowledge by combining internal representation shifts and semantic gaps between pre- and post-edit outputs. Building on this, the authors propose PIPE (Purge-Imprint Patch Editing), a two-stage adaptive framework that first purges outdated knowledge at an intensity proportional to the TangleScore and then imprints new knowledge using a dynamic loss balancing learning and stability retention. Experiments on UNKEBench, AKEW, and KEBench with LLaMA-2/3 and Qwen2.5 models show that PIPE improves generalization while preserving factual correctness and general abilities. Overall, the work provides both a diagnostic tool and an adaptive editing framework for more robust and interpretable unstructured knowledge editing.
+
+### Strengths
+The paper addresses the highly relevant problem of editing unstructured knowledge in large language models. It is original in formulating editing difficulty as a quantifiable property of individual knowledge instances. The proposed TangleScore represents a clear conceptual advance by linking internal model entanglement to empirical editing outcomes. Building on this insight, the PIPE framework introduces an adaptive editing strategy that dynamically scales intervention strength based on the measured difficulty of each instance.
+
+The experimental evaluation is thorough, covering multiple model families (LLaMA-2/3, Qwen-2.5) and diverse datasets (UNKEBench, AKEW, KEBench). It includes ablations, structured versus unstructured comparisons, and assessments of general ability retention using MMLU.
+
+Overall, TangleScore provides a valuable diagnostic tool for analyzing editability across models, while PIPE achieves consistent performance gains on the key challenge of generalizing unstructured knowledge edits. Together, they constitute a meaningful conceptual and practical advance in understanding and improving knowledge editing in LLMs.
+
+### Weaknesses
+While the paper presents an interesting and well-motivated approach, several aspects should be improved to strengthen its conceptual clarity and empirical rigor.
+
+First, the derivation of the TangleScore is insufficiently detailed and difficult to reproduce. It remains unclear how the hidden-layer representations used in the metric are obtained, whether they come from specific transformer layers, averaged across layers, or taken from a particular token position. Similarly, the definition of the answer distributions used in the Sinkhorn distance is vague. The paper does not specify whether these distributions are token logits, embedding vectors, or contextualized sentence representations. This lack of precision makes it difficult to interpret what the TangleScore is actually measuring.
+
+Second, the form of the TangleScore function lacks theoretical justification. The authors divide the internal representation distance by the distance of the answer distributions, but no clear motivation or intuition is provided for this specific ratio. Ablation experiments testing alternative formulations, such as using only one of the two components or other combinations (e.g., $\frac{1}{\text{answer distance}}$ alone), would help validate this design choice and clarify the underlying rationale.
+
+Third, there is a conceptual inconsistency in Section 3.2. The authors first claim that the TangleScore is “_solely determined by the knowledge to be edited_” suggesting it is independent of the model, yet later state that the TangleScore depends on the model’s internal representations. This contradiction raises questions about whether TangleScore truly captures an intrinsic property of the knowledge instance or merely reflects model-specific behavior. A more precise discussion and controlled experiments varying model checkpoints could resolve this ambiguity.
+
+Fourth, the definition of “generalization” in the experiments is unclear. The paper reports improvements in generalization metrics but never explains what type of generalization is tested. (e.g., paraphrase generalization, compositional generalization, or reasoning generalization). Even if the benchmarks (UNKEBench, AKEW) provide paraphrased samples, the authors should explicitly describe their structure and what constitutes success. Moreover, evaluating only a single type of generalization offers a limited view of editing robustness. The brief mention of a “multi-hop comprehension task” in Section 5.2 is particularly confusing, as it is unclear what data or setup is used. Clarifying and expanding these evaluations to include more challenging forms of generalization (e.g., multi-hop or reasoning-based edits) would significantly strengthen the empirical claims.
+
+Finally, while the proposed two-stage editing design (purge then imprint) is conceptually appealing, the evaluation does not isolate or verify the effectiveness of the purge step. All reported results focus on the final edited performance, leaving open whether the purge function truly removes the targeted knowledge before re-imprinting. An explicit evaluation (e.g., measuring model responses after the purge stage but before imprinting) would provide valuable evidence that the method actually unlearns the targeted knowledge.
+
+### Questions
+* TangleScore derivation: Could the authors clarify how the hidden-layer representations and answer distributions used in TangleScore are obtained?
+* TangleScore formulation: What is the motivation for dividing the hidden-state distance by the answer-distribution distance, and have alternative formulations been tested?
+* Generalization definition: What type of generalization is evaluated (e.g., paraphrase, reasoning, multi-hop), and how are these samples constructed in the benchmarks?
+* Multi-hop task: Could the authors clarify what the mentioned “multi-hop comprehension task” in Section 5.2 refers to?
+* Effectiveness of purge step: Have the authors measured the model’s behavior after the purge phase but before imprinting to confirm that the purge truly unlearns the targeted knowledge?
+* Relation to unlearning: If the imprint step were removed, would it be possible to employ PIPE as a standalone unlearning method?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the generalization of edits for unstructured knowledge. The authors propose a metric, TANGLESCORE, to quantify the intrinsic difficulty of editing a specific knowledge instance. This metric is based on the internal representation shift and the output semantic gap between the old and new knowledge. Leveraging this insight, they introduce PIPE, a framework that adaptively modulates its editing strategy based on the TANGLESCORE. Experiments across four LLMs and three datasets show that PIPE outperforms baselines, particularly in generalization on paraphrased prompts and factual correctness.
+
+### Strengths
+1. The paper introduces the TANGLESCORE and diagnoses why unstructured KE fails. The conceptualization of editing difficulty as an intrinsic, quantifiable property of the model-knowledge is a valuable contribution.
+2. The PIPE method is a direct and logical consequence of the TANGLESCORE analysis. The two-stage "purge-then-imprint" paradigm is well-justified.
+3. The authors evaluate on multiple modern, open-source LLMs. The use of multiple datasets and the inclusion of structured KE demonstrates the method's applicability.
+
+### Weaknesses
+1.	The definition of TANGLESCORE as a ratio between internal representation shift and output semantic gap is not fully justified. Why this specific formulation (a ratio)? Why greater semantic gap of outputs causes smaller TangleScore? The paper would be stronger with a more rigorous theoretical or empirical justification for this specific choice.
+2.	The PR definition is unclear in eq3 and fig4. As stated “where γ = log λ_max/ log λ_min is the scaling factor, and λ_max and λ_min represent the maximum and minimum values,” what is the maximum and minimum for? Why need two hyper-parameter to set this γ? The rationale for these specific values is attributed only to "preliminary exploratory experiments." Furthermore, λ_min only appears once, used to define the scaling factor γ, making its role ambiguous and the overall formulation seem arbitrary. This lack of clear justification for these critical, hard-coded values undermines the method's robustness.
+3.	The claim that TANGLESCORE is an "intrinsic property" is a strong one, but the analysis is based on showing the distribution remains similar pre- and post-edit. This doesn't necessarily mean the score for individual samples is unchanged.
+4.	Confusing and contradictory analysis in fig.5(b). The analysis in Section 5.4, meant to show PIPE's effectiveness, is poorly presented and potentially contradictory. The method is under-explained. The Y-axis of Figure 5(b) is unlabeled (presumably 'Density'). More critically, the X-axis is labeled 'Probability(0.0-1.0),' while the text states 'negative log-probability' was used. These two metrics are inversely related. If the axis is 'Probability,' the observed rightward shift for PIPE would imply a higher probability of outputting old knowledge, directly contradicting the paper's claim of suppression. This ambiguity makes the entire analysis unverifiable. 
+5.	The paper's central thesis is that existing methods fail on high-TangleScore samples and that PIPE is designed to solve this. However, the paper does not present the critical evidence: a plot of PIPE's performance versus TangleScore and improvements on hard knowledge against other methods. Without this, it is impossible to verify if PIPE's improvement comes from solving the "hard sample" problem, or from just being a better method on average.
+6.	The paper's mathematical notation is ambiguous and mathematically inconsistent. L_purge (Eq. 5) is explicitly defined for a single 'i-th knowledge item'. In contrast, L_consistency (Eq. 6) and L_learn (Eq. 8) are defined as summations over the entire batch. The final objective in Eq. 10 then adds these mismatched terms. This sloppiness makes the precise formulation of the final objective unclear. And the expressions like “current key output for the i-th query” “original key vector” are unclear to show how they are obtained.
+7.	The figures (fig.1 and fig.4) are blurry and fig.4 shows traces of post-processing of changing some characters to “TS”. Fig.5(b) lacks a legend. Line 292: “higher TANGLESCORE implies hard-to-edit knowledge…while higher TANGLESCORE denotes easier samples”. Line 342: “u denote the numbers of pre-training samples, tokens per input, and edited samples, respectively.” Eq.8 is under-explained.
+
+### Questions
+1.	Could the authors elaborate on the design choice for the TANGLESCORE ratio? What is the intuition behind dividing the internal shift by the output shift? 
+2.	The calculation of r_old and r_new relies on a specific prompt-answer template. How sensitive is the TANGLESCORE value to variations in this prompt template?
+3.	In Table 8, does the reported Time for PIPE include the pre-computation of TANGLESCORE?
+4.	How is the "original key vector" $\tilde{k}_{i}^{orig}$ used in the knowledge purge function (Eq. 5) obtained?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes TangleScore, a metric intended to quantify the intrinsic difficulty of editing a given knowledge in an LLM, and a corresponding editing framework, PIPE, whose purge and imprint strengths are adaptively modulated by the proposed TangleScore. Specifically, TangleScore measures (i) the internal representation shift between model states associated with old vs. new knowledge and (ii) the semantic gap between answers before/after editing. Empirically, the authors show that higher TangleScore correlates with worse post-edit generalization on paraphrases. Based on this, PIPE applies stronger purging (unlearning) and more assertive imprinting on high-TangleScore (hard) instances using a gradient-bounded purge loss and a consistency-regularized imprint loss with an instance-wise weight. Experiments on UNKEBench, AKEW and KEBench across LLaMA and Qwen-family models seem to indicate that PIPE improves generalization over ROME/MEMIT/RECT/AlphaEdit and recent unstructured editors.
+
+### Strengths
++ Overall I feel that tangleScore gives a practical, per-instance signal for how “entangled” an edit is, and PIPE uses it to adapt purge/imprint strength, which indeed turns a vague notion (e.g., “some edits are harder”) into an actionable control knob. 
+
++ Empirically, by introducing stronger purging (unlearning) and more assertive imprinting on high-TangleScore (hard) instances using a gradient-bounded purge loss and a consistency-regularized imprint loss, the method improves generalization on unstructured edits while preserving performance on structured edits and holding up model-wide abilities.
+
+### Weaknesses
+- The specific TangleScore form (choice of representation/output distances and ratio) feels ad-hoc and lack in-depth theoretical justification.
+
+-  Computing the score and running a two-stage edit add overhead, and it would be better if the authors can provide clearer cost–quality tradeoffs (runtime, memory, throughput) needed for large edit streams.
+
+### Questions
+Please refer to my summery of weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses the challenge of unstructured knowledge editing for LLMs, where existing methods often fail to generalize. To address this, the paper first proposes TANGLESCORE, a novel metric designed to quantify the difficulty of editing specific knowledge. It is calculated based on the shift in the model's internal representations and the semantic gap between the old and new output answers. The authors demonstrate that a higher TANGLESCORE correlates with poorer generalization performance in existing editing methods. To achieve editing, they propose PIPE, a new two-stage editing framework that leverages TANGLESCORE to adapt its strategy. It first employs a purge phase making model unlearn the outdated information, adjusted based on the TANGLESCORE. This is followed by an imprint phase that carefully incorporates the new knowledge while preserving the model's general capabilities. Through extensive experiments on multiple LLMs and benchmarks, the authors show that PIPE outperforms SOTA methods, especially in generalization.
+
+### Strengths
+1. The paper targets an important and practical challenge of editing unstructured, free-form knowledge, which is more complex than editing simple factual triplets.
+
+2. The proposed two-stage "purge-and-imprint" framework is intuitive, and separating the process of forgetting old information from learning new information is a promising direction.
+
+### Weaknesses
+1. The TANGLESCORE metric is defined using model outputs and internal states after an edit has been performed. However, the PIPE method claims to use TANGLESCORE to guide the edit itself. This is a circular dependency that the metric required to perform the edit can only be computed after the edit is complete, leaving a fundamental gap in the proposed methodology.
+
+2. The paper’s core purge-then-imprint framework has been explored in prior work. For instance, [1] also employs a similar two-stage process of first erasing outdated knowledge before introducing new facts. The current paper fails to discuss such relevant work, which overstates the novelty of its proposed framework.
+
+3. The paper also fails to discuss existing approaches quantifying editing difficulty. For instance, [2] demonstrated that the perplexity can serve as a strong indicator of editing difficulty. The authors do not mention this or other potential baseline metrics. This omission weakens the novelty and thoroughness of the proposed metric.
+
+[1] Enhancing Multi-hop Reasoning through Knowledge in Large Language Model Editing.
+
+[2] The Butterfly Effect of Model Editing: Few Edits Can Trigger Large Language Models Collapse.
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

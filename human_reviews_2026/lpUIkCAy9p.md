@@ -1,0 +1,225 @@
+# Cactus: Accelerating Auto-Regressive Decoding with Constrained Acceptance Speculative Sampling
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 2, 4, 6
+
+## Abstract
+Speculative sampling (SpS) has been successful in accelerating the decoding throughput of auto-regressive large language models by leveraging smaller draft models. SpS strictly enforces the generated distribution to match that of the verifier LLM. This is unnecessarily restrictive as slight variations of the verifier's distribution, such as sampling with top-$k$ or temperature, would also be acceptable. Typical acceptance sampling (TAS) alleviates this issue by accepting more tokens using entropy-based heuristics. However, this approach distorts the verifier distribution, potentially degrading output quality when the verifier encodes critical information. In this work, we formalize the speculative sampling algorithm through the lens of constrained optimization. Based on this formulation, we propose Cactus (**c**onstrained **ac**cep**t**ance spec**u**lative **s**ampling), a method that guarantees controlled divergence from the verifier distribution and increasing acceptance rates. Empirical results across a wide range of benchmarks confirm the effectiveness of our approach.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper introduces Cactus, a constrained acceptance speculative sampling method aimed at accelerating auto-regressive decoding in large language models (LLMs) while preserving output distributional fidelity. The work frames speculative sampling as a constrained optimization problem balancing acceptance rate and divergence from a verifier model. Theoretical analysis yields a principled solution for constrained divergence (using KL divergence as a metric), and the authors propose a practical algorithm that maximizes accepted tokens per verification step. Empirical evaluation on multiple benchmarks (GSM8K, IFEval, and GPQA), using various pairs of drafting and verifying models, demonstrates improved throughput and competitive or superior accuracy versus classical speculative sampling and typical acceptance sampling approaches.
+
+### Strengths
+1. Formalization and Theoretical Rigor: The paper provides a thorough formalization of speculative sampling as a constrained optimization problem, with mathematically sound derivations (see Equations in Section 2 and supporting proofs in Appendix A). The use of $f$-divergences, primarily KL, is well-motivated and leads to explicit solutions for the acceptance/recovery functions.
+
+2. Principled Design: Compared to prior heuristics like typical acceptance sampling (TAS), Cactus mathematically guarantees bounded divergence from the verifier distribution. The method is grounded in strong theoretical justifications (see Theorem 3, Corollaries 6 and 7, and explicit treatment of the divergence-acceptance trade-off).
+
+3. Empirical Breadth and Depth: The experiments include a wide variety of benchmarks, LLM architectures, and model sizes. Table 1 provides detailed results across tasks and models, showing Cactus consistently offers higher acceptance rates (e.g., $\mathrm{AL}_{m}$ and Rej columns), often without sacrificing accuracy compared to SpS and TAS. Additional evaluations address wall-time throughput (Figure 3), cross-architecture robustness (Figure 4), and trade-offs with alternative approaches (interpolation and SpecCas).
+
+4. Clarity and Transparency: Mathematical notation is mostly clear, with comprehensive appendices containing proofs and derivations. The design of the method is explained with both equations and pseudocode (Algorithm 1), and decision points are clearly highlighted.
+
+5. Practical Impact: The method is training-free, requires only elementwise operations on output probabilities, and can be deployed to accelerate LLM inference in real-world conditions.
+6. Figure/Table Engagement: Key quantitative claims are backed up by explicit references to figures and tables. For example, Table 1a and 1b directly show improvement of Cactus in both acceptance rate and quality, while Figure 1 graphically summarizes the accuracy-acceptance tradeoff across diverse settings.
+
+### Weaknesses
+1. Empirical Baseline Coverage and Ablations: While the paper includes SpS, TAS, Top-k, Mentored decoding, and SpecCas as baselines, it does not systematically evaluate against very recent tree-based decoding advancements (such as recursive or blockwise candidate strategies). This limits direct benchmarking of Cactus's relative value in the face of alternative parallel or hierarchical sampling frameworks. The omission can be seen in the lack of explicit mention of, e.g., "Recursive Speculative Decoding: Accelerating LLM Inference via Sampling Without Replacement" or similar tree/tree-of-N approaches, which could address the same efficiency-quality tradeoff. Including these could strengthen the empirical section.
+
+2. Scope of Generalization Claims: Although Figure 4 and several model series are included, experiments mostly focus on models up to 14B parameters and a limited set of benchmarks. Claims about scalability to substantially larger backbones (hundreds of billions of parameters) or broader domains (e.g., multilingual or multimodal tasks) remain unproven, and the discussion in Appendix C defers these questions to future work.
+
+3. Selection and Tuning of $\delta$ (Divergence Constraint): The hyperparameter $\delta$ critically determines the quality-throughput tradeoff. While the mechanism for grid search and choice is described, no principled or automated selection strategy is suggested, nor is the sensitivity to $\delta$ analyzed in detail beyond grid-search plots (see Figure 2). This may be a practical barrier for deployment, especially for practitioners unfamiliar with the KL/gamma tradeoff mechanics.
+
+### Questions
+1. The method currently relies on manual or grid-based tuning for the divergence parameter $\delta$. Is there a theoretically principled or adaptive way to set or anneal $\delta$ based on runtime feedback (e.g., based on target throughput or accuracy)? What would be the pitfalls in automating this choice?
+
+2. While Cactus aims to bound divergence and preserve verifier fidelity, do any empirical failure cases show semantic or correctness failures? For example, what types of errors arise in GSM8K or GPQA when $\delta$ is set too high?
+
+3. How would the approach scale to extremely large verifiers (e.g., >100B parameters) with draft models that are structurally or statistically misaligned? Does the performance gain or accuracy gap increase as model size scales up?
+
+4. Related to Figure 1 and Table 1: In specific cases (e.g., GPQA with Cactus 1.0), Cactus surpasses the verifier's accuracy. Is this genuine improvement or due to variance/noise in evaluation or artifacts of metric normalization?
+
+5. Could the framework be generalized to allow for multi-token acceptance rules (e.g., chains or blocks of tokens) beyond per-token KL constraint, and what would the mathematical/algorithmic implications be?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes Cactus, a novel speculative sampling method that provides explicit control over divergence from the verifier’s distribution to improve the token acceptance rate. It formulates speculative sampling as a constrained optimization problem that maximizes the draft token acceptance probability while keeping the target distribution within a bounded divergence from the verifier. Empirical results across multiple models and datasets show that Cactus achieves higher acceptance rates, often with improved accuracy compared to baseline methods.
+
+### Strengths
+1. Proposes principled trade-off between efficiency and fidelity. The paper proposes viewing speculative sampling as choosing an appropriate distribution $h$ that achieves a desired trade-off between draft token acceptance rate and divergence from the verifier. This view allows methods including SpS and TAS to be viewed in a unified framework.
+
+2. Practical implementation. Based on the constrained optimization formulation, the paper derives a closed-form solution with cost comparable to SpS.
+
+3. Empirical evaluations. Experiments on multiple models and datasets show improved acceptance length compared to SpS and TAS.
+
+### Weaknesses
+1. Missing evaluations on drafter quality. Qwen 3 models are used as both the verifier and the drafter. Since these models belong to the same family, their output distributions are likely to be similar, making it unclear how the results would change with different levels of inherent divergence between the verifier and drafter. Also, how does performance vary when using drafters of different sizes?
+
+2. Missing evaluations on interactions with temperature. For the main experiments, one set values for top-p, top-k, and temperature (fairly low) is used. Further analysis on how different methods interact with sampling hyperparameters would be useful since the focus of the paper is on speculative $\textit{sampling}$.
+
+3. Discussion on approximation validity. Cacus leverages second-order Taylor approximation assuming $\delta$ remains small. It is unclear whether $\delta$ values such as 0.75 justifies the approximation.
+
+### Questions
+Q. What are some possible explanations for the often better accuracies?
+
+Q. The anonymous link to code seems broken?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The core idea—casting speculative decoding as a constrained optimization and applying a KL-divergence bound with a second-order Taylor approximation—appears as an incremental re-interpretation of existing acceptance strategies rather than a fundamentally new algorithmic principle. Theoretical development largely repackages known mechanisms, while empirical gains emphasize acceptance/throughput and depend heavily on the hyperparameter δ; accuracy robustness improvements are inconsistent across tasks. Overall, the contribution does not clear the bar for novelty and impact.
+
+The manuscript exhibits noticeable typesetting glitches (e.g., unnecessary hyphenation and line breaks in the title/long tokens, inconsistent styles for algorithms/tables/captions, and minor inconsistencies in notation and reference formatting. These issues hurt readability and professional polish; a thorough pass against the official template is needed.
+
+### Strengths
+The work introduced a principled, divergence-controlled acceptance rule (Cactus) that balances fidelity and efficienc.
+
+### Weaknesses
+The manuscript exhibits noticeable typesetting glitches (e.g., unnecessary hyphenation and line breaks in the title/long tokens, inconsistent styles for algorithms/tables/captions, and minor inconsistencies in notation and reference formatting. These issues hurt readability and professional polish; a thorough pass against the official template is needed.
+
+### Questions
+The manuscript exhibits noticeable typesetting glitches (e.g., unnecessary hyphenation and line breaks in the title/long tokens, inconsistent styles for algorithms/tables/captions, and minor inconsistencies in notation and reference formatting. These issues hurt readability and professional polish; a thorough pass against the official template is needed.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces Cactus, a novel speculative sampling method for accelerating auto-regressive decoding in large language models (LLMs). Building on prior work like vanilla speculative sampling (SpS) and typical acceptance sampling (TAS), the authors reformulate speculative sampling as a constrained optimization problem to trade off acceptance rates against divergence from the verifier model's distribution. They derive a closed-form approximation using KL divergence and provide theoretical guarantees on bounded divergence. Empirical evaluations on benchmarks like GSM8K, IFEval, and GPQA using models from Qwen, Gemma, R1, and LLaMA series show that Cactus achieves higher acceptance rates and throughput than baselines while preserving or improving output quality.
+
+### Strengths
+1. The paper is well-written and highly readable, with the authors providing a detailed introduction to the proposed method, along with in-depth theoretical contributions and proofs.
+2. The "training-free" nature and minimal computational overhead of Cactus make it extremely easy to integrate into existing inference frameworks, endowing it with high practical value.
+3. The experiments cover a variety of benchmark datasets as well as multiple model families and sizes. The results consistently show that Cactus outperforms SpS and TAS in terms of acceptance length and rejection rate, while maintaining stable accuracy.
+
+### Weaknesses
+1. It only includes three types of datasets: mathematical reasoning, instruction following, and scientific question answering, and lacks experimental results on Spec-Bench [1]—a more commonly used benchmark for speculative decoding. Spec-Bench covers multiple tasks such as multi-turn dialogue, translation, mathematical reasoning and so on.  
+2. The experiments only cover small-to-medium-sized models (with a maximum of 14B parameters) and do not involve larger models (e.g., 70B parameters) where memory bottlenecks are more prominent.  
+3. The baselines are relatively outdated. Key baseline methods such as Medusa [2] and EAGLE-2/3 [3, 4] are not comprehensively compared in the main results.
+4. The code in the anonymous link (https://anonymous.4open.science/r/Cactus-2E4D/) is empty.
+
+[1] Xia H, Yang Z, Dong Q, et al. Unlocking Efficiency in Large Language Model Inference: A Comprehensive Survey of Speculative Decoding [C]. Findings of the Association for Computational Linguistics ACL 2024. 2024: 7655-7671.
+
+[2] Cai T, Li Y, Geng Z, et al. Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads [C]. International Conference on Machine Learning. PMLR, 2024: 5209-5235.
+
+[3] Li Y, Wei F, Zhang C, et al. EAGLE-2: Faster Inference of Language Models with Dynamic Draft Trees [C]. Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing. 2024: 7421-7432.
+
+[4] Li Y, Wei F, Zhang C, et al. Eagle-3: Scaling up inference acceleration of large language models via training-time test [J]. arXiv preprint arXiv:2503.01840, 2025.
+
+### Questions
+1. How sensitive is Cactus to δ? Can the authors provide ablation experiments?  
+2. How to select the optimal δ? And how should δ be chosen for different tasks?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes CACTUS, a novel constrained acceptance speculative sampling algorithm that accelerates large language model decoding while maintaining output fidelity. The key idea is to cast speculative sampling as a constrained optimization problem that explicitly trades off divergence from the verifier distribution against acceptance rate. By leveraging an f-divergence–bounded objective, the authors derive a closed-form solution (with KL divergence) that ensures provably controlled deviation from the verifier while allowing more draft tokens to be accepted. Extensive experiments on multiple model families (Qwen, Gemma, R1, LLaMA) and benchmarks (GSM8K, IFEval, GPQA) show that CACTUS consistently improves throughput and acceptance length without hurting accuracy. Compared with typical acceptance sampling (TAS), it demonstrates both higher acceptance rates and more stable quality, validating its theoretical motivation.
+
+### Strengths
+The paper is well-written. The proposed approach is novel. The evaluation is comprehensive and analysis is in-depth.
+
+### Weaknesses
+1. The observed improvements of CACTUS appear to correlate strongly with the capability of the underlying LLMs. For instance, larger verifiers (e.g., 14B) consistently outperform smaller ones (e.g., 8B), and reasoning-tuned models achieve higher acceptance and throughput than non-reasoning counterparts. This raises the question of whether the proposed method inherently benefits from the stronger self-consistency and error-correction capacity of powerful models, rather than from the constrained optimization formulation itself. A more detailed analysis or discussion of this correlation would strengthen the empirical claims.
+2. The evaluation primarily reports acceptance length and rejection ratio as proxies for throughput, but omits key metrics such as average generation length or tokens per completion. Without these, it is difficult to fully interpret both the quality improvements and the real speedup.
+
+### Questions
+See above
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

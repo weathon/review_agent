@@ -1,0 +1,186 @@
+# CoDiEmb: A Collaborative yet Distinct Framework for Unified Representation Learning in Information Retrieval and Semantic Textual Similarity
+
+- Decision: Reject
+- Scores: 6, 2, 4, 2
+
+## Abstract
+Obtaining text embeddings that excel across diverse downstream scenarios is a long-standing pursuit in representation learning, yet negative transfer remains a persistent obstacle. This challenge is particularly pronounced when jointly optimizing two core tasks: Information Retrieval (IR) and Semantic Textual Similarity (STS). Owing to discrepancies in data organization, text-length distributions, and evaluation metrics, naive co-training typically yields steep performance trade-offs. In this paper, we contend that systematically decoupling these tasks at both the design and training levels is essential for comprehensive model convergence. To this end, we propose CoDiEmb, a unified framework that processes IR and STS collaboratively yet distinctly. Unlike previous methods, CoDiEmb achieves superior performance under joint optimization without requiring complex multi-stage training pipelines or additional learnable components. CoDiEmb introduces three key innovations: (1) a unified data format compatible with inputs of any granularity. (2) task-specific objective functions aligned with evaluation metrics; and (3) a dynamic single-source data sampling strategy. Extensive experiments on 15 standard IR and STS benchmarks across three base encoders thoroughly validate the effectiveness of CoDiEmb. Our results and analysis demonstrate that the framework not only mitigates inter-task conflicts but also substantially alleviates the issues of anisotropy and over-smoothing in the semantic space. Our code is publicly available at https://anonymous.4open.science/r/CoDiEmb.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces CoDiEmb, a novel framework for joint representation learning in IR and STS tasks. CoDiEmb addresses the challenges of negative transfer and performance trade-offs that arise when optimizing these tasks together. It achieves this by employing a unified data format, task-specific loss functions, and a dynamic single-source data sampling strategy. The proposed framework demonstrates superior performance on a range of IR and STS benchmarks compared to existing methods and single-task models.
+
+### Strengths
+**Novel Approach:** CoDiEmb presents a unique approach to joint IR and STS representation learning by systematically decoupling the tasks at both design and training levels. This leads to more effective model convergence and avoids the performance trade-offs observed in previous methods.
+
+**Theoretical Analysis:** The paper includes a theoretical analysis of CoDiEmb’s impact on the learned representation space, demonstrating its ability to mitigate issues such as anisotropy and over-smoothing.
+
+**Extensive Experiments:** The paper provides extensive experimental results on 15 standard IR and STS benchmarks, thoroughly validating the effectiveness of CoDiEmb across different base encoders and tasks.
+
+### Weaknesses
+**Hyperparameter Sensitivity:** The paper briefly mentions the impact of batch size on model performance but does not explore the sensitivity of CoDiEmb to other hyperparameters in detail. Further analysis of hyperparameter tuning and robustness would be beneficial.
+
+**Generalization to Other Tasks:** While the paper demonstrates the effectiveness of CoDiEmb on Pair Classification tasks, it would be valuable to explore its generalization to a broader range of tasks and domains.
+
+**Computational Cost:** While the paper mentions the use of DeepSpeed ZeRO-1 and gradient checkpointing to conserve computational resources, the overall computational cost of training CoDiEmb on large datasets may still be significant.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+The paper proposes CoDiEmb, a unified representation learning framework. It jointly optimizes Information Retrieval (IR) and Semantic Textual Similarity (STS) tasks. Authors argue that naive joint training causes task competition due to structural and metric differences between IR and STS. To address this, the authors introduce: a) unified data format that supports heterogeneous inputs b) Task-specific loss functions aligned with evaluation metrics c) dynamic sampling strategy to balance between the tasks. Experiments show consistent improvements over baselines (InfoNCE, CoSENT, and mixed-task sampling).
+
+### Strengths
+* Tackles an important and widely relevant problem—joint optimization across tasks like IR and STS, which mirrors the broader multi-task goal seen in setups such as MTEB (though the paper focuses on only two of those categories).
+* The proposed framework is conceptually simple, avoiding complex multi-stage pipelines or architectural modifications.
+* The algorithm is practical and easy to implement, making it accessible for real-world adaptation and integration into existing embedding training workflows.
+
+### Weaknesses
+* Limited novelty: the proposed methods such as extended InfoNCE, rank-normalized losses, and task-specific sampling, are largely incremental adaptations of existing techniques.
+* The scope of joint optimization is narrow. Recent IR work (e.g., BEIR, MTEB) already treats multi-task or zero-shot generalization as standard, so balancing only IR and STS tasks represents a subset of a broader, already-explored challenge.
+* The reported performance gains are modest, often falling within the expected variance of large-scale embedding evaluations.
+
+### Questions
+* How does the proposed framework compare to more recent multi-task embedding approaches such as NV-Embed? Can authors provide quantitative comparisons with recent studies?
+* Does the dynamic sampling strategy ensure balanced training between IR and STS, or simply disjoint task batches?
+* Could CoDiEmb be extended to other MTEB task categories (e.g., classification, clustering), and do the authors already have experimental results or preliminary findings in this direction?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes CoDiEmb, a framework to address the long-standing challenge of negative transfer when jointly training text encoders for IR and STS tasks. CoDiEmb's core idea is to process these tasks collaboratively yet distinctly within a single training stage. This is achieved through three key innovations: 1. A unified data format that uses a task identifier to route inputs to the correct processing pipeline; 2. task-specific objective functions; 3. A dynamic single-source data sampling strategy that ensures batches contain data from only one task.
+
+### Strengths
+The paper is well-motivated, providing a clear and insightful diagnosis of why joint IR/STS training typically fails, correctly identifying the core discrepancies in their respective data structures, text lengths, and evaluation metrics. The proposed solution is systematic, providing a comprehensive framework that decouples tasks at the data ingestion, loss calculation, and batch sampling levels. The design of the task-specific losses is a significant strength. Each objective is explicitly chosen to align with the task's primary evaluation metric, representing a more principled approach than naive multi-task learning.
+
+The dynamic single-source sampler is a clever and highly practical contribution. It correctly identifies mixed-task gradients as a source of interference. It provides an engineering solution that also efficiently handles the heterogeneous batch size requirements for short (STS) and long (IR) texts.
+
+### Weaknesses
+1. The weights $\alpha$, $\beta$, and $\gamma$ of the total STS loss are never specified in the paper, which hinders reproducibility. 
+2. The dynamic single-source data sampler is a core component, but its scheduling mechanism is completely undefined. How are the tasks (IR vs. STS) alternated? Is it a 1:1 iteration, or proportional to dataset size, or some other curriculum?
+3. The paper calls this a "unified framework", but it functions more like a task switcher. It doesn't use a single, unified loss function to model both tasks. Instead, it calls two completely different processing logics. While this is from an engineering perspective, in an academic context, like a decoupled framework, which might be more accurate than a "unified framework."
+4. While the paper demonstrates a synergistic gain (IR helping STS), it fails to provide a deep explanation for why this occurs.
+5. The paper claims it does not require additional learnable components (like Adapters). However, it introduces more complex sampling logic and more complex loss calculations (especially the three list-wise losses for STS). Does this significantly increase the training's computational overhead and time? The paper provides no comparison of training duration or computational cost against baseline methods.
+
+### Questions
+1. Can the authors please provide the missing hyperparameters crucial for reproducibility: the weights $\alpha$, $\beta$, and $\gamma$ for the STS loss components, and the temperature $\tau$ for PRO loss?
+2. What is the scheduling strategy for the dynamic single-source sampler? How is the decision made in each iteration whether to sample an IR batch or an STS batch (e.g., 1:1, dataset size proportion, etc.)?
+3. The geometric analysis in Section 4 describes the outcome. Do the authors have a more concrete analysis of the mechanism behind the synergistic gain? Specifically, why does training on IR with CoDiEmb's setup boost STS performance beyond a specialist STS-only model? Is it the expanded negative pool from cross-device sampling, or the specific nature of the extended InfoNCE loss, or some other factor?
+4. How does the computational overhead (e.g., wall-clock training time) of CoDiEmb compare to the baselines? A brief analysis of this would strengthen the paper's claims of practical efficiency.
+
+Addressing these points, especially the missing details for reproducibility and the clarifications on synergy and cost, would significantly strengthen the submission. I would be happy to reconsider my rating based on your responses.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes CoDiEmb, a collaborative‑yet‑distinct training framework to learn general‑purpose text embeddings that perform well on both Information Retrieval (IR) and Semantic Textual Similarity (STS). The method: (i) expresses heterogeneous corpora in a unified tuple format so both tasks can be fed through a single pipeline; (ii) applies task‑specific objectives. For IR, an extended InfoNCE with multi‑positives and cross‑device negatives. For STS, a Pearson correlation loss augmented with a rank‑normalized KL term and an adaptation of Preference Ranking Optimization (PRO); and (iii) uses a dynamic single‑source sampler so each training step draws task‑pure batches, enabling cross‑device negatives for IR but not for STS. The workflow is depicted in Figure 1 (p.3); the sparsity of IR positives is quantified in Figure 2 (p.4). On CMTEB (8 IR + 7 STS tasks), CoDiEmb yields consistent gains over InfoNCE, CoSENT, and a mixed‑batch sampler across three backbones (MiniCPM‑Embedding, multilingual‑E5‑large, BGE‑large‑zh‑v1.5); see Table 1 (p.7) and per‑task Tables 6–7 (p.16). The paper also reports representation‑space diagnostics (anisotropy/over‑smoothing) where CoDiEmb shows favorable trends (Table 3, p.9), robustness to batch sizes (Table 8, p.17), ablations of loss components (Table 9, p.17), and an extension to pair classification (Table 5, p.16). Task‑specific instructions are prepended to inputs for all methods to keep comparisons fair (Appendix A.2, p.15).
+
+### Strengths
+- The paper tackles persistent "negative transfer" between IR and STS and argues for task‑aware training. The design aligns losses with evaluation targets (nDCG@k vs Spearman). Figure 1 and Sec. 2 make the approach concrete.
+- Consistent gains across three backbones on STS tasks only. CoDiEmb outperforms InfoNCE/CoSENT/mixed‑sampler baselines on the CMTEB suite (Table 1), with per‑task details in Tables 6–7.
+- Useful ablations/robustness. Loss‑component ablations (Table 9) and batch‑size robustness (Table 8) indicate each piece helps and training is stable.
+- Representation analysis. The token‑space SVD/entropy metrics in Table 3 show reduced over‑smoothing/anisotropy vs baselines, a thoughtful diagnostic even if indirect for sentence‑level isotropy.
+- Practical training recipe. The sampler’s “same‑file across devices for IR; no cross‑device negatives for STS” is a clean best practice many practitioners will appreciate.
+
+### Weaknesses
+1. Limited novelty relative to listwise LTR. The proposed LRankKL is extremely close to classical listwise losses (ListNet/ListMLE/RocketQA). The paper should explicitly connect to that literature and temper novelty claims around the STS loss.  
+2. Scope of baselines. Results largely compare to internal objectives (InfoNCE, CoSENT, mixed sampler). Missing are strong generalist comparators such as NV‑Embed and Jina‑v3/Task‑LoRA, which directly address multi‑task IR+STS. Even frozen‑backbone adaptions would help calibrate effect size.  
+3. Trade‑off policy favors STS. The STS side receives three losses (Pearson/Rank‑KL/PRO) while IR uses a single contrastive loss; unsurprisingly, Table 2 (p.8) shows small IR costs for STS gains. For IR‑first settings this may be undesirable; the paper should expose a Pareto control over IR:STS emphasis.  
+4. Reproducibility gaps. Missing exact α/β/γ weights, temperatures, and K⁺/K⁻ per dataset; Appendix A.2 confirms instructions were used, but does not list the actual prompts. Release full configs and prompts.  
+5. Unified format & task‑conditioned batching framed as contributions. These are standard practice in instruction‑tuned and LLM‑backbone embedding training; keep them as implementation notes, cite precedent (INSTRUCTOR; LLM2Vec), and avoid implying novelty.  
+
+References
+----
+[INSTRUCTOR] Su et al., One Embedder, Any Task: Instruction‑Finetuned Text Embeddings, 2022.  
+[LLM2Vec] BehnamGhader et al., LLM2Vec: Large Language Models Are Secretly Powerful Text Encoders, 2024.  
+[ListNet] Cao et al., Learning to Rank: From Pairwise to Listwise Approach, 2007.  
+[ListMLE] Xia et al., Listwise Approach to Learning to Rank: Theory and Algorithm, 2008.  
+[NV‑Embed] Lee et al., NV‑Embed: Improved Techniques for Training LLMs as Generalist Embedding Models, 2024.  
+[Jina‑v3 (Task‑LoRA)] Sturua et al., jina‑embeddings‑v3: Multilingual Embeddings with Task LoRA, 2024.
+
+### Questions
+1. Beyond instructions. Since all methods use task‑specific instructions (Appendix A.2), quantify the incremental benefit of CoDiEmb beyond instruction prompting with a 2×2 study: {w/ vs w/o instructions} × {Mixed vs CoDiEmb}. For IR, use asymmetric prompting (query‑only), for STS symmetric prompting, following INSTRUCTOR practice.  
+2. Mixture vs method. To rule out data‑mixture imbalance as the driver of STS>IR gains, hold objectives fixed and sweep IR:STS sampling ratios under both the Mixed and CoDiEmb samplers, comparing matched ratios. Report Avg‑IR, Avg‑STS, and Overall.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

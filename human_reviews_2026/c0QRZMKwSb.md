@@ -1,0 +1,178 @@
+# NOVA3R: Non-pixel-aligned Visual Transformer for Amodal 3D Reconstruction
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 2, 8
+
+## Abstract
+We present NOVA3R, an effective approach for non-pixel-aligned 3D reconstruction from a set of unposed images in a feed-forward manner. Unlike pixel-aligned methods that tie geometry to per-ray predictions, our formulation learns a global, view-agnostic scene representation that decouples reconstruction from pixel alignment. This addresses two key limitations in pixel-aligned 3D: (1) it recovers both visible and invisible regions with a complete scene representation, and (2) it produces physically plausible geometry with fewer duplicated structures in overlapping regions. To achieve this, we introduce a scene-token mechanism that aggregates information across unposed images and a diffusion-based 3D decoder that reconstructs complete, non-pixel-aligned point clouds. Extensive experiments on both scene-level and object-level datasets demonstrate that NOVA3R outperforms state-of-the-art methods in terms of reconstruction accuracy and completeness.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces NOVA3R, a novel feed-forward framework for amodal 3D reconstruction from a set of unposed images. The central problem the authors address is the limitations of traditional "pixel-aligned" methods (like DUSt3R or VGGT), which are tied to per-ray predictions. NOVA3R's core idea is to decouple reconstruction from pixel alignment by learning a global, view-agnostic scene representation. This allows the model to recover both visible and occluded points and generate a single, physically plausible point cloud for the entire scene. The method is implemented as a two-stage pipeline, the first is 3D Latent AutoEncoder training and the second one is Feed-forward Scene Prediction. Experiments on both scene-level (SCRREAM, NRGBD) and object-level (GSO) datasets show that NOVA3R outperforms state-of-the-art methods in reconstruction completeness and accuracy.
+
+### Strengths
+1. The paper's main strength is its "non-pixel-aligned" formulation. This is a clear and well-motivated departure from dominant pixel-aligned methods. It directly addresses fundamental, known issues in 3D reconstruction (incompleteness and duplicate geometry).
+2. The architectural design is novel and effective. Using a diffusion decoder with a flow-matching loss elegantly transforms noisy point clouds to target distribution with conditioning.
+3. The experimental validation is thorough. NOVA3R demonstrates superior performance over strong baselines in its primary goal of complete amodal reconstruction (Table 1) and also shows it can be applied to object-level tasks (Table 3).
+4. The paper shows that this new paradigm is also efficient. NOVA3R has significantly fewer parameters (718M) than both the pixel-aligned VGGT (941M) and the latent-generation TRELLIS (1785M) models.
+
+### Weaknesses
+1. While the method commendably avoids the need for high-quality meshes, the autoencoder in Stage 1 still requires "complete point clouds" for supervision. The authors' solution is to aggregate depth maps from dense views. However, it still can not eliminate the ambiguity of occluded or invisible area.
+2. The point cloud is noisier compared to VGGT. VGGT presents a smoother plane in Figure 6. This is also reflected in normal consistency metrics.
+3. Static scene only. It seems like this paradigm is hard to generalize to dynamic scenes.
+
+### Questions
+1. In stage1's diffusion decoder training, how do you matches the unordered points in flow matching?
+2. Any experiments on outdoor scenes?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+NOVA3R is a non-pixel-aligned visual Transformer approach for feed-forward amodal 3D reconstruction from unposed images. It addresses the limitations of pixel-aligned methods—such as only reconstructing visible regions and generating duplicated structures in overlapping areas—and overcomes the inability of latent 3D generation methods to handle complex scenes by learning a global, view-agnostic scene representation.
+
+The core of this method includes a scene-token mechanism (to aggregate multi-view information) and a diffusion-based 3D decoder (to generate complete point clouds). It adopts a two-stage training process: first, a 3D latent autoencoder is trained using a flow-matching loss; then, a pre-trained image encoder and learnable scene tokens are used to map images to the latent space.
+
+Experiments show that NOVA3R outperforms state-of-the-art methods on both scene-level (SCRREAM, 7-Scenes) and object-level (GSO) datasets, producing more complete and physically plausible reconstruction results. It supports both single-view and multi-view inputs, combining feed-forward efficiency with strong modeling capabilities. Its limitations include insufficient reconstruction quality for large-scale complex scenes and no support for dynamic objects.
+
+### Strengths
+1. By modeling the entire 3D reconstruction task as a two-stage generative process, NOVA3R breaks the traditional pixel-aligned paradigm that estimates geometric attributes by tying geometry to per-ray predictions. This innovative design decouples reconstruction from pixel alignment, enabling the model to learn a global, view-agnostic scene representation and thus reconstruct point clouds of both visible and invisible (occluded) regions, addressing the incompleteness limitation of pixel-aligned methods .
+
+2. NOVA3R innovatively adopts diffusion as the point cloud decoder, which is highly suitable for the inherent characteristics of point clouds (e.g., unordered and unaligned nature). Unlike deterministic decoders that struggle with matching unordered point sets, the diffusion-based decoder, trained with a flow-matching loss, effectively resolves matching ambiguities in unordered point clouds, ensuring the generation of complete, physically plausible non-pixel-aligned point clouds without duplicated structures.
+
+3.experiments
+
+### Weaknesses
+1. Compared with end-to-end architectures, NOVA3R requires additional training efforts due to its two-stage design. The model first trains a 3D latent autoencoder (Stage 1) with a flow-matching loss to compress complete point clouds into latent tokens and decode them, then optimizes the image encoder and learnable scene tokens (Stage 2) to map unposed images to the latent space. This two-stage training not only increases the overall training pipeline complexity but also demands more computational resources and time compared to one-step end-to-end reconstruction methods.
+
+2. Concerns arise regarding the consistency between the reconstructed point clouds and input images under NOVA3R’s paradigm. Unlike pixel-aligned methods that directly predict geometry attributes (e.g., depth, point maps) tied to image pixels, NOVA3R undergoes a "compression-decompression" process: it compresses scene information into latent tokens and decompresses them via a diffusion-based generative decoder. This indirect mapping, combined with the stochastic nature of diffusion, introduces uncertainties about whether the generated non-pixel-aligned point clouds can fully align with the visual content of input images, requiring further validation of cross-view and pixel-scene consistency.
+
+3. This modeling approach may struggle to scale to scenarios with an extremely large number of input images, primarily due to computational bottlenecks caused by its point-wise decoding nature. As the number of point clouds required for reconstructing complex, large-scale scenes increases (e.g., when processing more input views to enhance reconstruction completeness), the diffusion-based decoder— which operates on individual points during the decompression process—faces a significant surge in computational load. Unlike pixel-aligned methods that can leverage per-ray parallelization tied to image pixels, NOVA3R’s non-pixel-aligned, point-wise decoding lacks efficient scalability for handling massive point volumes, making it challenging to adapt to tasks requiring extensive multi-view input or high-density point cloud output.
+
+### Questions
+Regarding the paper proposing NOVA3R, there are three key questions to raise with the authors, corresponding to potential weaknesses: First, compared with end-to-end structures, the two-stage training design requires additional training efforts, and it is worth discussing whether the training complexity can be optimized. Second, the paradigm of "compression-decompression" plus diffusion-based decoding may bring uncertainty to the consistency between the reconstructed point cloud and the input image, and further verification of this consistency is needed. Third, the point-wise decoding nature makes it difficult for the model to scale to scenarios with an extremely large number of input images, as the increase in point cloud quantity will lead to significant computational bottlenecks.
+
+Nevertheless, integrating the generative idea into the VGGT series of works is an excellent and valuable concept. Although a hybrid framework (using VGGT for visible regions and the proposed method for invisible regions) might perform better than solely adopting NOVA3R, the framework proposed in this paper still has significant reference value. Therefore, it is recommended to give this paper a borderline accept decision.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes NOVA3R, a non-pixel-aligned 3D reconstruction method that effectively improves occluded region completion through a scene-token mechanism and flow-matching loss. It provides a feasible solution for the non-pixel-aligned paradigm.
+
+### Strengths
+As a non-pixel-aligned 3D reconstruction framework, NOVA3R decouples reconstruction from pixel-ray binding via a global Scene Token mechanism. It completes occluded regions, addressing the flaw of traditional pixel-aligned methods (e.g., DUSt3R, VGGT).
+
+### Weaknesses
+1. Innovation Needs Further Quantification. The core innovation of the paper lies in the synergy between the non-pixel-aligned paradigm and Scene Token. It is recommended to quantify the token’s contribution to global structure modeling. 
+2. Qualitative Results Require Objective Quantitative Support. The core goal of qualitative experiments (Figures 6, 7) is to verify "occlusion completion" and "physical plausibility," but current evaluations rely solely on visual judgment, leading to potential subjectivity in assessing effectiveness. It is suggested to supplement quantitative metrics (e.g., hole area ratio, point cloud density variance) to objectively measure differences between NOVA3R and baselines. Furthermore, enrich qualitative results for complex scenes to highlight the method’s advantages in challenging scenarios.
+3. Validation Scope for Scene Completion Needs Expansion. Verification is only conducted under  (single view) and  (two views), which is insufficient to fully demonstrate the gain of multi-view input for complete reconstruction. It is recommended to add experiments to analyze the relationship between the number of views and reconstruction completeness  as well as physical plausibility.
+4. Comparative Experiments Need Clear Task Boundaries and Explanations for Omitted Comparisons. When comparing with pixel-aligned methods (e.g., DUSt3R, VGGT), it is necessary to more explicitly explain the "impact of task differences on metrics" (e.g., VGGT outperforms in CD because it does not need to handle occlusion completion). For the omission of Amodal3R in Object Completion experiments, supplement explanations for the exclusion (e.g., Amodal3R requires mask input and only works for object-level reconstruction). If comparisons are deemed necessary, design adaptive experiments (e.g., providing NOVA3R with the same masks as Amodal3R) before conducting comparisons.
+5. Analysis of Flow-Matching Loss Needs Deepening. The paper only mentions using flow-matching loss to address unordered point cloud supervision but fails to analyze its advantages over traditional losses. It also does not explain the tuning strategy for loss hyperparameters (e.g., sampling strategy for time step ). It is recommended to add ablation experiments comparing "different loss functions" to verify the necessity of flow-matching for unordered point cloud encoding. Additionally, explain the tuning differences of the loss across datasets.
+
+### Questions
+1. Innovation Needs Further Quantification. The core innovation of the paper lies in the synergy between the non-pixel-aligned paradigm and Scene Token. It is recommended to quantify the token’s contribution to global structure modeling. 
+2. Qualitative Results Require Objective Quantitative Support. The core goal of qualitative experiments (Figures 6, 7) is to verify "occlusion completion" and "physical plausibility," but current evaluations rely solely on visual judgment, leading to potential subjectivity in assessing effectiveness. It is suggested to supplement quantitative metrics (e.g., hole area ratio, point cloud density variance) to objectively measure differences between NOVA3R and baselines. Furthermore, enrich qualitative results for complex scenes to highlight the method’s advantages in challenging scenarios.
+3. Validation Scope for Scene Completion Needs Expansion. Verification is only conducted under  (single view) and  (two views), which is insufficient to fully demonstrate the gain of multi-view input for complete reconstruction. It is recommended to add experiments to analyze the relationship between the number of views and reconstruction completeness  as well as physical plausibility.
+4. Comparative Experiments Need Clear Task Boundaries and Explanations for Omitted Comparisons. When comparing with pixel-aligned methods (e.g., DUSt3R, VGGT), it is necessary to more explicitly explain the "impact of task differences on metrics" (e.g., VGGT outperforms in CD because it does not need to handle occlusion completion). For the omission of Amodal3R in Object Completion experiments, supplement explanations for the exclusion (e.g., Amodal3R requires mask input and only works for object-level reconstruction). If comparisons are deemed necessary, design adaptive experiments (e.g., providing NOVA3R with the same masks as Amodal3R) before conducting comparisons.
+5. Analysis of Flow-Matching Loss Needs Deepening. The paper only mentions using flow-matching loss to address unordered point cloud supervision but fails to analyze its advantages over traditional losses. It also does not explain the tuning strategy for loss hyperparameters (e.g., sampling strategy for time step ). It is recommended to add ablation experiments comparing "different loss functions" to verify the necessity of flow-matching for unordered point cloud encoding. Additionally, explain the tuning differences of the loss across datasets.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This manuscript presents NOVA3R, a non-pixel-aligned visual transformer for amodal 3D reconstruction from unposed images. Unlike prior methods tied to pixel-level supervision, NOVA3R decouples geometry prediction from image pixels by learning a global scene representation. The approach leverages a diffusion-based 3D autoencoder trained with a flow matching loss, and introduces learnable scene tokens to aggregate multi-view information. The method demonstrates state-of-the-art performance across object-level and scene-level benchmarks, outperforming both single- and multi-view baselines.
+
+### Strengths
+- The paper is well-written and well-presented. The provided figures are clear and informative. The accompanying video shows clearly the method in action.
+- The idea of predicting non-pixel-aligned geometry is novel and interesting. While the literature of 3D generation is rich, framing the tasks as an intersection of DUST3R-style prediction and 3D-native prediction is clever and refreshing.
+- The method achieves state-of-the-art performance both on the SCRREAM dataset and NRGBD/7-Scenes dataset, demonstrating the effectiveness of the proposed method.
+
+### Weaknesses
+- The runtime performance of the flow-matching decoder is not analyzed. It would be nice to show how the proposed method compares to a regular point cloud decoder without the diffusion process.
+- It is unclear how image-based properties, such as camera poses or intrinsics, or depth maps, can be derived. While the entire scene is put under the coordinate system of the first view, it is not clear how accurate it is for other views. Pose or depth accuracy evaluation is not provided.
+- It is not clear how the proposed method can be extended to more than 4 views, i.e., it is not clear how a global bundle adjustment problem can be formulated as in DUST3R to incorporate videos of arbitrary length.
+
+### Questions
+- While the method focuses on amodal 3D reconstruction, do you have any thoughts on how image-based properties such as camera poses or intrinsics, or depth maps can be derived from the proposed scene representation?
+- How does the method generalize to more views that covers larger areas of the scene? e.g. how the method performs on autonomous driving datasets such as nuScenes or Waymo?
+- What is the maximum pose gap between the two input images? How large the portion of the scene can be completed?
+- How can the method be extended to handle dynamic scenes? How can the method handle incremental reconstruction?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -88,8 +88,8 @@ Output your final review in this markdown format:
 
 ## Weaknesses
 // list all of the reasonable points, but rank them accordingly
-###: Fatal
-// if the paper has some fatal errors, list them here
+### Fatal
+// if the paper has some fatal errors, list them here, only use when it collapse the whole paper's claim
 
 ### Major:
 - weakness 1 — why it matters
@@ -122,7 +122,7 @@ After you finish writing a review, assign a score to the review.
 {{CALIBRATION_INSTRUCTION}}
 
 - If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
-- The harsh reviewer can sometimes be a bit overly critical, so weigh their points on their merits rather than accepting them at face value.
+- The harsh reviewer can be a overly critical, so weigh their points on their merits carefully. 
 
 Do NOT be afraid to give very high (>8) or very low (<4) scores when the
 paper warrants it. 

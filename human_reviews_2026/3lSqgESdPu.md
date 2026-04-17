@@ -1,0 +1,133 @@
+# Implicit Regularisation in Diffusion Models: An Algorithm-Dependent Generalisation Analysis
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 4
+
+## Abstract
+The success of denoising diffusion models raises important questions regarding their generalisation behaviour, particularly in high-dimensional settings. Notably, it has been shown that when training and sampling are performed perfectly, these models memorise training data—implying that some form of regularisation is essential for generalisation. Existing theoretical analyses primarily rely on algorithm-independent techniques such as uniform convergence, heavily utilising model structure to obtain generalisation bounds. In this work, we instead leverage the algorithmic aspects that promote generalisation in diffusion models, developing a general theory of algorithm-dependent generalisation for this setting. Borrowing from the framework of algorithmic stability, we introduce the notion of score stability, which quantifies the sensitivity of score-matching algorithms to dataset perturbations. We derive generalisation bounds in terms of score stability, and apply our framework to several fundamental learning settings, identifying sources of regularisation. In particular, we consider denoising score matching with early stopping (denoising regularisation), sampler-wide coarse discretisation (sampler regularisation), and optimising with SGD (optimisation regularisation). By grounding our analysis in algorithmic properties rather than model structure, we identify multiple sources of implicit regularisation unique to diffusion models that have so far been overlooked in the literature.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This work studies the implicit regularization of denoising score matching, brought by the early stopping, timestep discretization and optimization algorithm. The analysis is based on a novel score stability framework, which converts the generalization bound into the sum of empirical score matching error plus a stability term.
+
+### Strengths
+1. The proposed score stability framework is sound and novel.
+
+2. The analysis is comprehensive, covering a broad range of aspects, including discretization, early stopping and optimization algorithm.
+
+### Weaknesses
+1. No empirical verification of the theorem is provided. 
+
+2. it is unclear to me how the results explain how diffusion model generalizes despite the empirical optimum can only memorize.
+
+3. Empirically, early stopping and discretization are no the key to generalization.
+
+### Questions
+1. Can you provide some simulation to validate the theory? For example, just considering learning the score of a simple Gaussian distribution? Can you show by early stopping or using a coarser discretization, the generalization (KL divergence) is improved? Currently, the bound is not  intuitive for interpretation without solid example.
+
+2. How can your theory explain diffusion model can generalize despite the empirical optimum can only memorize?
+
+3. Although the theoretical result is rigorous, in practice, early stopping and discretization are not the key factors of generalization. What do you think about this? What are other factors that enable generalization?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+Diffusion models generalize their training data, and how this happens must depend on some combination of (i) the training objective, (ii) optimization (e.g., using SGD), and (iii) the details of sampling. Prior work has attempted to bound generalization error given various assumptions (e.g., by assuming the 'manifold hypothesis'), but these bounds might neglect various details important in practice. The authors attempt to rectify this by introducing the notion of "score stability", and show that this notion allows them to derive interesting bounds on generalization error.
+
+### Strengths
+The paper is relatively clearly written and the math claims appear to be rigorous (although I did not check them in detail). The notion of score stability is interesting and appears to be a useful conceptual/technical contribution. In the main text, the authors strike a good balance between presenting their results and presenting the intuition for them, without overwhelming the reader with technical detail.
+
+### Weaknesses
+I understand that the point of the paper is to prove bounds in the tradition of recent formal (mathematical) work on diffusion models, but I am still left wondering about the extent to which these bounds are tight and/or interesting in practice. There are no experiments in the paper; would it be possible to conduct any experiments to show that the bounds are interesting, or that they are at least qualitatively consistent with what one sees in experiments? Relatedly, figures (either showing schematics, or experiments) would be helpful in getting the reader to follow the arguments. 
+
+Also relatedly, are there any interesting (even toy) settings where the reader can analytically see that these bounds are interesting, because various things can be explicitly computed?
+
+There is some interesting work on how mislearning in diffusion models supports generalization. Three examples I can think of are the Kadkhodaie et al. 2024 geometry-adaptive harmonic representations paper (https://arxiv.org/abs/2310.02557), the Kamb and Ganguli 2025 combinatorial creativity paper (https://arxiv.org/abs/2412.20292), and the Vastola 2025 generalization through variance paper (https://arxiv.org/abs/2504.12532). The authors don't have to cite these if they don't find them interesting/appropriate; I just mean to say that there's other work (not in the same formal mathematical tradition the authors follow) on the basic question they're interested in. This work may be useful in framing their contribution.
+
+### Questions
+1. Can the authors show via some numerical experiments that their bounds are tight or at least qualitatively interesting?
+
+2. Can the authors come up with a toy setting where things can be explicitly computed, which may help show that their derived bounds are interesting?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies generalisation in denoising diffusion models from an algorithm-dependent perspective. It introduces score stability, a measure of how sensitive score-matching algorithms are to changes in the training data, and uses it to derive generalisation gap bounds. The authors identify three sources of implicit regularisation: (i) early stopping in the denoising process, (ii) coarse discretisation in the sampling algorithm, and (iii) optimisation noise from SGD with gradient clipping and weight decay. They show that each of these sources improves generalisation in different ways, such as limiting memorisation, controlling discretisation error, or inducing contractive training dynamics. By grounding the analysis in algorithmic properties rather than model structure, the paper provides a unifying theoretical framework for understanding why diffusion models generalise despite high dimensionality. Overall, it links practical training heuristics to formal generalisation guarantees, revealing overlooked mechanisms that naturally regularise diffusion models.
+
+### Strengths
+**1. Introduction of an algorithm-dependent generalization framework:** The paper introduces score stability, a novel, algorithm-dependent framework for analyzing generalization in diffusion models. Unlike previous works that rely on algorithm-independent uniform convergence bounds, this approach explicitly quantifies how training and sampling algorithms affect generalization. By linking the sensitivity of the learned score function to single-sample perturbations with the expected generalization gap, the framework provides theoretical insight into why diffusion models generalize despite high dimensionality.  
+
+**2. Identification of multiple sources of implicit regularization:** The paper systematically analyses three distinct sources of implicit regularization in diffusion model training: denoising regularisation via early stopping, sampler regularisation through coarse discretization, and optimization regularization induced by stochastic gradient dynamics. By grounding these effects in the algorithmic framework of score stability, the work reveals mechanisms that were previously overlooked in the literature.
+
+### Weaknesses
+**1. Difficulty in computing score stability:** While the paper introduces the notion of score stability and shows its theoretical connection to generalization, it does not provide a clear or practical method for computing or estimating $\epsilon_{stab}$ for a given algorithm and dataset. In practice, evaluating score stability requires measuring the sensitivity of the learned score function to changes in individual data points, which may involve retraining or coupling multiple stochastic outputs—a process that can be computationally expensive, especially for large datasets and high-dimensional diffusion models.
+
+**2. The loss function for diffusion models has no integration over time:** The analysis in the paper treats the diffusion model loss as time-agnostic, meaning it does not explicitly integrate or weigh contributions across different noise levels or time steps. In practice, the difficulty of learning the score function varies with time: early steps with high noise are often easier to model, whereas later steps with low noise are more sensitive and crucial for high-quality generation. Ignoring this temporal structure may oversimplify the analysis and obscure how generalization and stability depend on the progression of the diffusion process.
+
+### Questions
+**Q1.** How can score stability be practically estimated for large-scale diffusion models?
+
+**Q2.** Can the framework be extended to conditional or latent diffusion models? 
+
+**Q3.** How sensitive are the generalisation bounds to different optimisation schemes?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,180 @@
+# Conditional Independent Component Analysis for Estimating Causal Structure with Latent Variables
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 2, 6
+
+## Abstract
+Identifying latent variables and their induced causal structure is fundamental in various scientific fields. Existing approaches often rely on restrictive structural assumptions (e.g., purity assumption) and may become invalid when these assumptions are violated. We introduce Conditional Independent Component Analysis (CICA), a new principle that extracts components that are conditionally independent given latent variables. Under mild conditions, CICA can be optimized using a tractable proxy such as rank-deficiency constraints. Building on CICA, we establish an identifiability theory for linear non-Gaussian acyclic models with latent variables: solving CICA and then applying an appropriate row permutation to the sparsest CICA solution enables recovery of the causal structure. Accordingly, we propose an estimation method based on the identifiability theory and substantiate the algorithm with experiments on both synthetic and real-world datasets.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a new algorithm for identifying latent variables and causal structures in linear causal models, especially for models with unknown latent variables. A new CICA principle is proposed as a key tool for identification, which utilizes two-sided projections instead of one-sided projections, thus allowing for wider identifiable cases. Experiments on synthetic data show that the proposed algorithm performs better in both variable and structure identification, compared with several baseline methods.
+
+### Strengths
+1.	A novel identifiability principle is proposed (CICA), allowing for identification of some cases that is originally unidentifiable. I think this is the major merit of this paper.
+2.	A complete identification algorithm is presented, achieving better results on both latent variable identification and structure discovery than several baselines.
+3.	Examples are provided for better illustration of certain Lemmas or Conditions.
+
+### Weaknesses
+1.	The major weakness lies in unsatisfying experimental results. In Tab. 1, causal discovery metrics (COR, F1-Score) are quite low for the proposed methods. If I understand it correctly, COR < 0.7 or F1-Score < 0.8 indicate a structure identification result that is far from optimal, > 0.9 results are expected for a theoretically-supported algorithm. Meanwhile, error in latent variables is supposed to decrease while sample size grows. However, the proposed method does not exhibit such monotonicity, making it questionable for the stability of proposed algorithm.
+2.	Another weakness is about the clarity. In the main algorithm (Alg. 1), only a rough process is given, and no implementation details is provided in this manuscript. Some subprocesses is based on Lemma or Theorem which does not contain a constructive solution itself. I suggest the authors provide details for each subprocess in Appendix.
+
+### Questions
+1.	Since the proposed CICA principle is one of the major contributions, why not compare your method with GIN and TIN algorithms in experiments?
+2.	In Fig. 2, the CICA is given in a form conditioned on L. However, in the rest of this paper, it is more common that the independence is presented without conditioning on L. Which is right?
+3.	In Eqn. 1, the variable V=AE is introduced as part of problem setup. However, I find V is seldomly mentioned in the rest parts. Is V necessary here? Or it should be mentioned separately somewhere else.
+4.	The solution in line 234 seems to be incorrect, see if it should be $\omega_1=[-(au+b),a], \omega_2=[-v, 1]$.
+5.	In Condition 2, what does $LPa(X_i)$ mean? According to your definition in line 106, LPa takes a subset S as input and returns common latent parents of any *two* nodes in S. However, $X_i$ is a single node here.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes Conditional Independent Component Analysis (CICA), a new statistical causal discovery method that can handle latent variables. Traditional causal discovery methods involving latent variables often require a strong assumption that each latent variable has at least one pure child node to ensure identifiability.
+In contrast, the proposed approach proves that identifiability can be achieved without the pure-child assumption, by jointly adjusting the projections of two sets of observed variables to find directions that are conditionally independent given the latent variables, together with a sparsity condition on the causal structure.
+
+Building on this theoretical result, the authors introduce the CICA-LiNGAM algorithm, which implements the framework in practice.
+They also show that, unlike Independent Subspace Analysis (ISA), which assumes independence only across subspaces, CICA can explicitly model conditional autonomy concerning latent structures.
+
+Experiments on simulated data demonstrate that the proposed method estimates causal structures more accurately than existing statistical causal discovery approaches that account for latent variables.
+
+### Strengths
+The main strength of this paper is that it removes the pure-child assumption, which is required by most existing statistical causal discovery methods dealing with latent variables, through a natural and well-motivated reformulation. This represents a significant contribution to the causal discovery research community. The ability to handle latent variables more naturally greatly expands the practical applicability of causal discovery to real-world problems where unobserved factors cannot be eliminated.
+
+The theoretical development is carefully and clearly presented, making the reasoning easy to follow.
+
+In addition, the paper uses clear illustrative examples that help readers understand the key ideas, and the simulation experiments convincingly demonstrate that the proposed method outperforms conventional approaches.
+
+### Weaknesses
+While the paper makes a strong theoretical contribution by proving that the sparsest solution is unique and identifiable, it does not sufficiently discuss how much denser alternative feasible solutions could differ from the sparsest one. This issue is important for understanding the algorithm’s stability and robustness. Although it is plausible that such alternative solutions would have similar structures due to the algorithmic design, explicitly discussing this point, and, if possible, providing empirical evaluation, would greatly strengthen the paper’s practical credibility.
+
+In addition, the minimal sparsity principle, the assumption that the true causal structure is the sparsest among all feasible ones, is theoretically reasonable in the context of identifiability proofs. However, this assumption appears to be motivated mainly by the need for identifiability rather than by empirical or theoretical evidence that real causal systems are indeed maximally sparse. In this sense, the preference for sparsity may be viewed more as a convenient modeling choice than as a natural property of causal mechanisms. A clearer discussion of this limitation, or of the conditions under which sparsity aligns with real-world causal structures, would further improve the interpretability and credibility of the work.
+
+### Questions
+Could you discuss more clearly how much denser alternative feasible solutions might differ from the sparsest one, and, if possible, include an evaluation experiment to illustrate this?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces Conditional Independent Component Analysis (CICA), a novel method for identifying latent variables and causal structure in linear non-Gaussian acyclic models. Unlike existing approaches that require "purity" assumptions (where latent variables must have enough pure children), CICA uses two-sided projections to extract components that are conditionally independent given latent variables. The authors prove that under some conditions, the sparsest CICA solution combined with appropriate row permutation recovers the full causal structure and demonstrate their approach on synthetic data and a personality psychology dataset. The method offers tractable optimization through rank-deficiency constraints rather than higher-order statistics, achieving superior performance particularly in "fully impure" scenarios where existing methods struggle.
+
+### Strengths
+* The paper presents a reasonable extension of prior work by generalizing from one-sided to two-sided projections in the ICA framework, addressing the one-sided limitations.
+* The theoretical analysis and identifiability results are rigorous as far as I can tell, with clear conditions under which full causal structure recovery is guaranteed.
+* Unlike overcomplete ICA methods that require EM algorithms and higher-order cumulants, CICA provides tractable optimization criteria through rank-deficiency constraints, making the approach computationally feasible while maintaining theoretical guarantees.
+* While the material is mathematically dense, the theoretical developments are presented clearly with good use of examples.
+
+### Weaknesses
+* The paper seems to be mostly driven by theoretical feasibility rather than a practical necessity of an improved approach. It is unclear to me whether the setting and the proposed method have any practical relevance. The assumptions in Equation (1), linearity and non-Gaussianity seem prohibitive for most problems. While those are common assumptions in the Causality literature, the authors would have to provide strong evidence that their method is useful in relevant problems despite those strong assumptions.
+* The real-world experiment on personality data fails to validate the method convincingly. The discovered causal relationships lack corroboration with psychological literature and rely solely on intuitive plausibility (e.g., "difficulty understanding causes lack of interest"), with many arrows equally plausible in reverse. The authors provide no justification for why personality data would exhibit the specific dependency structures that necessitate their two-sided projection approach over existing methods like Dong et al. Critical technical assumptions (linearity, non-Gaussianity) are never verified for the data, and the fundamental assumption that latent personality factors follow a DAG structure is also not well-justified. The real-world results appear to be post-hoc interpretations rather than meaningful validation.
+
+**Minor:**
+
+* L121: LiNGAM isn't defined.
+* Figure 2 contains little relevant information. That space might be better spent making a visual overview of the method.
+
+### Questions
+* Is there any concrete, non-theoretical evidence, that extending the method to two-sided projections helps solve relevant problems for which previous approaches fail?
+* How does your method relate to Causal Component Analysis [1]?
+
+References:
+
+[1] Wendong, Liang, et al. Causal component analysis. NeurIPS 2023
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper tackles causal discovery with latent confounders in settings where the standard “pure measurement” assumption breaks down—i.e., observed variables may also be causally linked, making many existing methods unreliable. The authors introduce Conditional Independent Component Analysis (CICA), which seeks two-sided linear projections whose outputs are conditionally independent given the latent factors. They show that CICA admits a characterization through rank-deficiency constraints and that, among all CICA-consistent solutions, the one aligned with the true causal model is the sparsest. Building on this, they design an algorithm that recursively recovers a latent-augmented DAG under mild structural assumptions. On synthetic data with non-pure, inter-connected observed variables, the method outperforms recent latent-causal baselines.
+
+### Strengths
+* The motivation is clear: the paper targets exactly the regime where measurement purity is violated because observed variables also have edges, a setting in which many latent-causal methods break down.
+* The theoretical contribution is novel and well argued: introducing two-sided conditional independence provides the additional degrees of freedom needed to distinguish structures that are otherwise observationally equivalent, and the insight that the “correct” CICA solution is the sparsest one is both elegant and convincing.
+* Experiments on several deliberately hard, impure scenarios demonstrate consistent advantages over existing baselines.
+
+### Weaknesses
+* The main limitation—admittedly a common one in this area—is that all experiments are synthetic and closely matched to the paper’s own generative assumptions. There is no semi-real or real benchmark (e.g., latent-variable causal discovery datasets, or at least mixed real+synthetic scenarios) to demonstrate robustness under model misspecification.
+* Several recent works with very similar problem settings are not discussed. For instance, the ICLR’24 paper “Causal Structure Recovery with Latent Variables under Milder Distributional and Graphical Assumptions” is highly relevant and should be compared.
+
+### Questions
+* How robust is CICA to departures from the linear-mixing-with-independent-noise assumption? In particular, if the observables are produced by mildly nonlinear transformations of the latents, do the proposed rank-deficiency constraints still identify meaningful structure, or do they degenerate to spurious CICA solutions?
+* The method largely assumes that p (the number of conditioning latents) is known in advance. How should p be chosen in practice from data? Is there a concrete, data-driven procedure—e.g., progressively increasing p while monitoring rank deficiency or CI test statistics—to determine an appropriate order?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

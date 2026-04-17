@@ -1,0 +1,178 @@
+# The generation phases of Flow Matching: a denoising perspective
+
+- Decision: Reject
+- Scores: 6, 2, 2, 6
+
+## Abstract
+Flow matching has achieved remarkable success, yet the factors influencing the quality of its generation process remain poorly understood. 
+In this work, we adopt a denoising perspective and design a framework to empirically probe the generation process. Laying down the formal connections between flow matching models and denoisers, we provide a common ground to compare their performances on generation and denoising. This enables the design of principled and controlled perturbations to influence sample generation: noise and drift. This leads to new insights on the distinct dynamical phases of the generative process, enabling us to precisely characterize at which stage of the generative process denoisers succeed or fail and why this matters.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper design a framework to empirically study the generation process of flow matching algorithms. Under their framework, they study a combination of three losses (FM, classic denoising  and unweighted denoising) and two parametrization of neural nets. Besides studying studying common generative and inpainting metrics, they also study 1) drift-type and noise-type pertubations and 2) the influence of early and late times on generation, by doing Jacobian/ Lipschitz analysis and tweaking the weighting in loss.
+
+### Strengths
+This paper provides a framework to study FM generation empirically. Although many similar observations have been reported in other papers, consolidating these scattered observations into one paper clarifies the landscape and may yield new insights. Besides summary work, the study on  Jacobian/ Lipschitz analysis of vector fields over time provides useful intuition.
+
+### Weaknesses
+1. The section 3.3 Denoising Losses L unifies different losses by reparametrization, and the results are very similar to Kingma & Gao, 2023 [1]. Although the authors cite the paper in intro, it would be better to emphasize this similarity here.
+2. The paper consider 3 losses: FM, classic denoising (classic) and unweighted denoising (den). Under their parametrization, FM loss puts more weight on large $t$ (high SNR region), while classic one puts less weight on small $t$ (low SNR). However, when comparing commonly used FM/ Diffusion losses, the FM is actually very aggresive on low SNR (small $t$) ([1] and [2]), and empirically putting more weight in middle SNR can be more helpful (SD3 did this). In this paper, they only study losses that put even more weight on low SNR than FM. For completeness, it would be great to see the performance weighting in other direction. 
+
+[1] Kingma, Gao, “Understanding Diffusion Objectives as the ELBO with Simple Data Augmentation”, Neural Information Processing Systems, 2024.
+
+[2] Gao, R., Hoogeboom, E., Heek, J., De Bortoli, V., Murphy, K. P., & Salimans, T. (2025). Diffusion Models and Gaussian Flow Matching: Two Sides of the Same Coin. In The Fourth Blogpost Track at ICLR 2025. https://openreview.net/forum?id=C8Yyg9wy0s
+
+### Questions
+In section 6.2, can you provide any intution on why using $w_t^{mid}$ lead to such generation results?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper studies flow matching from a denoising perspective and proposes an empirical framework to probe generation via controlled perturbations (labeled as noise vs. drift). It aims to clarify where/when denoisers succeed/fail in the generation process.
+
+### Strengths
+The paper studies the generalization ability of flow matching models, which is an important problem.
+
+### Weaknesses
+1. Though this is an empirical paper, the experiments are not well conducted. For example, the FID protocol for evaluating on 10k test images is not standard, and the model appears undertrained, as the best-reported CIFAR-10 FID (9.44) is far from the FM baseline (2.99; Lipman et al) . With such poor absolute quality, differences across variants may reflect training deficit rather than principled phase behavior.
+
+2. The experiments are not well designed. The 10-denoisers experiment in Section 4.1 claims that training a single uniform network requires a specific weighting scheme to obtain good performance. This contradicts the fact that models in Lipman et al. use a default uniform weighting scheme and achieve good performance. The perturbation experiments in Section 5 lack a clear definition and justification of the perturbation types. The assignment of small-checkerboard as “noise-type” and large-patch as “drift-type” lacks a formal definition. The categories feel arbitrary and risk overgeneralization from very limited perturbation choices. One cannot draw meaningful conclusions from the experiments. The Lipschitz constant related analysis in Section 6 at most is some observations, and it would require more rigorous analysis to justify the claim that maintaining a high Lipschitz constant is beneficial. The conclusion in Section 6.2 reports a finding as that models with similar FID can have different generation results. This is neither surprising nor useful, as bad models can fail in many different ways.
+
+3. When discussing the emergence of similar samples across architectures (see line 451), the paper should cite Zhang, Huijie, et al. (2023), “The emergence of reproducibility and generalizability in diffusion models.” Additionally, it is questionable to say that the L_mid model produces samples that differ from those of other models; to me, the global outline remains similar to those of other models. Additionally, when we check the generation in Figure 14, the similarities are even more apparent.
+
+Lipman et al, Flow Matching for Generative Modeling, ICLR 2023
+
+### Questions
+1. Why is the FID so high? Were the models trained to convergence?
+2. FID protocol: Why not use the standard protocol of generating 50k samples and comparing them to the train distribution? Could you re-run with the standard protocol for computing the FID?
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper presents an empirical investigation into the generative process of Conditional Flow Matching (CFM) models through the lens of denoising. The authors construct a "denoising toolkit" by establishing a formal duality between vector fields and denoisers. Different denoising loss and parametrizations are considered. Using this framework, the authors analyze the impact of controlled perturbations (drift- and noise-type) at different temporal phases of generation. The key findings are: 1) The choice of loss weighting and parametrization significantly impacts both denoising and generative performance, with the standard FM approach performs best; 2) Perturbations affect the process differently depending on when they are applied, revealing distinct early (drift-sensitive) and late (noise-sensitive) phases.
+
+### Strengths
+- The idea of constructing of the "denoising toolkit" can be fruitful
+- The analysis of perturbations in Section 5 is one of the most interesting points. The distinction between drift-type and noise-type perturbations and their dependence on time is an interesting observation that contributes to a better understanding of Flow Matching dynamics. The statement that similar FID indicators can have different generative behaviors is important.
+
+### Weaknesses
+- The absence of theoretical justification or any intuition that would lead to an understanding of the numerical results presented. While the empirical work is extensive, the paper falls short of providing a satisfying explanation for its most critical observations:
+     * Why does the FM loss weighting $(\frac1{1-t})^2$, which emphasizes easy (low-noise) denoising tasks, yield the best generative models? This is counter-intuitive and demands a deeper hypothesis beyond its empirical success.
+     * Why does residual parameterization $(C_1+NN)$ so consistently outperform others? The paper notes this fact but does not discuss its causes (e.g., implicit regularization, simpler optimization landscape). It would seem that, from the point of view of the rather complex architecture of neural networks, both parameterizations are practically equivalent, since they are derived from each other by linear transformation.
+     * The discussion of the "intermediate phase" in Section 6, while interesting, remains somewhat phenomenological. What is the nature of the computations happening in this phase that make it so crucial for learned models, as opposed to the closed-form solution?
+
+- The choice of specific perturbation patterns (checkerboard, shift) feels somewhat arbitrary. 
+- The selection of time intervals for perturbations $[t_{min},t_{max}]$ (length 0.3) and for the ad-hoc denoisers is not well-justified. An ablation on the interval size or a more principled method for defining these phases would strengthen the claims.
+- For a paper whose goal is to draw general conclusions about generative models, empirical evaluation is limited to relatively low-resolution datasets (CIFAR-10, CelebA-64). It is crucial to demonstrate that the identified phases and superiority of FM parameterization are preserved in more complex, higher-resolution datasets (e.g., ImageNet-128/256) to ensure that the results obtained are not artifacts of simpler data domains. Moreover, only image datasets are considered. It would be interesting to consider extensions of the method to other types of data that can be effectively generated using FM-like methods.
+-  The paper distinguishes between "early" and "late" phases based on perturbations and an "intermediate" phase from the ad-hoc denoiser. However, the boundaries and relationships between these phases are not clearly defined. A more coherent presentation, combining these observations into a single evolution of the generative process, would greatly improve the paper.
+
+### Questions
+- Please, see the weakness section
+- Can you provide a more formal hypothesis or intuition for why the FM loss weighting and the C_1+NN parametrization are so effective? 
+- Have you conducted any experiments on higher-resolution datasets (e.g., ImageNet)?
+- What was the reasoning behind the specific perturbation types (checkerboard, shift)? Were they designed to test specific hypotheses about the model's sensitivity to high-frequency vs. low-frequency errors?
+- The "intermediate phase" is central to your conclusion. Can you define it more precisely? Is it a specific time range (e.g., $t \in [0.3, 0.7]$)? How does this phase relate to the early phase identified by the peak in the Lipschitz constant of the closed-form solution?
+- If arbitrary multidimensional datasets are considered, rather than just images, are your results transferable to them?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper reinterprets flow matching as a denoising process, formally proving the equivalence between FM velocities and time-dependent denoisers. Building on this link, it introduces a unified denoising framework with new weighting and parameterization schemes to analyze generative dynamics. Controlled perturbation experiments reveal that global and local effects dominate early and late phases of generation respectively, while intermediate times are most influential for learned models. Empirically, residual parameterization improves both denoising PSNR and generative FID, offering practical insights into training FM models.
+
+### Strengths
+- The paper cleanly derives the MMSE denoiser (velocity identity) and uses it to recast FM training as weighted denoising, unifying multiple losses (FM, classical, unweighted) in one framework. This makes design choices (weights, parameterizations) explicit and comparable. 
+
+- It shows new insight on temporal regimes. By comparing Jacobian spectral norms, the paper shows the closed-form target has an early Lipschitz peak (at trajectory “splitting”), which trained models smooth out
+
+- Residual parameterization consistently helps, and FM-style weighting correlates with both better denoising and generation
+
+### Weaknesses
+- Most results use small image benchmarks (CIFAR-10, CelebA-64), a single ODE solver (dopri5, 100 steps), and closely related U-Net-style architectures with EMA; this limits claims about “phases” to low-resolution image FM under specific integration and training regimes. Stronger evidence would test (higher resolutions and diverse datasets (e.g., ImageNet-256/512), other samplers/step counts (explicit compute-vs-quality curves), and other architectures (non-U-Net backbones, transformer variants)
+
+- The paper argues that intermediate times matter most for learned models and that residual parameterization/weights drive outcomes; however, some comparisons confound factors (e.g., “10-denoisers” train 10 separate models, total optimization budget and effective capacity differ from a single time-conditioned network). Similarly, perturbations are hand-crafted (checkerboards, shifts, a “residual” relaxation) and calibrated to a fixed PSNR drop; while illuminating, they may not reflect realistic failure modes (e.g., learned adversarial drifts or dataset-aligned corruptions), leaving open whether conclusions hold under less synthetic disturbances.
+
+### Questions
+Do the phase sensitivities (drift-early, noise-late) and the mid-time importance persist on larger datasets/resolutions? Any preliminary evidence beyond CIFAR-10/CelebA-64?
+
+For the “10-denoisers” setup, can you report total train steps, parameter counts, and wall-clock to ensure fair comparisons to a single time-conditioned model? If you equalize compute/capacity, do the PSNR/FID conclusions still hold?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

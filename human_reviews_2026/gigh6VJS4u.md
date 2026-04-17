@@ -1,0 +1,194 @@
+# Translution: Unifying Self-attention and Convolution for Adaptive and Relative Modeling
+
+- Decision: Reject
+- Scores: 2, 4, 6, 6
+
+## Abstract
+When modeling a given type of data, we consider it to involve two key aspects: 1) identifying relevant  elements (e.g., image pixels or textual words) to a central element, as in a convolutional receptive field, or to a query element, as in self-attention, and (2) encoding these tokens effectively.  Self-attention can adaptively identify these elements but relies on absolute positional embedding for structural representation learning. In contrast, convolution encodes elements in a relative manner, yet their fixed kernel size limits their ability to adaptively select the relevant elements. In this paper, we introduce Translution, an operation that unifies the adaptive identification capability of self-attention and the relative encoding advantage of convolution. However, this integration leads to a substantial increase in the number of parameters, exceeding most currently available computational resources. Therefore, we propose a lightweight variant of Translution, named LoR-Translution. Experiments on computer vision and natural language processing tasks show that Translution (including LoR-Translution) achieves superior accuracy compared to self-attention, demonstrating its potential to build the next generation of deep neural networks. The code has been included in the supplementary materials and will be released soon.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces Translution, an operation that unifies self-attention and convolution for adaptive and relative modeling. To mitigate Translution’s substantial parameter overhead, the authors further develop α-Translution. Experiments on computer vision and natural language processing tasks suggest certain effectiveness, though the improvements appear limited. As a general operation, Translution is claimed to be applicable beyond ViT and GPT architectures.
+
+### Strengths
+This paper proposes Translution, a new operation that unifies self-attention and convolution in a single framework. This idea is conceptually interesting and offers a new perspective on combining adaptive and relative modeling.
+
+The formulation is clearly presented with intuitive figures and mathematical definitions. Experiments across both vision and language tasks show consistent.
+
+The proposed unification maybe inspire future research
+
+### Weaknesses
+The parameter count of Translution is substantially larger than that of standard self-attention, while the α-Translution structure already includes the self-attention component.  A clearer demonstration of its benefits requires further comparisons under an equal parameter budget.
+
+The experiments have significant limitations. The MNIST dataset is too small and simple. The reported ImageNet accuracy is too low(Table. 4). The validation only used the outdated GPT-2 architecture(Table 7). Because of these issues, the claims about the algorithm's effectiveness are unconvincing.
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces Translution, a new neural operation intended to unify the adaptive region selection of self-attention with the relative structural encoding of convolution.
+The authors argue that self-attention excels at adaptive relevance modeling but depends on absolute positional embeddings, while convolution naturally encodes relative spatial structure but has a fixed receptive field.
+Translution extends self-attention by assigning separate learnable matrices for each spatial offset ($\delta x, \delta y$) in query, key, and value computations, thereby achieving relative encoding.
+A lightweight variant, α-Translution, is proposed to reduce parameter count.
+Experiments on vision (ViT) and language (GPT) architectures show consistent accuracy gains over standard self-attention, especially in tasks involving positional shifts (e.g., dynamic MNIST).
+
+### Strengths
+1. Overall clarity:  The paper is very clear and fluent, it was a pleasure to read it.
+2. Conceptual clarity and motivation: The paper clearly articulates the complementary strengths of convolution (relative encoding) and self-attention (adaptive selection) and unifies them in a principled way.
+3. Novel formulation: Translution generalizes both convolution and self-attention as special cases, offering an elegant theoretical unification that may inspire new architectural directions.
+4. Empirical evidence for relative modeling: The dynamic MNIST and ImageNet experiments convincingly demonstrate that Translution is more invariant to translation and better at modeling relative structure.
+5. Comprehensive comparisons: The paper includes baselines using multiple positional encoding schemes (absolute, relative vector/scalar, RoPE), showing consistent improvements.
+
+### Weaknesses
+1. Impracticality for LLMs: the Translution method with model weights which are proportional to max_sequence_length is impractical for LLMs with sequence lengths $N$ reaching  ~10M tokens. Both in model parameters and runtime. Even when considering $\alpha$-Translution with small $C^1$ and $C^2$, the model weights still have a dependency on $N$
+
+2. What about runtime performance? how will Translution/$\alpha$-translution affect the latency of inference. Specifically, as a function of sequence length. This measurement has a tremendous factor on acceptance of the method.   
+
+3. Computational cost and scalability: Translution by-itself introduces a very large number of parameters, making it impractical for modern-scale models. I will consider it only as the hypothetical performance limit of this methodology. Nevertheless, part of this high limit stems from the mere addition of model parameters. 
+the ablation study of section 4.1.3 does not fully convince me about this issue. The fact that a 1B parameter model did not reach a high accuracy may stem from the lack of training data or amount of cycles.  
+
+4. Limited experimental scale: Most results are on small or medium-sized ViT/GPT architectures. Especially GPT with the very short sequence length (160…) The authors acknowledge memory constraints but this limits confidence in real-world applicability for Small Language Models
+
+5. Reference to the Positional embedding as described by Vaswani et al. all along the work: 
+Most of the discussion and reference is to an obsolete Positional embedding standard. In the last few years, RoPE has become the de-facto positional embedding which is reapplied in each layer.
+Also, as reported in “Rotary Position Embedding for Vision Transformer”, for high resolution images, RoPE improves accuracy without introduction of additional model parameters…
+
+### Questions
+$Q_1$ The reduction of dimensionality to $C^1$ and $C^2$ reminds me of LoRA. Is it simply it? Please refer to it.
+
+$Q_2$ How does $\alpha$-Translution’s training and inference runtime scale compared to standard relative self-attention for large-scale ViTs or GPTs?
+
+$Q_3$ Can the proposed operation be efficiently implemented via low-rank or factorized parameter sharing (e.g., learned basis over offsets)?
+
+$Q_4$ The layers are not identical in their representation abilities. The first layers are more sensitive to modifications while the middle layers are more compressible. In this sense, would a hybrid design (Translution in early layers, vanilla-self-attention in later ones) retain most benefits while reducing cost?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes Translution, a novel advanced attention mechanism that unifies the adaptive nature of self-attention with the relative encoding ability of convolution. A lightweight version, $/alpha$-Translution, reduces parameter cost. Experiments on ViT and GPT architectures demonstrate improved accuracy on both CV and NLP tasks.
+
+### Strengths
+* The motivation is clear and the method is novel.
+
+* The writing is clear.
+
+* The derivation of Translution is elegant and connects convolution and self-attention through a unified mathematical framework.
+
+* Strong empirical results across both vision and language domains, with meaningful ablation analyses.
+
+### Weaknesses
+* The experiment on LM lacks baselines of relative positional encodings, e.g. RoPE.
+
+* The proposed parameterization will siginificantly increase the number of parameters when the input sequence length is big.
+
+### Questions
+Pls refer to Weaknesses. I'd like to increase my scores if the additional experiments could be updated.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposes an improved self-attention operator named "translution," which essentially replaces the Q, K, and V in the vanilla self-attention mechanism with a location-dependent convolutional operator. However, directly applying this paradigm would lead to an explosion in the number of parameters. To address this, the authors decompose the location-dependent convolutional operator in a manner similar to depthwise separable convolution, thereby significantly reducing the parameter count. Experimental results demonstrate that this operator achieves moderate yet consistent improvements over the vanilla self-attention mechanism.
+
+### Strengths
+The greatest strength of this paper lies in the clear effectiveness demonstrated by the experimental results of the proposed operator. It provides a relatively comprehensive set of experimental results. The paper as a whole is clearly written and well-structured, making it easy to follow.
+
+### Weaknesses
+The primary issue with this paper is overclaiming. The authors suggest that this operator has the potential to replace self-attention. However, based on the elaboration of the core idea, it essentially adds a location-dependent convolutional operator to self-attention. Methods employing similar techniques are already quite prevalent; for example: [1][2][3], where [3] replaces the K, Q, V in self-attention with K*K convolutions.
+
+As we know, a crucial property of the Transformer is its scaling capability. I am very curious about whether Translution maintains a performance advantage when scaled up, and whether the added convolution remains genuinely important in large-scale models. Therefore, the authors should add scaling experiments to demonstrate this characteristic.
+
+Furthermore, the training configuration has a critical impact on final performance. Were all experiments in this paper conducted under the same training settings? From the experiments, the model scale for Translution seems significantly larger than the baseline models. To what extent does this difference in scale contribute to the performance improvement? This point needs clarification through experimental analysis.
+
+Additionally, incorporating a location-dependent convolution might lead to a significant decrease in inference efficiency. The authors should provide comparative data on inference efficiency.
+
+[1] CoAtNet: Marrying Convolution and Attention for All Data Sizes
+
+[2] X-volution: On the unification of convolution and self-attention
+
+[3] Restormer: Efficient Transformer for High-Resolution Image Restoration
+
+### Questions
+Please refer to Weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

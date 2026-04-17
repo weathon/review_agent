@@ -1,0 +1,139 @@
+# Low-Latency Neural LiDAR Compression with 2D Context Models
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 6
+
+## Abstract
+Context modeling is fundamental to LiDAR point cloud compression. Existing methods rely on computationally intensive 3D contexts, such as voxel and octree, which struggle to balance the compression efficiency and coding speed. In this work, we propose a neural LiDAR compressor based on 2D context models that simultaneously supports high-efficiency compression, fast coding, and universal geometry-intensity compression. The 2D context structure significantly reduces the coding latency. We further develop a comprehensive context model that integrates spatial latents, temporal references, and cross-modal camera context in the 2D domain to enhance the compression performance. Specifically, we first represent the point cloud as a range image and propose a multi-scale spatial context model to capture the intra-frame dependencies. Furthermore, we design an optical-flow-based temporal context model for inter-frame prediction. Moreover, we incorporate a deformable attention module and a context refinement strategy to predict LiDAR scans from camera images. In addition, we develop a backbone for joint geometry and intensity compression, which unifies the compression of both modalities while minimizing redundant computation. Experiments demonstrate significant improvements in both rate-distortion performance and coding speed. The code is available at: https://github.com/rrui-song/RangeCM.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper addresses the LiDAR point cloud compression problem via context modeling. The method yields a significant performance increase and faster runtime than its competitors. In order to achieve that,
+all computations are performed in the 2D domain (images from the camera and range images from LiDAR). Furthermore, the proposed method utilizes context from camera features for LiDAR compression. 
+Evaluations were performed on WOD and KITTI datasets, and comparisons to prior works are properly presented.
+
+### Strengths
+1. The paper clearly makes and supports its claims through empirical evaluations.
+2. Components of the proposed method are clearly explained.
+
+### Weaknesses
+1. Storage is a major point of compression. What is the effective storage saving that the proposed method offers, compared to prior works, if any?
+
+### Questions
+1. How would the authors address imperfect data? For example, there might be misalignments between the camera and LiDAR or fast motions that cause smeared images.
+2. Why are some prior works not included in Figure 4?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes RangeCM, a neural LiDAR compression framework that integrates spatial, temporal, and camera contexts to achieve low-latency and high-efficiency range–intensity compression. It introduces deformable attention for LiDAR–camera alignment and a dual-stage quantization strategy for geometry encoding. Experiments on Waymo and SemanticKITTI show rate–distortion and latency improvements over G-PCC, RIDDLE, and Unicorn.
+
+### Strengths
+1. The paper presents a coherent end-to-end architecture integrating spatial, temporal, and camera contexts for LiDAR compression, showing a thoughtful system design.
+2. It consistently outperforms prior methods like RIDDLE and Unicorn in both compression ratio and reconstruction quality, demonstrating effectiveness across datasets.
+
+### Weaknesses
+1. The claimed low-latency perception is not experimentally validated, as all tests rely on complete point clouds rather than partial-scan or early-sensing data.
+2. The use of ground-truth references for each frame hides cumulative decoding errors, leaving long-term stability and error propagation unexamined.
+3. Inference latency comparisons may be biased, since the hardware configuration of baseline methods is unspecified.
+4. The absence of released models or code prevents independent verification and limits the reproducibility of results.
+
+### Questions
+1. The method claims early scene prediction before full scanning, yet all tests use complete point clouds. Does low latency refer only to reduced inference time rather than partial-scan prediction?
+2. Since each frame uses the ground-truth reference instead of reconstructed data, has the impact of error propagation in continuous decoding been evaluated?
+3. Why are recent temporal compression baselines like MuSCLE[1] and BIRD-PCC[2] omitted from comparisons or tables?
+4. Were all latency comparisons conducted on the same hardware (e.g., RTX A6000)? If not, how are timing results normalized?
+5. The experimental results in Table 1 contain many missing entries, and several baselines are not uniformly reproduced across datasets. Given that the paper’s main contribution lies in introducing the Camera Context, the KITTI evaluation omits this component and instead reuses baseline results due to unavailable calibration matrices. Does this inconsistent experimental design—using different model implementations for different datasets—undermine the fairness and reliability of the reported comparisons?
+6. The appendix reports downstream task performance on KITTI, which is informative. However, the results suggest that G-PCC achieves nearly identical downstream accuracy when doubling data usage (6→12), while also benefiting from simple parallelization, low end-to-end latency, and broad generalization without GPU dependency. Considering modern increases in communication bandwidth, under what specific conditions does the proposed method provide a clear practical advantage over G-PCC—particularly in real-time deployment scenarios where latency and generality may outweigh compression ratio improvements?
+7. The paper repeatedly claims real-time capability, yet all experiments are conducted on an RTX A6000 GPU—a configuration rarely available in real-world automotive or mobile platforms. Considering that true real-time performance requires end-to-end processing at sensor-level frame rates (≥10 FPS) under resource-constrained conditions, can the authors clarify the specific hardware assumptions and computational settings under which their method achieves real-time operation (e.g. memory, computational requirements)? If such conditions cannot be met on embedded or on-vehicle systems, should the claim be limited to low-latency rather than real-time performance?
+8. Other problems.
+1) [152] Equation (1) misuses angle indices: x and y depend on \( \theta_i \), but \( z\) incorrectly uses \(\theta_j\) instead of \(\theta_i\), causing an inconsistency in coordinate conversion.
+2) [197] The phrase “full-precision range value map can be recovered as \hat r = \hat r_1 + \hat r_2” is misleading because both terms are quantized. It should be described as a “reconstructed” or “approximate” range map .
+3) Figure 2 contains a typographical error “Intenstiy Map”.
+
+[1] Biswas S, Liu J, Wong K, et al. Muscle: Multi sweep compression of lidar using deep entropy models[J]. Advances in Neural Information Processing Systems, 2020, 33: 22170-22181.
+[2] Liu C S, Yeh J F, Hsu H, et al. Bird-pcc: Bi-directional range image-based deep lidar point cloud compression[C]//ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP). IEEE, 2023: 1-5.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+1
+
+### Summary
+This paper presents a neural LiDAR point cloud compression method based on 2D context modeling, addressing the trade-off between compression efficiency and coding speed that limits existing 3D context-based methods such as voxel or octree approaches. By leveraging a 2D context structure, the proposed method achieves fast and efficient compression while supporting joint geometry and intensity compression. Experimental results show substantial gains in both rate-distortion performance and coding speed.
+The contributions of the paper can be summarized as follows: 1. Develop a new paradigm for low-latency LiDAR compression. 2. Propose a comprehensive context model that integrates spatial, temporal, and camera features for LiDAR compression. 3. Design a joint compression backbone that predicts LiDAR geometry and intensity based on a hybrid context.
+
+### Strengths
+1. The method integrates multi-scale spatial context, flow-based temporal context, and deformable-attention camera context, with context refinement addressing causality and alignment issues. Moreover, the hybrid context jointly supports geometry and intensity compression, reducing redundant computation and significantly improving practical efficiency compared to prior methods such as Unicorn.
+
+2. The paper presents thorough evaluations, including different LiDAR resolutions, coding latency, and impact on downstream tasks like PointPillars, demonstrating robustness and transferability. Ablation studies clearly quantify the contributions of camera, temporal, and multi-scale contexts, showing the effectiveness of each component.
+
+### Weaknesses
+1. It is unclear whether the VAE used for compressing range-view optical flow was specifically trained on flow data. Without training on range-view optical flow, the VAE may not be able to effectively encode the unique spatial patterns and dynamics of LiDAR flow, potentially leading to high reconstruction error and suboptimal bit allocation. The authors are encouraged to clarify whether the VAE was trained on optical flow and, if not, to discuss the potential impact on compression performance.
+
+2. Material properties and reflections do not directly correspond to visual appearance, which limits the effectiveness of using deformable attention to predict intensity from camera images. The authors are encouraged to discuss whether incorporating more physics- or sensor-based priors (e.g., material classification combined with simplified BRDF models) could improve intensity prediction, or to analyze the potential upper bound achievable by purely data-driven approaches.
+
+### Questions
+1. Training and hyperparameter details: Please provide a complete description of the training hyperparameters for RangeCM-G and RangeCM-GI (e.g., batch size, optimizer, learning rate schedule, and total training steps). If any baseline methods were re-implemented, please clarify the details of their re-training procedure.
+
+2. Adaptation to different scanning patterns: The appendix presents evaluations on 32-/128-line LiDARs (Tables 6 and 7). Could the authors clarify the robustness of the range image mapping when the sensor’s emission pattern differs from that during training (e.g., different elevation angles)? Would retraining be necessary for each sensor, or could fine-tuning suffice?
+
+3. Limitations and failure cases: In which real-world scenarios do the authors expect RangeCM’s performance to degrade significantly (e.g., extreme weather, reflections from water or snow)? Could some failure cases and analyses be provided to illustrate the system’s limitations?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

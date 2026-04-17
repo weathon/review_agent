@@ -1,0 +1,176 @@
+# Data as a Lever: A Neighbouring Datasets Perspective on Predictive Multiplicity
+
+- Decision: Reject
+- Scores: 4, 2, 2
+
+## Abstract
+Multiplicity—the existence of distinct models with comparable performance—has received growing attention in recent years. While prior work has largely emphasized modelling choices, the critical role of data in shaping multiplicity has been comparatively overlooked. In this work, we introduce a neighbouring datasets framework to examine the most granular case: the impact of a single-data-point difference on multiplicity. Our analysis yields a seemingly counterintuitive finding: neighbouring datasets with greater inter-class distribution overlap exhibit lower multiplicity. This reversal of conventional expectations arises from a shared Rashomon parameter, and we substantiate it with rigorous proofs.
+
+Building on this foundation, we extend our framework to two practical domains: active learning and data imputation. For each, we establish natural extensions of the neighbouring datasets perspective, conduct the first systematic study of multiplicity in existing algorithms, and finally, propose novel multiplicity-aware methods, namely, multiplicity-aware data acquisition strategies for active learning and multiplicity-aware data imputation techniques.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper investigates data-preprocessing-induced multiplicity, i.e. the existence of multiple “good enough” models that arise from different versions of a dataset in classification settings.  It introduces the notion of $k-$neighbouring datasets, i.e., datasets containing the same number of samples $n$ but differing in $k$ of them.  Such datasets can typically be obtained by applying different preprocessing techniques (eg different imputation techniques).
+
+The authors build on two key notions:
+- **Rashomon set**: the set of models achieving at most a given loss on the training set ($\approx$ the set of good enough models) 
+- **Multiplicity** (taken as ambiguity in the paper): the proportion of test samples on which at least two models from the Rashomon set disagree (this is a score between 0 and 1).
+
+The paper proves **a theorem showing that, for 1-neighbouring datasets, greater class overlap leads to a smaller Rashomon set**; in other words, when the distributions of the two classes overlap more, the set of “good enough” models shrinks.
+
+Motivated by this result, the authors formulate **a conjecture: for two $k$-neighbouring datasets, higher class overlap implies lower multiplicity.**
+
+Experiments creating $k-$neighbouring datasets via active learning or imputation empirically confirm that higher overlap coefficients are negatively correlated with multiplicity.
+
+Finally, the paper proposes and evaluates **active learning and imputation strategies designed to achieve comparable accuracy while inducing either lower or higher multiplicity** than standard baselines.
+
+### Strengths
+I found the paper particularly clear, which is noteworthy given the number of notions introduced. I also appreciated the explicit discussion of assumptions and the careful formulation of the conjecture, reflecting a concern for transparency rather than an attempt to overstate the results.
+
+The related work is thoroughly and appropriately covered.
+
+The authors propose an original perspective on multiplicity by jointly considering the effects induced by both datasets and models. Interestingly, their findings reverse some previous conclusions, highlighting how different views can lead to contrasting outcomes.
+
+### Weaknesses
+* **My main concerns relates to the multiplicity-aware data acquisition and imputation strategies. These are designed to either minimise or maximise multiplicity. However, I wonder whether it makes sense to minimize or maximize multiplicity.** In my understanding, multiplicity is a diagnostic rather than an objective. Minimising multiplicity artificially suppresses legitimate uncertainty. Creating an imputation technique that leads to small downstream multiplicity means I am drawing robust conclusions *given the choice of imputation*, but for the same samples, conclusions would not be robust under different imputations. Could the authors elaborate on the practical usefulness of the proposed multiplicity-aware data acquisition and imputation strategies?
+
+* The authors hypothesise that smaller Rashomon sets lead to smaller multiplicity. This is a core hypothesis that leads to the proposed conjecture. If I understand correctly, the conjecture follows the following reasoning: more overlap => (1) more errors => (2) less models in the Rashomon set for a fixed threshold => (3) less multiplicity because less models mean less opportunities to have disagreement. Is this correct? Actually I am not convinced by transition (3) for multiplicity, as smaller Rashomon sets do not necessarily imply smaller multiplicity. Could the authors elaborate on it? The experiments indeed show that higher overlap (and so smaller Rashomon sets) lead to smaller multiplicity, but should we expect it to always hold?
+
+* In the experiments, I agree that the proposed methods for low multiplicity (MultLow) indeed achieves lower multiplicity at a similar accuracy (although Figure 4e indicates that it is on par with the Confidence method in terms of multiplicity). However, I do not see in the Figures that MultHigh achieves higher multiplicity than the baselines.
+
+### Questions
+see weaknesses
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper studies multiplicity, the phenomenon where multiple distinct models achieve similar performance. While previous research has focused mainly on model design, this work highlights the role of data in shaping multiplicity. The authors propose a neighboring datasets framework to analyze how changing a single data point affects model multiplicity. Surprisingly, they find that datasets with greater inter-class overlap show lower multiplicity, a result explained through a shared Rashomon parameter.
+They further apply this framework to active learning and data imputation, conducting an analysis of multiplicity in these areas and introducing multiplicity-aware methods for both tasks.
+
+### Strengths
+This paper addresses an interesting problem, and practical problem encountered by a lot of practitioners.
+
+### Weaknesses
+The presentation currently lacks rigor and precision.
+
+The theoretical framework would benefit from clearer definitions, more consistent notation, and stronger connections to related literature.
+
+Given that the authors claim their method to be efficient, it should be described in a much clearer and more structured manner, with each step of the procedure explicitly outlined and all underlying concepts rigorously defined.
+
+### Questions
+*1. Lack of rigor and clarity in definitions.*
+The manuscript would benefit from a clearer distinction between model parameters and the prediction functions parameterized by these parameters.
+The current notation blurs this distinction and leads to confusion.
+
+*2. Related work and conceptual connections.* The notion of leverage point is well defined in the context of linear regression, and this connection should be explicitly discussed if relevant.
+Similarly, the relationship to stability-based approaches is not mentioned but seems important.
+A short discussion would help situate the paper within the existing literature.
+
+*3. Need for precise and rigorous statements.*
+Several notations and definitions lack clarity:
+
+The notation $0^i_{\mathrm{train}}$ is unclear and should be revised.
+
+The definition of $OVL^1_{\mathrm{train}}$ is missing.
+Please specify which probability density is used in this computation.
+Is it based on a theoretical density, or on the empirical distribution associated with the training set?
+
+*4. Interpretation of correlations (Line 363).*
+The statement “Correlations are stronger for LR and MLP, which may be attributed to a poorer approximation of the model than RF” seems incorrect.
+A more plausible explanation is that correlations measure linear dependencies, which are more naturally captured by linear regression (LR) and multilayer perceptrons (MLP) than by random forests (RF).
+
+*5. Active learning (Line 369).*
+The sentence “This robustness highlights the practical utility of our approach” is too vague.
+Which specific approach or method is being referred to? Please clarify this explicitly.
+
+*6. Definition of confidence scores (Line 430).*
+The term “confidence scores” is used without a precise definition.
+Please specify how these scores are computed, and how they relate to the rest of the methodology.
+
+*7.* How is your method proving to be more efficient? By maintaining accuracy and decreasing ambiguity? It should be explicitly said.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper studies the predictive multiplicity (the extent to which training data allows many different high-accuracy prediction models) through the lens of neighboring datasets. It establishes a theoretical connection between the Rashomon parameter and the overlapping coefficient, so as to provide more insights on how the high overlapping of a dataset can lead to a small ambiguity parameter and thus is more beneficial to the learning problem.
+
+### Strengths
+The problem is well-motivated, and the paper is well-written and easy to follow. 
+
+The notion of neighboring dataset connects many different aspects: Rashomon parameter, ambiguity, and active learning.
+
+### Weaknesses
+My main concern is on the overlapping coefficient. 
+
+- The key parameter of the whole paper is this overlapping coefficient defined in 4.1. 
+- However, the useful quantity is defined on the training data, i.e., $OVL_{train}^i$. As I understand, for most datasets, this quantity is simply zero. To see it, the quantity is defined upon the empirical training distribution. Thus this quantity is only nonzero when the training dataset contains >= 2 samples with same x but different y, say Sample 1 (x, y=0) and Sample 2 (x, y=1) where both samples have the same feature. In practice, this rarely happens for (i) many of the features are continuous-valued, and (ii) there are a lot of features. In this case, the result provides no insights.
+
+As a result,
+- the framework is hardly generalizable to the regression setting where y is continuous; and it'd be possible but awkward to be generalized to the multiclass classification setting where y is multi-category.
+
+For the numerical experiments, 
+- I guess the above factor is the reason for the choice of the three datasets but can't be applied for more general datasets such as UCI-repo or other deep learning datasets.
+
+### Questions
+See above. I spend quite amount of time reading the paper but might have overlook certain aspects; look forward to seeing the authors' response.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

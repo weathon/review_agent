@@ -1,0 +1,216 @@
+# Self-Supervised Learning from Structural Invariance
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 4, 6
+
+## Abstract
+Joint-embedding self-supervised learning (SSL), the key paradigm for unsupervised representation learning from visual data, learns from invariances between semantically-related data pairs.
+We study the one-to-many mapping problem in SSL,
+where each datum may be mapped to multiple valid targets. 
+This arises when data pairs come from naturally occurring generative processes, e.g., successive video frames.
+We show that existing methods struggle to flexibly capture this conditional uncertainty. As a remedy, we introduce 
+a latent variable to account for this uncertainty and derive a variational lower bound on the mutual information between paired embeddings.
+Our derivation yields a simple regularization term for standard SSL objectives.
+The resulting method, which we call
+AdaSSL, applies to both contrastive and 
+distillation-based
+SSL objectives, and we empirically show its versatility in
+causal representation learning,
+fine-grained image understanding, and world modeling on videos.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper studies the Self-Supervised Learning problems. It argues that existing methods fail to model the heteroscedasticity in $p(z^+|z)$  for positive pairs. The paper proposes AdaSSL by introducing a latent variable $r$ that captures the stochastic transformation from one view to another. By jointly learning the encoder f(x), the latent transformation r, and an edit function that reconstructs the target embedding, the method adapts to the heteroscedasticity in the above conditional. The paper performs extensive experiments on synthetic and real datasets and shows improved disentanglement and generalization compared to InfoNCE and BYOL variants.
+
+### Strengths
+- I find the paper interesting and enjoyable to read.
+- Learning from pairwise images and the heteroscedasticity in $p(z^+|z)$ is a promising and under-explored area.
+- Strong motivations backed by theoretical and empirical analysis.
+
+### Weaknesses
+- While proposition 2.1 shows heteroscedasticity exists, and 2.2 explains how existing methods fail to account for it. It remains unclear to me (at least intuitively) how modeling the complex conditional $p(z^+|z)$ contributes towards the ultimate SSL objective, i.e., generalization on a wide range of downstream tasks that predict a subset of factors in z.
+- It is even harder for me to understand how the proposed approach should be better in downstream tasks compared to baselines with similar motivation (e.g., H-InfoNCE).
+- As acknowledged in Section 3.2, the proposed approach is only theoretically justified for contrastive SSL. This introduces a gap due to the popularity and performance of non-contrastive SSL.
+- $q_\phi,p_\theta$ are both modeled as factorized Gaussians. This is slightly against the idea that the conditional can be quite complex, as it is up to the edit function $t$ to model the complexity, which can complex model design and reduces learning efficiency.
+
+### Questions
+- Why is the proposed approach better than H-InfoNCE? How does it encourage disentanglement?
+- How learning an efficient representation of r (line 397) leads to a more disentangled feature f(x) in Table 4?
+- Why is another view $x^{++}$ introduced in CelebA experiment? What if only using $x$ and $x^+$?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the problem of self-supervised representation learning when the two views of the data used to learn the representation are so-called {\em natural pairs}  instead of handcrafted augmentations, such that the two views are generated from (unknown) latent factors with the dependency between the latent variable encoded by some unknown conditional probability distribution.
+
+### Strengths
+SSL methods are widely used, and their theoretical study is welcome. The dea of modeling the dependency of the views on some latent variables is interesting.
+
+### Weaknesses
+Although the topic of the paper is interesting, the presentation is hard to follow without well identified objectives and experiments mostly limited to toy examples. 
+
+The presentation should be clarified. For example:
+- Section 2 defines the data generation process in terms of latent variables z and z+, but in Section 3 these disappear to be replaced by a latent variable r presumably there to parameterize the predictor, simillar to predictive SSL methods.
+- I did not understand the difference between the AdaSSL loss and that typically used in predictive SSL, in part because the dependency of the model on the latent variable r is never defined before giving Eqs. (4) and (5) so I didn't understand how the terms in these equations were computed.
+-psi_1 and psi_2  are used in Eq. (8) before they are defined in Eq. (9).
+-The function t, which was an arbitraty MLP until then, is defined explicitly in Eq. (11) as a modular editing function.
+
+I could not find any justification as to why it should be possible to recover the latent variables since they are never used, as far as I know, in the actual loss of the AdaSSL variants. This is problematic since the experimental evaluation is for the most part dedicated to this recovery.
+
+Remark: although it is frequently used in non-contrastiva approches to SSL, the EMA formulation in Eq. (3) is, as far as I know, ill defined since the exponential moving average is normally taken over the parameters defining psi over time.
+
+### Questions
+I understand how, from their probabilistic definition in terms of latent factors, natural data pairs may be different from the "augmented" pairs typically used in SSL. From an intuitive point of view, however, I do not really see how nearby video frames are qualitatively different from image crops, say. Both can be seen as crops, temporal or spatial, of the data. I would appreciate that the authors comment on this point.
+
+Please explain the significance of Prop. 2.1.
+
+As noted by the authors, AdaSSL-V is only justified for contrastive SSL, but it is used for non-contrastive SSL as well. Could you please justifiy this?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents novel self-supervised learning methods that model the uncertainty in data pairs generated from natural generative processes, using regularized latent variables. For example the uncertainty between consecutive frames in a video. Two variants are presented, one based on variational inference on the other on enforcing sparsity on the latent variable. Experiments on artificial and reel data are conducted to demonstrate the effectiveness of the approach in identifying latent factors of variations and modelling uncertainty.
+
+### Strengths
+- The paper tackles a key problem in self-supervised learning: modelling conditional uncertainty, which arises in many other problems related to causal prediction. The potential applications are therefore numerous: video prediction, video generation, world modelling and latent action prediction, efficient self-supervised learning ect. The paper could actually do a better job at motivating these applications.
+
+- The ideas presented in the paper are interesting, described in depth, well-motivated, and seem to be good candidate solutions, at least on the toy problems explored in the experimental section.
+
+### Weaknesses
+- The paper is complex to understand, with lots of formalism (the probabilist framework, Proposition 2.1), complex vocabulary (heteroscedasticity, modular editing, DCI) that is not necessarily introduced, or introduces lots of new vocabulary (CRL, DGP, SSL from structural invariance, Adaptive SSL, natural pairs), all for ideas that are actually fairly simple. I feel like this over–complixification hinders the reading flow and makes it harder to deliver the message it intends to deliver.
+
+- Also, the paper put a lot of emphasis on particular SSL losses such as contrastive vs non-contrastive, as well as several variants of InfoNCE, which does not seem very relevant for this study, and adds too many factors of variation that make the conclusions of the paper less clear and convincing. Section 2.2 and 2.3 are probably unnecessary, and the new variants H-InfoNCE, AnInfoNCE, ect are not well motivated.
+
+- Finally, all this formalism is derived by the JEPA framework and the authors mention that they only take inspiration from JEPA, whereas I see these contributions as instanciations of JEPAs, just with various ways of regularizing the latent variables. In Figure 1, b) and c) are JEPAs.
+
+- The experiments are conducted on toy problems which limits the credibility of the approach. How does it behave on more concrete problems ? I don’t think people care about the artificial numerical problems of section 4.2, these should be more of a tool for you to debug the approach. Section 4.2 is interesting but very artificial, and 4.3 is Moving MNIST which is good again for debugging but nowhere near close to the actual interesting problems.  Finally, the focus is on velocity decoding, which is good for debugging but not as interesting as the problem of prediction. It would be more interesting to show experiments where a model predicts the future trajectory in moving MNIST, and being able to sample several possible future trajectories by sampling from the latent.
+
+- Related to this, the claims made at the beginning of the paper need to be toned down, for example Line 20 “and we empirically show its superiority on identifiability, generalization, fine-grained image understanding, and world modeling on videos”. Superiority against which concurrent method ? And on benchmarks that are too toy.
+
+- The paper ignores the vast literature existing on uncertainty modelling and latent variables. All the work in generative modes, video generative models, video prediction, latent action models.
+
+- In conclusion, the paper is tackling an interesting problem and presents interesting ideas but it is hard to be convinced by the toy experiments. These points would make it much stronger:
+
+- Remove the studies on InfoNCE variants, along with sections 2.2 and 2.3, and focus on AdaSSL. Maybe rename using the JEPA terminology and just name the latent variable regularization methods.
+
+- Remove section 4.2 and focus more on real data experiments.
+
+- Add more motivations in terms of potential applications
+- Acknowledge other literature in uncertainty modelling and world modelling.
+
+- Focus the experiments more on video world modelling, and the prediction capability, rather than training probes to recover properties such as velocity.
+
+### Questions
+- Line 160: Then the solution is just to project and do prediction in the same space ?
+
+- In AdaSSL-V, how could you make more explicit the mechanism that regularizes the latent variable regularized, basically what is L_reg ?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes a model for self supervised learning that extends previous approaches to include an auxiliary variable that capture the variation between representation of related data, e.g. augmentations or naturally occurring variations. The results suggest indicate that the model is better able to adapt to data generated under more flexible assumptions, such as heteroskedasticity, relative to baselines.
+
+### Strengths
+The paper is relatively clear and well explained (see weaknesses for exceptions). The motivation seems sound and the proposed solutions are rationally justified. Experimental results suggest the proposed models are effective.
+
+### Weaknesses
+A main weakness of the paper is its occasional lack of clarity. For the most part the paper is easy to follow, which makes the following very noticeable. The paper would improve greatly if these areas were addressed.
+* 33 - this does not seem to be about "distribution shift", i.e. a change to the distribution, but rather that artificial augmentations do not span the full variation in the distribution of natural images
+* Prop 2.1 - this is unclear, e.g. in line 156 we already know h maps to the unit sphere so why restate? It is unclear what this proposition adds since it appears to be specific to Gaussian distributions under a mapping between different topologies. This is a contrived scenario so it is unclear how it is necessarily relevant or "unavoidable" in practical scenarios. If the point is that the distributions of $z^+|z$ may vary over $z$ for real world datasets, which sounds highly plausible, Prop 2.1 doesn't appear to prove that and seems redundant.
+* 199: Eq 4 does not appear to support the "intuition" that follows, e.g. $r$ could convey no information and Eq 4 holds, so "*should* help" is untrue.
+* 209: The use of $p$ and $q$ suggest that $p$ is a ground truth posterior distribution over $r$ that $q$ learns to approximate similarly to a VAE, but a VAE is quite different since a ground truth posterior $p(z|x)$ is defined by the model's likelihood and prior, which $q$ provably learns to approximate. Here there is no defined prior over $r$ or ground truth posterior $p$, so the notation seems spurious (it would seem more accurate to refer to $r$ as an "auxiliary" variable (as in Khemakhem et al. (2020)) and "conditional" $q$.
+* 234: it is unclear how $r$ is included in InfoNCE or how the projector compares to the MLP used in BYOL. This is a key part of describing the model and should be very clear. 
+* 308: the distinction between embeddings and representations is unclear from the text.
+* 4.2: this section is very difficult to read, e.g. 
+    - "$f$ is the frozen encoder trained on $p(z)$" presumably means $f$ was trained under the SSL algorithm given $x, x^+$ pairs sampled under the described generative process? If so, that is hard to parse and should be made clearer. 
+    - (a) appears to describe generating data under the described method and training a regressor to predict the true generative $c$ component of $z$ from the representation $f(x)$. It is much less clear what (b) and (c) describe (c appears to be about robustness of the regressor?)
+    - since $\Sigma$ is unstated, the significance of $5I$ in the "OOD" cases has no context (presumably 5 is higher variance than $p(z)$)?
+* "OOD experiments" - the theoretical background does not appear to suggest robustness under distribution shift, so there is no clear explanation for the improved results and "only flexible models generalize OOD" seems unjustified. It is fair to note the improved OOD results, but it seems unexplained.
+    - 366 - as above, the emphasis on OOD sees out of keeping with the rest of the paper. The model is designed to learn more flexible latent conditionals, this is shown in column 1 of Table 2, which seems the main result justifying the approach. No explanation has been given why this model would be expected to perform better OOD.
+* 377 - "identifiability" - what does this refer to?
+
+CelebA results: while the paper considers an adaptation to the InfoNCE loss, I believe that InfoNCE does not achieve state of art performance, so the results are not well contextualised in terms of current model performance.
+
+### Questions
+see weaknesses
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

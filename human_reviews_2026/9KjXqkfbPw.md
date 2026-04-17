@@ -1,0 +1,154 @@
+# Brain-IT: Image Reconstruction from fMRI via Brain-Interaction Transformer
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6
+
+## Abstract
+Reconstructing images seen by people from their fMRI brain recordings provides a non-invasive window into the human brain. Despite recent progress enabled by diffusion models, current methods often lack faithfulness to the actual seen images. We present ``Brain-IT'', a brain-inspired approach that addresses this challenge through a Brain Interaction Transformer (BIT), allowing effective interactions between clusters of functionally-similar brain-voxels. These functional-clusters are shared by all subjects, serving as building blocks for integrating information both within and across brains. All model components are shared by all clusters \& subjects, allowing efficient training with limited amount of data. To guide the image reconstruction, BIT predicts two complementary localized patch-level image features: (i) high-level semantic features which steer the diffusion model toward the correct semantic content of the image; and (ii) low-level  structural features which help to initialize the diffusion process with the correct coarse layout of the image. BIT's design enables direct flow of information from brain-voxel clusters to localized image features. Through these principles, our method achieves image reconstructions from fMRI that faithfully reconstruct the seen images, and surpass current SotA approaches both visually and by standard objective metrics.  Moreover, with only 1-hour of fMRI data from a new subject, we achieve results comparable to current methods trained on full 40-hour recordings.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents Brain-IT, a novel framework for reconstructing images from fMRI using a Brain Interaction Transformer (BIT). The method clusters functionally similar voxels across subjects to form shared functional units, which BIT maps to both semantic and structural image features for guiding a diffusion-based reconstruction. Experiments on the NSD show that Brain-IT achieves superior performance over existing methods in both qualitative and quantitative evaluations, while maintaining strong performance even with limited fMRI recordings.
+
+### Strengths
+* The brain-inspired BIT design is both biologically plausible and effective, leveraging shared functional voxel clusters to address data scarcity and inter-subject variability.
+* The dual-branch reconstruction (structural and semantic) balances visual fidelity and semantic accuracy, producing reconstructions that better match the original stimuli.
+* The efficient transfer learning strategy enables fast adaptation to new subjects with minimal fMRI data, greatly improving practicality.
+
+### Weaknesses
+* The paper lacks a clear distinction between its scientific and technical goals. While it emphasizes "brain interaction", it does not analyze what kinds of neural interactions BIT is meant to model or how these relate to known brain mechanisms, making the neuroscience contribution unclear.
+* The Voxel-to-Cluster (V2C) mapping largely follows Beliy et al. (2024) but does not clearly explain what is new. How the shared clusters differ from prior work and how they are optimized for decoding rather than encoding?
+* The low-level reconstruction choice (DIP+VGG) is insufficiently justified, with no comparison to standard alternatives like VAEs that could test whether the chosen method is actually superior.
+* The anatomical clustering baseline is overly simplistic, relying only on 3D coordinates rather than established anatomical-functional parcellations (e.g., Schaefer et al., 2018). This makes the comparison less meaningful, as the performance gap may reflect a weak baseline rather than a true advantage of functional clustering.
+
+[1] Schaefer et al. (2018). Local-Global Parcellation of the Human Cerebral Cortex from Intrinsic Functional Connectivity MRI.
+
+### Questions
+1. What specific scientific question does Brain-IT aim to address regarding brain function or visual processing?
+2. How does BIT capture or validate specific neural interaction patterns between brain regions?
+3. How does your V2C mapping differ technically and conceptually from Beliy et al. (2024), especially in achieving shared clusters?
+4. Why was DIP+VGG chosen over VAE-based reconstruction, and have you tested this choice empirically?
+5. Have you compared your functional clustering with established anatomical-functional parcellations such as Schaefer et al. (2018)? If not, why choose a coordinate-based baseline, and how might results change with a more realistic anatomical framework?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper proposes Brain‑IT, a pipeline that maps fMRI signals to localized image features via a Brain‑Interaction Transformer (BIT) and reconstructs images through two complementary branches: a low‑level branch and a high‑level semantic branch. This design leverages coarse layout from the low‑level path to initialize diffusion and uses semantics to refine details. On NSD, the method achieves SOTA performance across most metrics, and demonstrates efficient transfer learning with only 15 minutes for new subject. The paper includes several ablations and states an intent to release code, checkpoints, and reconstructions.
+
+### Strengths
+- Brain‑IT outperforms prior methods on most of the conventional metrics in the 40‑hour setting and 1‑hour setting as well. It also reports first results for 15/30‑minute reconstruction on single subject. 
+- Ablations cover usage of external unlabeled images, functional vs. anatomical clustering, and number of clusters, plus branch‑wise contributions. 
+- They pledge to release code, checkpoints, and all reconstructed images upon publication.
+
+### Weaknesses
+- There is no explicit OOD evaluation (e.g., NSD‑synthetic) to probe robustness beyond the training distribution. 
+- The paper primarily focuses on reconstruction accuracy and does not analyze what the Brain Tokens capture, thus provides limited neuroscientific insights.
+
+### Questions
+- During pretraining on NSD, did the authors exclude the shared 1,000 images, i.e., are the shared images strictly held out throughout? I would like to confirm no leakage (or not).
+- Related to the above question, I also would like to confirm transfer‑learning protocol and data usage.
+    - For a new subject, which stages use that novel subject’s data, and how much? Please clarify if any of the new subject’s data is used in the shared pretraining stages or any other training stages.
+    - For non‑target subjects (= training subjects), did the authors use all their data in all pretraining stages? Does this include or exclude the shared 1,000 images? 
+- For anatomical clustering, the paper states that voxels are clustered by 3D coordinates in FSaverage space and then run through the same pipeline. However, I wasn’t fully sure how the anatomical clustering baseline was implemented. Could the authors provide more detail on the procedure?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper introduces Brain-IT, a new framework for reconstructing natural images from fMRI data. Its key innovation is the Brain Interaction Transformer (BIT), which introduces functionally shared voxel clusters across subjects, mapped via a Gaussian Mixture Model over voxel embeddings derived from a pre-trained “Universal Brain Encoder.” Results show strong performance on both structural (PixCorr, SSIM) and perceptual (CLIP, Inception, AlexNet) metrics outperforming prior SoTA methods. Brain-IT sets a very strong benchmark for fMRI-Image decoding pipelines with SoTA performance in full and limited data settings. Brain-IT achieves comparable results to full-data baselines with only 1 hour of subject-specific data, and qualitatively plausible reconstructions even with 15 minutes.
+
+### Strengths
+1. **SoTA empirical results:** Outperforms all previous methods in full-data and limited-data settings.
+2. **Novel techniques:** The idea of functional voxel clustering for fMRI-Image decoding is novel and improves performance, finding an elegant way to incorporate transformers into the mapper architecture. 
+3. **Extensive quantitative and qualitative evaluation:** The paper provides clear tables, broad baselines (MindEye, BrainDiffuser, MindTuner, MindEye2, NeuroVLA, etc.), and an ablation appendix exploring cluster number and anatomical vs functional clustering.
+4. **Use of additional synthetic training data:** While the idea of using synthetic signals to improve alignment has been considered in previous works, using it to generate significantly more training data is a neat idea that seems to provide positive gains.
+
+### Weaknesses
+1. **Ambiguity in Functional Clustering Implementation:** While the voxel-to-cluster mapping is conceptually clear, I would appreciate a clarification on a few details:
+- Are the voxel embeddings unique per-voxel-per-subject (i.e., one embedding vector per voxel that is fixed regardless of the input image), or do they vary per-image?
+- Are these voxel embeddings frozen after the initial V2C mapping is established, or are they continuously optimized during BIT training? Section 5.3 mentions that adapting to a new subject requires optimizing only the voxel embeddings, suggesting they are trainable, but the timeline of when they are optimized versus frozen could be more explicit.
+2. **Generalization to Out-of-Distribution Data:** The joint training approach in Stage (ii) of the semantic branch (Section 3.2) fine-tunes the diffusion model end-to-end with BIT on COCO-derived data. While you note this allows the models to "establish a representation that is better suited for conditioning," this differs from prior works that keep the diffusion model frozen. This raises a question about generalization: Could you comment on how this joint training might affect the model's ability to generalize to fMRI data from substantially different experimental paradigms (e.g., THINGS dataset with different stimuli distributions, or datasets with different scanning protocols)? While the strong NSD results are impressive, while pushing the SoTA on 7T fMRI results is impressive, the more important problem in the field is building models capable of transferring to new scanning protocols or modalities (M/EEG). Developing a method that gives gains on an already good baseline at the cost of increased overhead for cross-dataset generalization might undermine the contribution. 
+3. **Insufficient Evidence for "Localized Image Features" Claim:** Throughout the paper, you emphasize that BIT enables "direct flow of information from brain-voxel clusters to localized image features" as a key distinction from prior work. However, the predicted outputs are global CLIP embeddings (256 spatial tokens from ViT-bigG/14, which still represent the entire image) and VGG features. Could you provide evidence or analysis demonstrating that the functional clusters map to spatially localized regions in the predicted features? For instance, do specific clusters consistently predict features corresponding to particular spatial regions of images? Without such evidence, the "localized" claim appears to refer more to the intermediate representation (Brain Tokens) rather than the actual output features, which would make it similar to prior works in this regard.
+4. **Lack of codebase:** I believe this is the biggest weakness of this work. I understand that the authors promised to release the code and checkpoints upon acceptance. But when you claim to have SoTA empirical results in a rapidly growing field, it is vital to provide the code necessary to validate your results. The gains are significant from previous works and without the ability to verify these gains, it does leave room for some skepticism.
+
+### Questions
+1. Verification of Low-Level Pipeline and VGG Model Details: The low-level reconstruction results are exceptionally strong with structural metrics (SSIM, PixCorr) being high while simultaneously maintaining strong semantic metrics (CLIP+Inception>85%), which is unusual since prior low-level pipelines typically show a trade-off (almost all previous works' LL pipelines have CLIP,Inception around the 50-60s). Given the novelty and importance of this component can you clarify the following:
+- Which specific pretrained VGG checkpoint is used?
+- Can you confirm there is no train/test overlap between the VGG pretraining data and COCO images used in NSD?
+
+2. **Ablation on Low-Level Pipeline Contribution:** Another question regarding the low level pipeline. I believe your strong gains in the LL pipeline may be the primary driver of performance gains. Can you provide additional ablation experiments to isolate teh contribution of V2C+BIT from the VGG+DIP pipeline? For instance:
+- Train an ME2 model on a single subject but switch the low level ground truth to VGG+DIP. Use an MLP similar to previous works feeding in the entire fMRI instead of doing V2C.
+Anything along these lines to clarify whether the gains primarily come from the novel architectural choices (V2C mapping, BIT interactions) or the low-level reconstruction approach would be helpful.
+
+3. **Loss Function Design Choices:**  You use the L2 loss for Feature Alignment and standard diffusion loss for Joint Training. This differs from recent works that employ contrastive losses, multiple alignment objectives, or diffusion priors to align fMRI with CLIP embeddings.
+- Have you experimented with contrastive losses (e.g., InfoNCE) or other alignment objectives for the CLIP prediction task?
+- What motivated using only L2 loss for the initial alignment stage?
+- Could you report intermediate alignment metrics (e.g., cosine similarity between predicted and ground-truth CLIP embeddings) after each semantic training stage to better understand the alignment during the two stages?
+
+4. Do you use image-to-text captioning (as in ME2) during the SDXL refinement stage, or only the CLIP-based conditioning?
+
+Additional:
+Typo in Figure 4: Trasnformer instead of Transformer
+
+
+Overall I believe this a strong contribution to the field and I am open to increasing my score if my concerns are addressed.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

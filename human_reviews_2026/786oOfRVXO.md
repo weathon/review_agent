@@ -1,0 +1,236 @@
+# GET: Rethinking Dynamic Graph Learning as Global Event Sequence Generation
+
+- Decision: Reject
+- Scores: 4, 4, 2, 2
+
+## Abstract
+The prevailing paradigms in dynamic graph learning, which rely on local neighbor propagation or node-specific memory updates, are fundamentally limited in their ability to model global interaction patterns and to scale inference efficiently. Rethinking these challenges, we propose GET (Global Event Transformer), an event sequence modeling framework that reformulates dynamic graph learning as global event sequence modeling. By processing the entire interaction history as a unified stream of events, GET is designed to capture dependencies beyond the local receptive fields of prior methods, while its "encode once, score many" design removes the candidate-wise inference bottleneck of discriminative models. GET flexibly incorporates structural priors through lightweight GNN encoders and memory modules, which provide local structural and temporal cues that the global Transformer then reasons over. Our main focus in this paper is dynamic link prediction under standard Temporal Graph Benchmark (TGB) protocols, complemented by preliminary short-horizon generative evaluations on small/medium graphs. Extensive experiments on five large-scale TGB benchmarks and six additional datasets show that GET achieves strong competitive performance while delivering substantially faster inference throughput (up to 21.4 × on tgbl-wiki) compared to strong baselines.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes GET (Global Event Transformer), a generative framework that reformulates dynamic graph learning as global event sequence generation. Instead of performing local message passing or node-level memory updates, GET models the entire temporal graph as a unified chronological sequence processed by a Transformer with ALiBi attention. It can optionally incorporate structural priors via lightweight GNN encoders and memory modules. Experiments on five large-scale TGB benchmarks and six smaller datasets show competitive accuracy and substantial inference speedups.
+
+### Strengths
+Novelty: Reformulating dynamic link prediction as global event sequence generation addresses a real limitation of local propagation methods. The motivation for moving beyond k-hop GNN receptive fields and pairwise scoring bottlenecks is well-articulated and grounded in practical deployment challenges.
+
+Motivation and Analysis: The architectural design consists global sequence modeling (Transformer), structural encoding (GNN), and temporal dynamics (memory), enabling an interesting synergy among them. The ablation studies (Table 3) show complementarity between GNN (dense graphs) and memory (sparse graphs) modules.
+
+Empirical Results: Strong performance on largest datasets (tgbl-flight: 0.895, tgbl-comment: 0.732) with substantial inference speedups validates the practical value of the event sequence generation.
+
+### Weaknesses
+Motivation:
+
+Despite framing the problem as "event sequence generation," the paper focuses exclusively on discriminative link prediction. No experiments demonstrate multi-step autoregressive generation, long-term forecasting, or joint modeling of multiple future events. They are the core advantages of generative models. The generative evaluation in Appendix E is preliminary and shows mixed results (struggles with global statistics). So I'm not full convinced on the paradigm shift part.
+
+Theoretical analysis:
+
+Theorem 1 (Appendix B) claims FGNN-k ⊂ FGET and FMemory ⊂ FGET but provides only an informal proof sketch. The argument relies on attention masking simulating k-hop aggregation, but this ignores fundamental differences: GNNs use learned message-passing functions specific to graph structure, while Transformers use generic self-attention. The "periodic co-occurrence" counter-example is vague and not formalized. A rigorous proof (e.g., via approximation theory or simulation arguments with explicit constructions) or toning down the claims would improve credibility.
+
+
+Scalability analysis: 
+
+- Largest graph (tgbl-flight) has 67M edges but only 1,385 unique timestamps, meaning events are highly concentrated in time rather than truly long-sequence scenarios. To claim "long-range dependencies", I think it would be appropriate to evaluate the model on some anti money laundering transaction networks such as from IBM.
+- While the 21× speedup over TGN is impressive, comparisons are not fully fair: (i) inference time includes both encoding and scoring, but encoding cost (O(L²)) can dominate for long sequences, (ii) no analysis of how speedup varies with K (candidate set size) is shown beyond the theoretical O(K) vs. O(K·Tpropagate) claim, (iii) batch size and hardware utilization differences across methods are not controlled, (iv) no comparison with approximate nearest-neighbor methods or other efficient retrieval techniques that could accelerate discriminative methods.
+
+Baselines:
+
+I think some sequence-based temporal graph methods should be compared with (and referenced):
+- SimpleDyG [Wu et al., WWW 2024]
+- ROLAND [You et al., KDD 2022]
+- DTFormer [Chen et al., CIKM 2024]
+- DyGMamba [Ding et al., TMLR 2025]
+- TGEditor [Zhang et al, ICAIF 2023]
+Without these baselines, it's hard to determine whether GET's advantages stem from global sequence modeling specifically or simply from using Transformers effectively. Authors does not justify why the event sequence paradigm is necessary when other Transformer-based temporal graph methods exist.
+
+Alternative global modeling architectures: 
+- The paper focuses exclusively on the event sequence paradigm but does not compare to other approaches for capturing global information:
+  - Graph Transformers with structural encodings (GraphGPS [Rampášek et al., NeurIPS 2022], Exphormer [Rampášek et al., ICML 2023])
+  - Attention-based architectures that could process entire graph histories.
+  - Memory-augmented Transformers that aggregate global context differently.
+- This makes it unclear whether the event sequence representation is uniquely effective or just one of several viable global architectures.
+
+GNN evaluation: 
+- Only GAT is tested for the GNN component. It is important to see how different structural encoding methods affecting the performance.
+- Only TGN-style memory is tested. Other memory mechanisms might interact differently with the Transformer backbone.
+- No ablation of Transformer architecture choices (decoder-only vs. encoder-decoder, number of heads, FFN dimension).
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes the Global Event Transformer (GET), a generative framework that fundamentally reframes dynamic link prediction as global event sequence generation. By processing the entire graph history as a single sequence and leveraging Transformer with ALiBi for continuous-time modeling, GET aims to overcome the limited receptive fields and inference scalability issues inherent in prior local/discriminative methods. The architecture integrates modular structural priors. Experiments show GET achieves competitive accuracy while delivering substantial speedup in inference, supporting its utility for large-scale dynamic graphs.
+
+### Strengths
+1.	This paper provides a fundamental paradigm shift for scalability. The shift from a multiplicative ($O(K \cdot T_{\text{propagate}})$) discriminative inference to an additive ($O(L^2 d + Kd)$) generative paradigm effectively resolves the major bottleneck for real-time applications with massive candidate sets.
+
+2.	GET uniquely combines global sequence modeling with continuous time modeling, enabling the capture of long-range dependencies and non-local patterns previously inaccessible to local or memory-based methods.
+
+3.	The framework's modular design allows for flexible injection of structural priors via GNN or TGN-style memory modules, demonstrating complementary strengths tailored to graph density.
+
+### Weaknesses
+1.	The GNN encoder (Eq. 2) relies on a computational graph from recent events (L155). Given GET's claim to model global, long-range dependencies, relying on a locally constructed graph for structural priors seems contradictory to the global modeling objective.
+
+2.	The dual-head decoder predicts $d_{n+1}$ (contrastive classification) and $t_{n+1}$ (regression) independently from $\mathbf{H}^{(L)}$. There is no explicit mechanism ensuring that the predicted time $t_{n+1}$ is causally or consistently aligned with the predicted node $d_{n+1}$, which could introduce incoherence in the generated event.
+
+3.	The model is evaluated on discriminative link prediction but uses a generative mechanism. The cross-entropy loss $\mathcal{L}_{\text{node}}$ (Eq. 12) is inherently designed for classification over a *small, sampled* candidate set $C$, which might lead to inflated performance metrics (MRR) compared to full-set evaluation or rigorous ranking fidelity.
+
+4.	Although the paper's core redefinition is "generative," the evaluation primarily focuses on the discriminative task (link prediction). The brief generative analysis in Appendix E is insufficient to fully validate the fidelity and quality of the generated events, especially on metrics beyond edge overlap.
+
+### Questions
+1.	The GNN enhancement is computed on a graph derived from *recent events* (L155). Given the goal of capturing global dependencies across the entire sequence $X_{1:n}$, why is the structural prior derived from a local temporal window rather than being a global invariant representation?
+
+2.	The next event is generated as $P(s_{n+1}) \cdot P(d_{n+1}|s_{n+1}) \cdot P(t_{n+1}|s_{n+1}, d_{n+1})$. In the dual-head architecture, $d_{n+1}$ and $t_{n+1}$ are predicted from the same context $\mathbf{h}^{(L)}$. How do you ensure the predicted time $\hat{t}_{n+1}$ is temporally plausible *given* the specific predicted destination $\hat{d}_{n+1}$ without an explicit conditional link in the decoder?
+
+3.	Since GET's final task is discriminative link prediction, but the model is optimized using contrastive classification over a sampled set $C$, what is the performance gap if you were to evaluate MRR over the *entire* node set $V$ (full ranking) instead of the contrastive candidate set?
+
+4.	The balance parameter $\lambda$ controls the trade-off between $\mathcal{L}_{\text{node}}$ and $\mathcal{L}_{\text{time}}$. Given that $\mathcal{L}_{\text{time}}$ is crucial for temporal patterns (L417), what practical strategy or metric guided the selection of $\lambda=0.4$ (Table 6) across diverse datasets like highly sparse `tgbl-review` and dense `tgbl-flight`?
+
+5.	Why was the 3-token subsequence $[\text{SEP}, s_i, d_i]$ chosen over the 4-token sequence $[\text{SEP}, s_i, d_i, t_i]$? Incorporating $t_i$ as a token might allow the Transformer to directly attend to temporal magnitude, potentially strengthening the role of the temporal dimension in the sequence.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes to reformulate dynamic graph learning as a global event sequence generation task. 
+It introduces a generative transformer-based model, GET, which models temporal interactions  as sequential events with causal masking and global attention. Experiments on several temporal graph benchmarks show competitive performance and improved speed.
+
+### Strengths
+(1) The paper offers a clear and unified perspective by formulating dynamic graph learning  as a global event sequence generation problem, connecting temporal graph models with  sequence modeling and transformer architectures. 
+
+(2) The proposed GET model achieves strong empirical performance and improved inference efficiency  on several benchmarks, showing its effectiveness in capturing long-range temporal dependencies.
+
+### Weaknesses
+1. The methodological novelty of the paper is limited.  Framing dynamic graph learning as global event sequence  resembles prior work  in transformer-based models (e.g., TCL, DyGFormer). Moreover, although the model is described as ``generative``,  its training objective remains discriminative: it is still based on negative sampling and softmax scoring without explicit probabilistic modeling of event likelihoods.  
+
+2. The paper claims that inference complexity shifts from a multiplicative to an additive form. However, the prediction of destination nodes still relies on negative sampling. In practice, the candidate set size $K$ can easily reach tens of thousands, making the computational cost still substantial. More importantly, different negative sampling strategies may lead to unstable evaluation results, yet the paper does not report any sensitivity analysis with respect to  different negative sampling strategies.
+
+3. Key hyperparameters such as the event sequence length $L$, the candidate set size $K$,  and the loss trade-off coefficient $\lambda$ in the objective function are used without justification or discussion.  These parameters directly affect both the model's computational complexity  and its learning behavior, yet the paper provides no analysis or sensitivity study  to show how varying them impacts performance or stability.
+
+4. The theoretical analysis in section 5 is conceptually appealing but lacks rigor. Specifically, the theoretical “proof” of the strict inclusion relations is heuristic rather than formal. The function spaces are never formally defined, the “simulation via attention mask” argument confuses neighborhood masking with message passing and the causal attention analogy does not capture the recursive dynamics of memory-based models. The counter-example illustrating “strictness” is descriptive but non-constructive, lacking any formal mapping or quantitative verification. Therefore, this section should be interpreted as an intuition example, not a rigorous proof of expressiveness containment. 
+
+5. The paper claims that GET changes the inference complexity of discriminative dynamic graph models (e.g. TGN) from multiplicative  $O(K \cdot T_{\text{propagate}})$ to additive $O(L^2 d + Kd)$, yet this comparison relies on unrealistic assumptions.  First, this characterization does not accurately reflect how models such as TGN  are implemented and deployed in practice. In standard TGN, each node maintains a memory state $m_v(t)$  that summarizes its interaction history.  During inference, edge probabilities are computed through a decoder  $f([m_u(t), m_v(t)])$, without re-running neighborhood propagation per candidate.  Thus, the actual inference complexity is approximately $O(Kd)$ rather than  $O(K \cdot T_{\text{propagate}})$.   Therefore, the comparison made in the paper implicitly assumes a worst-case setting  that repeatedly executes message passing for each candidate.  This exaggerates the efficiency gap between GET and memory-based models.   Second, The claim that inference cost is dominated by $K$ is only valid in the short-history regime ($L$ small).  When event sequences become long or graphs are temporally dense, the quadratic attention complexity $O(L^2 d)$  can surpass the linear term $O(Kd)$, thereby weakening the claimed additive advantage.
+
+### Questions
+Please see the weakness above
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces GET (Global Event Transformer), a generative framework for dynamic graph learning that reformulates the task as global event sequence modeling. Rather than relying on localized message passing or pairwise scoring, GET leverages a Transformer-based sequence model augmented by optional structural priors — specifically, a single-pass GNN encoder and a memory module. The goal is to achieve improved receptive field coverage and inference efficiency by transforming dynamic graphs into tokenized time-series representations.
+
+### Strengths
+* The paper tackles an important limitation of existing temporal GNNs — limited receptive field — by reframing the problem into a global event modeling perspective.
+
+
+* The integration of structural priors into a Transformer pipeline is conceptually appealing and can offer a new direction for hybrid GNN–Transformer architectures.
+
+
+* The approach demonstrates reduced memory footprint compared to Temporal Graph Networks (TGNs), addressing a known bottleneck.
+
+
+* GET achieves competitive results on smaller datasets, suggesting that the model can be efficient under constrained conditions.
+
+### Weaknesses
+1. Expressiveness of Structural Priors. Line 149 defines structural priors using a single-pass GNN encoder that captures explicit multi-hop structural patterns. However, following Chen et al. (2020), MPNNs and even 2-IGNs cannot count induced subgraphs in connected structures with three or more nodes. While Kanatsoulis & Ribeiro (2024) show that certain architectures with randomized node inputs can count specific structures, it remains unclear how expressive the proposed encoder truly is. Please discuss the expressive capacity of this “single-pass” encoder for structure-aware embeddings, especially since the final structure-aware representation is computed using a GAT.
+
+2. Weak motivation and theoretical basis for the architecture. Several design decisions appear to be arbitrary rather than having a theoretical or empirical justification. This is the case for using GAT over GatedGCN (c.f., Lines 160 and 194) and use of Transformer AliBi (why are the biases needed in this case?). Regarding the event serialization strategy, there is no clear reason to use 3-token subsequences. As it stands, the manuscript lack without a clear motivation or strong fundamental contributions.
+
+3. Generative Decoding Ambiguity. Section 4.4 describes a generative decoding phase composed of a conditional contrastive objective and a continuous-time regression. However, the generative component is underspecified — there is no clear definition of an autoregressive loss or generative sampling process, raising doubts about whether GET is truly generative or merely predictive.
+
+4. Weak evaluation protocol and small gains. Despite being framed as a generative model, all experiments are conducted on discriminative link prediction benchmarks (e.g., TGB), and performance gains are modest. This discrepancy weakens the paper’s central generative claim.
+
+
+References
+
+Chen, Z., Chen, L., Villar, S., & Bruna, J.; Can graph neural networks count substructures?, NeurIPS 2020.
+
+Kanatsoulis, C., & Ribeiro, A.; Counting graph substructures with graph neural networks, ICLR 2024.
+
+### Questions
+* Could the authors elaborate on how the single-pass encoder interacts with the Transformer backbone? Is it used as a static embedding layer or dynamically updated during training?
+
+* Would the proposed model still hold advantages if evaluated on tasks requiring explicit event generation (e.g., temporal graph synthesis)?
+
+* Consider adding ablation studies isolating the impact of the structural prior, the memory module, and ALiBi.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

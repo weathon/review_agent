@@ -1,0 +1,259 @@
+# Constrained-Data-Value-Maximization: Utilizing Data Attribution for Effective Data Pruning in Low-Data Environments
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 4, 2, 4, 4
+
+## Abstract
+Attributing model behavior to training data is an evolving research field. 
+A common benchmark is data removal, which involves eliminating data points with either low or high values, then assessing a model's performance trained on the modified dataset.  It is generally expected that removing low-value points results in a gradual decline in accuracy, while the removal of high-value points leads to a sharp decrease in performance. Many existing studies leverage Shapley-based data values for this task. In this paper, we demonstrate that these data values are not optimally suited for pruning low-value data when only a limited amount of data remains. To address this limitation, we introduce the Contsraint-Data-Value-Maximization approach, which effectively utilizes data attributions for pruning in low-data scenarios. By casting pruning as a constrained optimization that both maximizes total influence and penalizes excessive per‐test contributions, CDVM delivers robust performance even when only a small fraction of the data is retained. On the OpenDataVal benchmark, CDVM consistently outperforms existing alternatives, achieving state‐of‐the‐art accuracy and competitive runtime.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces  Constraint-Data-Value-Maximization (CDVM), which addresses a critical flaw in Shapley-based data pruning methods (and more generally methods based on semi-values): they lead to cluster removal bias, systematically pruning entire large clusters first and causing sharp performance drops. CDVM reformulates pruning as a constrained linear optimization over an attribution matrix $T$, maximising total influence while using slack variables to ensure balanced coverage across all test samples (preventing any cluster from losing all influence).
+
+### Strengths
+The proposed method is a novel and well-motivated contribution that directly addresses the weaknesses of existing data-pruning techniques based on Shapley or other semi-value formulations. The authors introduce a principled mechanism to balance influence across test samples and prevent over-removal of clusters, a limitation often overlooked in prior work. The approach is original to my knowledge,  and the experimental evaluation across multiple OpenDataVal datasets demonstrates strong performance.
+
+### Weaknesses
+The main weakness of this work is its high computational cost, which limits the method’s practicality to relatively small datasets, precisely where data pruning is often less critical. This restricts CDVM’s immediate applicability to large-scale, real-world problems. A more minor concern is the sensitivity to its two hyperparameters: as shown in Figure 4.c, the chosen $\kappa$ values vary considerably across datasets, suggesting potential instability to achieve good performance.
+
+### Questions
+- Could the authors elaborate on potential strategies to make CDVM computationally feasible for larger datasets ?
+- Given that κ and α appear to vary considerably across datasets, how robust is CDVM to these choices ?
+- The constrained optimisation program relaxes the $w$ to continuous variables. How do you use them for pruning ?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper identifies and describes limitations of leave-one-out and semivalue-based data valuation methods that lead to poor accuracy when pruning large fractions of data. The paper then proposes Contsraint-Data-Value-Maximization that addresses the limitations. The key idea to solve an optimization problem that maximises the influence of the training samples while reducing the influence of each test point. This pruning strategy results in non-nested solutions for different subset sizes.
+
+### Strengths
+1. The example in Fig 1 is helpful and the three limitations highlighted in Sec 2.1.3 are clear and significant. Addressing these limitations improve the accuracy after data pruning in many applications.
+2. The paper is generally clear and easy to follow.
+
+### Weaknesses
+1. There is a lack of comparison with other semivalues, e.g. Shapley value and semivalues with more weights on smaller coalitions which should do better under significant data pruning.
+2. The solution is more computationally expensive than semivalues. In Sec 3.1, it is explained that it requires training multiple models. In Sec 3, it additionally involves solving a mixed-integer linear program. 
+3. Some claims in Sec 3 should be better justified.
+    * How does penalising the excess over $\kappa$ ensure that no test sample has zero total influence and address the cluster size problem?
+    * Why is the definition of $T_{ij}$ in line 342 appropriate? Unlike the Shapley value, it does not measure marginal contribution of each sample $d_i$ to a coalition and does not satisfy the efficiency property. Why is it ok to round $T$ to either 0 or 1?
+4. The experiments are small-scale and hence less convincing. Each dataset is subsampled in line 359. It is important to demonstrate that the results still hold on larger real-world datasets.
+
+### Questions
+1. What does 10000 models mean in line 193? Does it mean samples/actual evaluation of utility?
+2. Why is Shapley value not included in Fig 2 or the experiments? See [K] for a more efficient approximation of Shapley value that allow sample reuse. 
+3. How is the mixed-integer linear program solved? Describe the efficiency and the approximation guarantee. 
+
+[K] Kolpaczki, Patrick, et al. "Approximating the shapley value without marginal contributions." Proceedings of the AAAI conference on Artificial Intelligence. Vol. 38. No. 12. 2024.
+[L] Li, Weida, and Yaoliang Yu. "One Sample Fits All: Approximating All Probabilistic Values Simultaneously and Efficiently." Advances in Neural Information Processing Systems 37 (2024): 58309-58340.
+
+Minor comments 
+* The font looks different from Times.
+* LOO should be capitalised
+* The LOO and semivalue definitions should be wrong. It should be the utility with $d_i$ as the first term.
+* Some grammatical errors (e.g., many data instance on line 98) and typos (1.000 in Fig 2 caption)
+* The “test samples” should be validation samples instead. The test set should not be used for pruning or hyper parameter selection.
+* Fig 1 should also include the performance of the proposed method
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+Paper proposes a new algorithm to prune train datasets using linear programming.
+
+### Strengths
+Paper makes an algorithm by Yang more efficient (at some cost in value). 
+
+I found their discussion of the nomao dataset interesting.
+
+### Weaknesses
+Experiments: Given the problem is to reduce train set size, I expected to see experiments with at least mid-sized train sets (say, 1 million training samples), but they seem to have presented experiments with 1000 training samples.  The lack of even mid-sized data was disappointing and really saps my interest in their results and the significance of their experimental results. 
+
+It also seems like the amount of computation to prune the dataset is very high compared to just training on the whole dataset. 
+
+One of their results is that the optimal reduced train set does not strictly grow as instances grow.  They show this empirically, which has some value, but this is the sort of result that’s fairly easy to *prove* through counterexample, so empirical result is not that significant. 
+
+Another weakness is that the semi-value approach doesn’t sound optimal at all, given it uses a poor proxy objective, so it’s not at all surprising that one can do a bit better. 
+
+Reducing the train set in a smart way dates back at least to Peter Hart’s 1968 paper on condensed nearest neighbors.
+
+Missing all the related work in coresets and other related work in optimizing a reduced train set?   Tons more work in data pruning not even nodded to, there are surveys one could cite at least.
+
+Lastly, I’ll note that the strategy I’ve seen work best in practice when there's really too much train data and you need to reduce it down and train faster is the opposite of data pruning, it’s to start with a small set of the train data and then add in more data, aka "batch active sampling" (see e.g. Jiang and Gupta KDD 2021).
+
+Writing was weak in it use of casual language too casually, like this sentence: “It is generally expected that removing lowvalue
+instances results in a gradual decline in accuracy, while the removal of
+high-value instances leads to a sharp decrease in performance.”  Isn’t that just the definition of “low value instances” and “high value instances” making this sentence like saying “One expects an orange to be an orange?” Paper is full of this sort of loosey-goosey language. Try to be more specific / concise/precise please.
+
+As an other example of this too loose writing, paper says “the subset that maximizes accuracy for one
+budget s may exclude instances that are essential for another budget s′ ̸= s.”  But really the point they are trying to communicate is optimal subset for a budget of size S may be exclude instances that are optimal  if the  budget is size S’ > S.  
+
+
+MINOR:
+Typo: “Contsraint”
+
+Capitalize acronyms like LOO
+
+In your bibtex, use {Shapley} and {OOB} and other {} to get proper capitalization of proper names
+
+References: what is “6 2023” mean in Jiang et al reference?  Similar in other ones.
+
+### Questions
+No questions at this time.
+
+### Soundness
+4
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on the challenge of training data pruning (that is, removing least useful training samples while minimizing performance degradation). The authors observe that common Shapley/semi_value based data valuation methods may lead to steep degrade in performance by often pruning entire clusters. To circumvent this limitation, they propose a new formulation called Constrained Data-Value Maximization (CDVM), which uses a data attribution matrix and poses pruning as a linear optimization problem that encourages balanced influence across test samples while penalizing over concentration. Experiments on the OpenDataVal benchmark (six datasets, multiple retention rates) show CDVM outperforms baseline alternatives and achieves competitive runtime.
+Overall it is a very well written paper.
+
+### Strengths
+1. The author provided a strong motivation to study this paper by clearly identifying the limitations in the existing approaches.
+
+2. The proposed CDVM leverages fine grained per test sample attribution signals and introduces a slack penalized objective preventing cluster collapse issue associated with the semi-values based literature. This is a great idea indeed. 
+
+3. The authors performed a comprehensive empirical evaluation of their proposed approach by working with 6 datasets × 6 pruning budgets. This makes the empirical evidence very strong.
+
+### Weaknesses
+1. The proposed still needs to estimate the attribution matrix T which is often very large (several GBs) in practice. Thus scalability becomes a bottleneck when we head to really large datasets.
+
+2. The authors did not carry of systematic analysis of failure modes in the experiments. That is.. certain datasets exhibit unexpected under performance. Why such a behavious is not explained properly.
+In fact, it would be of great value to discuss what dataset characteristics trigger failures and how to detect these cases automatically.
+
+3. The proposed model conveniently ignores higher-order interactions.. in fact, the authors explicitly highlight that T entries are not additive.
+
+### Questions
+Please address the above 3 weak points. 
+
+Furthermore, I have following comments too:
+(a) Please provide guidance on hyperparameter defaults.. κ and α are crucial. if you can offer, practical recommendations would improve reproducibility.
+(b) Please characterize failure conditions.. this would increase methodological transparency.
+(c) Can you provide early-stopping heuristics to avoid expensive grid searches on T-based hyperparameters..
+(d) Providing histograms or test sample coverage plots would illustrate the “balanced coverage” claim... without such plots, it would be hard to judge the practical utility of this approach.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces Constraint-Data-Value-Maximization (CDVM), a novel approach for data pruning that addresses key limitations of existing Shapley-based data valuation methods. The authors demonstrate that semi-value approaches tend to assign lower importance to instances in larger clusters, leading to imbalanced data pruning. To overcome these issues, CDVM formulates data pruning as a constrained optimization problem over a data attribution matrix that tracks training data influence on individual test samples. CDVM achieves state-of-the-art accuracy in 28 out of 36 configurations while maintaining competitive runtime.
+
+### Strengths
+Very clear presentation. 
+
+The motivation for improving the current scoring-based data pruning is very well-motivated.
+
+### Weaknesses
+It is unclear to me why semivalue-based approaches cannot be used for attribution on individual test samples. While the original Data Shapley and Banzhaf papers employ average test accuracy/loss as their evaluation metric—primarily because they target "data valuation" applications—there is fundamentally little distinction between attribution and valuation. Adapting these methods to compute individual test loss/accuracy appears to require only minor modifications to the code, if I understand correctly. This would enable more direct apple-to-apple comparisons in experiments, such as Data Banzhaf versus Data Banzhaf + CDVM.
+
+The proposed approach is straightforward but lacks theoretical justification. For example, how does the proposed approach compared with the line in coresets (e.g., https://proceedings.mlr.press/v119/mirzasoleiman20a.html)?
+
+The experiment scale is very small. The authors mentioned that "CDVM relies on a selected soft upper bound κ and incurs quadratic cost in computing and storing T (e.g., roughly 250 GB for a naive implementation without sparsity on the full ImageNet-1k train
+and val splits)", which is not very clear to me why that's the case. If it means the storage cost during the computation of gradients, here's a highly efficient implementation for computing In-Run Data Shapley (aka TracIn-Ideal) https://github.com/Jiachen-T-Wang/GhostSuite 
+
+The following reference is missing, but it seems highly relevant to the discussion in Section 2.1.3. 
+
+[1] Wang, Jiachen T., et al. "Rethinking data shapley for data selection tasks: Misleads and merits." ICML 2024
+
+Line 337: citation for Maximum Sample Reuse is wrong.
+
+### Questions
+See weakness.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+2

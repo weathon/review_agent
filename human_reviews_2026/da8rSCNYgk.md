@@ -1,0 +1,194 @@
+# UniOMA: Unified Optimal-Transport Multi-Modal Structural Alignment for Robot Perception
+
+- Decision: Reject
+- Scores: 2, 8, 4, 2
+
+## Abstract
+Achieving generalizable and well-aligned multimodal representation remains a core challenge in artificial intelligence. While recent approaches have attempted to align modalities by modeling conditional or higher-order statistical dependencies, they often fail to capture the structural coherence across modalities.
+In this work, we propose a novel multimodal alignment method that augments existing contrastive losses with a geometry-aware Gromov-Wasserstein (GW) distance-based regularization. 
+To this end, we encode intra-modality geometry with modality-specific similarity matrices and extend the GW distance to minimize their discrepancies from a dynamically learned barycenter, thereby enforcing structural alignment across modalities beyond what is captured by InfoNCE-like mutual information objectives.
+We apply this optimal-transport-based alignment strategy to robot perception tasks involving underexplored modalities such as force and tactile signals, where modality data often exhibit varying sample densities. 
+Experimental results show that our method yields superior inter-modal coherence and significantly improves downstream robot perception tasks such as robot and environment state prediction. Moreover, our GW-based augmentation term is versatile and can be seamlessly integrated into most InfoNCE-like objectives.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper augments contrastive multimodal alignment with a Gromov–Wasserstein (GW) barycenter regularizer that encourages each modality’s batchwise similarity structure to agree with a shared consensus. The method is meant to scale to ≥3 modalities and is evaluated on several robotics-flavored datasets (vision/force/tactile/proprioception), reporting improvements when the GW term is added to common contrastive objectives.
+
+### Strengths
+1. Clear articulation of the structural alignment gap in contrastive learning and a tidy objective that is easy to plug into existing losses.
+2. Sensible idea for many-modality settings (barycenter vs. O(M²) pairwise couplings), with interpretable per-modality weights.
+3. Robotics tasks with underused modalities (force/tactile) are a good target domain.
+
+### Weaknesses
+The theoretical component largely instantiates known pieces of OT/GW (trace-style alignment, barycenter regularization) within a standard contrastive framework, without new guarantees or analysis (e.g., identifiability, convergence behavior with stochastic batches, or conditions under which the barycenter preserves task-relevant geometry). Derivations and definitions appear to repackage established GW formulations rather than introduce genuinely new theory. As a result, the contribution feels incremental on the theory side.
+
+Empirically, the paper shows consistent but mostly modest gains, and the evaluation lacks the depth needed for an ICLR-level claim:
+- Ablations are thin: no systematic study of kernel choices/γ sensitivity, solver settings, or the effect of the barycenter update frequency.
+- Compute & practicality: no clear reporting of training overhead vs. baselines (wall-clock/epoch, peak memory, GW iterations), which matters for practitioners considering per-batch GW.
+- Missing-modality robustness: the narrative highlights this use case, but there’s no explicit drop-a-modality at inference stress test.
+- Baselines & breadth: comparisons miss stronger or more recent structural-preserving or OT-regularized approaches; it’s hard to conclude that the proposed regularizer is the best option among peers.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper proposes UniOMA, a unified optimal-transport based framework for multimodal structural alignment that addresses the "structural alignment gap" in existing contrastive learning approaches. The key insight is that while InfoNCE-style objectives achieve statistical alignment between modalities, they fail to preserve intra-modal geometric relationships, leading to embeddings that are statistically correlated but structurally inconsistent. UniOMA augments standard contrastive losses with a Gromov-Wasserstein (GW) distance-based regularization that enforces structural coherence across modalities by:​
+- Computing intra-modal similarity matrices for each modality and estimating a dynamic GW barycenter as structural consensus​
+- Aligning each modality's embedding-space geometry to this consensus via weighted GW distances​
+- Learning modality-specific weights that quantify each modality's contribution to the structural consensus​
+
+The approach is evaluated on robotic perception tasks across vision, force, tactile, proprioception, and audio modalities, demonstrating improvements in downstream tasks while maintaining interpretability through learned modality weights.​
+
+### Strengths
+- Novel Problem Identification: The paper clearly identifies and formalizes the "structural alignment gap" - a fundamental limitation where InfoNCE objectives achieve statistical dependence but fail to preserve intra-modal geometry. 
+- Strong Theoretical Motivation: Figure 1 provides an effective illustration of the key theoretical motivation—the limitation of InfoNCE-based alignment methods in preserving intra-modal structural relationships, even when achieving overall statistical alignment. The figure clearly demonstrates how correlated structure within modalities can be lost, supporting the necessity of structure-aware regularization. This theoretical insight is further contextualized with concrete examples from robotics, establishing the practical importance of addressing this challenge in real-world applications.
+- Theoretically Grounded Approach: Strong theoretical foundation connecting Gromov-Wasserstein distances to multimodal alignment
+- Comprehensive Experimental Validation: Evaluation across diverse robotic modalities (vision, force, tactile, proprioception, audio)​, Multiple downstream tasks including regression, classification, and cross-modal retrieval​, Consistent improvements when adding GW regularization to existing methods (Pairwise, Symile, GRAM)​
+- Comprehensive Ablations, Analysis and Visualizations: The paper provides thorough ablation studies, particularly the unequal modality sampling scenarios that demonstrate practical robustness. The analysis of learned modality weights is particularly compelling, showcasing the model's ability to adaptively handle imbalanced modalities. Figure 3e is especially convincing evidence that the theoretical foundations of UniOMA are working as intended—the framework genuinely learns to weight modalities appropriately based on their informational content and availability. This adaptive redistribution of weights when modalities are downsampled provides both practical value and theoretical validation, demonstrating that the GW-barycenter approach isn't just mathematically elegant but actually captures meaningful structural relationships that translate to improved performance.
+
+### Weaknesses
+- Computational Overhead: The iterative GW barycenter computation and optimal transport estimation introduce significant computational cost during training​. While mini-batch approximations are used, scalability to very large datasets remains unclear. There is limited analysis of computational complexity in practice beyond algorithmic complexity bounds​
+- Hyperparameter Sensitivity: The framework introduces multiple hyperparameters (regularization weight α=1000, kernel scales γ, barycenter iterations Tmax=5)​ There is limited sensitivity analysis provided, particularly for the choice of kernel similarity measures across different modalities​
+- The paper could benefit from a discussion and comparison with the rich literature on missing modality learning, which addresses related challenges of preserving modality-specific information while modeling shared information. Prior works grounded in Partial Information Decomposition emphasize explicitly modeling and disentangling unique versus shared modalities information. Although these works do not explicitly discuss intramodality topology or structural concisitency, the concept of “modality-specific” information seems like a different theoretical view of the same goal. Including these references and discussing their relationship to the proposed approach would strengthen the contribution and contextualize the novelty relative to relevant fields. Notable examples include:
+   - Wang et al. (2023), "Multi-modal learning with missing modality via shared-specific feature modelling" (CVPR)
+   - Nguyen et al. (2025), "Robust: Leveraging redundancy and modality-specific features for robust multimodal learning" (IJCAI)
+
+### Questions
+Clarifications:
+- In Figure 2, why are the corresponding similarity matrices between the data space and the embedding space not aligned? For example, Kx1 could be aligned with Kz1, and Kx2with Kz2. It seems aligning each modality’s similarity matrix individually to its embedding counterpart would better encourage encoders to capture the topological structure, while still maintaining O(M) complexity rather than relying on a combined consensus? And the encoders are already aligned across modalities through L_c.
+- Lines 260-262 mention that modalities such as vision and force–torque are in incomparable metric spaces but have meaningful internal geometries, which is crucial in robotics. Could this claim be clarified with a concrete example to illustrate this point? Like a task or data instance when this would be the case
+- In line 264, what does the bold "1" represent in the notation?
+- In Table 1, what do the bolded and orange-colored numbers signify? Additionally, what measure of uncertainty is reported with the +- (standard deviation, variance, confidence interval)?
+
+Though Experiments/Extensions
+- Scalability Concerns: How does the computational overhead scale with dataset size and number of modalities? What are the practical limits for real-time robotic applications where inference speed is critical?
+- Generalization Beyond Robotics: How effective would this approach be in non-robotic multimodal domains (e.g., vision-language, medical imaging), are there any issues that may occur? Adding proof of funcionality in other domains would really extend this work’s contributions 
+- Alternative Consensus Strategies: Why choose a single barycenter as consensus rather than multiple cluster centers? Could hierarchical or mixture-based consensus improve performance for complex structural relationships?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+In this paper, the authors propose an enhancement to existing InfoNCE-based contrastive learning frameworks by incorporating modality-specific intrinsic relationships. The motivation stems from the observation that conventional contrastive methods, which primarily align paired cross-modal data, often fail to preserve the inherent structural topology within each individual modality. To address this limitation, the authors introduce a Gromov–Wasserstein distance–based regularization, which explicitly maintains intra-modality geometric consistency while aligning multiple modalities. The proposed method is applied to representation learning across vision, force, and tactile modalities—domains that are relatively underexplored yet critical for robotic perception and manipulation. Experimental results demonstrate that the approach significantly improves both representation quality and downstream task performance, validating the effectiveness of incorporating modality-specific structural alignment into contrastive learning.
+
+### Strengths
+1. The paper is well-written and clearly structured. The proposed idea of preserving intrinsic relationships when aligning representations across different modalities is both intuitive and promising. It provides a thoughtful perspective on improving cross-modal contrastive learning.
+
+2. The authors’ claims are well-supported by both qualitative and quantitative evidence. The case study (Fig. 1) effectively illustrates the underlying, while the main experimental results convincingly demonstrate the method’s performance advantages.
+
+3. The incorporation of Gromov–Wasserstein (GW) distance as a regularization term is well-motivated and promissing. The resulting framework is flexible and can be seamlessly integrated into existing InfoNCE-based contrastive learning methods, enhancing their ability to capture modality-specific structural information.
+
+### Weaknesses
+1. The main concern with this paper lies in its experimental setup. Aligning representations between vision and low-dimensional, robotics-related modalities (such as tactile signals or end-effector (EEF) positions) may not be conceptually sound. Visual observations inherently contain richer, high-level semantic information — including environmental context, object appearance, and background — whereas proprioceptive or tactile data capture only limited, low-dimensional physical aspects of the same scene. Aligning these representations risks degrading the generality and expressiveness of the visual embeddings, as the model may overfit to the less informative modalities. Similarly, the task of aligning vision and audio modalities seems somewhat unnatural in the given robotic context, and its motivation should be better justified.
+
+2. The paper’s central idea of maintaining intrinsic structural relationships is conceptually appealing, but modeling these relationships in high-dimensional visual feature spaces remains an open challenge. The choice of RBF kernel to define distances in such complex, semantically rich spaces is not particularly promising — while it has shown effectiveness in early low-level computer vision applications, it may not adequately capture the nuanced semantic geometry of deep visual embeddings. A deeper discussion or alternative strategies (e.g., learned metrics or graph-based structures) would strengthen this aspect.
+
+3. It is unclear why the proposed method is designed specifically for three or more modalities. The idea of using Gromov–Wasserstein regularization to enhance two-modality contrastive learning (e.g., in vision–language pretraining) could be impactful, given its broader applicability and relevance to large-scale multimodal learning. Exploring or discussing such extensions could significantly increase the practical and theoretical contribution of this work. The key remaining challenge would be to properly model intra-modal structures for high-semantic modalities like vision and language, which would make the approach more meaningful and generalizable.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a framework designed to achieve geometry-aware alignment across multiple heterogeneous modalities such as vision, force, tactile, proprioception, and audio in robotic perception. The method introduces a Gromov–Wasserstein (GW) distance–based regularization to augment conventional contrastive objectives (e.g., InfoNCE). Specifically, UniOMA computes intra-modal similarity matrices to represent modality-specific geometric structures and aligns them through a dynamically learned GW barycenter that serves as a shared “structural consensus.” This barycentric formulation reduces the pairwise coupling complexity from O(M^2)to O(M)and allows adaptive modality weighting via learnable coefficients. Experiments on four multimodal robotics benchmarks (VFD, VFP, MuJoCo Push, VAT) show consistent gains across regression, classification, and retrieval tasks compared to pairwise and higher-order contrastive baselines (CLIP, Symile, GRAM). Ablations suggest improved robustness to asynchronous sampling and interpretability via modality weights.
+
+### Strengths
+- The paper identifies and formalizes the structural alignment gap in multimodal contrastive learning, an under-discussed but practically relevant issue.
+- Integration of Gromov–Wasserstein barycenters into the multimodal alignment objective is mathematically principled and computationally efficient (O(M) scaling).
+
+### Weaknesses
+- The theoretical novelty is limited; the framework primarily combines existing OT/GW formulations with standard contrastive objectives.
+- The ablation studies, while illustrative, lack statistical rigor (no error bars or repeated trials).
+- Comparisons are restricted to InfoNCE-based baselines; recent large-scale multimodal foundation models (e.g., ImageBind, CLIP4Clip) are not directly benchmarked.
+- The computational cost of computing GW barycenters, though claimed mitigated, is not thoroughly analyzed (no runtime or memory comparison).
+- The claim of “scaling naturally to 3+ modalities” is empirically modest, tested only on up to 3 modalities per benchmark.
+
+### Questions
+- How sensitive is the method to the choice of kernel functions (RBF vs. TCK) for constructing similarity matrices?
+- Could the authors provide runtime analysis or scalability benchmarks comparing UniOMA with pairwise CLIP and GRAM?
+- How does the learned barycentric consensus behave qualitatively—does it correspond to physically interpretable intermediate structures?
+- Can UniOMA extend beyond robotics to vision–language–audio domains, and would the same kernels apply?
+- Does the GW regularizer introduce convergence instability or require curriculum scheduling during training?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

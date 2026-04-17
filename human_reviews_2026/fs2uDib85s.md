@@ -1,0 +1,179 @@
+# Joint Selection for Large-Scale Pre-Training Data via Policy Gradient-based Mask Learning
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 6, 6
+
+## Abstract
+A fine-grained data recipe is crucial for pre-training large language models (LLMs), as it can significantly enhance training efficiency and model performance. One important ingredient in the recipe is to select samples based on scores produced by defined rules, LLM judgment, or statistical information in embeddings, which can be roughly categorized into quality and diversity metrics. Due to the high computational cost when applied to trillion-scale token pre-training datasets such as FineWeb and DCLM, these two or more types of metrics are rarely considered jointly in a single selection process. However, in our empirical study, selecting samples based on quality metrics exhibit severe diminishing returns during long-term pre-training, while selecting on diversity metrics removes too many valuable high-quality samples, both of which limit pre-trained LLMs' capabilities. Therefore, we introduce DATAMASK, a novel and efficient joint learning framework designed for large-scale pre-training data selection that can simultaneously optimize multiple types of metrics in a unified process, with this study focusing specifically on quality and diversity metrics. DATAMASK approaches the selection process as a mask learning problem, involving iterative sampling of data masks, computation of policy gradients based on predefined objectives with sampled masks, and updating of mask sampling logits. Through policy gradient-based optimization and various acceleration enhancements, it significantly reduces selection time by 98.9% compared to greedy algorithm, enabling our study to explore joint learning within trillion-scale tokens. With DATAMASK, we select a subset of about 10% from the 15 trillion-token FineWeb dataset, termed FineWeb-Mask. Evaluated across 12 diverse tasks, this high-quality and diverse subset achieves significant improvements of 3.2% on a 1.5B dense model and 1.9% on a 7B MoE model after pre-training with hundreds of billions of tokens, demonstrating its effectiveness. Source code
+is available at: https://github.com/ByteDance-Seed/DATAMASK.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces DATAMASK, an efficient framework for large-scale pre-training data selection by jointly optimizing for both quality and diversity. DATAMASK reframes data selection as a mask learning problem, using a policy gradient-based approach to learn an optimal mask distribution. Instead of exhaustive comparisons, it iteratively samples small data batches, computes joint metrics, and updates a global sampling probability for each data point. By applying DATAMASK to the 15 trillion-token FineWeb dataset, the authors created FineWeb-Mask, a high-quality and diverse 10% subset, which achieves significant improvements over baselines trained on the random subset.
+
+### Strengths
+1. The proposed DATAMASK algorithm is highly efficient and capable of handling data selection on large-scale datasets.
+2. Based on pre-training results, the resulting data subset demonstrates higher quality than other existing subsets.
+
+### Weaknesses
+1. The necessity of the policy gradient algorithm is questionable. A simpler approach, such as directly assigning logit values based on each sample's quality and diversity score (evaluated on a small group), might achieve a similar effect.
+2. The assumption that sample selection probabilities are independent is a potential limitation. This modeling choice seems inconsistent with the goal of optimizing for diversity, which is inherently a set-level property that depends on the relationships between samples.
+3. The algorithm's performance is likely sensitive to the learning rate, yet a corresponding analysis is absent. A low learning rate risks insufficient differentiation among logits, approximating uniform sampling, whereas a high learning rate may lead to deterministic, greedy-like behavior. The effect of this hyperparameter on model performance remains unclear.
+4. The writing in some sections is not clear enough, for example, the explanation of the content in Figure 3.
+
+### Questions
+None
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper focus on the large-scale pre-training data selection for LLMs, which aims at optimizing the metrics for like data quality and data diversity. In this paper, the author point out that current open sourced dataset like FineWeb and DCLM rarely consider the data quality and diversity or the more metrics jointly in a single selection process, which leads to these problems based on their research: Selection based on quality metrics will leads to severe diminishing returns during long-turn pre-training, while the selection based on quality will remove to many high-quality samples, which limits the effect of pre-training LLMs. To solve this problem, this paper introduce DATAMASK: a new joint learning framework designed for large-scale pre-training data selection to simultaneously optimize multiple types of metrics (mainly focusing on quality and diversity). By interpreting the selection task as a mask learning problem and using multiple enhance technique, DATAMASK significantly reduces selection time by 98.9% compared with greedy algorithm. And in FineWeb dataset, they select a FineWeb-Mask subset, and achieves significant improvements of 3.2% on a 1.5B dense model and 1.9% on a 7B MoE model after pre-training with hundreds of billions of tokens, demonstrating its effectiveness.
+
+### Strengths
+Novelty for the problem definition: The paper conceptualizes the large-scale data selection problem into a learnable mask optimization task and use policy gradient-based optimization and various acceleration enhancements to optimize the selection speed.
+
+Strong motivation and empirical analysis: The paper demonstrates the fundamental limitations of single-metric selection on large scale pre-training dataset, and use the visualizations to express the conflict of data quality and diversity that supports the central motivation.
+
+High engineering availability and scalability: Implementation on 15T FineWeb corpus shows the method’s availability in engineering. Decrease 98.5% time cost compare with greedy algorithm, enabling the studies in large-scale datasets shows the scalability more research.
+
+### Weaknesses
+Limited methodological originality: The novelty is incremental, not a fundamentally new method. The framework of combination of Mask Learning and Policy Gradient is a direct application of Reinforce-style policy gradient to a combinatorial subset selection problem. Similar implementation have been used in: RL-based data pruning or sample selection (e.g., RLDataSampler, ICML 2022);Differentiable subset selection in vision and NLP (e.g., DPPNet, CVPR 2021; SubsetFormer, NeurIPS 2023).
+
+Lack of fair on challenging baselines:All baselines are existing data recipes, but without comparison with recent learning-based selection frameworks like: DataComp-LM (Li et al., NeurIPS 2024) etc. Also missing the comparison with other learnable data selection methods, which weakens the claims of the effectiveness.
+
+Lack of the explainability:Even the paper gives the heat map, the paper didn’t make qualitative analysis and visualization for the selected datas’ types, realms etc. 
+
+Weak theoretical justification:The paper only gives the upgrade formula for optimization in the end of method, and then comes into the experiment part, without explanation for convergence, bias introduced by probabilistic relaxation or gradient variance.
+
+### Questions
+1.What is the difference between DATAMASK and the classical reinforce-based subset selection? Please clarify the difference between traditional reinforce mechanism or active learning.
+2.Can the union optimization frame explains to more than two metrics? Like adding text toxic or the other metrics.
+3.Can you release more visualizations of selected samples? For example: distribution of domains, text lengths etc.
+4.How to confirm the stability for optimization? In the sampling upgrade with larger variance?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper identifies that existing pre-training data selection methods optimize quality or diversity separately, leading to either semantic redundancy or loss of valuable samples, which limits LLM performance. To address this, the authors introduce DATAMASK, a novel framework that jointly optimizes multiple metrics. Applied to FineWeb, DATAMASK produces FineWeb-Mask (1.5 trillion tokens), which demonstrates 3.2% and 1.9% performance improvements on 1.5B and 7B (MoE) models respectively. The work proves that balanced quality-diversity optimization is both computationally feasible and empirically superior for large-scale pre-training data selection.
+
+### Strengths
+- There is an inherent trade-off between generality and specificity that has not been considered in existing related work. 
+- I appreciate the fomalized approach that provides users with a more principled way of data curation. I believe such techniques are particularly valuable in increasing the sample efficency during pre-training and ultimately driving down cost. 
+- The transparent cost breakdown helps others estimate whether datamask is a useful (and affordable) technique for their individual use cases.
+
+### Weaknesses
+- When arguing about pre-training the proposed dataset the FineWeb-Mask rather small for fully training 7/8B parameter (dense) or even larger models. SOTA 8b dense models are typically trained on 10T+ tokens. I could see the dataset to be applicable for what sometimes is refered to stage-two pre-training, i.e., showing documents to a model that contain desirable information for later post-training steps that require versatility. Exploring how well the specificity-/generality-balance introduced through datamask would make a useful addition to the paper. 
+- The paper misses a recent work on a pre-trainign dataset that is also derived from fineweb. Even though, it's based on heuristics, the data processing pipeline makes an effort to carefully balance specificity and generality [1]. 
+
+**Sources:**
+
+[1] GneissWeb: Preparing High Quality Data for LLMs at Scale, Gohari et al., 2025
+
+### Questions
+- What does "optimized score" refer to in the G ablation study? I understand that G is used to keep the computational costs in check but doesn't it also implicitly change the optimization objective later on because of the dependency among samples in a group? 
+- Out of curiosity, is there any notable performance benefits for post-training when using datamask over vanilla fineweb? 
+- Will you open-source the data curation recipe (code) if the paper gets accepted?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper purpose DATAMASK, a new framework for large-scale data selection method based on policy-gradient mask learning framework. It targets jointly optimizes the quality and diversity in trillion-token constraints. The authors use differentiable optimization instead of probabilistic masks, and run experiments on FineWeb datasets, achieving a 98.9% reduction in selection cost while not sacrificing the performance. Evaluated across 12 diverse downstream tasks, this subset achieves significant performance gains of 3.2% on a 1.5B dense model and 1.9% on a 7B MoE model, demonstrating its effectiveness.
+
+### Strengths
+Originality: The paper addresses a critical problem, namely the trade-off between quality and diversity in LLM pre-training data selection. The idea of treating data selection as a mask learning problem and using policy gradients for optimization is novel. It moves beyond traditional greedy selection strategies, offering a unified learning-based approach.
+Quality: The paper is supported by rigorous empirical validation, including large-scale experiments on trillion-token datasets. Ablation studies are provided to analyze the impact of different diversity metrics and hyperparameters (e.g., λ, G). The method is evaluated on 12 diverse downstream tasks, demonstrating consistent and significant improvements.
+Clarity: The paper is well-structured and clearly written. The core mechanism is illustrated with formulas and algorithmic descriptions. The use of visualizations (e.g., t-SNE plots, heatmaps) helps show key insights effectively.
+Significance: The proposed method has practical value for improving LLM pre-training efficiency and performance. It opens up a new direction for joint optimization of multiple data metrics, which could influence future data curation paradigms. The released FineWeb-Mask dataset is a valuable resource for the community.
+
+### Weaknesses
+1.	Partial Ablation of Core Parameters
+While the paper ablates diversity metrics, the balancing hyperparameter (λ), and the group size (G) in policy gradient estimation, it lacks systematic exploration of other key hyperparameters, such as the learning rate, the number of update epochs, and the initialization strategies for logits. This omission limits the understanding of the method's robustness and sensitivity to its full configuration.
+2.	Insufficient Accessibility and Clarity in Figures
+Figure 2 (t-SNE) uses colors that are not colorblind-friendly, and the legend is small with ambiguous labels. Figure 3 (score evolution) lacks units on the x-axis and error bars/confidence intervals, making it difficult to interpret convergence behavior and stability.
+3.	Missing Comparison with Scalable Learned Selection Paradigms
+Comparisons are made primarily against heuristic baselines. A comparison with other learned selection methods that are scalable to trillion-token datasets (if available) is needed to better situate DATAMASK's advantages. For methods limited to small-scale data, this could be framed as future work instead of a current limitation.
+
+### Questions
+1.Beyond computational constraints, the key hyperparameters like the learning rate and number of update epochs are excluded from ablation. Was wondering if it is due to observed insensitivity in preliminary experiments. It will be great to analyze their expected impact on DATAMASK’s performance and convergence?
+2. It seems valuable to compare DATAMASK with learned data selection strategies that are scalable to trillion-token datasets. For methods limited to small-scale data, could you elaborate on why they are not suitable for direct comparison, or outline how DATAMASK might outperform them at scale?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

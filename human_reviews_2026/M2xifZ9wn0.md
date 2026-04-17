@@ -1,0 +1,134 @@
+# Reducing Spurious Correlations in CNNs via Attention-Based Feature Aggregation
+
+- Decision: Reject
+- Scores: 8, 2, 2
+
+## Abstract
+Spurious correlations in datasets result in Convolutional Neural Networks (CNNs) learning features that are predictive but not causally relevant to the task, leading to poor generalization and fairness issues. The recently proposed Deep Feature Reweighting (DFR) technique aims to reduce the reliance of an ERM-trained model on spurious correlations by retraining its classification head on a target dataset, achieving state-of-the-art performance on various spurious correlation benchmarks. However, we find that DFR operates on entangled features, which limits its ability to simultaneously extract the core features while removing the influence of spurious features. Our analysis reveals that this entanglement in CNNs is primarily caused by the commonly used Global Average Pooling (GAP) aggregation mechanism, which indiscriminately collapses information in a feature map across spatial locations into a single feature. To address this, we propose Deep Attention Reweighting (DAR), which replaces the GAP layer with an attention-based aggregation mechanism that adaptively assigns importance to spatial locations of the feature maps, enabling selective suppression of spurious features before they become entangled with the core features. Across various metrics, datasets, and experimental settings, we empirically validate the effectiveness of DAR over DFR in its ability to resolve the feature entanglement between the core and spurious features to better mitigate spurious correlations.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper identifies that the effectiveness of the state-of-the-art Deep Feature Reweighting (DFR) method for reducing spurious correlations in CNNs is limited by feature entanglement. The authors pinpoint the Global Average Pooling (GAP) layer as the primary cause, as it indiscriminately averages spatially distinct core and spurious features into a single, entangled representation. To address this, they propose Deep Attention Reweighting (DAR), a novel post-hoc approach that replaces the GAP layer with a lightweight attention mechanism. This module is retrained to adaptively weight spatial locations within feature maps, enabling it to selectively aggregate task-relevant core features while suppressing spurious ones before they are collapsed. Empirical results demonstrate that DAR significantly improves feature disentanglement and consistently outperforms DFR and other baselines, particularly on minority-group data where spurious correlations are absent.
+
+### Strengths
+The core originality of this paper lies not in inventing a new attention mechanism. While attention has been used for feature aggregation before, the authors are the first to explicitly link the architectural choice of the Global Average Pooling (GAP) layer to the limited performance of the post-hoc debiasing technique, DFR. This causal connection that GAP creates the very feature entanglement DFR struggles with, is a novel and valuable insight. Furthermore, the introduction of the Core Effect Percentage (CEP) metric, grounded in interventional do-calculus, provides a principled and original way to quantify this entanglement, moving beyond qualitative observations to concrete measurement.
+The proposed method, Deep Attention Reweighting (DAR), is a logical and well-motivated solution to the diagnosed problem. The authors construct a clear, linear narrative: DFR is limited by entanglement, GAP causes entanglement, our attention-based DAR solves it. This finding encourages the community to think more critically about the inductive biases embedded in standard architectures and their downstream effects on fairness and generalization.
+
+### Weaknesses
+* The central premise of DAR is that core and spurious features, while channel-entangled, are spatially separable in the final feature maps. The method's success hinges on this assumption. However, the paper does not explore scenarios where this assumption might be violated. For instance, a spurious correlation could manifest as a subtle, global texture or style change that co-locates with the core object. In such cases, a spatial attention mechanism would have no distinct regions to up-weight or down-weight, and its advantage over GAP would likely diminish.  Have you considered scenarios of spatial entanglement? for instance, where a spurious feature is a global texture or a style applied to the entire image rather than a localized object?
+* As a post-hoc method, DAR's performance is capped by the quality of the feature representations learned by the initial ERM-trained backbone. If the backbone fails to learn spatially separable features to begin with, DAR will have little to work with. The paper acknowledges this as a limitation and area for future work.
+* The paper details a specific multi-head, two-layer attention architecture but does not provide an ablation study to justify these choices over simpler alternatives. It is unclear if all this complexity is necessary or if a simpler dot-product attention (as in Jetley et al., 2018) would have sufficed. Could you provide a brief ablation or justification for the multi-head, two-layer design over a simpler attention mechanism (e.g., single-head or single-layer)?
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper addresses the problem of CNNs learning spurious correlations, which harms their ability to generalize and which can also lead to fairness issues. While the existing Deep Feature Reweighting (DFR) technique attempts to mitigate this by retraining the classification head, the authors find its effectiveness is limited by feature entanglement. They identify the Global Average Pooling (GAP) layer as the primary cause of this entanglement, as it harmfully combines spatially distinct core which are causally relevant and spurious which are non-relevant into a single representation. To overcome this, the paper proposes Deep Attention Reweighting (DAR), a novel approach that replaces the GAP layer with an attention-based aggregation module. This attention mechanism is retrained alongside the final layer, learning to adaptively assign importance weights to different spatial locations within the feature maps. This process allows DAR to selectively focus on core features and suppress spurious ones before they are collapsed into an entangled feature vector. The authors introduce new metrics to quantify entanglement and demonstrate through comprehensive experiments on three benchmark datasets that DAR significantly outperforms DFR and other baselines in resolving feature entanglement and reducing reliance on spurious correlations.
+
+### Strengths
+The authors clearly and effectively situate their work by building upon the existing DFR method, identifying a precise and plausible limitation: feature entanglement. They convincingly argue that the Global Average Pooling layer is a primary culprit, which provides a strong and logical motivation for their proposed solution. The core idea of Deep Attention Reweighting is interesting and intuitive. Instead of trying to fix entangled features after they've been combined, DAR intervenes at the source, using an attention mechanism to selectively aggregate features before they are collapsed, which is a straightforward approach to the problem.
+
+Furthermore, the proposed method has the advantage of being relatively simple and practical. The concept of replacing the GAP layer with a lightweight attention module—and only retraining this new module alongside the classification head—makes it an accessible/efficient solution. It doesn't require a complex re-architecture or a full, costly retraining of the entire model. Another methodological strength is the authors' contribution of three novel metrics (CEP, CAP, and CGP); these are well-motivated and specifically designed to quantify the abstract concept of feature entanglement, allowing for a much more rigorous and appropriate evaluation of their method's success beyond just standard accuracy scores.
+
+### Weaknesses
+The main weaknesses of the paper lie in the great imbalance between the well-motivated problematic and its unconvincing validation. Given that the proposed DAR method is relatively simple and straightforward, I believe that it is up to the authors to demonstrate its superiority to DFR as well as other methods, which the paper fails to deliver. The experimental section is rather sparse, lacking the extensive benchmarks and in-depth qualitative analyses needed to be really convincing; in fact, one of the very few qualitative analysis is relegated to the appendix. The lack of thorough validation makes it difficult to assess the true weight of the paper's contribution. The paper's structure and writing also seems a bit weird and distracting from its main message. The introduction, for example, is written in a confusing manner, which very early dives into specifics of a commonly used dataset in spurious correlations (Waterbirds) in its second opening sentence.. Instead, it should first establish the general problem, the limitations of existing solutions, and a clear, high-level motivation for the proposed method.
+
+The paper also suffers from presentation issues and sections that could be significantly more concise and shorter. Figures, such as Figure 1 and Figure 4, mostly take up excessive space without being proportionally informative; this space could have been better utilized for more extensive experiments (both qualitative and quantitative). On a smaller/less important note, the histograms in Figure 2, would be more illustrative if they displayed density (percentages) rather than raw frequency. Furthermore, large sections of the text feel redundant. The lengthy paragraph analyzing DFR (lines 252-261), while perhaps accurate and appropriate for the appendix, appears to offer no novel insights and could be significantly shortened. Similarly, the entire section on the architectural design of the attention mechanism (Section 3.4) could be condensed into a single paragraph, with the specific technical details moved to the appendix to improve readability and focus.
+
+Apart from presentation, the paper contains critical methodological ambiguities and unsubstantiated claims. A key component of the DAR algorithm is the use of a "small balanced target dataset" (line 363), yet this concept is left not well-defined. The authors provide no specifics on the required proportion of this dataset, nor do they define what "balanced" means in the context of spurious correlations (e.g., in the Waterbirds dataset, what would this balanced mean? Or in the less specific case of a more general dataset?). The subsequent claim that the model "will correctly learn" on this dataset simply because spurious features are no longer predictive is stated as an obvious fact, but it would be much stronger if it was backed up by experimental evaluations. This lack of rigor extends to most of the results in the paper, where the empirical evidence is unconvincing. In Table 2, DAR's performance on majority accuracy is not as good, and its improvement over DFR on minority accuracy seems to often be statistically insignificant. While Table 3 shows stronger results, the overall evaluation is not elaborate enough to prove that DAR offers a meaningful and significant advantage over DFR, or other proposed methods.
+
+### Questions
+Please see weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+Convolution neural networks (CNNs) often exploit spurious correlations in datasets, leading to poor generalization and fairness issues. The recent proposed deep feature reweighting operates on the features entangled with core and spurious features because of the global average pooling (GAP) layer commonly used in CNNs. To address this, the paper proposes an attention-based aggregation module called deep attention reweighting (DAR) to replace GAP. This module allows dynamic selection and suppression of core and spurious features. Experiments across various metrics and datasets validate the effectiveness of DAR over DFR in mitigating spurious correlations.
+
+### Strengths
+- The paper proposes core effect percentage (CEP), core activation percentage (CAP), and Core GradCAM percentage (CGP) to quantify the entanglement between spurious and core features. These metrics can be useful for analyzing shortcut learning behaviors in models.
+
+- The proposed attention-based aggregation module is effective in mitigating spurious correlations on three datasets.
+
+- The paper is well-written and easy to follow.
+
+### Weaknesses
+- The motivation that spurious and core features in a feature map are spatially separated is only supported by  experiments on the MNIST-CIFAR Dominoes dataset where spurious and core features are spatially separated by design. While this dataset allows controlled interventions on the input and straightforward interpretability through Grad-CAM, it is unclear whether this motivation also holds for real-world datasets where spurious and core features are not well separated.
+
+- In the attention-based feature aggregation defined in Eq. (5), the same attention weight is applied to different feature maps. It is possible that different feature maps have different distributions of spurious and core features. Using the same attention weights for different maps may again entangle spurious and core features. Are there any justifications on why using the same attention weight matrix for different feature maps?
+
+- Lack of ablation studies: the introduction of an additional attention module adds more parameters for fine-tuning. It is unclear whether the performance gains are from additional parameters or from the proposed attention module. It would be better to also give the result of fine-tuning the last convolution layer along with the final classification layer and the results of fine-tuning additional architectures (e.g., fully connected non-linear layers) other than attention, to show that the performance gains are not achieved by increasing parameters.
+
+- It is unclear whether the learned attention weights actually assign higher weights to core features than spurious features. Adding a visualization of the attention weights would be beneficial.
+
+### Questions
+- Would adding additional parameters (not with the proposed attention module) for fine-tuning increase performance? 
+
+- Does the claim that spurious and core features in a feature map are spatially separated generally hold in other datasets?
+
+- Why do you use the same attention weights for different feature maps?
+
+- Could you provide a worst-group accuracy comparison between DFR and DAR?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

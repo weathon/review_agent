@@ -1,0 +1,186 @@
+# Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions
+
+- Decision: Accept (Poster)
+- Scores: 6, 8, 6, 4
+
+## Abstract
+Recent benchmarks for Large Language Model (LLM) agents primarily focus on evaluating reasoning, planning, and execution capabilities, while another critical component—memory, encompassing how agents memorize, update, and retrieve long-term information—is under-evaluated due to the lack of benchmarks. We term agents with memory mechanisms as memory agents.  In this paper, based on classic theories from memory science and cognitive science, we identify four core competencies essential for memory agents: accurate retrieval, test-time learning, long-range understanding, and selective forgetting. Existing benchmarks either rely on limited context lengths or are tailored for static, long-context settings like book-based QA, which do not reflect the interactive, multi-turn nature of memory agents that incrementally accumulate information. Moreover, no existing benchmarks
+cover all four competencies.  We introduce MemoryAgentBench, a new benchmark specifically designed for memory agents. Our benchmark transforms existing long-context datasets and incorporates newly constructed datasets into a multi-turn format, effectively simulating the incremental information processing characteristic of memory agents. By carefully selecting and curating datasets, our benchmark provides comprehensive coverage of the four core memory competencies outlined above, thereby offering a systematic and challenging testbed for assessing memory quality. 
+We evaluate a diverse set of memory agents, ranging from simple context-based and retrieval-augmented generation (RAG) systems to advanced agents with external memory modules and tool integration. Empirical results reveal that current methods fall short of mastering all four competencies, underscoring the need for further research into comprehensive memory mechanisms for LLM agents.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes MemoryAgentBench, a benchmark for LLM memory agents that emphasizes incremental and multi-turn information intake. It operationalizes memory along four competencies: Accurate Retrieval, Test-Time Learning, Long-Range Understanding, and Selective Forgetting, grounding these choices in classic memory science. It converts or reconstructs several long-context datasets into chunked, time-ordered interactions and adds two new datasets, EventQA and FactConsolidation, to close gaps around temporal recall and conflict resolution. The study evaluates long-context buffers, three classes of RAG, and agentic memory systems including commercial offerings, under a unified protocol.
+
+This paper offers an important contribution because it reframes memory evaluation around how agents actually encounter information, chunk by chunk, across sessions, rather than flooding a context window and calling it memory. The four-competency map separates skills that are often conflated, the datasets stress realistic patterns like temporal ordering and conflict updates, and the results give a clean and actionable picture. The framework is reproducible and extensible, so it can anchor future work on agent memory.
+
+### Strengths
+The conversion of long-context resources into incremental dialogues is the key design choice and it is done consistently. The inclusion of commercial memory agents alongside RAG and long-context baselines provides a market-realistic snapshot. 
+
+EventQA probes temporal recall under narrative structure, and FactConsolidation isolates resolution and forgetting. The dataset validation with shorter contexts is a nice touch that shows solvability in principle and surfaces context-length brittleness in practice.
+
+### Weaknesses
+Some claims would be stronger with strict compute-matched comparisons across families. For example, matching total retrieved tokens, prompt tokens, number of model calls, and wall-clock between a tuned RAG loop and a long-context buffer would reduce confounds when declaring winners per competency. Current results trend in the right direction but still leave room for “budget effects.” 
+
+Moreover, the benchmark tells agents to “memorize” chunks. The exact prompt templates and any guardrails for overwriting or abstention deserve more foregrounding in the main paper, since small prompt deltas can shift Selective Forgetting outcomes. Much of this is in the appendix; a concise main-text summary would help.
+
+### Questions
+(1) Under equalized prompt tokens, generated tokens, and forward passes, how do the best RAG, best long-context, and best agentic memory settings compare on TTL and LRU? 
+
+(2) Can you expose the exact overwrite prompts and test a tiny policy grid, for example “always prefer later facts” or “prefer later only if explicit negation”?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper introduces MemoryAgentBench, a new benchmark for evaluating the memory management capabilities of large language model agents in multi-turn interactions.  The authors outline four essential competencies for memory agents: accurate retrieval, test time learning, long range understanding, and conflict resolution. To test these competencies, the authors adapt several existing datasets and create two new ones, EventQA and FactConsolidation, to expose weaknesses in current memory systems. They evaluate a wide range of memory types, including context-based models, retrieval augmented systems, and agentic memory agents. The results show that while some methods perform well on isolated tasks, no agent performs consistently across all four competencies. This suggests that memory management remains a significant open challenge for the next generation of intelligent agents.
+
+### Strengths
+1. Compared to previous benchmarks, this paper has a more comprehensive advantage in terms of data token length, problem diversity, and evaluation diversity.
+2. The paper presents a comprehensive and systematic framework that evaluates four memory-related competencies of LLM agents, including a novel aspect of Selective Forgetting. This enables consistent testing across a variety of scenarios by combining existing and newly created datasets.
+3. The paper conducts a broad comparison across various types of memory under a consistent evaluation protocol, clarifying the strengths and weaknesses of each approach, and also provides detailed analyses with ablation studies on various memory settings, offering practical insights into the efficiency and scalability of memory construction and query processing for  agents.
+4. The paper is clearly written and well-structured, with informative tables and figures. The inclusion of detailed prompts and ablations supports reproducibility.
+
+### Weaknesses
+See questions.
+
+### Questions
+1.  How confident should we be that the evaluation metrics and the usage of LLM-as-a-judge in this paper are appropriate (e.g., for summarization or recommendation)?
+
+2. Why does this benchmark primarily use chunking as the main interaction method between the user and the Memory agent? Does this accurately reflect real-world interaction scenarios?
+
+3.  Could you explain the difference between the dialogue-based task designed in the article and the direct document question answering task from the perspectives like task definition and model performance? 
+
+	For example, considering the document Question Answering task in the Accurate Retrieval category, what is the essential difference between transforming it into a dialogue and directly answering based on the original dataset? Is there a difference in the downstream model's performance?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces MemoryAgentBench, a benchmark suite designed to systematically evaluate memory agents along four core competencies: accurate retrieval, test-time learning, long-range understanding, and selective forgetting. This benchmark repurposes existing long-context datasets and introduces two new datasets to address shortcomings in existing memory benchmarks. A wide range of agents, including long-context models, RAG-based agents, and commercial memory systems, are evaluated using a unified protocol. The results highlight that current memory agents exhibit significant limitations, particularly in selective forgetting and long-range understanding.
+
+### Strengths
+- The paper tackles a timely task and an under-evaluated aspect on LLM-based agents. It introduces a broad, multi-faceted benchmark that evaluates memory beyond traditional long-context QA, encompassing lesser-explored but crucial capabilities like selective forgetting.
+- Introduces two new datasets, EventQA and FactConsolidation, to evaluate accurate retrieval and selective forgetting. Selective existing long-context datasets are carefully reconstructed into multi-turn interactions, simulating more realistic memory use in incremental settings.
+- Comprehensive empirical evaluation across diverse agent architectures under a unified framework.
+
+### Weaknesses
+- Most benchmark tasks are language-focused QA or summarization; it lacks memory evaluations in action-heavy or procedural domains (e.g., coding tasks like SWE-Bench or tool-use environments).
+
+- While covering four competencies, some of the chosen evaluation tasks may inherently favor certain types of models, raising questions of whether all approaches are on equal footing. For instance, the test-time learning tasks (e.g. few-shot text classification and movie recommendation through a long dialogue) essentially test in-context learning ability. Large context models with expansive memory windows can simply absorb all provided examples or dialogue turns, whereas retrieval-based agents might struggle to learn new tasks since they mainly fetch past knowledge. The result that long-context models outperform others on these TTL tasks is unsurprising, but it underscores that the benchmark might be conflating memory length with learning ability. In practice, an agent with a smaller context but a clever memory update algorithm might still be disadvantaged in such a setup. It just shows that current RAG systems are not very good at adapting. But it also suggests that the TTL evaluation might be favoring raw context length over true adaptation. A related concern is whether the information or skills being learned at test time were truly unknown to the base model; if not carefully controlled, stronger LLMs might answer correctly without genuine on-the-fly learning.
+
+### Questions
+1. For test-time learning, did you measure a baseline performance without providing any in-context examples, to confirm that it improves significantly only when it learns from the given in-context examples? Understanding how novel the tasks are to the model would help interpret whether improved performance indeed reflects on-the-fly learning and not just prior knowledge or spurious pattern-matching.
+
+2. Can the authors also report the associated API costs for conducting different experiments? This will offer insights on the practical limitations of each agent architecture under the benchmark conditions.
+
+3. Minor Typo: Line 91: “fuor” to “four”
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces a benchmark (datasets and evaluation metrics) for evaluating so-called "memory agents" - essentially sophisticated versions of RAG-like tasks that need retrieval before (maybe some reasoning and then) generation.
+
+There are 4 categories of tasks; 3 of them somewhat standard, and one of them ("Selective Forgetting") that seems newly made in this paper. The datasets therein are a mix of re-purposed (about 70%) existing, and new (about 30%), datasets. 
+
+The authors evaluate several existing methods on this framework.
+
+### Strengths
+Tests memory beyond simple retrieval, supporting diverse tasks, multi-turn access etc.
+
+The authors have made a comprehensive evaluation of a large number of different styles of RAG systems and agents. 
+
+The authors have spent the effort to make some new datasets, and re-purpose existing work into a uniform framework.
+
+### Weaknesses
+There should be a subsection called "RAG Benchmarks" in Section 2, covering related work in that area as well. 
+
+The "Selective Forgetting" task seems like a boutique, somewhat fabricated one. It should be justified why measuring this is specifically important.
+
+The "test-time-learning" title seems a bit of a misnomer, since the actual task is just learning from long histories/context.
+
+### Questions
+Why devise the "selective forgetting" question ? Seems like a boutique task, so why was this particular boutique task chosen in this paper ?
+
+Is it possible to have a simple clear motivating example that shows where existing benchmarks fail to capture a specific particular way modern "memory agents" work ? 
+
+What exactly is a "memory agent" ? The term seems to have been left somewhat intentionally vague so as to be broad, but it would be better to clearly explain it.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

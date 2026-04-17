@@ -1,0 +1,179 @@
+# KARE-RAG: Knowledge-Aware Refinement and Enhancement for RAG
+
+- Decision: Reject
+- Scores: 2, 6, 4, 4
+
+## Abstract
+Retrieval-Augmented Generation (RAG) enables Large Language Models (LLMs) to access external knowledge sources, significantly enhancing their ability to perform knowledge-intensive tasks. As RAG systems become increasingly vital for real-world applications, improving their ablility of leveraginge externel knowledge has emerged as a critical research direction. Recent studies have explored fine-tuning approaches to enhance LLMs' adaptability in RAG scenarios. However, the inherent complexity of RAG systems makes it challenging to achieve robust performance without substantial amounts of high-quality training data, particularly when handling multi-hop reasoning and other complex tasks that require rich information content and intricate relationships between knowledge elements.
+
+In this paper, we present KARE-RAG (Knowledge-Aware Refinement and Enhancement for RAG), which introduces a novel strategy for RAG optimization. Our key insight is that by training models to construct structured knowledge representations as intermediate outputs, models can learn robust information discrimination strategies from minimal training data while maintaining the flexibility of end-to-end generation. Experiments show our method achieves superior OOD performance while requiring substantially less training data. Notably, these improvements are achieved without compromising general capabilities or requiring modifications to standard RAG inference pipelines. Our findings establish that targeted training strategies focusing on knowledge organization can unlock more efficient optimization pathways for RAG systems. All data and code will be publicly available on Github.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes KARE-RAG, which first builds a “knowledge-aware” intermediate representation in RAG, then uses an LLM expert to iteratively refine the student model’s incorrect knowledge representation. Finally, it applies DDPO at the token level, focusing only on the key difference regions between positive and negative samples to improve factual consistency and robustness. The results look decent when compared with existing methods.
+
+### Strengths
+1.The framework design is clear and easy to follow. It shifts the learning goal of “how to use retrieved evidence” from optimizing only the final answer to learning structured intermediate knowledge, which helps reduce the sparse supervision problem in end-to-end DPO.
+
+2.The experimental results look good, and the ablation studies are fairly complete.
+
+### Weaknesses
+1.The main innovation lies in verifying whether the LLM Expert’s refinements are correct. The verification process uses both the gold answer y₍gnd₎ and the retrieved docs D. But since y₍gnd₎ is also used to judge whether the refinement is “correct,” the model could end up overfitting to the human answer format instead of truly learning a general knowledge verification logic.
+
+2.The expert model is trusted completely without any external calibration or cross-checking. I think that’s an unsafe and weak assumption in the experimental design.
+
+3.The paper doesn’t report important metrics about the expert, such as quality, cost, number of refinement steps, success rate, discarded samples, or processing time per sample.
+
+4.The algorithm looks elegant in theory but seems hard to scale. Any system that claims “end-to-end optimization” but relies on multiple LLM refinement loops must report throughput and actual cost.
+
+5.The baselines are outdated. Although the related work mentions Self-RAG and Graph-RAG/G-Retriever—both highly relevant to structured knowledge use—the main table only compares with Vanilla, RA-DiT, and DDR, missing stronger baselines in the same space.
+
+6.The paper should also include current top reasoning LLMs (like DeepSeek, GPT-5, Claude 3.5, Gemini 1.5) as baselines to better show the method’s advantage.
+
+7.From about 20k samples in the MuSiQue dataset, the pipeline only produced 2,400 usable pairs, showing low sample-generation efficiency.
+
+8.The figures and layout still need polishing, especially Figure 1.
+
+### Questions
+See weaknesses
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Interesting research paper. Existing RAG systems struggle with multi-hop reasoning and conflicting information. Traditional optimization methods (e.g., SFT, DPO) require substantial high-quality training data and lack sufficient supervision for intermediate knowledge processing steps. Providing a good solution. Proposes KARE-RAG, which enables models to learn information discrimination from limited data through structured knowledge representation, automated refined sample generation, and the DDPO training strategy. Outperforms baselines on both in-domain and out-of-domain benchmarks, requires no modifications to standard RAG inference pipelines, is compatible with various model scales, and will make related data and code publicly available.
+
+### Strengths
+High data efficiency: Achieves robust performance with only a small amount of training data, addressing the traditional reliance on large-scale high-quality datasets.
+Strong practicality: Does not alter the standard RAG inference pipeline, incurs no additional computational overhead, and can be seamlessly integrated into existing systems.
+Excellent generalization and compatibility: Delivers superior OOD (out-of-distribution) performance, supports multiple structured representations (e.g., knowledge graphs, key-point structures), and ensures stable performance gains across different model scales.
+
+### Weaknesses
+- How to design specific structured representation. Heavily relies on carefully designed knowledge representation structures, whose versatility and adaptability to diverse task scenarios have not been fully verified.
+- Mabye limitations of automated sample generation. The sample refinement pipeline relies on advanced LLMs for error correction, which may be affected by the performance of the underlying LLMs. The sample quality in extremely complex scenarios is not explained.
+- Room for expansion in complex task adaptation: Although it mentions handling multi-hop reasoning and conflicting information, the upper performance limit in scenarios with ultra-large-scale knowledge sources and ultra-high-complexity queries remains unclear.
+- Indomain is not better than DDR based on Llama3-3b/8b, and Qwen-14b.
+
+### Questions
+- How to design specific structured representation. 
+- Mabye limitations of automated sample generation. The sample refinement pipeline relies on advanced LLMs for error correction, which may be affected by the performance of the underlying LLMs. The sample quality in extremely complex scenarios is not explained.
+- Indomain is not better than DDR based on Llama3-3b/8b, and Qwen-14b.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents KARE-RAG, a training strategy that refines structured knowledge after retrieval to enhance the robustness and generalization of Retrieval-Augmented Generation (RAG) systems. The method introduces knowledge-aware sampling, which organizes retrieved documents into intermediate structured representations prior to generation, and a refinement pipeline that leverages a large language model to correct factual errors in negative samples while preserving structural coherence. Additionally, the paper proposes Dense Direct Preference Optimization (DDPO), extending standard DPO through token-level weighting to emphasize critical knowledge components during training. Experiments on multiple benchmarks to demonstrate consistent gains in robustness and out-of-domain generalization, achieved without modifying the standard RAG inference pipeline.
+
+### Strengths
++ The paper proposes a practical approach that trains models to generate intermediate structured representations for optimizing RAG, effectively addressing the sparse supervision problem in end-to-end methods like DPO.
++ The method shows strong data efficiency and OOD generalization, suggesting that the model learns a robust strategy for knowledge organization rather than mere memorization.
++ The trained model incurs no additional inference overhead, making it easy to integrate into existing RAG systems.
++ The Refinement Pipeline uses a teacher model to generate minimally different contrastive pairs, providing high-quality signals for DDPO training.
+
+### Weaknesses
+- The refinement stage relies heavily on a more advanced expert LLM to generate high-quality positive samples. While this improves data quality, it raises concerns about novelty and practical independence, as the performance gain may largely depend on the capabilities of the external expert model.
+- The training primarily uses the Musique dataset, but the paper does not provide sufficient justification for this choice or explore cross-dataset generalization. It would strengthen the work to test setups such as training on PopQA and evaluating on Musique, or vice versa, to better assess the method’s robustness across different domains.
+- The paper improves the generation of structured “graph-like” text representations but does not perform explicit reasoning over knowledge graph connections. This distinction should be clarified, as the current formulation may conflate improved structural formatting with genuine graph-based reasoning.
+- Since Musique is a multi-hop QA dataset with overlapping conditions and complex logical relations, it is notable that keypoint-based representations outperform graph-based ones on this dataset. This suggests that even after refinement, the proposed graph structure may still lose critical contextual information and may not be universally effective across all reasoning scenarios.
+
+### Questions
+The training primarily relies on the Musique dataset, but the paper does not justify this choice or examine cross-dataset generalization. Could the authors provide results on alternative training–testing configurations—for example, training on PopQA and evaluating on Musique, or the reverse，to better assess the robustness and transferability of the proposed method across different domains?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes knowledge-aware refinement for RAG, which is to train an LLM to learn to first structured knowledge (e.g., a knowledge graph) from text before generating a final answers. The training method is developed based on DDPO where the negative samples are obtained from those with sub-optimal quality of knowledge structure and more attention are put on the tokens corresponding to modified tokens.
+
+### Strengths
+- This paper proposes to train an LLM with RL by optimizing its ability to extract structured knowledge for QA, which seems to be a valid direction for RAG in general.
+- Experiments are done on multiple datasets with different backbone models, and the results show strong performance on OOD test sets specifically
+- Detailed analysis and ablation studies show the effectiveness of proposed method
+
+### Weaknesses
+- The baseline selection is limited. It would be better to compare with other prompt-based and especially graph-based RAG methods to show the value of knowledge refinement
+- Because the prompt schema is rather complicated, it would be better to report the cost and token consumption of the proposed method and how it compares with baselines
+- The paper lacks some real case studies to show what a good quality knowledge structure can be induced by the model and how it helps the final answering.
+
+### Questions
+There some typos and the citation formats should be better adjusted. Besides the questions mentioned above, I also have the following question
+- As shown in Table 1, the in-domain performance is consistently worse than the baseline. Is there an explanation? How would people address that if they only want to achieve better in-domain performance (which can be common in some real applications)?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

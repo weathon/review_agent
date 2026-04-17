@@ -1,0 +1,178 @@
+# Learning Discriminative and Generalizable Anomaly Detector for Dynamic Graph
+
+- Decision: Reject
+- Scores: 4, 2, 4, 4
+
+## Abstract
+Anomaly detection in dynamic graphs is critical for many real-world applications but remains challenging because labeled anomalies are scarce. Most existing approaches rely on unsupervised or semi-supervised learning, which often struggle to learn discriminative representations and generalize to unseen cases. To overcome these issues, we propose SDGAD, a supervised framework with three main components. First, we design a residual representation that highlights deviations from historical patterns, providing strong anomaly signals. Second, we constrain the residuals of normal samples within an interval defined by two co-centered hyperspheres, ensuring consistent scales while keeping anomalies separable. Third, we use a normalizing flow to model the likelihood distribution of normal samples, treating anomalies as out-of-distribution points. Based on this distribution, we derive an explicit decision boundary and further propose a bi-boundary optimization strategy to boost generalization. Experiments on six datasets, covering both real and synthetic anomalies, show that SDGAD consistently outperforms diverse baselines across multiple evaluation metrics. The code is available at this repository:\href{https://anonymous.4open.science/r/SODA-7EFD/}{https://anonymous.4open.science/r/SODA-7EFD/}.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper focuses on anomaly detection in dynamic graphs, where labeled anomalies are scarce and existing unsupervised or semi-supervised methods often fail to learn discriminative representations or generalize well. The authors propose SDGAD, a supervised framework that constructs residual representations capturing deviations from historical behavior, and constrains normal residuals within an interval defined by two co-centered hyperspheres to maintain consistent scaling while enlarging separation from anomalies. Additionally, a normalizing flow models the likelihood distribution of normal samples, yielding an explicit decision boundary and a bi-boundary optimization strategy to enhance generalization. Experiments on six datasets containing both real and synthetic anomalies demonstrate improvements over a diverse range of baselines across multiple metrics.
+
+### Strengths
+1. well written and no obvious typo
+
+2. This paper proposes a new method called SDGAD to achieve anomaly detection with the labels.
+
+### Weaknesses
+1. I'm confused about the motivation of why focus on supervised anomaly detection rather than the unsupervised setting. In my opinion, unsupervised setting more consistent with real-world scenario.
+
+2. The comparison in the main experiment seem to be unfair, since no anomaly detection are introduced.
+
+3. Density estimation seems to be a time-consuming process, no matter what kind of approximate method is used. This raise the concern of scalablity.
+
+### Questions
+see Weaknesses
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes SDGAD, a supervised anomaly detection method for continuous-time dynamic graphs. Although technically sound, the motivation and contribution are questionable.
+
+### Strengths
+* The model achieves slightly better F1 scores than some baselines.
+
+### Weaknesses
+1. **Questionable motivation (Lines 11–16).**
+   The motivation presented in the paper is not convincing. The authors claim that label scarcity motivates now works, but then argue that the prevalence of unsupervised or semi-supervised methods is a problem that needs to be fixed by introducing a fully supervised method. This reasoning is conceptually inconsistent. If labels are scarce, it is perfectly reasonable for the community to focus on unsupervised or semi-supervised settings. Turning to a supervised setting does not address the stated problem; it avoids it.
+
+2. **Supervised setting reduces to standard binary classification.**
+   Once anomaly labels are available, the task essentially becomes a binary classification problem (albeit with imbalanced data). In that case, numerous well-established methods exist for handling class imbalance (e.g., weighted loss, focal loss, re-sampling, or cost-sensitive learning). The proposed method offers no clear advantage over these simpler, well-understood approaches, and the authors do not provide a convincing justification for introducing a more complex framework.
+
+3.  **Misalignment with the anomaly detection community’s focus.**
+   The current trend and practical relevance of anomaly detection lie in *unsupervised* or *semi-supervised* learning, since real-world anomalies are diverse and often lack explicit labels. Relying on labeled anomalies restricts the model to only those anomaly types seen during training, severely limiting generalization and defeating the purpose of anomaly detection. The proposed approach thus misaligns with the core philosophy and goals of the field.
+
+4. **Limited novelty and weak experimental rigor.**
+   The proposed components are rather standard and appear to be a straightforward combination of existing techniques (residual representation, boundary-based loss, and normalizing flow). There is little conceptual or algorithmic innovation. Moreover, several baselines compared in the experiments are outdated or not representative of recent state-of-the-art anomaly detection methods, which undermines the fairness and credibility of the evaluation. Additionally, the relatively newer baselines are not methods in this field.
+
+### Questions
+See weaknesss.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes SDGAD, a supervised framework for dynamic graph anomaly detection that combines three components: (1) residual representation encoding that captures deviations from historical patterns, (2) representation restriction using co-centered hyperspheres, and (3) bi-boundary optimization with normalizing flows.
+
+### Strengths
+1. The paper effectively articulates the limitations of unsupervised and semi-supervised approaches in DGAD, particularly the issue of ambiguous decision boundaries.
+
+2. The evaluation spans six datasets with both real and synthetic anomalies, comparing against 15 baseline methods across multiple metrics (AUROC, AP, F1).
+
+3. The framework can be integrated with different CTDG encoders (TCL, CAWN, DyGFormer), demonstrating some generalizability.
+
+### Weaknesses
+1. The representation restriction mechanism (Section 4.2, Equation 5) is directly borrowed from Zhang et al. (2024) "Deep orthogonal hypersphere compression for anomaly detection." The authors acknowledge drawing "inspiration" but the formulation is nearly identical—using co-centered hyperspheres with interval penalties. The only modification is adding MSE and cosine similarity terms for anomalies, which is a minor incremental change.
+
+2. Using normalizing flows to model normal distributions and detect anomalies as out-of-distribution samples is standard practice (Kirichenko et al., 2020; Kumar et al., 2021, both cited). The bi-boundary optimization (Section 4.3) essentially applies a margin to the likelihood threshold, which is conceptually similar to margin-based losses in classification (e.g., hinge loss, triplet loss).
+
+
+3. The framework requires careful tuning of multiple hyperparameters (λ₁, λ₂, rₘᵢₙ, rₘₐₓ, α, τ, L) across different components. Tables 6-8 show high sensitivity to these choices, suggesting the method lacks robustness. The paper admits "there is no configuration simultaneously maximizes all metrics" (page 16, line 825)
+
+4. The paper doesn't compare against recent anomaly detection methods using normalizing flows (e.g., "Inflow: Robust outlier detection utilizing normalizing flows" by Kumar et al., 2021, which is cited but not compared).
+
+### Questions
+1. Can you provide rigorous justification for why residual representations are theoretically optimal for dynamic graph anomalies?
+
+2. How does your hypersphere restriction differ substantively from Zhang et al. (2024) beyond the minor additions in Equation 5?
+
+3. Can you provide tighter theoretical bounds that account for all three loss terms and their interactions?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes SDGAD, a supervised framework for dynamic graph anomaly detection (DGAD), aiming to improve discriminability in unsupervised settings and enhance generalization to unseen anomalies. The framework consists of three main components. First, Residual Representation Encoding calculates the difference between node embeddings with and without the current interaction, thus highlighting deviations from historical patterns. Second, Representation Restriction constrains the residuals of normal samples within an interval bounded by two co-centered hyperspheres, which helps compact their scale while keeping anomalies separable. Third, Bi-Boundary Optimization with Normalizing Flows models the likelihood distribution of normal samples and introduces explicit normal and anomaly boundaries separated by a margin to improve robustness.
+
+### Strengths
+1. The paper is clearly written, with a clear problem statement and a logically organized presentation.
+2. SDGAD improves both ranking metrics (AUROC/AP) and classification metrics (F1) across multiple datasets and backbones.
+
+### Weaknesses
+1. Although SDGAD demonstrates strong performance in supervised settings, it requires a sufficient number of labeled anomalies to train effectively. In many practical applications, such as fraud detection, labeled anomalies are extremely rare or unavailable, which could reduce the feasibility and impact of the proposed approach in such environments.
+2. The complexity of the loss design, which combines residual restriction and bi-boundary optimization, adds tuning complexity ($\lambda_{1}$, $\lambda_{2}$, $\tau$, $r_{\mathrm{min}}$, $r_{\mathrm{max}}$, $\alpha$), though the authors provide sensitivity analysis.
+
+### Questions
+1. How does the proposed dynamic graph anomaly detection task fundamentally differ from a standard imbalanced classification problem in terms of definition, modeling, and challenges?
+2. How does SDGAD perform when anomaly labels are extremely limited (e.g., < 0.1%)?
+3. Have other density estimators (e.g., energy-based models, autoregressive likelihood models) been tested instead of normalizing flows? Would they face the same “typical set” risk?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1

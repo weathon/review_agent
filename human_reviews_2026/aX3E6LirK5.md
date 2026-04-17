@@ -1,0 +1,183 @@
+# pFedMMA: Personalized Federated Fine-Tuning with Multi-Modal Adapter for Vision-Language Models
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 4, 6
+
+## Abstract
+Vision-Language Models (VLMs) like CLIP have demonstrated remarkable generalization in zero- and few-shot settings, but adapting them efficiently to decentralized, heterogeneous data remains a challenge. While prompt tuning has emerged as a popular parameter-efficient approach in personalized federated learning, existing methods often sacrifice generalization in favor of personalization, struggling particularly on unseen classes or domains. In this work, we propose pFedMMA, the first personalized federated learning framework that leverages multi-modal adapters for vision-language tasks. Each adapter contains modality-specific up- and down-projection layers alongside a globally shared projection that aligns cross-modal features. Our optimization strategy allows clients to locally adapt to personalized data distributions while collaboratively training the shared projection to improve global generalization. This design is also communication-efficient, as only the shared component is exchanged during communication rounds. Through extensive experiments across eleven datasets, including domain- and label-shift scenarios, we show that pFedMMA achieves state-of-the-art trade-offs between personalization and generalization, outperforming recent federated prompt tuning methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposes pFedMMA for personalized federated learning (PFL) on vision–language models (VLMs). The core idea is to adopt a Multi-Modal Adapter structure, aggregating only the shared projection on the server while keeping the up/down projections as local personalized parameters. This aims to balance personalization vs. generalization under limited communication cost.
+
+### Strengths
+* The method is intuitive and easy to implement.
+* It has an advantage in terms of communication efficiency.
+
+### Weaknesses
+1. While the approach is effective for personalized federated VLMs, I have concerns about novelty: the work largely looks like replacing the backbone with a Multi-Modal Adapter in a standard FL pipeline. The substantive difference from prior PEFT/Adapter + FL lines is not sufficiently quantified.
+2. The paper emphasizes applicability in out-of-distribution (OOD) scenarios, which is closely related to Federated Domain Generalization (FedDG). However, related work is not discussed in depth and experiments do not compare against FedDG-style algorithms also targeting federated VLMs (e.g., PLAN [1]).
+
+```
+Reference
+[1] Shuai Gong, Chaoran Cui, Chunyun Zhang, Wenna Wang, Xiushan Nie, and Lei Zhu. Federated domain generalization via prompt learning and aggregation. arXiv:2411.10063, 2024.
+```
+
+### Questions
+1. Why does pFedMMA achieve only 9.26% on the Amazon domain, significantly below FedPGP’s 20.34%? Please provide an explanation/diagnosis.
+2. Could you add comparisons of vision-only / text-only / both-sides shared projection to localize the main information-sharing channel and potential side effects?
+3. Please include the HM formula and a brief rationale for choosing it in the main text.
+4. Fairer baselines beyond prompts: Have you considered other VLM fine-tuning approaches such as CLIP-Adapter + FL (and more general PEFT baselines), given that current baselines are mostly prompt-based?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes pFedMMA, a novel personalized federated learning (PFL) framework for fine-tuning vision-language models (VLMs) like CLIP in decentralized, heterogeneous settings. It introduces multi-modal adapters with modality-specific down- and up-projection layers and a shared projection layer, inserted into upper transformer blocks of both image and text encoders. Clients locally update all adapter components to adapt to their data distributions, while only the shared projection is globally aggregated via FedAvg, balancing personalization and generalization with communication efficiency.
+
+### Strengths
+Comprehensive Evaluation: The study spans diverse heterogeneity scenarios (label shifts via non-overlapping classes, feature shifts via multi-domain datasets like DomainNet), using Dirichlet partitioning for realistic non-IID data. Testing extensive datasets, two backbones (ViT-B/16, ViT-B/32), and few-shot regimes, provides robust evidence of applicability and interpretability.
+
+Efficiency and Scalability: As a parameter-efficient fine-tuning (PEFT) method, it freezes the VLM backbone, training only lightweight adapters. The focus on shared projection aggregation reduces communication costs.
+
+### Weaknesses
+Unverified Cross-Modal Alignment: The core claim of achieving cross-modal consistency via the shared projection lacks rigorous validation. The parallel adapter design with a shared layer assumes modality interaction without explicit mechanisms (e.g., attention or fusion gates), and no quantitative evidence (e.g., cosine similarity, t-SNE visualizations) confirms reduced modality gaps or alignment under federated heterogeneity. 
+
+Insufficient Motivation and Problem Framing: The motivation relies on prompt-based PFL methods, sacrificing generalization for personalization, but lacks deep analysis on why adapters inherently outperform prompts or why a hybrid prompt-adapter approach is not explored. Baseline selection is biased toward prompt methods, omitting adapter-based methods such as FedCLIP (Lu et al., 2023).
+
+### Questions
+Please see the weaknesses above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes pFedMMA, a personalized federated learning framework for Vision-Language Models (VLMs), which for the first time incorporates multi-modal adapters into federated fine-tuning. The proposed architecture includes modality-specific up- and down-projection layers along with a globally shared projection layer. During training, all components are updated locally, while only the shared projection is aggregated globally. Extensive experiments across multiple datasets demonstrate that pFedMMA achieves a SOTA trade-off between personalization and generalization.
+
+### Strengths
+1. pFedMMA effectively introduces multi-modal adapters into personalized federated learning, balancing personalization and generalization. It addresses the poor generalization of existing prompt-tuning methods on unseen classes.
+
+2. The asymmetric training mechanism, which aggregates only the shared projection layer, reduces communication costs while retaining modality-specific up- and down-projections locally to adapt to local data distributions.
+
+3. Through extensive evaluation across diverse data heterogeneity scenarios, pFedMMA is shown to surpass prior prompt-based PFL techniques in generalization across both domains and categories, without compromising its personalization strength.
+
+### Weaknesses
+1. Although communication cost is reduced, the total number of trainable parameters introduced by pFedMMA is significantly larger than mainstream prompt-tuning methods, increasing local computational and memory burdens, which may not be friendly to resource-constrained devices.
+
+2. Despite achieving the best harmonic mean (HM) performance, pFedMMA shows noticeably lower local accuracy than pFedMoAP on several datasets (e.g., Flowers102 and DTD), indicating that its personalization capability is sacrificed in certain scenarios. The overall performance is sensitive to dataset distributions and lacks stability.
+
+3. In the domain generalization experiments on DomainNet and Office-Caltech10, the experiments do not include federated baselines explicitly developed for domain or feature shift scenarios, which weakens the credibility of their claims regarding domain generalization capability.
+
+### Questions
+1. The paper claims that the shared projection layer improves generalization to unseen classes, but it does not explain why this structure effectively generalizes to semantic categories completely absent during training.
+
+2. The motivation for using harmonic mean (HM) as the main evaluation metric, rather than arithmetic mean, is not sufficiently justified. Moreover, no references are provided to support the use of HM for evaluating the balance between personalization and generalization.
+
+3. The main contribution appears to be a direct adaptation of the centralized MMA to the federated setting, with the added strategy of aggregating only the shared projection layer globally. This raises concerns about limited novelty.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper designs an algorithm (pFedMMA) to personalize Vision-Language Models in a federated learning setup to adapt to client-side data heterogeneity. The design is based on client-specific multi-modal parallel adapters with each adapter's cross-modal shared projection layer aggregated for generalization under federated learning. The paper presents extensive empirical evidence (under data heterogeneity, label-shift, and feature-shift) that pFedMMA improves the generalization-personalization trade-off compared to personalized federated prompt tuning methods. The adapters are restricted to higher layers of the image and text encoders of the VLM to keep communication cost of aggregating the shared projection layers in check while capturing a large proportion of the full potential of the design w.r.t. generalization and personalization.
+
+### Strengths
+(S1) The paper is very well-organized and well-written. It is delightfully easy to read. Intuitions from related work are provided in several places for proper contextualization. The problem, algorithm design, and experimental setups are all well motivated. Results and intuition are well communicated.
+
+(S2) Experiments and metrics presented provide good quality empirical evidence to support the claims in the paper. A diversity of datasets and experimental conditions covering data heterogeneity, label-shift, and feature-shift have been considered. The results communicate that a demonstrated improvement is achieved by pFedMMA in the generalization-personalization trade-off in federated learning of VLMs for several datasets.
+
+### Weaknesses
+(W1) While related work is mostly well cited, I believe that one relevant paper [FedDAT] is missing. Contributions of this manuscript should be contextualized and differentiated w.r.t. this reference. [FedDAT] Chen, H., Zhang, Y., Krompass, D., Gu, J., & Tresp, V. (2024). FedDAT: An Approach for Foundation Model Finetuning in Multi-Modal Heterogeneous Federated Learning. Proceedings of the AAAI Conference on Artificial Intelligence, 38(10), 11285-11293.
+
+(W2) Lines 461-462: Based on Fig. 4, one can only comment about evolution of personalization accuracy, not generalization. To support the analogous generalization claim, a plot of the base-to-novel generalization vs communication round is needed.
+
+(W3) Line 357: It would be good to have results with one more optimizer (Muon or Adam) besides SGD to ensure that the conclusions hold true on change of optimizer. Results can be in the appendix, but referenced & commented on in the main body.
+
+Things to improve the paper that did not impact the score:
+- Lines 363-365: It would be good to have a cited reference for the use of "base-to-novel generalization" metric.
+- Section 4.3: Among all the studies presented, only the "Adapting Variant Options for PFL" is an ablation study. The others are hyperparameter choice experiments.
+
+### Questions
+(Q1) Lines 18-20 - "In this work, we propose pFedMMA, the first personalized federated learning framework that leverages multi-modal adapters for vision-language tasks." I feel that this is a bit too strong of a claim, since several elements of the design already appear in the related works - a) [FedDAT] incorporates adapters in FL, and b) FedPGP deals with generalization-personalization trade-offs. Is it more apt to state this work as an advancement (with explicit clarifications on what parts are advancements)? Same comment for Lines 86-88.
+
+(Q2) Would pFedMMA translate well to state-of-the-art privacy and security aware enhancements to the aggregation method? Some explicit commentary on this aspect is warranted in the paper's main body (or in the appendix and referenced in the main body).
+
+(Q3) Lines 264-265: Should this aggregation formula be changed when number of samples varies across clients? How are the empirical results generated for large differences in number of samples?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+2

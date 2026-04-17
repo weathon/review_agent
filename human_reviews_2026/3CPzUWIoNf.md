@@ -1,0 +1,137 @@
+# A$^2$Search: Ambiguity-Aware Question Answering with Reinforcement Learning
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6
+
+## Abstract
+Recent advances in Large Language Models (LLMs) and Reinforcement Learning (RL) have led to strong performance in open-domain question answering (QA). However, existing models still struggle with questions that admit multiple valid answers. Standard QA benchmarks, which typically assume a single gold answer, overlook this reality and thus produce inappropriate training signals. Existing attempts to handle ambiguity often rely on costly manual annotation, which is difficult to scale to multi-hop datasets such as HotpotQA and MuSiQue.
+In this paper, we present A$^2$Search, an annotation-free, end-to-end training framework to recognize and handle ambiguity. At its core is an automated pipeline that detects ambiguous questions and gathers alternative answers via trajectory sampling and evidence verification. The model is then optimized with RL using a carefully designed $\mathrm{AnsF1}$ reward, which naturally accommodates multiple answers.
+Experiments on eight open-domain QA benchmarks demonstrate that A$^2$Search achieves new state-of-the-art performance. With only a single rollout, A$^2$Search-7B yields an average $\mathrm{AnsF1}@1$ score of $48.4$% across four multi-hop benchmarks, outperforming all strong baselines, including the substantially larger ReSearch-32B ($46.2$%). Extensive analyses further show that A$^2$Search resolves ambiguity and generalizes across benchmarks, highlighting that embracing ambiguity is essential for building more reliable QA systems. Our code, data, and model weights can be found at https://github.com/zfj1998/A2Search.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes A²SEARCH—an end-to-end RL framework that requires no manual annotation. Its core contribution lies in designing an automated annotation pipeline that automatically identifies ambiguous questions in multi-hop question-answering datasets and generates alternative, valid answers through trajectory sampling, evidence filtering, and LLM-based validation. After RL training, A²SEARCH can automatically identify ambiguous questions, enabling the model to output all reasonable answers within a single inference trajectory, thereby improving the realism of the training signal and the reliability of the evaluation. Experimental results show that A²SEARCH-7B achieves SOTA  performance on eight open-domain QA benchmarks.
+
+### Strengths
+-  The paper clearly points out the pervasive mismatch between existing QA benchmarks (which assume a single gold answer) and real-world QA scenarios (where multiple valid answers exist). It is the first to propose a large-scale, annotation-free ambiguity solution specifically for the challenging multi-hop QA setting.
+-  The proposed four-step automated pipeline (Sampling, Filtering, Verification, and Grouping) is a significant technical contribution. It effectively utilizes the capabilities of existing LLMs to automatically discover and verify alternative answers, demonstrating a viable and scalable approach to augmenting training data without costly manual annotation.
+-  A2SEARCH-7B achieves SOTA results on multi-hop QA using only a single greedy decoding rollout. When compared to baseline models that typically require multiple sampled rollouts, this demonstrates the model's precise ambiguity-sensing capability and the significant efficiency of the proposed training paradigm.
+
+### Weaknesses
+Although the model performs exceptionally well on the AnsF1 metric, the source of this performance gain is insufficiently distinguished in the methodology. 
+It is unclear whether the improvement stems from genuinely solving ambiguities across different semantic levels or merely from increasing the recall of paraphrased variants of a single reference answer. 
+
+The use of a single-rollout comparison for A2SEARCH (@1) against multi-rollout estimation for baselines (@3) may potentially overstate its advantage relative to the baselines' true underlying capability.
+
+### Questions
+- The Attribution of Performance Improvements: Can a more detailed analysis be provided to better demonstrate the actual value of "ambiguity perception"? When A2SEARCH outputs multiple answers, what is the precision of its predicted answers? Does the model tend to over-generate to achieve higher recall, especially when the final answer is a single, unambiguous response? Is part of the model's superior performance merely due to being trained to output answers in a list format, which differs from baseline models that are optimized to provide a single best answer? The authors need to more clearly demonstrate that the benefits arise from the recognition of ambiguity, rather than just the output format of multiple answers.
+- Additional experiments: Based on the previous point of inquiry, could you provide a comparative model that is trained on the original single definitive answer but is capable of outputting a list of multiple answers? This would allow for a comparison to demonstrate the contribution of the ambiguity-aware data itself. Additionally, it would be beneficial to constrain A2SEARCH to output only the most likely single answer and compare its performance on AnsF1@1 with that of baseline models. This would help to demonstrate whether the introduction of ambiguity information during training has enhanced the model's single-answer reasoning capability.
+- Source of Baseline AnsF1/Recall@3 Data: What is the specific source for the baseline models' AnsF1/Recall@3 data reported in Table 1 and Table 2? Were these results taken directly from the original papers, or were they reproduced and estimated by the authors themselves using the specified sampling procedure?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper tackles ambiguity in open-domain QA (i.e. the cases where a question has multiple valid answers) by proposing $A^2-SEARCH$, an annotation-free RL framework that automatically mines alternative answers via an evidence-based pipeline and trains an LLM with an answer-level F1 (AnsF1) reward that balances precision and recall in multi-answer settings. Experiments on eight benchmarks show state-of-the-art results with single-rollout decoding.
+
+### Strengths
+- The paper proposes a method that addresses a significant problem in QA.
+- The authors present convincing empirical evidence supporting their claims, using several baseline models of various sizes and several datasets to check the performance of their model.
+
+### Weaknesses
+- The paper does not address unanswerable queries - cases where retrieval fails and the model should abstain (e.g., say “I don’t know”). This omission is a substantial gap that limits real-world applicability of the framework.
+- At "Step 1: Sampling" (lines 248-258) the pipeline generates millions of trajectories, which may be computationally infeasible for many users; clearer reporting of the time cost of these experiments would be valuable.
+- If I understand correctly, the authors applied their training recipe exclusively to Qwen-family models to produce their $A^2-SEARCH$ model. I.e. they don't provide evidence for cross-family generality of this training approach (see "Questions" section).
+- Verification phase fully relies on proprietary models (Claude 3.5/3.7, OpenAI o3/o4-mini). Unpredictable availability of proprietary models and model drift may affect reproducibility and future re-runs; more results with open verifiers (or human audits at scale) would help.
+- Some parts of the paper are written in unclear way (see "Questions" section).
+
+### Questions
+- How sensitive are results to the choice/mix of verifiers? Could an all-open pipeline (e.g., Llama- or Qwen-based judge + open retriever) approach the same agreement/coverage?
+- What "△", "□", "○" symbols mean on the Figure 2?
+- What's going on in the "Step 2" on the Figure 2?
+- Do I understand correctly that you use Qwen-2.5-Intrusct 3B/7B specifically as a base models for your $A^2-SEARCH$ 3B and 7B correspondingly in the Tables 1 and 2?
+- Did you try other models, NOT from Qwen family, as a base models for your $A^2-SEARCH$? What is the difference in the performance for other models?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper addresses the challenge of ambiguity in open-domain QA, noting that standard benchmarks often rely on a single reference answer, overlooking the reality that many questions admit multiple equally valid responses. To counter this, the paper proposes A^2 SEARCH, an annotation-free, end-to-end RL framework designed to recognize and handle ambiguity. This work proposes automated data generation pipeline that detects ambiguous questions and collects alternative answers via trajectory sampling and evidence verification. The subsequent RL training uses GRPO and an answer-level F1 reward, a metric tailored to accommodate multiple correct answers by rewarding coverage while penalizing over-generation. Eight open-domain QA benchmarks demonstrates that the approach achieves new state-of-the-art results, confirming that embracing ambiguity is essential for developing more reliable QA systems that can learn to sense ambiguity and retrieve multiple valid answers.
+
+### Strengths
+- The motivation for this work is well explained, and the paper is generally well written. The paper effectively highlights the significant challenge posed by ambiguity in open-domain QA. The recognition that current RL pipelines deliver misleading signals by rewarding only the reference answer and penalizing valid alternatives provides a strong foundation for the proposed framework.
+
+- The proposed method is its fully automated pipeline for identifying ambiguous questions and gathering alternative answers via trajectory sampling and evidence verification. This annotation-free approach is critical, especially since scaling costly manual annotation to complex multi-hop datasets like HotpotQA and MuSiQue is difficult. This automation makes the approach highly practical and scalable.
+
+- The paper includes rich and detailed experiments, encompassing a variety of ablation studies and case analyses.
+
+- Models trained with the proposed method show high efficiency, achieving strong recall levels with fewer average tool calls compared to baselines, demonstrating more effective utilization of reasoning steps.
+
+### Weaknesses
+- While the overall framework is effective, the novelty of the core learning method and reward design is moderate. The reward structure employs an outcome-only design and incorporates Answer-level F1 (AnsF1), which is derived from standard precision and recall metrics but tailored for multiple answers. The novelty lies primarily in the application of these existing mechanisms to the specific problem of ambiguity resolution, coupled with the sophisticated automated data pipeline, rather than new architectural or objective function designs.
+
+- While the paper confirms that the generated alternative answers are semantically distinct from the reference answer and evidence-supported, a more detailed breakdown of why they constitute genuine ambiguity is helpful. A statistical analysis quantifying the frequency of these different types of ambiguity (e.g., linguistic vs. entity vs. scope ambiguity) across the derived dataset would enrich the findings of the paper.
+
+### Questions
+- Why are K LLM verifiers necessary? Just for the ensemble?
+- L174 - what is the meaning of a n_hat s?
+- How does performance increase even on non-ambiguity datasets? Are ambiguous answers substantially included in datasets like HotpotQA?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,234 @@
+# Attention as a Compass: Efficient Exploration for Process-Supervised RL in Reasoning Models
+
+- Decision: Accept (Poster)
+- Scores: 6, 2, 6, 4
+
+## Abstract
+Reinforcement Learning (RL) has shown remarkable success in enhancing the reasoning capabilities of Large Language Models (LLMs). Process-Supervised RL (PSRL) has emerged as a more effective paradigm compared to outcome-based RL. However, existing PSRL approaches suffer from limited exploration efficiency, both in terms of branching positions and sampling. In this paper, we introduce a novel PSRL framework (AttnRL), which enables efficient exploration for reasoning models. Motivated by preliminary observations that steps exhibiting high attention scores correlate with reasoning behaviors, we propose to branch from positions with high values. Furthermore, we develop an adaptive sampling strategy that accounts for problem difficulty and historical batch size, ensuring that the whole training batch maintains non-zero advantage values. To further improve sampling efficiency, we design a one-step off-policy training pipeline for PSRL. Extensive experiments on multiple challenging mathematical reasoning benchmarks demonstrate that our method consistently outperforms prior approaches in terms of performance and sampling and training efficiency. Our code is available at https://github.com/RyanLiu112/AttnRL.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes AttnRL for process-supervised reasoning RL. It uses attention-guided branching to pick a small set of step-level decision points to expand; a one-step off-policy pipeline is used to improve training efficiency; plus difficulty-aware adaptive sampling so harder problems receive more rollouts. On several math reasoning benchmarks (1.5B/7B models), AttnRL shows better accuracy and faster learning curves.
+
+### Strengths
+1. Clear motivation and insightful analysis: Figure 2’s analysis (e.g., how perturbing high-FCI steps impacts performance) is interesting and provides useful intuition for why attention-guided branching should help.
+
+2. Method completeness: attention-guided step selection + adaptive sampling + off-policy pipeline form a coherent system, the one-step pipeline reduces the training-efficiency issues brought about by TreeRL.
+
+3. Empirical evidence: the authors report consistent gains over GRPO/TreeRL across multiple math benchmarks (1.5B/7B).
+
+### Weaknesses
+1. The main claim is using attention scores to guide process RL, but current experiments may not sufficiently isolate this contribution. The final selection combines the top 20% FCI steps plus the earliest steps—are there ablations separating these two factors? Would a simple baseline that branches only on the first 2 steps close the gap?
+
+2.  The paper reports a w/ ATB ablation with 1.2 point gains in average (in Table 2), does TreeRL and w/ATB in Table 2 use the same rollout budget? Is this gain large enough to support the claim? Similar ablations are missing on DS-R1-Distill-Qwen-7B—are the conclusions consistent there?
+
+2. Complexity vs. gain: Although simpler than TreeRL, training complexity still increases compared to plain GRPO. The gains at 7B are smaller than at 1.5B; considering cost vs. benefit, the overall value is questionable.
+
+### Questions
+Q1. What is the relationship between FCI scores and step position? For example, do they exhibit a certain correlation?
+
+Q2. Do you expand starting at the high-FCI step itself (i.e., keep that step fixed and sample continuations from it), or do you expand from its parent step (i.e., resample the action at that step as well)? Please clarify which you use and why. If possible, please also explain your intuition: you mention that steps with high FCI scores are related to reasoning behaviors such as planning and self-verification—why does branching in this way help?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This work first conducts empirical analysis on how high attention score reasoning steps are connected to the reasoning process. Then, they propose the following methods: 1, branching at massive attention values; 2, filtering out responses whose advantage values are 0; 3, a multi-process method to sample trajectories on adjacent steps.
+
+### Strengths
+1, I appreciate their in-depth empirical analysis into the effects of attention score/step position (section 3.1.1 and 3.1.2).
+
+2, In section 4, the proposed method (AttnRL) can significantly outperform three baselines: the base model, GRPO, and TreeRL.
+
+### Weaknesses
+1, Some presentations in this paper could be improved, making some of its point unclear to me. I will list my questions in the Questions section.
+
+2, Although the work does some empirical analysis on token attention scores, it is still unclear to me why the branching points should be selected according to the attention scores.
+
+3, Some of the designs are claimed without explanation:
+- equation 3
+- equation 7 (btw, what is the definition of $C$; how is it used?)
+- equation 9
+- The proposed method does not significantly outperform DeepScaleR-Preview-1.5B
+
+4, in Line 240 to 241, the claim that zero advantage indicates all samples are correct is wrong. If all samples are wrong, their advantages are also 0.
+
+### Questions
+- In the abstract, AttnRL is claimed to resolve the “limited exploration efficiency”. How does AttnRL improve the exploration efficiency?
+- In figure 1, from my understanding, those sentences (e.g., “Let me compute that”) are steps. Why are only some words colored in red? What does the color indicate? Why are those words related to “reasoning”?
+- In line 252, What do you mean “more difficult to rollout”?
+- In line 272, what is $B$ and how is it involved in the filtering? 
+- In experiment section, why do different training have different steps? If so, is the comparison fair?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The manuscript proposes AttnRL to make exploration in Reasoning Language Models (RLMs) more efficient. The authors start from an analysis that shows that the decomposition of reasoning steps, which they define on a paragraph level, correlates with high attention scores. By using a new metric called FCI score, which reflects how much a given reasoning step influences the subsequent parts of the trajectory, they select the highest relevant reasoning steps as well as the first two reasoning steps, where additional exploration, i.e. branching should take place. Additionally the authors propose a number of techniques to improve the sampling efficiency, for example by filtering out easy problems that provide zero advantage in the Markov Decision Process to improve efficiency as well as determining the magnitude of exploration by the complexity of the problem. Another optimization is the  dynamic selection of the batch size to improve training efficiency and that the two sampling phases are combined together, so that presumably optimizations can applied to the sampling phase as a whole.
+
+### Strengths
+* improvement of (exploration in) reasoning chains in RLMs is a timely topic
+* selection of important reasoning steps based on attention scores instead of for example on entropy seems like a novel idea
+* additionally a number of improvements are suggested to improve the sampling efficiency
+* writing is mostly clear and seems to be well motivated, where certain decisions are based on or validated with micro-benchmarks
+* evaluation:
+  * clear description of the used evaluation setting and the hyperparameters for the most part
+  * training, while being done in fewer steps, shows improvements on a selection of evaluation benchmarks
+
+### Weaknesses
+My main concern is the limited evaluation:
+* only two different and smaller models (1.5B and 7B) are trained, which are from the same model family
+* unclear whether the approach generalizes to larger models, since the improvements to the 7B model are already small
+* I found it a bit unclear which policy optimization algorithm is used for training AttnRL
+* ablation study seems a bit limited, albeit I have no concrete suggestion for additional experiments to run
+* description of the baselines could be a bit clearer
+
+4.3: Table 4.2 seems to suggest that AttnRL is implemented on top of TreeRL or is based on it, but alters certain key aspects? -> I think this should be made more clearer at the beginning of chapter 4.
+  * best results on the individual benchmarks are not bolded, despite claiming in the caption to do so, probably because AttnRL is only best in three of them 
+  * performance drop for filtering easiest is not completely true -> is best in two of the benchmarks
+
+related work: if there is that much work with outcome-based reward modeling, I assume there is a reason for it - I found the efficiency claim not convincing in its brevity.
+
+Additionally while the manuscript is clearly written, it also omits a lot of details/assumes prior knowledge, so it might be at times hard to understand for the reader. But maybe that is just my personal lack of knowledge.
+
+minor issues:
+* 4.1 
+  * line 310: footnote is not on the same page
+  * line 314/315: Luo et al. (2025) is cited twice in the same sentence
+* related work, 6.2: abbreviation PRM is never introduced
+* references:
+  * no "accessed date for weblinks:
+    * [An et al. 2025]
+    * [Anthropic 2023]
+    * [Luo et al. 2025]
+    * [MAA 2023/2024/2025]
+    * [meituan search 2025]
+    * [OpenAI 2024]
+  * consider capitalizing the titles to be consistent, especially abbreviations and proper names (which is sometimes done)
+  * [Luo et al. 2025] - URL cuts into the margin (consider using the xurl package)
+  * [MAA 2024] and [MAA 2025] have the same URL
+
+### Questions
+* How is a tree constructed from just identify important steps? I believe the tree construction is never actually discussed.
+* How does Figure 3 show that the advantage is zero if it shows FCI scores?
+  * If the FCI score is defined for a given step, how is it applied to a whole problem?
+* Isn't the total token generation the limiting factor instead of the multiple sampling?
+* How different can the DeepScaleR-Preview-Dataset be seen compared to the evaluation benchmarks/datasets?
+* Are TreeRL and AttnRL trained using PPO as a "PPO minibatch size" is used? Previously I was under the impression that AttnRL mechanism is applied to GRPO.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes AttnRL, a novel Process-Supervised Reinforcement Learning (PSRL) framework that improves exploration efficiency for reasoning models. The authors identify critical limitations in existing PSRL methods like TreeRL: entropy-based branching ignores semantic meaning of reasoning steps, uniform sampling wastes computation on uninformative problems, and two-step sampling per iteration creates computational bottlenecks. AttnRL addresses these issues through attention-guided branching, adaptive difficulty-aware sampling, and efficient training pipelines, achieving superior performance with better sample efficiency.
+
+### Strengths
+## Originality
+
+The paper demonstrates strong originality by being the first to systematically leverage attention mechanisms for identifying branching points in process-supervised RL. While attention analysis and PSRL exist independently, the Forward Context Influence (FCI) metric elegantly connects attention patterns to reasoning behaviors, moving beyond naive entropy-based heuristics. The disruption experiments (Figure 1) provide compelling validation that high-FCI steps correspond to critical reasoning behaviors like planning and verification, not just predictive uncertainty. The adaptive sampling strategy that dynamically allocates compute based on problem difficulty addresses a practical inefficiency overlooked by prior uniform-sampling approaches, showing creative problem-solving beyond incremental improvements.
+
+## Quality
+
+The technical quality is high with comprehensive evaluation across six mathematical benchmarks and two model scales (1.5B, 7B), demonstrating consistent improvements. The experimental design is sound, using appropriate baselines (GRPO, TreeRL, DeepScaleR-Preview) and reporting both performance (Pass@K) and efficiency metrics (wall-clock time, valid training tokens). Ablation studies systematically isolate component contributions (ATB: +1.2%, full method: +1.8%) and reveal nuanced insights, such as filtering all easy problems slightly hurting performance. 
+
+## Clarity
+
+The paper is well-structured with clear motivation and logical progression from problem to solution. Figure 1 effectively visualizes FCI scores with annotated reasoning steps. Mathematical formulations are precise and implementation details comprehensive, facilitating reproducibility.
+
+### Weaknesses
+## Limited Theoretical Foundation
+
+The paper lacks rigorous theoretical justification for why attention-based branching should outperform entropy-based selection. While the FCI metric is intuitively motivated and empirically validated through disruption experiments, there is no formal analysis establishing under what conditions high attention scores correspond to high-value branching points for credit assignment. The connection between "massive attention values" and reasoning behaviors relies primarily on empirical correlation (Figure 1) without explaining the underlying mechanism—why do planning and verification steps exhibit high attention? What attention patterns distinguish productive reasoning from unhelpful verbosity?
+
+## Questionable Distribution Shift
+
+The **selective branching based on FCI scores creates significant state distribution shift** that the paper completely ignores: by branching only from top 20% high-FCI states, the method oversamples certain states by 5-10× compared to the natural policy distribution $d^\pi(s)$. This creates $d^{branching}(s) \neq d^\pi(s)$, which technically requires importance weight corrections $w(s) = d^\pi(s)/d^{branching}(s)$ for unbiased policy gradients. 
+
+## Inconsistent Results and Missing Statistical Analysis
+
+The results show concerning inconsistencies without proper statistical analysis. Table 1 shows AttnRL's improvements vary wildly across benchmarks: +4.0 points on AIME24 but only +0.2 on MATH-500 for the 1.5B model, and sometimes underperforms TreeRL (e.g., AMC23: 91.9 vs 92.2 for 7B). No error bars, confidence intervals, or significance tests are provided—are these differences within noise? The paper doesn't specify number of training runs, random seeds, or variance across runs, making it impossible to assess reliability. The paper should report results with multiple seeds, provide statistical significance tests (e.g., bootstrap confidence intervals), and better control for confounds when comparing to published baselines.
+
+## Computational Cost and Scalability Concerns
+
+While the paper claims "lightweight" and improved efficiency, the actual computational overhead of AttnRL is underspecified. Computing FCI scores requires extracting and aggregating attention matrices across all layers and heads for every sequence ($\max_{l,h}\{\sum_j \alpha^{l,h}_{j,k}\}$), which could be expensive for long sequences or large models. How much wall-clock time does FCI computation add per sample?
+
+### Questions
+see weakness above
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

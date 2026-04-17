@@ -1,0 +1,191 @@
+# Equilibrium Matching: Generative Modeling with Implicit Energy-Based Models
+
+- Decision: Reject
+- Scores: 4, 8, 2, 4
+
+## Abstract
+We introduce $\textit{Equilibrium Matching}$ (EqM), a generative modeling framework built from an equilibrium dynamics perspective. EqM discards the non-equilibrium, time-conditional dynamics in traditional diffusion and flow-based generative models and instead learns the equilibrium gradient of an implicit energy landscape. Through this approach, we can adopt an optimization-based sampling process at inference time, where samples are obtained by gradient descent on the learned landscape with adjustable step sizes, adaptive optimizers, and adaptive compute. EqM surpasses the generation performance of diffusion/flow models empirically, achieving a FID of 1.90 on ImageNet 256$\times$256. EqM is also theoretically justified to learn and sample from the data manifold. Beyond generation, EqM is a flexible framework that naturally handles tasks including partially noised image denoising, OOD detection, and image composition. By replacing time-conditional velocities with a unified equilibrium landscape, EqM offers a tighter bridge between flow and energy-based models and a simple route to optimization-driven inference.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces Equilibrium Matching (EqM), a novel generative modeling framework that replaces the non-equilibrium, time-conditional dynamics of diffusion and flow-based models with a single, time-invariant equilibrium gradien. EqM learns the gradient field of an implicit energy landscape by training a noise-unconditional model to match a new target gradient. This target is designed to point from noise to data and, crucially, to vanish at the data manifold, ensuring ground-truth samples are stable local minima. This equilibrium perspective enables flexible, "optimization-based sampling" (e.g., gradient descent, NAG, adaptive compute) at inference time. Empirically, EqM achieves state-of-the-art performance, and demonstrates capabilities absent in standard flow models, such as OOD detection, image composition, and high-fidelity denoising from partially noised inputs.
+
+### Strengths
+- The shift from a time-conditional velocity field to a single equilibrium gradient field is a simple but powerful conceptual contribution.
+- The primary strength of EqM is its strong sample quality. It achieves a 1.90 FID on class-conditional ImageNet 256x256, outperforming the strong SiT (Flow Matching) baseline (2.06 FID) and the DiT (Diffusion) baseline (2.27 FID).
+
+### Weaknesses
+- The theoretical justification (Statements 1 and 2) that the model's local minima are the ground-truth data samples relies on "perfect training" and "high-dimensional" approximations . While the empirical results are strong, the theory provides an approximation rather than a hard guarantee.
+- The paper achieves its SOTA results by applying its new objective to the exact same SiT transformer backbone as its baseline. While this makes for a fair comparison, it also means the paper's contribution is entirely dependent on that specific architecture. Given the CIFAR-10/U-Net failure (Table 8), it is unknown if the EqM objective would provide any benefit to other model families. 
+- Optimization samplers can be slower per sample than well-tuned ODE/ SDE samplers; the paper claims adaptive savings but does not present thorough wall-clock or FLOP comparisons against accelerated samplers (e.g., DDIM, DDPM with distillation, flow samplers) at matched FID. Practical deployment requires these cost–quality tradeoffs; the paper’s lack of rigorous latency/compute comparisons weakens its practical case.
+
+### Questions
+- The use of NAG-GD for sampling improves FID (Table 2). Since sampling is just gradient-based optimization, have you explored more advanced optimizers (e.g., Adam, L-BFGS)? Could this optimization-based sampling framework unlock even better sample quality?
+- Can you show wall-clock and FLOP comparisons (not just # function evaluations) vs. strong baselines (DDIM, Flow Matching, distilled samplers) at matched FID?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces a novel generative modeling framework — Equilibrium Matching (EqM), which aims to unify Flow Matching (FM) and Energy-Based Models (EBM) from the perspective of equilibrium dynamics. Traditional diffusion or flow models rely on non-equilibrium dynamics conditioned on time, requiring the definition of noise levels and time steps. In contrast, EqM discards this conditional process and directly learns the equilibrium gradient field of the implicit energy landscape.With this setup, EqM enables optimization-driven sampling (such as gradient descent, Nesterov Accelerated Gradient, etc.) during the inference phase, generating high-quality samples without the need for trajectory integration.Overall, this work redefines the structure of generative models through the energy minimization perspective of equilibrium dynamics, providing a new theoretical bridge to connect Flow Matching with Energy-Based Models.
+
+### Strengths
+1. Novelty： 
+The key innovations over prior work are: (1) ‌eliminating explicit time/noise conditioning‌ by directly learning equilibrium dynamics, and (2) ‌unifying generative sampling as gradient-based optimization.
+
+
+2. Mathematically rigorous： 
+The paper theoretically shows that the Gradient-Based Sampling will converge.
+
+
+3. SOTA performance：
+EqM shows a better FID score over prior work. It demonstrates scalability in high resolution and adaptive inference, while outperforming flow matching models in tasks like ImageNet and OOD detection. This work effectively combines generative modeling and optimization theory, laying the foundation for an energy-based sampling framework with significant future application potential.
+
+### Weaknesses
+1 Lack of Systematic Comparison with Existing EBM/EM Methods. 
+Although the authors compare EqM with several energy-based models (e.g., IGEBM, GLOW, PixelCNN++) in Table 6, this evaluation only verifies EqM’s energy discrimination ability. It does not include systematic comparisons in terms of generation quality, energy landscape modeling, or convergence analysis. Moreover, since EqM is theoretically similar to Energy Matching (Balcerak et al., 2025), the absence of direct experimental comparison with that method weakens the validation of EqM’s claimed novelty.
+
+2. Insufficient Analysis of Sampling Mechanisms. 
+While EqM introduces GD, NAG-GD, and adaptive sampling strategies, the paper presents only qualitative results without a quantitative or theoretical examination of convergence speed, energy evolution, or performance under different energy landscape conditions.
+
+3. Sampling inefficiency. The sampling process still needs an iterative MCMC process, which might be slow in practice. I strongly suggest including sampling time comparison with prior EBM and flow-matching work.
+
+### Questions
+Q1: The theoretical derivations (Propositions 1–3) rely on the assumption of perfect training, where the model ( f ) fully minimizes its training objective. How would EqM behave when this idealized condition is relaxed — for instance, under optimization noise, incomplete convergence, or limited model capacity?
+
+Q2: Since EqM performs deterministic gradient-based sampling, is sample diversity entirely dependent on the randomness of initialization?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper introduces Equilibrium Matching (EqM), a generative modeling framework that aims to learn a single, time-invariant equilibrium gradient of an implicit energy landscape. This contrasts with diffusion and flow models, which learn time-conditional, non-equilibrium dynamics. The method modifies the Flow Matching objective by introducing a magnitude function $c(\gamma)$ for the target gradient, constrained such that the gradient vanishes on the data manifold ($c(1)=0$). This allows sampling via optimization (e.g., gradient descent) on the learned landscape. The authors report a 1.90 FID on ImageNet 256x256, outperforming some existing diffusion and flow models. They also claim additional capabilities, such as denoising partially noised images, OOD detection, and image composition.
+
+### Strengths
+* **Generation Quality:** The model achieves an FID of 1.90 on class-conditional ImageNet 256x256, which is a good value.
+* **Scalability:** The method demonstrates strong scaling properties. Figure 3 shows that EqM consistently outperforms the Flow Matching counterpart across different training epoch counts, model parameter counts, and patch sizes.
+* **Inference Flexibility:** The optimization-based sampling framework is flexible. It allows for the use of standard optimization techniques, such as Nesterov Accelerated Gradient (NAG-GD), which improves FID from 1.93 (GD) to 1.90 (NAG-GD) on the EqM-XL/2 model  It also supports adaptive compute, which can reduce function evaluations by terminating based on gradient norm.
+* **Partial Denoising:** A direct consequence of removing time/noise conditioning is the ability to denoise partially noised inputs without needing to be told the noise level. Figure 10 shows EqM's performance improves as the starting noise level decreases, whereas the baseline SiT model fails.
+
+### Weaknesses
+* **Incremental Novelty:** The core technical contribution is the modification of the noise-unconditional Flow Matching objective ($L_{uncond-FM}$, Eq. 2) to the EqM objective ($L_{EqM}$, Eq. 3). This change is driven entirely by multiplying the target gradient by a scalar function $c(\gamma)$ with the constraint $c(1)=0$. This seems like a minor modification to claim a new "framework."
+* **Weak Empirical Link to EBMs:** The paper heavily motivates the method from an energy-based perspective. However, the explicit energy variants (EqM-E), which would validate this link, perform very poorly . Table 5 shows the "dot product" and "$L_2$ norm" variants yield FIDs of 73.40 and 75.53, respectively, far worse than the 57.54 of the implicit model ("none"). This undermines the claim that the model is effectively learning a useful, explicit energy landscape.
+* **Contradictory Results and Excuses:** The method's performance is not consistent. On CIFAR-10, EqM (3.36 FID) is significantly worse than standard Flow Matching (2.09 FID) and only marginally better than noise-unconditional FM (3.96 FID). The authors' justification that the baseline was "extensively optimized" and noise schedules were "carefully selected" is a weak defense; a fundamentally superior method should not be so easily defeated by tuning.
+* **Misleading "Unique Properties":**
+    * The OOD detection capability (Table 6) relies on the "dot product" EqM-E variant. As established, this variant has poor generative performance (Table 5). This is a critical trade-off that is not properly acknowledged.
+    * Image composition  is a known, standard property of EBMs. Presenting this as a "unique property" of EqM is misleading; it is merely an expected feature of the model class EqM *claims* to belong to.
+* **Gap Between Theory and Practice:** The theoretical analysis (Statements 1 and 2) is used to justify that the model learns the data manifold. However, the derivations in Appendix C.1 and C.2 appear to assume a finite, discrete set of training points $\mathcal{X}$, not a continuous manifold.  Furthermore, there is no proof of either i) the fact that the gradient is zero ONLY at the points of interest and ii) that a sampling scheme will cover equally the local minima (is the data distribution recovered?). Finally, the convergence of GD like schemes is a well known result, it is not a contribution by the authors.
+* **Contradictory Caption:** The caption for Table 5 states "EqM-E performs the best" The data in the table and the text in the "Energy Formulations" paragraph (which states "both formulations degrade performance") directly contradict this.
+
+### Questions
+* The theoretical derivations in Appendix C.1 and C.2 rely on a finite dataset $\mathcal{X}$. How do these proofs and "Statements" 1 and 2 extend from a finite set of points to the "data manifold"?
+*  Why does the method's performance collapse relative to standard Flow Matching on CIFAR-10 (Table 8)? Blaming baseline optimization is insufficient. Does this imply EqM is only effective when paired with a transformer backbone (SiT) or on large-scale datasets, and not a universally better approach?
+* Given that the explicit energy models (EqM-E) perform so poorly (Table 5), and the OOD detection relies on these models, isn't it more accurate to say that EqM forces a trade-off: high-quality generation (implicit model) *or* OOD detection (explicit model), but not both?
+*  How is the $L_{EqM}$ objective (Eq. 3) fundamentally different from a noise-unconditional Flow Matching model (Eq. 2) that simply learns a re-scaled velocity field? The improvement from 40.81 FID (uncond-FM) to 32.85 FID (EqM) in Table 4 seems incremental. Why does this simple $c(\gamma)$ scaling constitute a new "framework"?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper introduces a generative modeling framework that replaces the non-equilibrium, time-conditioned dynamics of diffusion and flow models with a single equilibrium gradient derived from an implicit energy landscape. Instead of simulating a time-dependent reverse process, EqM performs optimization-based sampling at inference time using gradient descent on this learned energy surface, allowing adaptive step sizes and computational efficiency. Class-conditional generation achieves an FID of 1.90 on ImageNet 256×256, surpassing diffusion and flow baselines. It also supports tasks such as denoising, OOD detection, and image composition without architectural changes. Conceptually, EqM aims to unify flow-based and energy-based generative modeling through equilibrium dynamics, offering a simpler alternative to time-dependent generative models.
+
+### Strengths
+1) The writing is clear, the abstract is concise and sets up the new paradigm (equilibrium vs non-equilibrium) nicely.
+
+2) Moving away from time-conditional flows/diffusions to a single equilibrium landscape is a compelling conceptual shift.
+
+3) The reported generation quality (e.g., FID 1.90 on ImageNet 256×256) is extremely competitive, if accurate.
+
+4) List of downstream tasks (denoising, OOD detection, image composition) shows the authors have thought about broader applicability.
+
+### Weaknesses
+1) While the equilibrium viewpoint is interesting, many past works have considered implicit energy landscapes and hybrid flows/EBMs, to name a few, Energy Matching [1], VAPO [2] and Action Matching [3]. Authors need to more explicitly compare and contrast with such prior art, clarify what is distinct in their equation/learning/training paradigm.
+
+2) The connection between the noise/time-unconditional FM (2) and the noise/time-conditioned FM (1) remains unclear. Does (1) converges to (2) is some time/noise limit? Or is (2) some generalization of (1) in terms of the sampling path or training objective formulation?
+
+3) The theoretical section somewhat high-level. It does not answer questions like: what assumptions guarantee that the learned equilibrium landscape corresponds to the data manifold? How many gradient steps are required?
+
+4) No evidence of ablations that test sensitivity to sampling step-size, optimizer type, landscape smoothness, number of gradient steps, or compare optimisation-based sampling vs more standard sampling (e.g., Langevin dynamics, flow inversion). These are crucial for understanding where EqM gains come from.
+
+5) It would be helpful to see failure cases: e.g., where the energy landscape optimisation fails (mode collapse, slow convergence, sensitivity to initialization).
+
+### Questions
+Please consider addressing the weaknesses noted above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

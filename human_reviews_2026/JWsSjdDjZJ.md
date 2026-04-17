@@ -1,0 +1,278 @@
+# Class Incremental Continual Learning with Self-Organizing Maps and Synthetic Replay
+
+- Decision: Reject
+- Scores: 2, 4, 2, 4, 4
+
+## Abstract
+This work introduces a novel generative continual learning framework based on self-organizing maps (SOMs) extended with learned distributional statistics and encoder--decoder models which enable memory-efficient replay, eliminating the need to store raw data samples or task labels. For high-dimensional input spaces, the SOM operates over the latent space of the encoder--decoder, whereas, for lower-dimensional inputs, the SOM operates in a standalone fashion. Our method stores a running mean, variance, and covariance for each SOM unit, from which synthetic samples are then generated during future learning iterations. For the encoder--decoder method, generated samples are then fed through the decoder to then be used in subsequent replay. Experimental results on standard class-incremental benchmarks show that our approach performs competitively with state-of-the-art memory-based methods and outperforms memory-free methods, notably improving over the best state-of-the-art single class incremental performance without pretrained encoders on CIFAR-10 and CIFAR-100 by nearly $10$\% and $7$\%, respectively. We also find best performance on single class incremental CIFAR-100 utilizing a foundational encoder--decoder, and present the first baseline results for single class incremental TinyImageNet. Our methodology facilitates easy visualization of the learning process and can also be utilized as a generative model post-training. Results show our method's capability as a scalable, task-label-free, and memory-efficient solution for continual learning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper presents an *unsupervised class-incremental continual learning (CIL)* framework that combines *Self-Organizing Maps (SOMs)* with *encoder–decoder models* for memory-efficient synthetic replay.  Each SOM unit (BMU) maintains *mean, variance, and covariance* statistics of latent representations (from a VAE or CLIP encoder), enabling generation of synthetic samples via Gaussian sampling.  Three variants are proposed:  
+(i) SOM-only,  
+(ii) SOM with a global encoder–decoder, and  
+(iii) SOM with per-BMU encoder–decoders.  
+Experiments on MNIST, CIFAR-10, CIFAR-100, and TinyImageNet evaluate both non-pretrained and pretrained (CLIP-based) configurations.  Results show competitive final accuracies, especially in the pretrained regime, and the authors claim improved memory efficiency and interpretability.
+
+### Strengths
+**Originality:** The integration of SOMs with generative replay in a continual-learning setup is conceptually interesting. The paper explores an unusual direction by treating SOM units as probabilistic memory cells, extending earlier unsupervised CL approaches.  
+
+**Quality:** The experimental design is coherent, demonstrating how the SOM subsystem can act as a compact statistical memory. The pretrained CLIP variant achieves respectable final accuracies (e.g., CIFAR-100 = 69.8%, TinyImageNet = 63.2%).
+
+### Weaknesses
+### **W1. “Memory-free” claim vs. actual memory usage**
+The claim of being “memory-free” conflicts with the method’s design. Each BMU stores full covariance matrices (Σ)—scaling as \(O(d^2)\)—and the per-BMU encoder–decoder variant introduces a large parameter footprint. This undermines the claimed advantage over rehearsal buffers. Quantitative comparisons of memory usage with standard replay methods are absent.
+
+### **W2. Insufficient ablation studies and missing evolution metrics**
+Only final classification accuracy is reported. Essential continual-learning metrics—Forgetting (F), Backward Transfer (BWT), Forward Transfer (FWT), and per-task accuracy trends—are missing. No ablations isolate the impact of bias-correction, covariance type, or replay ratio, limiting interpretability of the results.
+
+### **W3. Underinvestigated bias-corrected EMA for μ/σ/Σ**
+In Section 2.1, the paper updates each SOM unit’s mean, variance, and covariance using an Adam-style bias-corrected exponential moving average, and later (Section 2.4) mentions sampling from *“bias-corrected statistics.”*  
+
+This method borrows the bias-correction concept from the Adam optimizer—normally used for gradient updates—but applies it to statistical tracking of data. However, this is not standard practice for estimating running statistics.  Established online methods such as Welford’s algorithm (*Welford, Technometrics, 1962*) already provide numerically stable and unbiased ways to compute the mean and variance incrementally *without* any bias-correction term.  The paper does not cite such prior work, explain why bias correction is necessary, or show ablations comparing with and without it.  Consequently, the "bias-corrected” design remains unclear in both *motivation* and *effect*.
+
+### **W4. Task-free vs. task-aware inconsistency**
+The method is described as task-free, but replay is explicitly triggered at known task boundaries, which is task-aware scheduling. Hence, the paper’s task-free claim is inconsistent with its experimental procedure.
+
+### **W5. “CLIP decoder” does not exist**
+Multiple sections refer to a “CLIP decoder”, implying image reconstruction from CLIP embeddings. CLIP is an encoder-only model; this is a conceptual and terminological error that reduces clarity.
+
+### **W6. Reproducibility gaps**
+Key implementation details are missing—SOM grid size, neighborhood function, replay ratio, BMU activation criteria, eigenvalue regularization, and per-BMU model thresholds. Algorithmic descriptions are incomplete and code availability is not mentioned, impeding reproducibility.
+
+### Questions
+Please see “Weaknesses” above. Also 
+
+1. What is the exact memory footprint (bytes) of storing μ, ε², Σ per BMU for CLIP-512 vs. VAE-128, and how does it compare to rehearsal buffers of similar size?  
+
+2. Could the authors include bias-correction and covariance-type (full vs. diagonal) ablations to clarify their effect on accuracy and stability?  
+
+3. If the method aims to be task-free, can results be shown using fixed-period or drift-detection-based replay instead of boundary-triggered scheduling?  
+
+4. Please clarify all mentions of a “CLIP decoder.” If a separate decoder was trained to invert CLIP embeddings, describe its architecture and training procedure.  
+
+5. How is inference conducted in single-class CIL—via BMU majority label, k-NN on SOM prototypes, or a linear classifier?  
+
+6. Could the authors present accuracy-vs-memory comparisons and per-task accuracy curves to assess forgetting and transfer dynamics?  
+
+7. How does this approach differ empirically and conceptually from c-SOM and SOMLP under identical encoders and memory budgets?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a memory-efficient, task-label-free continual learning framework for class-incremental learning (CIL), solving DNN catastrophic forgetting and high memory costs of traditional raw-sample replay. It uses self-organizing maps (SOMs) to store data distributional statistics for synthetic sample generation, no raw samples/task labels required. Three variants suit low-dimensional, high-dimensional (hybrid with VAE/CLIP), and refined needs. High-dimensional data uses encoders for latent compression, with bias correction/feature loss enhancing sample quality. Experiments on MNIST, CIFAR-10/100, and TinyImageNet (single/multi-class incremental) show non-pretrained performance outperforms SOTA by ~10% (CIFAR-10) and 7% (CIFAR-100) in single-class tasks; CLIP pretraining improves results. It also provides the first single-class incremental TinyImageNet baseline, with SOM enabling interpretability and post-training generative use。
+
+### Strengths
+- The paper abandons the traditional replay mode of storing raw samples, uses SOM units to store distributional statistics for synthetic sample generation. Memory overhead is only related to SOM grid size, not scaling with dataset size, solving the pain point of memory-constrained scenarios.
+- The authors focus on the most demanding single-class incremental learning. Without pretraining, it outperforms SOTA by nearly 10% on CIFAR-10 and 7% on CIFAR-100 in single-class tasks, and provides the first single-class incremental baseline for TinyImageNet, filling the field gap.
+- The experiments are sufficient and convincing.
+
+### Weaknesses
+- Performance on high-dimensional data heavily relies on the quality of encoder-decoders. The non-pretrained VAE variant only achieves 7.66% accuracy on single-class incremental TinyImageNet tasks, far lower than the CLIP-pretrained variant (45.11%), limiting applicability in scenarios without high-quality pretrained models.
+- The basis for selecting SOM grid size and its impact on performance are not clarified. Some experiments lack standard deviations (e.g., SOM-only model on MNIST), and stability verification under different random seeds is insufficient. The description of numerical stability processing for covariance matrices is brief.
+- The paper only claims "memory efficiency" but lacks quantitative memory comparison between SOM grids (e.g., different sizes) and traditional replay methods (e.g., iCaRL). No efficiency data such as training duration or synthetic sample generation speed is provided, making it impossible to evaluate practical application costs.
+
+### Questions
+- Need memory comparison experiments between SOM grids (e.g., 5×5, 10×10) and traditional replay methods (iCaRL, DER++) to verify the practical extent of memory advantages.
+- The basis for selecting SOM grid size is not clarified, lacking experiments on the impact of different grid sizes (5×5, 10×10, 20×20) on clustering effect and incremental performance; needs to supplement adaptation strategy experiments between class counts (e.g., 10, 100, 200 classes) and grid sizes to clarify the optimal matching rule.
+- Lacks comparison experiments on model training duration (time per task) and synthetic sample generation speed with SOTA methods (iCaRL, DDGR); needs to supplement efficiency data on different datasets (e.g., CIFAR-100, TinyImageNet) to evaluate the practical application cost of the method.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a continual learning approach based on Self-Organizing Maps (SOMs) and generated image replay. This framework uses SOM to perform clustering-like operations on given images for classification, encodes the image using VAE or CLIP, samples the features from latent space, and generates images to repaly without storing the original data. It also conducts single class incremental learning on CIFAR-100 and TinyImageNet with competitive results.
+
+### Strengths
+1.Combination of SOM and encoder–decoder models (VAE or CLIP) is a conceptually novel integration seldom explored in CL, and compensates for the lack of generative modeling in previous SOM-based methods, and achieves synthetic replay without storing the original data.
+2. On single-class incremental settings (the hardest), the proposed method (12.41%, CIFAR-100) outperforms baselines (5.58%), and provides baseline results on TinyImageNet. Besides, a large number of parameter combinations (bias or not, global or specific, pretrain or not, VAE or CLIP) have confirmed the effectiveness.
+
+### Weaknesses
+1. Although this paper combines SOM with generative replay to introduce a new continual learning framework, it lacks original contributions. In addition, the paper doesn't explain why SOM is superior to other unsupervised clustering methods (such as k-means, Gaussian mixture models, or VQ-VAE), and the claimed advantages, such as topological preservation and interpretability, lack experimental support.
+2. SOM configuration (BMU quantity, neighborhood radius) is not reported, which strongly affect performance and memory costs. For baseline methods (EWC, LwF, OWM...), this paper doesn't specify whether the results are replicated or taken from previous papers. If they are replicated, the architecture and training protocol must be described. For fair comparison, it is not yet clear whether all baselines share the same backbone or similar model size.
+3. No empirical analysis of computational or memory cost is provided. And the BMU-specific setting introduces additional encoder–decoder for each BMU, it could lead to high memory and training costs.
+4. In Algorithm 1, the "ENCDEC" seems to be "ENCODER"; The **related works** is brief and lacks a structured comparison with relevant methods; The paper doesn't include an **framework** figure, which would greatly help readers understand how the proposed method work.
+
+### Questions
+1. If using CLIP, how is image reconstruction achieved?
+2. For VAE and CLIP, using BMU-specific settings resulted in opposite effects in Tab.1 (the former reduced the results, while the latter improved). What could be the possible reasons?
+3. See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+this paper focuses on the single-class-per-task class incremental setting and introduces a self-organizing map (SOM) based approach. on the one hand, it mimics the current prototype-based approaches in maintaining statistics of each categories and sample feature vectors from the distribution when moving on to the new tasks. on the other hand, it uses VAEs and mimics the generative replay methods in the sense that the original sized images are generated. based on the generated images and their VAE features, the SOM is updated as the final classification network.
+
+### Strengths
++ using prototype-based sampling and generative replay for VAE makes sense for CIL settings
++ SOM as classifier is an interesting attempt
+
+### Weaknesses
+- unclear core contribution. on the one hand, the title and abstract primarily focus on SOMs as classifiers. on the other hand, the paper argues that the "our contribution lies not in the specific encoder–decoder, but in the replay framework itself" (L214), as if the contribution is analogous to the SOM. from the reviewer's point, the core contribution should be on either one or another, especially considering the fact that there is no close connections between these two or method customization for each other.
+  - stick with SOM-based classifier as the main contribution, and do ablation studies on substituting the SOM with fully-connected-layer-based classifiers. however, currently, all variant studies are on different configurations of the feature encoder / VAE, with zero variant / ablation on SOM to show its effectiveness. 
+  - demonstrate the effectiveness of the replay framework (prototype-like VAE sampling + image generation). review and compare with other prototype-based or generative replay CIL methods (especially ones using VAE) under similar settings (using the same classifier head architecture) to show its effectiveness.
+- limited novelty. no specifc adjustment is introduced for the SOM classifiers. 
+- questionable experimental settings. the proposed method only performs well under the 'single-class-per-task' setting, which is not often used in CIL. 
+- very poor performance from existing methods compared to their reported numbers, not only in the 'single-class-per-task' setting, but also in the normal multi-class settings.
+
+### Questions
+see above
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes **SOM-replay**, an unsupervised, buffer-free continual learning (CL) scheme that marries  
+- a **2-D Self-Organising Map** (fixed lattice)  
+- **online estimates of mean, variance and full covariance** stored *per unit*  
+- **Gaussian sampling** from those statistics to synthesise latent (or pixel) vectors that are replayed when new classes arrive.  
+
+Three instantiations are studied:  
+(i) raw-pixel SOM (MNIST),  
+(ii) global VAE latent SOM (CIFAR-10/100),  
+(iii) per-unit VAEs or frozen / fine-tuned CLIP-ViT (CIFAR-10/100, TinyImageNet).  
+
+The target protocol is **single-class incremental** (one new class per task) – the hardest CL setting.  The authors report **+10 % CIFAR-10 and +7 % CIFAR-100** over the best *non-pretrained* baseline, and establish the **first** single-class numbers on TinyImageNet.
+
+### Strengths
+1. **Originality**: first work to store *full covariance* per SOM unit for *continual* generative replay.  
+2. **Quality**: extensive ablations (bias correction, map size, replay budget, frozen vs. ft CLIP) and strong SOTA lifts.  
+3. **Clarity**: algorithmic boxes, convergence plots, and decoded snapshots make the system easy to understand.  
+4. **Significance**: shows that *unsupervised* topological memory can rival *supervised* replay-buffer methods, opening a new research direction.
+
+### Weaknesses
+1. Statistical misspecification  
+The manuscript assumes that the latent codes assigned to each SOM unit are adequately modelled by a single multivariate Gaussian whose first and second moments are tracked on-line. This assumption is never validated. In practice the encoder (VAE or CLIP) can yield class-conditional manifolds that are (i) multi-modal, (ii) low-dimensional subspaces, or (iii) mixed across classes when a unit is close to a Voronoi boundary. A single Gaussian will either inflate density in empty regions of the latent hypersphere or collapse distinct modes into a blurry mean, producing synthetic samples that sit outside the real data support. The paper supplies attractive visual grids of decoded images but provides no quantitative diagnostic such as Shapiro-Wilk tests per unit, Mardia’s multivariate skewness/kurtosis, or the proportion of units that reject Gaussianity at α = 0.05. Similarly absent are sample-based divergences (FID, KID, SWD) between the replay cloud and the real class cloud, precision-and-recall curves, or entropy histograms of the empirical class posterior inside each unit. Without these checks we cannot tell how much of the reported accuracy comes from the model’s discriminative robustness and how much from genuinely faithful generative replay. The risk is compounded in later tasks: because moments are updated incrementally, early mis-specification errors accumulate and the replay distribution can drift away from the original class manifold, feeding the learner an ever more corrupted training signal.
+
+2. Memory cost hidden  
+The paper markets its approach as “memory-free” because it never stores raw images. In reality every unit carries a mean vector and a full covariance matrix. For a 20×20 map (400 units) and CLIP’s 512-dimensional embeddings the covariance alone occupies 0.5 × 512 × 513 × 400 × 4 bytes ≈ 205 MB—comparable to the entire ResNet-18 feature extractor (≈ 44 MB) and larger than many replay buffers that keep only 2 k exemplars (2 000 × 50 kB ≈ 100 MB). The storage scales quadratically with latent dimension, so moving to a 768-D or 1024-D backbone would already exceed 450 MB. The manuscript never reports these byte counts, nor does it compare memory-at-equal-accuracy against baselines such as DER++ or ER-ACE. A factor-analysis decomposition Σ = LLᵀ + Ψ with rank r ≪ d, or a sparse inverse covariance estimator, could cut the footprint by an order of magnitude, but such ablations are missing. Likewise, the per-BMU VAE variant trains 400 separate decoder networks; even a light 2-layer MLP decoder (0.5 M parameters each) adds 200 M parameters—twice the size of the frozen CLIP encoder—yet this cost is brushed aside with the phrase “modular replay”. A fair accounting would list bits-per-sample as a function of stream length and accuracy target.
+
+3. Task-boundary oracle  
+Replay is triggered by an external scheduler that “knows” when a new class begins. This design side-steps one of the hardest constraints in continual learning: the agent must decide *when* to rehearse without peeking at task identity. The algorithm therefore runs inside an *oracle-gated* protocol while claiming to be “task-label-free”. A genuine task-free system would rely on drift detection (e.g., sudden likelihood drops on incoming batches), a fixed replay cadence, or a buffer-based reservoir that is agnostic to concept shift timing. The paper hints at “future work” on drift detection but provides no evidence that the current hyper-parameters (replay budget K, neighbourhood radius σ) remain optimal under *unsignalled* boundaries. If the learner replays too early it wastes compute and risks over-fitting stale fantasies; too late and forgetting has already occurred. Because the external trigger is perfectly aligned with the moment new data arrive, the measured forgetting curves are *optimistic* and the method’s true autonomy remains unvalidated.
+
+4. Per-BMU VAE sample starvation  
+Training a dedicated encoder-decoder for every SOM unit means each local model sees only the subset of images whose latent codes fall inside that unit’s Voronoi cell. In the single-class incremental protocol the first class is presented alone; its images are scattered across the entire map because no other class has yet pulled units away. When the second class arrives the neighbourhood radius has already shrunk, so new images are mapped chiefly to *different* units. Consequently a large fraction of units **never observe more than one class** and many units receive **fewer than 100 examples** throughout the entire stream. Learning a 128-D VAE decoder that generalises CIFAR-100 textures from < 100 samples is statistically impossible: the capacity term dominates empirical risk and the network simply memorises noise. The paper reports 12.66 % (global VAE) versus 12.18 % (per-BMU) on CIFAR-100 with n = 3 seeds—an 0.48 % gap whose 95 % confidence interval (≈ ±1.2 %) contains zero. This *under-powered* comparison is sold as evidence that “localised replay is competitive”, but the more honest conclusion is that **data starvation cripples per-BMU VAEs** unless the encoder is already excellent (CLIP). A learning-curve ablation (accuracy vs. number of unit hits) or a formal VC-bound would quantify how quickly the local decoder’s generalisation error explodes as training data shrink.
+
+5. Hyper-parameter oracle  
+Every hyper-parameter—map size, EMA decay α, replay budget K, initial neighbourhood radius σ₀, shrinkage schedule, decoder learning-rate—is grid-searched offline with access to *all* tasks’ validation accuracy. This protocol is **unrealistic** for continual streams where future data are unseen and grid search is impossible. The manuscript does not include sensitivity heat-maps, online bandit tuning, or regret analyses. Hence we do not know whether the reported gains hinge on a set of values that are *lucky* for the chosen order and data set, or whether they transfer to new domains. A responsible CL paper should either (i) fix hyper-parameters *before* the first task, (ii) adopt a *task-agnostic* schedule (e.g., σₜ = σ₀ e^{−λt}), or (iii) use a *bandit* or *Bayesian* optimiser that sees only past data. The current setup **implicitly overfits** the experimental protocol and exaggerates robustness.
+
+6. Order sensitivity under-reported  
+The authors average **three** random class orderings. Single-class incremental learning is *extremely* sensitive to order: presenting classes {0,1,…,9} yields markedly different forgetting from {9,8,…,0} because early classes anchor the representation. Recent CL literature (e.g., MIR, DER++, OSAKA benchmarks) uses **20–30** orderings or *adversarial* order optimisation to estimate mean, variance and worst-case accuracy. With only three seeds the standard error of the mean accuracy is σ̂ / √3 ≈ 0.58 σ̂, so a 2 % empirical swing is *invisible*. The paper therefore **cannot** claim that the method is “robust to ordering”; it merely shows that *one favourable ordering* works well. A cumulative distribution plot of accuracies across 20+ permutations (or at least the worst, median, best trio) is needed before the community can trust the reported averages.
+
+### Questions
+Q1 Gaussianity: Please provide Shapiro–Wilk or Mardia kurtosis tests per unit. How many units reject Gaussianity at 5 % significance?  
+For every SOM unit you store a single multivariate Gaussian, yet the encoder’s latent residuals can be heavy-tailed, skewed, or multimodal. A per-unit Shapiro–Wilk test (or the multivariate extension by Mardia that combines skewness and kurtosis) should be run on the collection of latent codes that have ever hit that unit. Report the exact fraction of units whose p-value falls below 0.05 after Bonferroni correction for 400 simultaneous tests. If, say, 60 % of units reject Gaussianity, then the replay distribution is systematically misspecified and the synthetic samples will place mass in regions that the real encoder never visits. In that case the reader needs to know whether the classification accuracy is robust to this mismatch or whether the Gaussian assumption is silently hurting generalisation. Additionally, please visualise the Q-Q plots for the ten most frequently updated units and for the ten most isolated units to see whether departure from normality is concentrated in rarely hit territory.
+
+Q2 Replay fidelity: Report FID between real and synthetic samples task-by-task. Does FID grow as the chain lengthens?  
+Fréchet Inception Distance (FID) measures the Wasserstein-2 distance between two Gaussians fitted in a 2048-D feature space. After each task you should extract (i) every real image of classes 0…t and (ii) an equal number of synthetic images generated from the current moment estimates, encode both sets with the *frozen* Inception-v3 network, and compute FID. Plot FID versus task index. If FID rises monotonically, the replay cloud is drifting away from the original manifold and the learner is increasingly rehearsing fantasies rather than faithful surrogates. A secondary diagnostic is precision-and-recall curves: precision tells us whether synthetic images lie inside the real support, recall tells us whether all modes of the real distribution are covered. A dropping precision would indicate that the Gaussian sampler is filling empty regions with implausible images, while a dropping recall would mean that some real modes are forgotten. Please also break down FID by class to see whether certain classes (e.g., fine-grained birds) are harder to replay than others.
+
+Q3 Memory footprint: What is the exact byte count for moments + decoders for the 20×20/512-D CLIP run? How does it scale vs. replay-buffer baselines (DER++, ER-ACE) at equal accuracy?  
+A 20×20 map has 400 units. Each unit stores a mean vector (512 floats) and a symmetric covariance matrix (512×513/2 = 131 328 floats). At 4 bytes per float that is 400 × (512 + 131 328) × 4 ≈ 210 MB for the second-order statistics alone. Add the parameters of 400 local VAE decoders (even a tiny 2-layer MLP with 0.5 M parameters each) and you reach 400 × 0.5 M × 4 bytes ≈ 800 MB. Report the grand total in megabytes and compare it with DER++ and ER-ACE when those methods are tuned to reach the *same* final accuracy on the same sequence. Express the comparison as “bytes per sample seen” or “bytes per class” so that the community can judge whether the *constant* memory claim is advantageous or merely shifts cost from exemplars to parameters.
+
+Q4 Task-free scheduling: Can you replace the oracle trigger with a drift-detection mechanism (e.g., likelihood drop > θ) without losing > 1 % accuracy?  
+Currently the training script calls replay exactly when a new class starts. Replace this oracle with an online drift detector: maintain a running exponential average of the log-likelihood of incoming batches under the current Gaussian mixture (one Gaussian per unit weighted by hit count). If the average drops by more than θ standard deviations, trigger K synthetic replays. Tune θ on a *single* validation sequence and then freeze it for 20 random orderings. Report the resulting mean accuracy and its standard deviation. If the drop is larger than 1 % relative to the oracle protocol, the method is not yet task-free. Additionally, plot the *delay* (number of batches between true boundary and detection) versus θ to see whether there is a regime where drift is detected early enough to prevent forgetting but not so often that compute is wasted.
+
+Q5 Hyper-parameter sensitivity: Provide heat-maps of final accuracy vs. α and K. Are the optimal settings portable across datasets?  
+The EMA decay α and the replay budget K are grid-searched offline with access to *all* tasks. Produce a 5×5 heat-map where α ∈ {0.01,0.05,0.1,0.2,0.5} and K ∈ {10,50,100,200,500} for CIFAR-100; then overlay the single best (α*, K*) found for CIFAR-10 and for TinyImageNet. If the *same* cell is no longer within 1 % of the optimum on the new dataset, the settings are *not* portable and the method will require an expensive search for every new domain. Also report the *wall-clock* time spent in the grid search measured in GPU-hours and expressed as a multiple of the actual training time; this quantifies the hidden cost that a practitioner would incur.
+
+Q6 Order robustness: Run 20 random class permutations and report mean ± std; is the std < 1 % of mean?  
+Single-class incremental learning is famously order-sensitive. Draw 20 random permutations of the 100 CIFAR-100 classes, run your full pipeline with the *same* hyper-parameters, and record the final average accuracy. Report the mean, the standard deviation, and the worst-case accuracy. If the standard deviation exceeds 1 % of the mean (or if the worst-case drop is larger than 3 %), the method is *not* robust and the three-seed average in the current paper is optimistic. Additionally, perform a *signed-rank* test against the baseline you claim to beat (e.g., DER++) across the 20 orders to show that the win is statistically significant (p < 0.05).
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

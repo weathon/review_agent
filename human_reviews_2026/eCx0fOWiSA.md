@@ -1,0 +1,138 @@
+# Cer-Eval: Certifiable and Cost-Efficient Evaluation Framework for LLMs
+
+- Decision: Reject
+- Scores: 6, 4, 4
+
+## Abstract
+As foundation models continue to scale, the size of trained models grows exponentially, presenting significant challenges for their evaluation. Current evaluation practices involve curating increasingly large datasets to assess the performance of large language models (LLMs). However, there is a lack of systematic analysis and guidance on determining the sufficiency of test data or selecting informative samples for evaluation. This paper introduces a certifiable and cost-efficient evaluation framework for LLMs. Our framework adapts to different evaluation objectives and outputs confidence intervals that contain true values with high probability. We use ``test sample complexity'' to quantify the number of test points needed for a certifiable evaluation and derive tight bounds on test sample complexity. Based on the developed theory, we develop a partition-based algorithm, named Cer-Eval, that adaptively selects test points to minimize the cost of LLM evaluation. Real-world experiments demonstrate that Cer-Eval can save 20% to 40% of test points across various benchmarks, while maintaining an estimation error level comparable to the current evaluation process and providing a 95\% confidence guarantee.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors argue that existing evaluations in LLMs do not (i) adapt to specific user goals, and (ii) do not consider trade-offs between evaluation cost and validity making it difficult to choose the correct amount of evaluation data. TO address this, the authors introduce Cer-Eval, an online evaluation framework for large language models that provides statistical guarantees while reducing evaluation costs. They introduce the concept of "sample complexity" to define the minimum number of test points required to obtain a reliable evaluation result. They provide certified bounds on bounded loss functions on the basis of sample complexity and empirically show that they are able to reduce test samples on common benchmarks considerably while maintaining evaluation accuracy.
+
+### Strengths
+- Addresses two underexplored but important problems: (i) certifiable / reliable, and (ii) efficient evaluation of LLMs.
+- The authors provide theoretical motivation and formal guarantees for their framework
+- Empirical evidence is provided to show that this method can lead to practical efficiency gains on popular benchmarks 
+- The authors provide relevant context regarding prior work in this area, specifically work concerned with efficient LLM evaluations
+- Ablation on the influence of the embedding model is provided in the appendix. I would consider moving this analysis to the main paper (or at least a fraction of it)
+
+### Weaknesses
+- The experimental validation focuses mainly on accuracy and efficiency. I would have liked an evaluation of the robustness of the confidence intervals (e.g., with minor perturbations to the data or repeated experiments)
+- It should be emphasized, that these results only hold if the partition is i.i.d. with respect to the rest of the evaluation set, which might not always be true in practice (or under adversarial attacks / poisoning / etc.)
+- No evaluation of the overhead of the algorithm, despite the focus on efficiency. What is the total run-time of evaluations? (Efficiency gains are sometimes around 20% without considering the overhead)
+
+### Questions
+- Would it be possible to adversarial attacks this framework? E.g., could an attacker design the data samples in a manner where uninformative subsets are chosen for evaluation? After all, the framework uses an embedding function, which will likely be vulberable to adversarial attacks
+- Did the authors consider ranking different models based on metrics derived from their evaluations? If yes, are these rankings consistent with full evaluations?
+- What is the computational overhead of adaptive partitioning compared to static evaluation? Benchmarks, such as MMLU can be evaluated on a single H100 GPU in ~20 Minutes on a 8B parameter model. What is the overhead of the adaptive partitioning?
+- Could the guarantees be extended to non-i.i.d. settings? (I dont see this as a weakness of the paper just curious)
+- Similarly, how would this approach scale to millions of data samples, which is the main use-case of this framework?
+- Would the framework also be applicable to binary metrics / other language modeling tasks, such as classification?  Based on the provided theory I would assume so, the authors could discuss this in the outlook of their work.
+
+I am strongly considering to raise my score based on the authors feedback and the other reviews.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a principled, online evaluation framework for LLM evaluations. The framework is based on partitioning the embedding space, and improves efficiency by leveraging variance of the evaluation in each partition. It can provide evaluations with high-confidence while requiring only 60-90% of the training data in empirical evaluations on benchmark datasets.
+
+### Strengths
+- The proposed evaluation approach seems to reduce the number of test samples required to obtain a confident evaluation, which can be of great use to practitioners since LLM evaluations are typically computationally expensive.
+- The proposed evaluation is principled and theoretically motivated.
+- The paper provides extensive evaluations on a synthetic task and for four models on three "real-world" datasets, empirically validating the effectiveness of their proposed evaluation.
+
+### Weaknesses
+*Missing breakeven analysis.* The discussion in the paragraph starting line 888 is not sufficient. The paper would require a thorough discussion on the breakeven point, i.e. the point at which using this evaluation is better than evaluating on the entire dataset. I am not sufficiently convinced that the proposed approach is always preferable - as the user has to tolerate a moderate to larger estimation error and/or the test dataset needs to be sufficiently large. I think the point where your approach becomes beneficial should be identified with more certainty, and would be required for practitioners to decide when implementing your approach provides a benefit. A more careful analysis and discussion would be critical for this paper and this should be, in particular, discussed in the main text.
+
+*Limited discussion of real-world experiments.* The discussion on the evaluation on "real-world" datasets is quite limited. While sufficiently many models are tested, the paper would benefit from a more comprehensive discussion of the results, and in particular of the limitations of this approach. The current discussion of the empirical results in real-world settings fails to offer clear takeaways.
+
+*Overly complicated formalization.* The formalization could be improved to make the paper more readable. For example, at first $n$ is introduced as the dataset size, but in Def. 3.6 $n$ represents a function depending on several parameters and this dependency remains unclear. The current formalization is not clear enough, especially not helpful for practitioners who just need to implement your approach. It becomes especially confusing in Theorem 4.2 where the function is denoted as $n'$. Generally all the variables $n, n', n^*$ and $N$ require disambiguation.
+
+Overall, I think the paper has potential toward improved LLM evaluations but the mentioned weaknesses should be addressed to improve clarity and to provide more clear takeaways in particular for practitioners.
+
+### Questions
+Why do you focus on MMLU, AlpacaEval and MATH in particular? Are these datasets suited to properly evaluate your proposed evaluation approach in more realistic settings? Could additional datasets be helpful to provide more objective insights?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper looks into the problem of efficient and reliable evaluation of LLMs. The authors propose a method called Cer-Eval, an online evaluation framework that sequentially select test points until a user specified estimation error and confidence level is achieved. The paper defines the concept of "test sample complexity" by the minimum number of test samples required for the "certified evaluation", and introduces theoretical formulation for the problem. Based on the definition, the paper derives upper and lower bounds based on the test sample complexity. The authors then developing an empirical partition-based adaptive algorithm that exploits variance structure within each partition to reduce evaluation cost. The experiment results on a few real world benchmarks show 20-40% test samples saving with the same estimation accuracy and 95% confidence interval against baselines.
+
+### Strengths
+1. The problem is well defined and the formulation is well motivated. The paper addresses a genuinely critical problem. The problem is well-known, yet many papers (both from industry and academic) are still using static evaluation which is sample inefficient. 
+
+2. The paper lays a strong theoretical foundation and introduces principled approach to variance reduction. The authors have done a great analysis matching the upper and lower bounds on the test sample complexity, and the theorem 5.2 provides clear connections between partition quality and sample complexity.
+
+3. In addition to the theoretical analysis, the paper also proposes a practical algorithm to apply the method to realistic scenarios where the true partitions of the test data is not available. The experiments results show that the designed procedures are able to save the evaluation cost by 20-40%.
+
+### Weaknesses
+1. My biggest concern for the paper is the critical gap in baseline comparisons. The paper only effectively compare the method with two baselines, i.e., the static evaluation and vanilla online evaluation process. There are quite a few obvious papers that address the same problem are not included. For example, TinyBenchmarks (Polo et all., 2024) leverages Item Responses Theory (IRT) and is able to achieve <2% estimation error based on 1% of the full MMLU dataset. Similarly, StratPPI (Fisch et al., 2024) and AutoEval (Boyeau et al., 2024) is cited in the related works but are not compared as baseline. Although some of the work requires the partition to be known in advance, however, I don't think that itself can justify the absence of these baselines. I would very strongly suggest the authors to including more baselines for comparison. 
+
+2. My another concern is the experimental setup. The main focus of the paper focuses on the efficiency and reliability of the evaluations, and the experiments solely base on the saving ratio vs. estimation error level. However, in practice, the most important goal for evaluation is for model comparisons (i.e., model A vs. model B). Why we don't carry on experiments to show the effectiveness of the method on ranking models? For example, are we able to rank models consistently with the 40% saving on the computation cost? I really think these experiments are critical to show the effectiveness of the proposed method and push the adoption.
+
+### Questions
+1. Why we are not comparing our method with other baselines? Any specific reason we only pick these two baselines in the paper?
+2. Have we done experiments to show how the proposed method rank models again baselines (e.g., static evaluation)? Since the method based on initial partition, how does the initial partition impact the results and how sensitive is our method to the initial partition? 
+3. Have we done any experiment to understand how the Cer-Eval handles non-deterministic LLMs (e.g., using large temperature etc.) there the f(X) varies across runs? Is the results sensitive to that?
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3

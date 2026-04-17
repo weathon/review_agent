@@ -1,0 +1,223 @@
+# Scaling Behavior of Discrete Diffusion Language Models
+
+- Decision: Accept (Poster)
+- Scores: 4, 2, 4, 4
+
+## Abstract
+Modern LLM pre-training consumes vast amounts of compute and training data, making the scaling behavior, or scaling laws, of different models a key distinguishing factor.
+Discrete diffusion language models (DLMs) have been proposed as an alternative to autoregressive language models (ALMs).
+However, their scaling behavior has not yet been fully explored, with prior work suggesting that they require more data and compute to match the performance of ALMs.
+
+We study the scaling behavior of DLMs on different noise types by smoothly interpolating between masked and uniform diffusion while paying close attention to crucial hyperparameters such as batch size and learning rate.
+Our experiments reveal that the scaling behavior of DLMs strongly depends on the noise type and is considerably different from ALMs.
+While all noise types converge to similar loss values in compute-bound scaling, we find that uniform diffusion requires more parameters and less data for compute-efficient training compared to masked diffusion, making them a promising candidate in data-constrained training environments.
+We scale our uniform diffusion model up to 10B parameters trained for $10^{22}$ FLOPs, confirming the predicted scaling behavior and making it the largest publicly known uniform diffusion model to date.
+In the process of deriving the scaling laws, we reformulate the discrete diffusion ELBO in terms of signal-to-noise ratio, closing the gap to continuous diffusion theory and simplifying both theory and implementation.
+Training code and models are open-sourced: upon acceptance
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies the scaling laws of discrete diffusion models. It systematically analyzes the scaling behavior across different noise types (masking, uniform, and hybrid), model sizes, training durations, learning rates (with and without annealing) and batch sizes. In addition, it reformulates Generalized interpolating discrete diffusion (GIDD) as a function of signal-to-noise ratio instead of time.
+
+### Strengths
+The topic is an important one since indeed as compute becomes more abundant, it is important to know whether diffusion models can scale better than AR ones.
+
+The reformulation of Generalized interpolating discrete diffusion (GIDD) as a function of signal-to-noise ratio instead of time, while not surprising, is valuable.
+
+The finding that annealing of the learning rate moves the ELBO by a constant value is interesting.
+
+### Weaknesses
+**Main Weaknesses**
+
+*W1* The greatest weakness is that one of the main claims of the paper is that uniform diffusion scales better with compute, but such a statement is not supported empirically. The curves in Figure 4 are extrapolated and will not necessarily behave in that way. In order to make such claims, the author should spend at least 15 times more flops for at least the masked and uniform diffusion. Seeing the intersection without the extrapolation is crucial to make such a claim. The paper itself states that as the model converges, the shape of the ELBO might change.
+
+*W2* Another weakness is that Figure 2 does not seem to support the claims in the paper. The optimal batch size seems very much dependent on the model size, as x in $D^x$ seems to be different for different batch sizes. In particular it seems to be smaller for larger models. Can the authors provide the values of x for each model size and diffusion type? I believe that the x will vary a lot with respect to 0.8179.
+
+*W3* A similar comment holds true for the optimal learning rate with respect to batch size. Can you please provide the exponents for each model size/diffusion type?
+
+**Other weaknesses**
+
+*W4* Some experiments seem to be unfinished at the time of submission. Given that ICLR allows updating the manuscript during the rebuttal period however, this should be rectifiable.
+
+*W5* While the paper positions itself properly and cites related work, some comparisons are missing. How does the formulation in terms of SNR compare with that of [1]? That paper also presents a similar result in the case of masked diffusion.
+Regarding the training without the weighting term, something very similar was originally presented in [2] in the form of CEDD which removes the time-weighting term from the loss, and CEDD* which finds and even more appropriate weighting compared to the usual CEDDT. The same paper also presents a similar diffusion process to the hybrid in this paper and in [3], which they call roulette and which predates GIDD. How does that compare to the hybrid model in this paper?
+
+[1] Sahoo et al. Simple and Effective Masked Diffusion Language Models. NeurIPS 2024
+
+[2] Haxholli et al. Efficient Perplexity Bound and Ratio Matching in Discrete Diffusion Language Models. ICLR 2025.
+
+[3] Rutte et al. Generalized Interpolating Discrete Diffusion. ICML 2025.
+
+### Questions
+**Q1** Would it be possible to extend the curves in Figure 4 for the uniform and masked one? Ideally up to 15x Flops? (if not possible at least 2-3x flops so that we can check if the extrapolation is appropriate). 
+
+**Q2** Can the authors provide the values of exponents for each model size and diffusion type regarding Figure 3 (both sides)?
+
+**Q3** Would it be possible to add the ALM results in Figure 4 for completeness?
+
+**Q4** The larger optimal batch sizes hold under the sub-epoch training assumption. Is it reasonable to make this assumption in practice?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper focuses on the scaling characteristics of DLMs, examining their performance across varied noise types. To do this, the author proposed a framework to unify the parameterization of uniform and masked diffusion models, which allows for smooth transitions between the two models. This paper investigates the scaling behavior of DLMs with respect to critical hyperparameters, including batch size, learning rate.
+
+### Strengths
+It is an insightful idea to unify the formulations of uniform and masked diffusion models via reparameterizing Signal-Noise-Ratio (SNR), which could help to explore new types of diffusion models in future work.
+
+### Weaknesses
+1. The authors sometimes made very strong claims without proper scientific support. For example, in Line#108, “... showing that training with and without annealing yields similar optima and a similar loss, up to some constant factor”. However, it turns out that the authors only compared the shapes of the loss curves of two different models through visual inspection, without any statistical analysis (Line#361 and 362).
+
+2.The analysis of optimal batch size and optimal step count is confusing. In Line#370 and Eq(14), the authors introduced 4 variables, i.e., step count S, batch size B, optimal learning rate and the same observed loss L, but in the following equation (Eq 14), only S and B appear in the target fitting function. Please can you elaborate?
+
+3. The conclusions about optimal batch size presented appear to be questionable. Specifically, in Line 397, the authors state that the optimal batch size (B) which can grow up to 2^10 x 10^9.9. This finding is presented as "in stark contrast" to existing literature, which suggests that smaller batch sizes generally lead to improved test accuracy. However, the authors also acknowledge that this discrepancy might stem from the fact that other research considers overfitting, whereas their work assumes overfitting is not a factor which seems unrealistic in practice. This raises a question regarding the reliability of their conclusion.
+
+The presentation of the paper could be improved. I’m listing a few examples:
+
+1.Figure 1, which reports the key findings in the paper, is hard to navigate, and more explanations in the caption could improve the presentation.
+
+2. In Line#073&074, it’s seems overstated to say “strictly more difficult”, as the difficulty can depend on specific tasks. In addition, some theoretical analysis to support this will be desirable.
+
+3. In the legend of Fig2 (a) (b), I assume “cd” stands for cooldown? If so, you should define the abbreviation in the caption.
+
+4. In Fig 2(c), neither of the model labels L8-D512 and L12-D768 is formally introduced in the main text, and they only appear silently in Table 2 in the Appendix.
+
+### Questions
+1. In Fig2, why do the ELBOs decrease over the training course? Are you meant to say negative log-likelihood or loss?
+
+2. In Fig2(c), you compared the shape of the annealed loss with the unannealed loss. Please can you clarify which curve corresponds to what?
+
+3. In Line#364, you claimed that you “do not expect the conclusions to change depending on the noise type.” Please could you elaborate more on this conclusion?
+
+4. In Line#377, what do you mean by “token-optimal batch size”? You mean token-size-optimal batch size?
+
+5. As the definitions of P (non-embedding parameters), D (total #training tokens), and loss (L) are scattered in different sections, while Table 1 summarizes all these metrics, it’ll be much more accessible to the reader if Table 1 can explain these symbols in the caption.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This work conducts various analyses related to the scaling laws of diffusion language models. They cast the diffusion objective into a form where the noise schedule is based on a SNR ratio and then conduct multiple analysis on how the training ELBO scales w.r.t parmater count, token budgets, and various hyper parameters.
+
+### Strengths
+This work is well presented and covers a reasonable range of noise schedules, model sizes, and various hyper parameters. Scaling models are quite important to guide future work and this is work is executed well enough to be generally impactful and useful. While I have some concerns regarding some evals I believe are missing, I believe this work could be a timely and useful addition to the community if these shortcomings are addressed.
+
+### Weaknesses
+This work is mainly limited by only presented results in terms of the ELBO and not performing any sort of downstream evaluation. This limits any comparisons to ALMs and allows for possible confounding where different mixing distributions during training may have different performance characteristics during downstream evaluation. The GIDD work this work cites a fair bit provides a reasonable set-up to perform downstream eval that would benefit this work immensely. In particular, one thing I would really like to see is how these scaling laws interact with different de-noising processes (e.g. LLaDa style decoders vs re-masking style decoders like ReMDM). 
+
+Additions such as these would significantly strengthen this work and in my opinion would clearly push this work into the accept range.
+
+### Questions
+What does some of the downstream performance looks like for some of the models you trained? Does Train ELBO correlate well with downstream performance? Do these comparisons hold across different types of de-noising processes?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents a comprehensive study on the scaling behavior of discrete diffusion language models. Notably, the fitted scaling law comparing masked diffusion and uniform diffusion predicts an advantage of uniform diffusion in the >10^22 flops regime.
+
+### Strengths
+* This work studies an important topic that is of interest to the community working on discrete diffusion models for language. The methodology taken is generally sound except a few design choices explained below.
+
+* Some experiment design choices are justified through ablations, e.g., the omission of annealing phase to save a search dimension.
+
+* The conclusion drawn from the fitted scaling law is surprising and if verified, could lead to a paradigm shift in the discrete diffusion community. It is widely believed that uniform diffusion underperforms masked diffusion but this work suggest that uniform makes better use of the flops and might catch up and lead as we further scale.
+
+### Weaknesses
+* The writing needs significant improvement - currently the paper is lacking proper introduction of background materials - just citing them is not sufficient. For example, “ To support both isotropic and anisotropic denoising, we implement diffusion forcing (Chen et al., 2024) by sampling independent per-token noise levels for 50% of samples” the authors need to define what is “isotropic” and “anisotropic” denoising and introducing the diffusion forcing method. It is not immediately clear why such algorithmic choices are being made and how that influences the scaling laws. The derivation of the objective is also assuming familiarity with GIDD method, e.g., it is never defined what “q(x)_z” means in equation (3). 
+
+* The use of unweighted surrogate loss also seems concerning - in fact, it creates a train-test mismatch (ELBO is measured at test time). Does this choice significantly change the scaling behavior of all models? What happens if you use the commonly employed ELBO objective for training?
+
+* The experiments are conducted on models up to 570M parameters and used at most \~10^20 flops. The paper's primary claims (uniform scales better than masking), however, are based on an extrapolation into 10^21\~10^22 flops based on a slope difference that is very small. The authors themselves admit the fit can be "brittle" and "sensitive to slight changes in the scaling exponents". Therefore, it is unclear whether the prediction would hold in practice. Recently there has been theoretical arguments made about the advantage of masked diffusion over uniform diffusion [4], which also seems to contradicting the prediction made here.
+
+* Discrete diffusion is a fast growing field and many very related work is missing. The authors should at least cite the recent simplification of masked diffusion models [1, 2, 3]. Some of these works might reduce the contribution claimed in this work, e.g., [2] proposed the same SNR formulation alpha/(1 - alpha) which is claimed as a novel contribution in this work. Also, the connection between masked diffusion and uniform diffusion is extensively studied in [4], with conclusion contradicting the one drawn from scaling law fitted in this work. The authors are expected to have at least a discussion on this.
+
+[1] Ou, J., Nie, S., Xue, K., Zhu, F., Sun, J., Li, Z., & Li, C. (2024). Your absorbing discrete diffusion secretly models the conditional distributions of clean data. arXiv preprint arXiv:2406.03736.
+
+[2] Shi, J., Han, K., Wang, Z., Doucet, A., & Titsias, M. (2024). Simplified and generalized masked diffusion for discrete data. Advances in neural information processing systems, 37, 103131-103167.
+
+[3] Sahoo, S., Arriola, M., Schiff, Y., Gokaslan, A., Marroquin, E., Chiu, J., ... & Kuleshov, V. (2024). Simple and effective masked diffusion language models. Advances in Neural Information Processing Systems, 37, 130136-130184.
+
+[4] Amin, A. N., Gruver, N., & Wilson, A. G. (2025). Why Masking Diffusion Works: Condition on the Jump Schedule for Improved Discrete Diffusion. arXiv preprint arXiv:2506.08316.
+
+### Questions
+Please see above weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3

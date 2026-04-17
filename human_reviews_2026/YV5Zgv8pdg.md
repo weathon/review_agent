@@ -1,0 +1,123 @@
+# Vivid-VR: Distilling Concepts from Text-to-Video Diffusion Transformer for Photorealistic Video Restoration
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6
+
+## Abstract
+We present Vivid-VR, a DiT-based generative video restoration method built upon an advanced T2V foundation model, where ControlNet is leveraged to control the generation process, ensuring content consistency. However, conventional fine-tuning of such controllable pipelines frequently suffers from distribution drift due to limitations in imperfect multimodal alignment, resulting in compromised texture realism and temporal coherence. To tackle this challenge, we propose a concept distillation training strategy that utilizes the pretrained T2V model to synthesize training samples with embedded textual concepts, thereby distilling its conceptual understanding to preserve texture and temporal quality. To enhance generation controllability, we redesign the control architecture with two key components: 1) a control feature projector that filters degradation artifacts from input video latents to minimize their propagation through the generation pipeline, and 2) a new ControlNet connector employing a dual-branch design. This connector synergistically combines MLP-based feature mapping with cross-attention mechanism for dynamic control feature retrieval, enabling both content preservation and adaptive control signal modulation. Extensive experiments show that Vivid-VR performs favorably against existing approaches on both synthetic and real-world benchmarks, as well as AIGC videos, achieving impressive texture realism, visual vividness, and temporal consistency. The codes and checkpoints are publicly available at https://github.com/csbhr/Vivid-VR.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a video restoration method. The core contributions include training with mixed real/synthesized data (termed “concept distillation”) and two architectural modifications.
+
+### Strengths
+The method demonstrates strong empirical performance according to the reported evaluations.
+
+### Weaknesses
+Technical novelty and depth are limited. The architectural modifications, while effective, are relatively standard and offer limited insight; it is unlikely that these design choices will significantly influence future research. Showing that synthesized videos can benefit video restoration is a useful observation, but this point alone, at the current level of investigation, does not meet the novelty threshold to me.
+
+The proposed components are not sufficiently analyzed. For example, although the projector is effective, there is no evidence that its efficacy is due to “filtering degradation artifacts from input video latents” (line 49). Given the presented experiments, the safe conclusion is only that having a trainable projection layer at that location is beneficial; any stronger claims require further evidence. Regarding concept distillation, can we directly generate synthesized samples from scratch instead of starting from half-noised real samples? Moreover, how do we know that the gains from concept distillation stem from better image–text alignment rather than other factors, such as the intrinsically easier distribution of synthesized data?
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Vivid-VR is a generative video restoration method. To address the issue of distribution drift during fine-tuning, the authors propose a concept distillation strategy that uses the pre-trained T2V model to synthesize aligned text-video pairs, thereby preserving texture realism and temporal coherence. The control mechanism is further enhanced with a novel feature projector to filter degradation artifacts and a dual-branch connector for dynamic control feature retrieval. Extensive experiments demonstrate that Vivid-VR achieves superior performance in texture realism and temporal consistency compared to existing methods on various benchmarks.
+
+### Strengths
+1. Leveraging the capabilities of pretrained T2V models to enhance the video restoration performance is an interesting approach. Using the textual description as a connector, the authors find an effective way to transfer the T2V model’s pretrained knowledge to the video restoration model, which I believe benefits the community.
+
+2. The proposed method outperforms several previous advances by a large margin in a wide range of benchmarks. The experiments are comprehensive, and the qualitative demos are also impressive.
+
+3. The ablation studies are also exhaustive. The effectiveness of each branch is clearly verified.
+
+### Weaknesses
+1. Though the idea of transferring the T2V model's capability to downstream tasks is interesting, the proposed method seems to be trivial and similar to other methods. Using a pretrained model to corrupt and reconstruct the visual content is a common way, especially in image enhancement and restoration tasks, and it is also widely adopted to add the textual description during the reconstruction. It is more likely to be a transition from the image restoration task to the video restoration task, which makes the technical contribution less competitive.
+
+2. How the concept distillation really works remains ambiguous. Why putting the textual description into the DiT block can ''transfer the T2V model’s conceptual knowledge to the video restoration model''? What concept is transferred to the video restoration model? What will happen if we use a video captioner to generate captions and add a text encoder to the DiT block instead of leveraging the pretrained T2V model?
+
+### Questions
+1. For the concept distillation process, what will happen if the generated textual descriptions have a major difference from the visual content? Then the pretrained T2V model may generate videos that are quite different from the original low HQ videos. Will it influence the semantic accuracy of the final high HQ videos?
+
+2. Why CogVideoX1.5-5B is selected as the pretrained T2V model? What will the model perform when selecting other alternatives? Besides, what will the video restoration perform when adopting pretrained T2V models in different sizes?
+
+3. What is the rationale of selecting DiT as the main architecture of the video restoration model, considering there are many alternatives, such as MMDiT?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper presents a DiT-based video restoration model trained with a novel concept-distillation strategy that uses a pre-trained T2V generator to produce aligned text–video pairs, which eliminates distribution drift. It also proposes a lightweight ControlNet projector and dual-branch connector that further suppress artifacts and enable dynamic control.
+
+### Strengths
+1. It proposes concept distillation with a pre-trained T2V model to generate aligned text–video pairs.
+2. It markedly outperforms prior methods.
+3. A high-quality dataset is created that should significantly benefit the video-generation community.
+
+### Weaknesses
+Lack of video supplementary results: As a video-oriented work, without video results as supplementary material, it is difficult for the public to intuitively evaluate the model's performance, especially the quality of temporal consistency.
+
+### Questions
+I don’t have any further questions at the moment; I’m waiting to discuss with the other reviewers.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

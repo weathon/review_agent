@@ -1,0 +1,236 @@
+# DATE: Dynamic Absolute Time Enhancement for Long Video Understanding
+
+- Decision: Reject
+- Scores: 4, 4, 4, 6
+
+## Abstract
+Long video understanding remains a fundamental challenge for multimodal large language models (MLLMs), particularly in tasks requiring precise temporal reasoning and event localization. Existing approaches typically adopt uniform frame sampling and rely on implicit position encodings to model temporal order. However, these methods struggle with long-range dependencies, leading to critical information loss and degraded temporal comprehension. In this paper, we propose Dynamic Absolute Time Enhancement (DATE) that enhances temporal awareness in MLLMs through the Timestamp Injection Mechanism (TIM) and a semantically guided Temporal-Aware Similarity Sampling (TASS) strategy. Specifically, we interleave video frame embeddings with textual timestamp tokens to construct a continuous temporal reference system. We further reformulate the video sampling problem as a vision-language retrieval task and introduce a two-stage algorithm to ensure both semantic relevance and temporal coverage: enriching each query into a descriptive caption to better align with the vision feature, and sampling key event with a similarity-driven temporally regularized greedy strategy. Our method achieves remarkable improvements w.r.t. absolute time understanding and key event localization, resulting in state-of-the-art performance among 7B and 72B models on hour-long video benchmarks. Particularly, our 7B model even exceeds many 72B models on some benchmarks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper proposes DATE, a training-free method to improve long-form video understanding of MLLMs through two light-weight modules: Timestamp Injection Mechanism (TIM) and Temporal-Aware Similarity Sampling (TASS). TIM interleaves each frame’s visual tokens with an explicit textual time token to build an absolute temporal reference and TASS reformulates frame sampling as caption-based clip retrieval and frame selection through greedy, similarity-first search. The paper is evaluated on 3 long video benchmarks and achieves superior performance.
+
+### Strengths
+1.	The proposed approach is training free.
+
+2.	Good performance gain on the evaluated benchmarks.
+
+### Weaknesses
+1.	Method - 
+
+  a.	The paper is an engineering effort of repurposing existing methods without strong technical novelty. 
+
+  b.	TIM is essentially timestamp token concatenation, an already well explored idea [1-4] repurposed as a module.  
+
+  c.	TASS is essentially BOLT [5] + AKS [6] with renamed components and minor cosmetic implementation changes. 
+
+2.	Experiments - 
+
+  a.	While both TIM and TASS like approaches are already existing, there is no absolute performance comparison against those methods [1-6], even though they are almost identical. While one ablation compares against AKS, comparison with [1-4] is necessary given “time perception” is the central claim.
+
+  b.	Despite claiming to solve “absolute time perception,” the method is not tested on any temporal grounding task benchmarks (e.g QVHighlights, Charades-STA, ActivityNetCaptions etc). Right now, it’s not clear whether TIM enables time understanding or just hints it textually. Even though the mentioned datasets are not truly long video, it still would have been a good starting point to show TIM’s effectiveness in time perception. Additionally, there is no proof that explicit timestamp tokens improve compositional or relational temporal reasoning.
+
+  c.	Despite calling TASS “efficient,” the preprocessing of using DeepSeek and CLIP over every frame at 1fps is computationally expensive. How does the method scale with frames (e.g MovieChat-1k can grow as much as 10k+ frames). Additionally, the paper reports no runtime scalability, memory, FLOP etc to prove efficiency. Just showing CPU comparison to show efficiency is not enough.
+
+  d.	While ablation isolates the performance contribution of TIM/TASS, there is no deeper exploration of these components. For example, What happens if timestamp tokens are randomized or inconsistent? How does timestamp density affect performance?
+
+  e.	Using DeepSeek for caption rewriting introduces unfair comparison with other models that don’t use captioning models and this dependency is unaccounted for. How much does caption rewriting actually help beyond raw question embedding? 
+
+Minor Weakness
+
+ 1.	Extremely small fonts in figures are hampering readability.
+
+References:
+
+ [1] Ren et al. Timechat: A time-sensitive multimodal large language model for long video understanding. CVPR 2024
+
+ [2] Chen et al. Timemarker: A versatile video-llm for long and short video understanding with superior temporal localization ability. arXiv 2024.
+
+ [3] Guo et al. Vtg-llm: Integrating timestamp knowledge into video llms for enhanced video temporal grounding. AAAI 2025
+
+[4] Huang et al. Lita: Language instructed temporal-localization assistant. ECCV 2024.
+
+[5] Liu et al. BOLT: Boost Large Vision-Language Model Without Training for Long-form Video Understanding. CVPR 2025.
+
+[6] Tang et al. Adaptive keyframe sampling for long video understanding. CVPR 2025.
+
+### Questions
+Weaknesses are mentioned in order of priority. Please refer to weakness for questions.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces DATE (Dynamic Absolute Time Enhancement), a plug-and-play framework to improve the capabilities of Multimodal Large Language Models (MLLMs) in understanding long videos, particularly for tasks that require precise temporal reasoning and event localization. The proposed method consists of two main components: 1) The Timestamp Injection Mechanism (TIM), which explicitly inserts textual timestamp tokens alongside video frame embeddings to create a direct and absolute temporal reference system for the model. 2) The Temporal-Aware Similarity Sampling (TASS) strategy, a two-stage, content-aware frame selection algorithm. The authors conduct extensive experiments on three challenging long-video benchmarks, demonstrating that DATE significantly outperforms strong baselines like Qwen2.5-VL.
+
+### Strengths
+1. The paper is well-written. The proposed method is well-illustrated and easy to follow.
+
+2. **Training-free and model-agnostic:** A major advantage of DATE is its "plug-and-play" nature. It enhances existing, pre-trained MLLMs without any need for costly fine-tuning or architectural modifications. 
+
+3. **Thorough analysis:** The paper is supported by solid analytical work, including comprehensive ablation studies that isolate the contributions of TIM and TASS. The attention map visualizations provide qualitative validation for TIM's mechanism, and the comparative analysis against the AKS sampling method further substantiates the superiority of TASS.
+
+### Weaknesses
+1. **The novelty is limited**: The Timestamp Injection Mechanism (TIM) has been proposed by Seed1.5-VL [1], and the similar ideas of Temporal-Aware Similarity Sampling (TASS) have been widely explored by previous work like AKS, VideoAgent [2], etc.
+
+[1] Seed1.5-VL Technical Report
+
+[2] VideoAgent: Long-form Video Understanding with Large Language Model as Agent
+
+2. **Inference latency for very long videos:** The TASS component requires an initial pass to extract frames (e.g., at 1 FPS) and compute similarity scores across the entire video. As acknowledged in the appendix, this introduces an inference overhead that scales linearly with the video's duration. For hour-long or multi-hour videos, this initial latency could be a significant practical limitation for on-demand applications.
+
+3. **Dependency on external components:** The TASS method's performance is dependent on an external LLM (deepseek-v3) to generate the descriptive caption. The quality of this caption is critical for identifying the most relevant frames. The paper does not analyze the sensitivity of the system to the choice of this LLM or how it handles potentially noisy or inaccurate captions, which could mislead the sampling process.
+
+### Questions
+1. **Comparison with fine-tuning approaches:** Your training-free approach is a significant strength. However, for context, how do you see DATE's performance and methodology comparing to methods that explicitly fine-tune a model with temporal tokens and timestamped video data? What are the key trade-offs in terms of performance, data requirements, and temporal localization precision?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces explicit timestamp tokens into MLLMs to improve time-aware video understanding and event localization. Meanwhile, it employs a two-stage semantic-guided key frame selection. Experiments are conducted on general video understanding benchmarks (VideoMME, LongVideoBench, and LVBench) and their event-aware tasks.
+
+### Strengths
+- The paper is well written and easy to follow.
+- The idea of injecting timestamp tokens into a video-language transformer is simple and intuitive.
+- The proposed approach is plug-and-play — it can be applied to existing multimodal LLMs without dense temporal grounding annotations or extensive retraining, making it appealing for low-resource or training-free settings.
+
+### Weaknesses
+1. **Misalignment between problem definition and evaluation.**
+
+The paper positions itself as addressing timestamp-aware video understanding and temporal/event grounding, yet the primary results are reported on general video understanding benchmarks (VideoMME, LongVideoBench, LVBench). Although some event-aware subsets are included, these benchmarks do not directly reflect timestamp reasoning or grounding capabilities.
+To support the claimed contributions, evaluations on specialized temporal grounding datasets for MLLMs are necessary, such as:
+
+- E.T. Bench (NeurIPS 2024) — open-ended event-level temporal grounding for video LLMs
+- Charades-STA — standard video temporal localization benchmark
+
+At present, the experiments do not sufficiently demonstrate that explicit timestamp modeling improves grounding over existing methods.
+
+**2. Limited novelty; similar ideas have been explored.**
+
+The main technical idea—inserting explicit timestamp tokens into the multimodal input stream—has been extensively explored in temporal grounding literature and even appears in open-sourced MLLMs (e.g., Qwen3-VL). As a result, the contribution feels incremental. Several recent works already introduce timestamp or temporal tokens into video-LLMs or temporal grounding pipelines:
+
+Number It: Temporal Grounding Videos like Flipping Manga, CVPR 2025
+GenS: Generative Frame Sampler for Long Video Understanding, ACL Findings 2025
+
+Thus, timestamp token injection appears more like a commonly used trick rather than a novel methodological contribution.
+
+**3. Missing discussion on reinforcement learning (RL) effects.**
+Recent GRPO-based work (e.g., TimeR1: Qwen2.5-VL + GRPO) shows that reinforcement learning can significantly improve grounding capability even without explicit temporal embedding.
+Therefore, it remains unclear whether the observed gains originate from:
+
+- the timestamp embedding mechanism itself, or 
+- insufficient grounding training of the base model.
+
+Ablations such as timestamp embedding vs. RL-enhanced grounding would clarify this.
+
+### Questions
+- In Table 3, does the reported runtime of TASS include the DeepSeek-V3 recaptioning step? If not, the latency comparison against AKS may not be fair.
+
+- Why are general video understanding benchmarks used as primary evaluation instead of timestamp-aware grounding datasets such as ETBench or Charades-STA?
+
+- If reinforcement learning (e.g., GRPO) is added to the base model, do timestamp embeddings still yield improvements?
+
+- Does the method require additional training data or annotations, or is it completely training-free?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses the challenge of precise temporal reasoning and event localization in long video understanding for Multimodal Large Language Models (MLLMs). The authors argue that existing methods, which often use uniform frame sampling and implicit position encodings, fail to model absolute time and long-range dependencies effectively. The paper proposes a plug-and-play framework named DATE (Dynamic Absolute Time Enhancement) consisting of two main components. The first is the Temporal-Aware Similarity Sampling (TASS) strategy, which reframes sampling as a retrieval task: it first uses an LLM to convert a user's question into a descriptive caption, then uses CLIP similarity scores to perform a temporally-regularized greedy sampling (Algorithm 1) to select frames that are both semantically relevant and temporally diverse. The second component is the Timestamp Injection Mechanism (TIM), which explicitly interleaves textual timestamp tokens (e.g., "83s") with the corresponding video frame tokens, creating a direct and explicit temporal reference system for the MLLM. The authors demonstrate that DATE achieves state-of-the-art performance on several hour-long video benchmarks, with their 7B model variant outperforming even 72B models on some tasks.
+
+### Strengths
+1. The paper makes the key observation that prior semantic sampling methods (e.g., AKS ) use raw questions as input to CLIP. This is a mismatch, as CLIP was trained on descriptive captions. The TASS solution of first generating a caption from the question is a novel and clever fix.
+2. The entire DATE framework is model-agnostic and requires no additional training. This is a significant practical advantage, lowering the barrier to adoption and making it easy to combine with future, stronger base models.
+3. TASS's two-stage process (caption generation  + regularized greedy sampling ) directly addresses both the CLIP-mismatch and the problem of temporal redundancy in naive semantic sampling.
+4. TIM's approach of interleaving explicit textual time_token while simplifying the MROPE to a simple sequential index  is an intresting way to decouple absolute time perception from relative order.
+
+### Weaknesses
+1. The TASS component requires calculating CLIP similarity for every frame (e.g., at 1 FPS)  and then running a greedy selection algorithm. The authors concede in Appendix D that this "leads to an inference time that grows approximately linearly with video length".
+2. This linear cost is a significant practical drawback for the "hour-long" videos  that are the paper's primary target. A one-hour video at 1 FPS has 3,600 frames, which must all be encoded by CLIP before the MLLM even sees the input.
+3. The paper fails to provide a quantitative analysis of this latency in the main text. While Table 3 compares TASS vs. AKS time, there is no plot or table showing total inference time (TASS + MLLM) vs. video duration (e.g., 10, 30, 60 minutes) to understand the practical impact of this bottleneck.
+4. Figure 3  introduces T, H, and W notation for positional IDs without a clear textual explanation in Section 3.1 of what H and W (presumably spatial) represent or how they are indexed, which can be confusing on a first read. (I would suggest add a sentence to Section 3.1 briefly defining the T, H, and W notations used in Figure 3  to improve clarity.)
+5. The TASS pipeline now critically depends on the quality of the caption generated by deepseek-v3. if the generated caption misinterprets the user query (e.g., ambiguous or overly generic phrasing), the CLIP similarity search can be misled, leading to suboptimal frame sampling.
+
+### Questions
+1. Could you provide a quantitative analysis of the TASS sampling latency? A plot of wall-clock time vs. video duration (e.g., 1 to 60 minutes) would be very helpful to understand the practical scalability of the method, as the linear cost  is a significant concern.
+2. Regarding TASS+TIM Interaction, the TASS samples a sparse, non-uniform set of frames. TIM then applies simple sequential position IDs (1, 2, 3...) to these sampled frames, thereby ignoring the actual time gaps. This cleverly solves the large $\Delta k$ problem. However, does this mean the MLLM loses all sense of duration between sampled frames (since it only sees a relative order)? How does this impact reasoning about "how long" an event took?
+3. The initial interval  is set to 20 seconds. While Figure 7 shows stability, this choice seems arbitrary. What happens if a video has a dense cluster of critical events all occurring within a 20-second window? Wouldn't this algorithm risk sampling only the first one and missing the rest?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3

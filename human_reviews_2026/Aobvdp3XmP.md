@@ -1,0 +1,214 @@
+# MobileWizard: A Data-Efficient GUI Agent with Structured Reasoning and Progressive Reinforcement Learning
+
+- Decision: Reject
+- Scores: 2, 2, 6, 6
+
+## Abstract
+This paper introduces MobileWizard, a data-efficient framework designed to enhance the reasoning and precision of mobile GUI agents. Trained on merely 24.5k public trajectories and 300 remedial trajectories, MobileWizard-7B demonstrates exceptional performance, achieving a 47.2\% success rate on AndroidWorld, outperforming prominent larger open-source models like UI-TARS-72B. This high efficiency stems from two core innovations: 1) Structured Reasoning: A new structured Chain-of-Thought (CoT) paradigm that decomposes the agent’s reasoning process into four explicit and interpretable modules: self-verification, screen analysis, planning, and action guidance. The proposed CoT guides the LLM to achieve logical consistency, extraction of key insights, and provides clear paths for failure analysis. 2) Progressive Reinforcement Learning: We propose a comprehensive RL strategy that features four key components: efficient cold-start training, a dynamic reward system with Progressive Reward Shrinking to boost precision, History Self-Alignment to narrow the training-inference gap, and a Corrective Teaching Pipeline for self-improvement from online failures. The experimental results demonstrate that our framework enables superior generalization from limited data. We believe that our method presents a scalable and efficient path toward building more robust and versatile GUI agents.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a GUI agent framework named *MobileWizard*, which introduces two key innovations:  
+1. A structured Chain-of-Thought paradigm comprising four components:  
+   a. self-verification,  
+   b. screen analysis,  
+   c. planning, and  
+   d. action guidance.  
+2. A progressive reinforcement learning approach consisting of four components:  
+   cold-start training, a reward system with progressive reward shrinking, history self-alignment, and a corrective teaching pipeline.
+
+### Strengths
+The presentation is mostly clear. The two innovations are described step by step and in detail, and the evaluation effectively demonstrates the proposed approach’s performance, with both comparish with baselines and ablation study.
+
+### Weaknesses
+The motivation is unclear—it’s not evident what drives these two innovations, nor how they specifically benefit GUI agents in mobile environments.  
+Descriptions and explanations for Figures 1 and 2 are missing.  
+Some word choices are vague or unsupported. For example, phrases like “...for critical visual information...” and “This includes critical state transitions and...” (line 234) raise questions. What qualifies as “critical”? Are there non-critical transitions or information?
+
+The claim that *MobileWizard-7B demonstrated exceptional performance* (line 375) is unconvincing for several reasons:  
+1. UI-TARS-7B achieves the same overall best performance on the ScreenSpot-v2 dataset.  
+2. UGround-7B outperforms MobileWizard-7B on the MMBench-GUI dataset (82.0% vs. 79.8%).  
+3. In Table 3, multiple baselines—including UI-TARS-7B and UI-Venus-Navi-7B—show better performance. Specifically, UI-Venus-Navi-7B achieves a 49.1% SR, compared to 47.2% from the proposed approach.  
+Given these results, how does the proposed approach qualify as “exceptional”?
+
+**Typo:**  
+“We first classifies...” in line 158 should be corrected to “We first classify...”
+
+### Questions
+- How are subtasks derived from tasks? Is there a one-to-many relationship between tasks and subtasks? Are subtasks independent of each other?  
+- In lines 233–245, if Action History and Planning History both trace back to time index 1, aren’t they also long-term information? If so, the naming is unintuitive—“Long-Term Information Memory” implies the others are not long-term.
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces MobileWizard, a data-efficient mobile GUI agent that combines structured reasoning and progressive reinforcement learning. The model decomposes reasoning into four interpretable modules, self-verification, screen analysis, planning, and action guidance, and employs progressive RL with reward shrinking, history self-alignment, and corrective teaching for continual improvement. Trained on only 24.5k public and 300 remedial trajectories, MobileWizard-7B achieves a strong performance on benchmarks, surpassing larger models.
+
+### Strengths
+1. The paper is well-structured and easy to follow.
+2. MobileWizard has strong data efficiency. It achieves competitive or state-of-the-art results using only 24.5k public trajectories and 300 remedial ones.
+
+### Weaknesses
+1. The improvement on ScreenSpot-v2 is marginal. MobileWizard-7B achieves 93.0%, while its base model already reaches 92.4%, raising questions about the claimed gains.
+2. Training dynamics are not illustrated; no learning curves or convergence analyses are provided, making it difficult to assess training stability.
+3. Code and data are not provided, which limits reproducibility and transparency.
+4. Using GPT-4o as a baseline is questionable; comparisons to stronger agent-based systems such as Operator or Claude Computer Use would be more appropriate.
+5. The paper lacks comparisons with other RL-based GUI agents such as DigiRL and GUI-R1, which are directly relevant baselines.
+6. The paper does not report performance after the cold-start phase, making it difficult to quantify the improvement brought by RL.
+
+### Questions
+1. The structured reasoning data are generated using Gemini-2.5 Pro, yet its performance is not reported in the benchmarks. Why is GPT-4o used instead?
+2. Will the model, data, and training code be open-sourced?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper presents and agent framework designed for mobile GUI manipulation using data more efficiently and also leveraging remedial trajectories to improve agent adaptation to failures. The proposed framework pitches a small model/small data approach as scalabe and effective for training mobile agents.
+
+The framework is composed of two core pieces: 
+1) a CoT-like structured reasoning apporach, including four sub-modules: screen analysis, planning, action guidance, and self-verification outputing a trajectory containing the four units per step.
+2) a Progressive Reinforcement Learning (PRL) procedure, itself also divided into four components: cold-start training, dynamic reward system, history self-alignment, and a Corrective Teaching Pipeline.
+
+PRL emphasizes the effective use of data for cold start, a four-parts reward function, self-alignment for efficient use of part history during inference, and a corrective teaching pipeline - were external LMMMs are used to classify failures and propose correct actions, which are then used as remedial trajectories back in the RL loop. The paper claims each components contribute for the effective usage of as little data as possible.
+
+Results on two UI grounding benchmarks show the framework can reach SOTA results or competitive results for models of the same size (7B) while using much less data. Further task execution benchmark results in two static benchmark and a dynamic benchmark further illustrate framework performance, showcasing its competitive performance. 
+
+The author also provide ablations, using the AndroidWorld benchmark, for four key components in the framework, which show their impact in improving perfomance versus simpler versions of the component or disabling each components in the framework.
+
+### Strengths
+The proposed framework is pragmatically designed and achieves strong UI grounding results in competitive agent benchmarks, as well as competitive performance in the dynamic task execution AndroidWorld benchmark, even using less data than other similar sized models.
+
+The paper presents and interesting system integration of different components that applies RL techniques in task execution scenarios while trying to reduce/minimize data use for more effective agent training.
+
+Experimental results suggest this strategy may have promise.
+
+### Weaknesses
+While a complex system per se, or relative small gains individually in benchmark results, are not an issue if the overall system is effective, however the proposed framework includes two many new pieces at once (2 core modules, divided each into 4 sub-modules, with a 4 component reward function, and two-step corrective pipeline using external models) that make it hard to properly analyse and determine if the presented result support its key claims. A lot of the paper space is used describing the system, but little on the analysis of each component or on the claims or effective use of little data.
+
+Regarding the structured CoT-like, which is only evaluated as a single block in ablation, differ from other agent work that also perform "self-verification, screen analysis, planning, and action guidance"? They are not novel concepts per se, and, for example, [1] presents an agent that does "self-reflection, information gathering, task inference, and action planning", which seem pretty analogous to the proposed framework. [1] also represents this output as structured memory/history fed to the model. The novelty claims and benefits here don't seem well supported (it increases MobileWizard performance less then 2 percent points in SR). 
+
+Section 3.4 seems to be the core contribution of the paper, but also here the contributions of each module are not well supported by the experiments. Regarding performance improvement in the presented ablation, each individually contribute only around 1.5 to 2 percent point to overall results. 
+
+More importantly, for the core claim of the paper, reduced data usage, no experiments are provided for different settings and few details are giving for the current used approach. For example, when discussing the optimization of the initial cold-start training data volume, the paper claims 25% of the data was best. Based on how diverse runs? Only one uniform sample? If the same evaluation was used for all sample rounds, how was evaluation coverage/generality guaranteed?
+
+The presented reward function is also complex, with 4 components, some somewhat trivial and some seemingly not well justified in their parameters. For example, in Action Type reward from groundtruth, how does this encourage different solutions if events must match the specific action in the trace? It seems somehow spurious, especially as parameters are its own reward component next. Also for the progressive shrinking mechanism. Gradually tightening the threshold seems very interesting, but why the chosen range though? Finally it reaches 4%, but does one know it's good enough? How does it affect UI's that require precision? How well are such cases represented in the benchmark data?
+
+The 4th reasoning reward requires very detailed annotated training data for format of reasoning and uses only Sentence-BERT as metric. This can also be significant if really having little high-quality data is key. But there is no in-depth analysis of how much data is actually need and, more importantly, how it scales. Similar comments apply to history self-alignment and how it's difference fromthe UI-Venus approach not negatively affect peformance. Or also to the corrective pipeline. How do the chosen traces help generalization? 300 are really sufficient?
+
+In summary, the paper is interesting, I like the system side of it and it achieves good results. But the design decisions are not well backed in the manuscript, and it doesn't provide enough evidence for its core claim of a "scalable and efficient path toward building more robust and versatile GUI agents". Especially in scaling and generalization ability. If toning down these claims it is still good work.
+
+[1] Weihao Tan et al. CRADLE: Empowering Foundation Agents Towards General Computer Control. ICML 2025.
+
+### Questions
+In the corrective teaching pipeline, the paper claim to really run apps under a simulator for corrective teaching. How do you make sure of the correct app state?
+
+GUI-Odissey and AC are part of the training data, so that can partially account for the performance in the offline benchmark cases in Table 3. How does this data correlate to AndroidWorld? The performance there does look interesting.
+
+Why would you say a larger UI-TARS leads to worse results in ScreenSpot and MMBench-ui? Does the same hold for UI-TARS 2?
+
+There are also some presentation issues to fix:
+- In Table 2, performance in grounding, there is incorrect use of underline to mark second best. Some columns don't have best/second, and some the underlined is actually the best.
+- In Table 3, SEED-VL and UI-TARS are not from OpenAI and at least UI-TARS is not a closed model. Also, if similar performance is going to be considered equal for best/second, define the deviation and be consistent in the whole table.
+- Xu et al. 2024 is not the best example of early image only agent input. Other work predates it on arxiv and published.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+MobileWizard is a 7B mobile GUI agent trained with (i) a structured reasoning format and (ii) a progressive RL recipe, comprising of a multi-part reward with progressive thresholds. The model was trained on 24.5k public trajectories and 300 remedial ones. MobileWizard reports 47.2% success-rate on AndroidWorld outperforming a 72B UI-TARS model. Further, it ties 93.0 on ScreenSpot-v2 with UI-TARS 7B.
+
+### Strengths
+- Paper is clean and easy to understand.
+- Progressive shrinking of the reward threshold is a sensible way to avoid reward hacking in later stages of the training while keeping the task easy enough for the model to learn.
+- Strong performance on benchmarks compared to existing state-of-the-art models.
+
+### Weaknesses
+- Missing information on test-time compute for the baselines against MobileWizard. Inference-time reasoning length, steps per episode, and latency are not reported or compared to baselines (e.g., UI-TARS, OS-Atlas, UI-Venus).
+
+- Although progressive shrinking seems reasonable, I am curious to know how would the model perform with a fixed threshold.
+
+- Nit: Increase the font size in figures. (e.g., Figure 3)
+
+### Questions
+- Does the model need a RL agent to learn? Curious to know, how would the training curve and performance looks like if the model was only trained on high-quality SFT data.
+
+- What are the failure modes that arise from a baseline RL setup that MobileWizard solves? Similarly, what are the failure modes that still exist in MobileWizard.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,185 @@
+# EvoScale: Evolutionary Test-Time Scaling for Software Engineering
+
+- Decision: Reject
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Language models (LMs) perform well on standardized coding benchmarks but struggle with real-world software engineering tasks such as resolving GitHub issues in SWE-Bench—especially when model parameters are less than 100B. While smaller models are preferable in practice due to their lower computational cost, improving their performance remains challenging. Existing approaches primarily rely on supervised fine-tuning (SFT) with high-quality data, which is expensive to curate at scale. An alternative is test-time scaling: generating multiple outputs, scoring them using a verifier, and selecting the best one. Although effective, this strategy often requires excessive sampling and costly scoring, limiting its practical application.
+We propose Evolutionary Test-Time Scaling (EvoScale), a sample-efficient method that treats generation as an evolutionary process. By iteratively refining outputs via selection and mutation, EvoScale shifts the output distribution toward higher-scoring regions, reducing the number of samples needed to find correct solutions. To reduce the overhead from repeatedly sampling and selection, we train the model to *self-evolve* using reinforcement learning (RL). Rather than relying on external verifiers at inference time, the model learns to self-improve the scores of its own generations across iterations. Evaluated on SWE-Bench-Verified, EvoScale enables a 32B model to match or exceed the performance of models with over 100B parameters while using a few samples. Code, data, and models will be fully open-sourced.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces EvoScale, a sample-efficient, test-time scaling method designed to resolve GitHub issues on SWE-Bench benchmark. The core idea of EvoScale is to iteratively refine outputs using an editor model. To ensure that each refinement step moves towards a better solution and without relying on verifiers at inference time, the authors employ RL, which trains the editor model to generate modifications that achieve a higher reward than the previous output. The authors claim that with EvoScale, a 32B parameter model can achieve performance comparable to that of models exceeding 100B parameters.
+
+### Strengths
+This paper focuses on using the key technique of test-time scaling to address the important and practical challenge of fixing GitHub issues.
+
+### Weaknesses
+1.The discussion of the problem and motivation is repetitive and redundant, taking up too much space and compressing the experiments section.
+
+2. The proposed approach lacks novelty. The core techniques used, i.e., iteratively refining model outputs, are common, pre-existing methods.
+
+3.The comparison in evaluation only includes naïve baselines like Reward Model Selection and Unit Tests Selection, lacking baselines from related work.
+
+4.The technique may introduce additional overhead in terms of time and token consumption.
+
+5.The paper lacks a thorough evaluation.
+
+### Questions
+1. The appendix provides a runtime comparison but only for a low sample budget. It would be more convincing to provide a table that shows both performance and runtime under the same sample sizes.
+
+2.In Figure 4, why aren't the results for RL, Classical SFT, and Mutation SFT presented in a single, unified chart for easier comparison? The metrics (e.g., Best@40 vs. Best@30) and experimental settings (e.g., values of M and K) also seem to differ between the plots.
+
+3.The main results for EvoScale-32B in Table 1 rely on both a reward model and unit tests, which potentially counteract the benefits of the RL-trained self-evolution. Could you report the performance of a pure EvoScale-32B without these external verifiers?
+
+4.The results lack exact numbers to quantify the improvements and sample savings. It would be helpful to specify the exact performance gain and the number of samples saved by EvoScale-32B compared to a standard test-time scaling approach on the base model.
+
+5.There are existing studies on reducing the cost of test-time scaling. It is suggested that you discuss and compare your method with these related works.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper proposes **EvoScale**, an evolutionary test-time scaling framework for software engineering (SWE) tasks. It views multi-sample inference as an evolutionary process, where model outputs are iteratively refined through selection and mutation. To further reduce sampling cost, the authors train the model to self-evolve via reinforcement learning, internalizing the guidance of a reward model. Experiments on SWE-Bench-Verified show that a 32B model (Qwen2.5-Coder) can match or exceed the performance of 70B–100B models with far fewer samples. The presentation is clear and technically solid, and the empirical results are strong.
+
+### Strengths
+- Excellent execution and presentation. The paper is well written, with rigorous experimental setup, clean figures, and strong empirical evidence supporting the method’s effectiveness.
+- Technically sound integration of evolutionary search and RL. The design of “mutation SFT + RL with potential shaping” is conceptually elegant and experimentally validated.
+- Meaningful improvements in sample efficiency. EvoScale achieves notable gains under the same computational budget, demonstrating that smaller models can approach large-model performance with clever test-time strategies.
+- Comprehensive analysis. The ablation studies, temperature experiments, and runtime comparisons are all thoughtfully conducted, providing convincing support for the claimed contributions.
+
+### Weaknesses
+- Directionally misaligned with the future of SWE research. The proposed approach remains strictly agentless—it treats issue resolution as a static, one-shot editing problem. While the method is effective within this paradigm, the field is rapidly shifting toward agentic and interactive systems (e.g., SWE-Agent) that perform multi-step reasoning, tool use, and environment feedback. Under this new paradigm, test-time scaling of static generation becomes a historical dead end rather than a forward-looking research direction.
+- Limited real-world applicability. SWE tasks inherently involve dynamic context, runtime interaction, and multi-file dependencies. Test-time scaling assumes an independent scoring function (reward model or unit tests), which fails to capture these structured, process-dependent aspects. Thus, even with RL-based self-evolution, the framework remains detached from the actual software development workflow.
+- Incremental conceptual novelty. While the “evolutionary” view is creative, it essentially reinterprets existing test-time compute scaling ideas (e.g., iterative refinement, verifier-guided search) rather than introducing a fundamentally new paradigm.
+- Lack of adaptability beyond the static pipeline. The method is evaluated only in a pipeline-based setup with fixed retrieval, showing no evidence it can integrate into agentic or runtime environments—precisely where current research momentum lies.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes EvoScale, an evolutionary test-time scaling method to improve small LLMs on real-world software engineering tasks. Instead of generating many candidate patches at once and selecting the best via a verifier, EvoScale treats code-editing as an iterative evolutionary process: generate candidates → select promising ones → condition on them → refine. The authors show that SFT models alone cannot perform mutation-style refinement, so they introduce a mutation-aware SFT phase, followed by potential-based RL training to enable models to self-evolve without external verifiers. They theoretically show monotonic improvement guarantees under a shaped reward. Experiments on SWE-Bench-Verified demonstrate that a 32B Satori-SWE model reaches 41.6%, matching or exceeding models >100B and much larger RL-trained systems while using significantly fewer samples. EvoScale provides efficient test-time scaling and shows sample efficiency benefits vs unit-test-driven or reward-model-driven selection. Overall, it advances agentless SWE pipelines by enabling self-refining LMs without runtime execution or expensive sampling.
+
+### Strengths
+1. Frames test-time scaling as evolution rather than brute sampling; aligns with natural mutation-refine workflows.
+2. Potential-based reward shaping ensures monotonic improvement; it avoids sparse reward pitfalls.
+3. 32B model reaches 41.6% on SWE-Bench Verified, beating or matching >100B models with far fewer samples 
+4. No expensive agent rollouts, minimal inference overhead, fewer unit-test calls.
+
+### Weaknesses
+1. More ablations isolating prompt effects would strengthen evidence for LM-as-mutation operator design. 
+
+2. Unit tests still needed for final selection in main benchmark. Despite "no verifier at inference" claims, final selection in SWE-Bench uses both RM + tests Clarify when EvoScale stands alone. 
+
+3. Iterative refinement can bias toward local optima; exploration vs exploitation trade-offs are not deeply analyzed.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces EvoScale, a novel framework for software engineering (SWE) tasks that enhances model performance at test-time. It creatively reframes multi-sample inference as an evolutionary process, iteratively improving model outputs through selection and mutation. To make this process highly efficient, the authors employ reinforcement learning to train the model to "self-evolve," thereby internalizing the guidance of a reward model and reducing sampling costs. The framework's effectiveness is validated by strong empirical results on SWE-Bench-Verified, where a 32B model (Qwen2.5-Coder) achieves performance comparable or superior to 70B-100B models with significantly fewer samples. Overall, the work is presented clearly, is technically solid, and offers compelling findings.
+
+### Strengths
+1. Significant Gains in Sample Efficiency: The paper's primary contribution is a meaningful improvement in computational efficiency. EvoScale powerfully demonstrates that with clever test-time strategies, smaller models can achieve performance comparable to, or even exceeding, much larger models under the same computational budget.
+
+2. Elegant Technical Integration: This efficiency gain is rooted in a technically sound integration of evolutionary search and Reinforcement Learning. The specific design, which combines "mutation SFT" with "RL with potential shaping," is both conceptually elegant and experimentally validated.
+
+3. Rigorous and Comprehensive Analysis: The claims are convincingly supported by a series of thoughtful analyses. The comprehensive ablation studies, temperature experiments, and runtime comparisons robustly validate the design choices and the method's effectiveness.
+
+4. Exceptional Clarity and Execution: Overall, the paper is exceptionally well-written and presented. The rigorous experimental setup, clean figures, and strong empirical evidence make the work both easy to follow and highly persuasive.
+
+### Weaknesses
+1. Directional Misalignment with the Future of SWE: The paper's primary weakness is its strategic focus on an outdated, agentless paradigm that treats software engineering as a static, one-shot editing problem. This direction is fundamentally misaligned with the field's rapid shift towards agentic, interactive systems that use multi-step reasoning and tool interaction. As such, improving static generation feels like a historical dead end rather than a forward-looking contribution.
+
+2. Lack of Generalizability and Real-World Applicability: This agentless design inherently lacks the generalizability required for practical application. It is ineffective in real-world agentic workflows because it cannot handle dynamic context, runtime feedback, or multi-file dependencies. The reliance on a static scoring function makes the framework detached from the actual, process-dependent nature of software development.
+
+3. Weak Empirical Support and Missing Baselines: The framework's limitations are reflected in its empirical results. The claimed improvements are not benchmarked against crucial SOTA models like Qwen3-Coder-30B or agentic systems like SWE-Smith. Furthermore, the fact that EvoScale-32B (Greedy) scores 35.8—nearly identical to its baseline (agentless + Qwen2.5-Coder-32B-Instruct)—casts serious doubt on the practical value of the proposed evolutionary mechanism.
+
+4. Incremental Novelty Rather Than True Innovation: Ultimately, the "evolutionary" concept appears to be more of a re-interpretation than a true innovation. It reframes existing test-time compute scaling ideas (iterative refinement, verifier-guided search) without introducing a fundamentally new paradigm capable of addressing the challenges of modern agentic systems.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

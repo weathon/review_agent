@@ -1,0 +1,191 @@
+# Static, Initialization-based Layer-wise Learning Rates
+
+- Decision: Reject
+- Scores: 2, 4, 6, 4
+
+## Abstract
+A major characteristic of the Adam optimizer is its adaptive step size modification, which prevents large gradients from dominating the update step size. Given that the simplicity and computational efficiency of first-order methods are a significant advantage for large-scale training, we investigate an extreme form of step size modification that assigns static, layer-wise learning rates inversely to the initial gradient magnitude. We observe this simple heuristic is surprisingly effective in improving the rate of convergence on LLM style models over eight contemporary optimizers, suggesting the possibility of a static, initialization-based preconditioner.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper **"Static, Initialization-Based Layer-Wise Learning Rates"** proposes a novel optimization method that assigns **static, layer-wise learning rates** inversely proportional to each layer’s **initial gradient magnitude**. Unlike adaptive optimizers such as Adam, which dynamically adjust learning rates based on ongoing gradient statistics, this approach fixes layer-wise scaling factors at initialization. The authors empirically demonstrate that this static scheme consistently *improves convergence speed* across eight modern optimizers (including Adam, Lion, SF-Adam, AdEMAMix, Muon, SOAP, Prodigy, and MARS) when training large language models (LLMs) of 124M and 350M parameters and shows performance benefits on ImageNet-1k classification tasks with various architectures. The findings suggest that initialization-based preconditioning can capture global structural information missed by traditional gradient-based adaptive methods.
+
+### Strengths
+1. The proposed method requires no additional computation during training since the layer-wise scaling factors are computed once at initialization. This makes it lightweight and easily integrable into existing training pipelines while maintaining compatibility with diverse optimizers and architectures.
+
+2. Experiments across multiple optimizers, model scales, and domains (language and vision) show consistent improvements in convergence and stability, supporting the claim that static, initialization-based preconditioning can serve as a general technique for enhancing neural network optimization.
+
+### Weaknesses
+1. The second paragraph of the introduction is confusing and should be moved to the related works section. It mainly provides a verbose discussion of previous studies that are only loosely connected to the main topic. Moreover, the last paragraph of the introduction largely repeats the content of this second paragraph, making the section redundant.
+
+2. After reading the introduction, it remains unclear what the paper’s main methodology actually is. The authors should clearly define their proposed approach early in the introduction to help readers understand the core contribution.
+
+3. The paper contains surprisingly sparse information. For instance, equations (1) through (5) appear almost identical, with only minor variations. The authors should consider grouping these equations and highlighting their differences more explicitly to improve clarity and facilitate comparison.
+
+4. The first few paragraphs of Section 4 read more like related work than a direct motivation for the proposed method. For example, the discussion on “attempts to remove the square root in Adam” (line 185) appears tangential and does not clearly connect to the main argument of the paper.
+
+5. The description of the proposed method is difficult to follow. To improve readability, key equations should be integrated directly into the main text instead of being referenced from the algorithm box without pointing to the line number. For example, in line 211, the statement “Next, the layer-wise gradient magnitude per parameter $G^T_l$ is used to inversely scale the relative...” should explicitly reference line 11 of Algorithm 1 to guide the reader.
+
+6. The experiments presented are limited in scale and insufficient to support the paper’s claims. Given the surprising performance improvements reported, more extensive experiments are needed for validation. Prior work on optimizers [1] [2] [3] typically evaluates on larger-scale scenarios such as (1) pre-training on C4, (2) self-supervised fine-tuning on GLUE, (3) parameter-efficient fine-tuning on commonsense reasoning tasks, and (4) RLHF. Furthermore, scalability should be demonstrated on larger models (e.g., 7B parameters or more). In contrast, this paper only reports small-scale experiments on models up to 350M parameters, which limits the strength and generality of its conclusions.
+
+Overall, while this work provides an interesting exploratory case study, it lacks sufficient methodological clarity and experimental rigor to be suitable for the ICLR main track.
+
+## Reference
+[1] GaLore: Memory-Efficient LLM Training by Gradient Low-Rank Projection, ICML 2024.
+
+[2] APOLLO: SGD-like Memory, AdamW-level Performance, MLSys 2025.
+
+[3] Adam-mini: Use Fewer Learning Rates to Gain More, ICLR 2025.
+
+### Questions
+1. What is the main motivation for studying static learning rates based on initialization gradient information? The paper should clearly explain why such an approach is valuable compared to existing adaptive methods.
+
+2. How is the proposed layer-wise learning rate integrated with optimizers that already adapt to gradient magnitudes, such as Adam? Since Adam scales updates by the inverse square root of the gradient variance, the effects of the proposed method may overlap. Clarification on how these mechanisms interact is needed.
+
+3. Is there any theoretical justification for why scaling by the initial gradient magnitude should improve optimization? Providing intuition or analysis on why this initialization-based scaling is effective would strengthen the paper’s contribution.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+1
+
+### Summary
+This paper challenges the dominance of dynamic optimizers like Adam, which rely exclusively on local, in-training gradients to determine step sizes.
+In particular, the authors argue that these dynamic-only methods fail to leverage a "global structure" evident in the model's initial state, which they claim can be captured by a layer’s gradient information at initialization across samples from the training set.
+To leverage this information, the authors propose a scheme that assigns a static layer-wise learning rate proportional to $1 / \sqrt{G_l ^T}$, where $G_l ^T$ is the average gradient magnitude of the $l$th layer across $T$ training minibatch samples.
+Experiments on LLM pretraining show this static initialization, when applied on top of eight different modern optimizers (including Adam and Lion), consistently improves the rate of convergence in an over-training regime.
+
+### Strengths
+1. This paper poses an interesting challenge to common assumptions in deep learning optimization
+
+2. Experiments support the author's claims that static learning rates can be competitive with dynamic ones.
+
+### Weaknesses
+W1. While I appreciate the scientific investigation, the practical impact was not obvious to me. For everyday users of deep learning optimizers, what are the practical (+ theoretical) implications of an optimizer with static learning rates? In particular, just how significant is the dynamic overhead for Adam (and related methods) to justify a static one?
+
+W2. The theoretical motivation of Algorithm 1 was not obvious to me, but this may be due to inexperience (see confidence).
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper studies a simple but useful form of learning rate scheduling or preconditioning in the style of adaptive learning rate. The proposed method, STATIC, sets layer-wise learning rates at initialization, inversely proportional to each layer’s initial gradient magnitude, and keeps them fixed during training. This method can be combined with widely used optimizers with almost no extra computational cost. Experiments demonstrate the effectiveness of the method across multiple settings.
+
+### Strengths
+1) The paper studies a simple yet practical problem—layer-wise learning rate scaling that remains fixed during training—which is easy to implement and shows potential usefulness.
+2) The motivation is clear, and the proposed method is reasonable. It is also optimizer-agnostic, making it suitable for improving a wide range of existing optimizers.
+3) The experiments on both large language models (LLMs) and vision tasks are well presented and easy to follow.
+
+### Weaknesses
+1) The initial layer-wise learning rates are calculated by collecting gradients from $T$ minibatches. Therefore, the hyperparameter $T$ may impact performance. It would be better to justify this choice and include an ablation study. It is also important to examine whether the method is sensitive to the order of minibatches during this initialization phase.
+2) In the standard training setting, the performance gain is limited—especially without depth scaling, as shown in Table 1. Even when combined with residual scaling $1/\sqrt{d}$, the gain remains modest compared to using residual scaling alone. This discrepancy should be discussed, particularly given the strong training performance observed in the over-training regime. Such discussion would directly impact the understanding and applicability of the approach.
+3) Minor: As expected, the layer-wise scaling works particularly well with SGD (Table 3). This suggests that the method may be more beneficial for less adaptive optimizers compared to Adam. It would be useful to discuss potential application regimes where the method provides the most benefit. Additionally, if possible, consider discussing or testing the approach on memory-efficient approximations of Adam, such as Galore [1], 8-bit Adam and others, which are less adaptive and could provide further insight into the method’s scope.
+
+[1] Jiawei Zhao, Zhenyu Zhang, Beidi Chen, Zhangyang Wang, Anima Anandkumar, and Yuandong
+Tian. Galore: Memory-efficient llm training by gradient low-rank projection. arXiv
+preprint arXiv:2403.03507, 2024.
+
+### Questions
+1) How do the results vary with different $T$ in the initial gradient calculation? and with shuffling or ordering of the initial minibatches?
+2) Why is the performance gain significant in the over-training regime but limited in the standard training regime?
+3) Minor: Could you also discuss or conduct experiments with memory-efficient approximations of Adam, such as Galore, to see whether the method benefits less adaptive variants of Adam?
+
+Please see the [Weakness] section for more details.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper assigns a per-layer learning rate multiplier computed from inverse of gradient at initialization, which is kept fixed throughout training. Results on image classification and language modelling show that this simple learning rate scheme can yield performance improvements on a variety of state-of-the-art optimizers including adam, muon, soap among others.
+
+### Strengths
+- The approach is simple: scale per-layer learning rates by inverse of gradient magnitude compute from average K batches at initialization and is kept fixed throughout training, so no extra memory or runtime overhead.
+- Experiments on standard tasks (resnet-50 imagenet-1k, gpt-2 language modeling) to demonstrate the effectiveness of the approach and its compatibility with SOTA optimizers including adam, muon, soap, etc.
+
+### Weaknesses
+- Overtraining regime is constructed a bit arbitrarily using 10 batches of data and I'm not convinced that it's enough to reveal/accurately model the issues in overtraining regime. Probably just ablating over data in terms of chinchilla optimal ratio (1x = chinchilla optimal, 2-8x = over-training regime) could be a better proxy for reproducing issues in over-training regime (with a smaller model such as 30m in case of computational constraints).
+- No clear improvements with layer-wise scheme in standard settings (language modelling 124m model with 10B tokens, table 1 and 2); similar trends in image classification. LR sweep values in appendix for standard setting look very limited (2-4 LRs, appendix section A) and some of these were directly borrowed from prior work which has different setup as mentioned in the same section. I believe a thorough sweep is critical for an empirical work like this. 
+- No weight decay is used which isn't the practice in realistic training setups. It should be part of the sweep and must be tuned for each optimizer separately.
+
+### Questions
+- Why is learning rate scheduler not used in over-trained setting (appendix A)?
+- Can authors please clarify the number of sweep runs for baseline (single global LR) and the proposed approach (layer-wise LRs) in LM and imagenet experiments?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

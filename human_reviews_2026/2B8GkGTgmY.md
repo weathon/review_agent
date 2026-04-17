@@ -1,0 +1,211 @@
+# CMT: Mid-Training for Efficient Learning of Consistency, Mean Flow, and Flow-Map Models
+
+- Decision: Accept (Poster)
+- Scores: 4, 8, 8, 8
+
+## Abstract
+Flow map models such as Consistency Models (CM) and Mean Flow (MF) enable few-step generation by learning the long jump of the ODE solution of diffusion models, yet training remains unstable, sensitive to hyperparameters, and costly. Initializing from a pre-trained diffusion model helps, but still requires converting infinitesimal steps into a long-jump map, leaving instability unresolved. We introduce *mid-training*, the first concept and practical method that inserts a lightweight intermediate stage between the (diffusion) pre-training and the final flow map training (i.e., post-training) for vision generation. Concretely, *Consistency Mid-Training* (CMT) is a compact and principled stage that trains a model to map points along a solver trajectory from a pre-trained model, starting from a prior sample, directly to the solver-generated clean sample. It yields a trajectory-consistent and stable initialization. This initializer outperforms random and diffusion-based baselines and enables fast, robust convergence without heuristics. Initializing post-training with CMT weights further simplifies flow map learning.  Empirically, CMT achieves state-of-the-art two-step FIDs of 1.97 (CIFAR-10), 1.32 (ImageNet $64\times64$), and 1.84 (ImageNet $512\times512$), using up to $98$\% less training data and GPU time than CMs. On ImageNet $256\times256$, it attains 1-step FID 3.34 with $\sim50$\% less training than MF from scratch (FID 3.43). On MSCOCO T2I, CMT reaches the best FID with $\sim47$\% less training. This establishes CMT as a principled, efficient, and general framework for training flow map models. Code and models are available at https://github.com/sony/cmt.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+Flow map models such as Consistency Models (CM) and Mean Flow (MF) enable few-step generation by learning the long jump of the ODE solution of diffusion models, yet training remains unstable, sensitive to hyperparameters, and costly. Initializing from a pre-trained diffusion model helps, but still requires converting infinitesimal steps into a long-jump map, leaving instability unresolved. This paper introduces mid-training, the first concept and practical method that inserts a lightweight intermediate stage between the (diffusion) pre-training and the final flow map training (i.e., post-training) for vision generation. Concretely, Consistency Mid-Training (CMT) is a compact and principled stage that trains a model to map points along a solver trajectory from a pre-trained model, starting from a prior sample, directly to the solver-generated clean sample. It yields a trajectory-consistent and stable initialization. This initializer outperforms random and diffusion-based baselines and enables fast, robust convergence without heuristics. Initializing post-training with CMT weights further simplifies flow map learning. Empirically, CMT achieves state of the art two step FIDs: 1.97 on CIFAR-10, 1.32 on ImageNet 64×64, and 1.84 on ImageNet 512×512, while using up to 98% less training data and GPU time, compared to CMs. On ImageNet 256×256, CMT reaches 1-step FID 3.34 while cutting total training time by about 50% compared to MF from scratch (FID 3.43). This establishes CMT as a principled, efficient, and general framework for training flow map models.
+
+### Strengths
+1. Mitigates issues of training instability, hyperparameter sensitivity, and high training costs that plague models like Consistency Models (CM) and Mean Flow (MF)
+
+2. Proposes a compact, principled intermediate stage (Consistency Mid-Training, CMT) between diffusion pre-training and final flow map post-training, providing trajectory-consistent and stable initialization—filling a critical gap in existing training pipelines.
+
+3. The CMT initializer outperforms random and diffusion-based baselines, enabling fast, robust convergence without relying on heuristics.
+
+### Weaknesses
+1. Lack of large-scale experiments, e.g., text-to-image, text-to-video. This reduces the credibility of the pipeline.
+
+2. The contribution is quite incremental. 
+
+3. I have doubts that the performance gain stems from the unfair experimental setup, since the latent baselines do not use LatentLPIPS in training.
+
+### Questions
+n/a
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper proposes a mid-training stage to stabilize the consistency trajectory model training. The proposed method can achieve competitive sample quality while reducing training cost.
+
+### Strengths
+* Evaluation is done on multiple datasets, including a high-resolution dataset (ImageNet 512x512).
+* The method rivals 2-step FID sCD with a 14x reduction in training cost.
+* The idea is simple and easy to implement.
+
+### Weaknesses
+One weakness is that 1-step FID on ImageNet 512 is worse than sCD by a non-trivial margin (2.28 vs 3.38). It is understandable as CMT uses fewer resources, but can it match the 1-step FID of sCD if given more compute?
+
+Theoretical analysis (Sec. 5) does not offer significant insight. It says that if we train a model to predict the PF-ODE solutions, it will better approximate the PF-ODE solutions, which is straightforward. I suggest moving this part to the appendix and instead using that space to include contents from the appendix (as it contains some valuable insights and experimental details).
+
+Some experimental setups are not clear. See questions.
+
+### Questions
+Did you use Eq. 6 or Eq. 7 in the experiments?
+
+Did you train ECD with general flow map post-training or special flow map post-training? ECD originally only supports the special flow map.
+
+Isn't Eq. 6 the same as ( L_{\text{var}}^{(1)} ) in L1108? (the slow CMT)
+
+> However, the Slow CMT’s mid-training stage costs 3x more GPU time since generating the regression target in the Slow version is more costly due to the failure to use intermediate points by the ODE-solver.
+
+Do you collect more trajectories for the slow version? Otherwise, the GPU hours should be the same. If we collect the same number of trajectories to match their GPU hours, does the slow version underperform CMT?
+
+( L_{\text{var}}^{(1)} ) (or eq 6) seems the same as 2-rectified flow loss. If we apply improved techniques for 2-rectified flow from [1], can it improve CMT's performance? It seems that [1]'s FID on CIFAR-10 is already pretty similar to CMT's FID, so it may offer even better initialization for the post training.
+
+Typo: in line 1116; it should be ( L_{\text{var}}^{(2)} )?
+
+[1] Lee, Sangyun, Zinan Lin, and Giulia Fanti. "Improving the training of rectified flows."
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposed a mid-training strategy. The motivation is to alleviate instability in training for the few-step trajectory distillation method, such as the Consistency model (CM) and MeanFlow. Such unstable training is inherent in approximation errors for the trajectory from $t->s$. This paper proposed a CMT loss to first provide a sub-optimal trajectory from $t->s$ with lower approximation errors, which significantly simplifies post-training trajectory distillation.  The experimental results demonstrate that such a mid-training strategy can: 1) achieve the few-step generation built up on the trajectory distillation method, such as CM, 2) boostraps the post-training for CM and MeanFlow.
+
+### Strengths
+1. This paper solves an important challenge about how to train a trajectory-based distillation method in a stable way and at a low training cost.  These distillation methods rely heavily on theory, which is sensitive to approximation errors. The mid-training strategy is a way to remedy this situation.
+
+2. The proposed method is interesting and novel. Such a mid-training strategy provides a good starting point for the trajectory-based distillation method. The experimental results also reveal that the training cost during mid-training remains low compared to that of the direct training of the trajectory-based distillation method.
+
+3. The experimental results demonstrate that CMT with CM can achieve the one-step generation and reduce the training cost.
+
+### Weaknesses
+I think this paper does not have significant concerns. I only have minor concerns.
+
+1.  While the author claims that $x_{T}$ is the terminal state. I refer to the code but find that $x_{T}$ actually comes from GT + noise. In this case, to directly claim that $x_{T}$ is the terminal state which differs from "a fresh data point $x_{0}$ and a noise vector $\epsilon$" (205 lines) may mislead the reader. 
+
+2. For the choice of the discretization time step. Is there any way to quantify the approximation errors that will be generated in different discretization schedulers?
+
+3. I think this paper is related to the progress distillation [1]. Although the targets of the two methods differ, the author should slightly distinguish them using CMT. 
+
+[1] PROGRESSIVE DISTILLATION FOR FAST SAMPLING OF DIFFUSION MODELS. Tim Salimans et al. ICLR 2022.
+
+### Questions
+1. A minor question: Can this method be used for a large-scale model such as SD 3.5 and Flux?
+
+To sum up, this paper proposed a novel mid-training strategy to mitigate the training cost for few-step trajectory-based distillation methods. I have carefully checked the theory proofs and related code. I think there are no major problems. The overall process is novel and sound. The experimental results clearly demonstrate that CMT can reduce the training cost and improve the stability of trajectory-based distillation methods. Therefore, I rate it as accept.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The main contribution of this paper is the introduction of an intermediate training stage for accelerating the training of fast inference generative models for image generation in continuous signals.
+
+Current state-of-the-art methods for distilling flow and diffusion models without GAN losses such as ECD [1], and MF [2] typically employ a two-stage training pipeline. In Stage 1 (pre-training), a diffusion model is trained with an x-prediction parameterization [3] or a flow matching model with a velocity-prediction parameterization [4]. In stage 2 (post-training),  the trained diffusion/flow model is distilled by approximating the flow map it defines. However, optimizing the exact objective function for the flow map is intractable, so instead an auxiliary loss is used, commonly involving a stopgrad instance of the current student model which can lead to unstable training. 
+
+This paper proposes a third stage, mid-training, for distillation of flow and diffusion models. The proposed mid-training loss regresses the flow map defined by the pretrained model using pre-sampled trajectories. Finally, the effectiveness of the mid-training stage is validated on several benchmark.
+
+[1] Geng, Zhengyang, et al. "Consistency models made easy." arXiv preprint arXiv:2406.14548 (2024).
+
+[2] Geng, Zhengyang, et al. "Consistency models made easy." arXiv preprint arXiv:2406.14548 (2024).
+
+[3] Karras, Tero, et al. "Elucidating the design space of diffusion-based generative models." Advances in neural information processing systems 35 (2022): 26565-26577.
+
+[4] Lipman, Yaron, et al. "Flow matching for generative modeling." arXiv preprint arXiv:2210.02747 (2022).
+
+### Strengths
+1. The paper is well written and the method presented clearly.
+
+2. The paper goal - accelerating distillation of flow/diffusion models,  is aligned with current most relevant problems considered in deep learning, potentially making large impact.
+
+3. Introducing a new training stage is a popular method for improving training of neural networks and can easily integrate with existing training pipelines.
+
+4. The empirical validation is comprehensive.
+
+### Weaknesses
+1. Regressing a peace wise linear version of the pre-trained model's trajectories was done in previous work e.g., [5], and might be worth mentioning.
+
+2. While the preliminary section covers number of previous work, the main paper does not include a previous work section (instead it is in the appendix) which is somewhat unorthodox for a research paper.. 
+
+[5] Nguyen, Bao, Binh Nguyen, and Viet Anh Nguyen. "Bellman optimal stepsize straightening of flow-matching models." arXiv preprint arXiv:2312.16414 (2023).
+
+### Questions
+1. In line 214 it is written that the discretization number of steps $T$ is fixed for the mid-training. First, did you examine how different choices of $T$ affect the training and the final results? Second, in the post-training stage ( i.e., ECD [1]/MeanFlow [2]) a continuous time is used again?
+
+2. How many different trajectories $\\{x_{t_0}, x_{t_1}, ... ,x_{t_T}\\}$ are used during mid-training and does the time to generate these is taken into account in your mid-training times report?
+
+3. It is claimed in the paper that training of vanilla ECD [1]/MeanFlow [2] remains "unstable, and configuration sensitive", how ever it seems that the authors did train a MeanFlow model with relatively close performance to the CMT (the proposed method). Can the authors provide an estimation of how many training attempts hyper-parameters searches are required to obtain the reported results ECD [1]/MeanFlow [2]?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

@@ -1,0 +1,207 @@
+# Rethinking Toxicity Evaluation in Large Language Models: A Multi-Label Perspective
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 6, 2, 4
+
+## Abstract
+Large language models (LLMs) have achieved impressive results across a range of natural language processing tasks, but their potential to generate harmful content has raised serious safety concerns. Current toxicity detectors primarily rely on single-label benchmarks, which cannot adequately capture the inherently ambiguous and multi-dimensional nature of real-world toxic prompts. This limitation results in biased evaluations, including missed toxic detections and false positives, undermining the reliability of existing detectors. Additionally, gathering comprehensive multi-label annotations across fine-grained toxicity categories is prohibitively costly, further hindering effective evaluation and development. To tackle these  issues, we introduce three novel multi-label benchmarks for toxicity detection: \textbf{Q-A-MLL}, \textbf{R-A-MLL}, and \textbf{H-X-MLL}, derived from public toxicity datasets and annotated according to a detailed 15-category taxonomy.  We further provide a theoretical proof that, on our released datasets, training with pseudo-labels yields better performance than directly learning from single-label supervision. In addition, we develop a pseudo-label-based toxicity detection method.
+ Extensive experimental results show that our approach significantly surpasses advanced baselines, including GPT-4o and DeepSeek, thus enabling more accurate and reliable evaluation of multi-label toxicity in LLM-generated content.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper postulates that many current prompt toxicity detectors and toxicity benchmarks are limited and biased by their single-label nature, since toxic content is typically toxic across a set of multiple categories/labels. The authors make three contributions to counteract this: (1) They re-annotate three public toxicity benchmarks with multiple toxicity labels according to 15 toxicity categories, (2) they provide a theoretical proof that training detectors with pseudo-labels beats training on only single-label annotations, and (3) they propose a novel training framework, LEPL-MLL, leveraging these pseudo-labels and label-enhancement strategies while showing empirically that this framework outperforms other detectors.
+
+### Strengths
+Originality: The originality of the paper mostly comes from the proposed training framework (LEPL-MLL) and the way it learns pseudo-labels from single-label instances using semantic similarity of instances and label prevalence in the validation set. This method seems fairly original and delivers an impressive outperformance of existing detection methods.
+
+Quality: The LEPL-MLL approach appears thoughtful in its design. The evaluation is also well-chosen covering aspects such as detection performance (measured by mean Average Precision and Label Ranking Loss), as well as results achievable with additional fine-tuning (vs. zero-shot), under different label coverage ratios, and with or without various model components (ablation studies).
+
+Clarity: The paper clearly outlines and motivates the problem and clearly presents the proposed method.
+
+Significance: The paper addresses a highly relevant problem with LLMs and LLM-based systems focused on helpful and harmless (and thus non-toxic) behavior. The strong empirical results of LEPL-MLL further highlight the untapped potential for improving toxicity detectors in these systems.
+
+### Weaknesses
+Some aspects of the paper lack detail in their documentation, e.g.,
+- The paper mentions that three new datasets are introduced, however it provides insufficient detail on how these datasets are created. Line 154 mentions that the datasets are re-annotated and lines 20f. mention that datasets are derived from public datasets. This implicitly suggests that three existing datasets were taken by the authors and not modified except adding new labels. However, the authors do not explicitly say that. Section 3 (lines 152ff.) is meant to describe these datasets but does not do so sufficiently. The three dataset abbreviations are given, but the full-form names are missing, citations to the original datasets are missing here, and there is no explanation of how the prompts in the datasets were generated. There is not even an explanation in the main part of how these three datasets are different from one another (lines 185ff. only briefly say that one dataset represents a different task from the other two), this is only somewhat provided in lines 781ff. in the appendix, but should have been in the main part.
+- Line 336 mentions that standard MLC models are trained, without explaining which ones exactly.
+- Line 190 says that 10 experts each labelled 15,063 instances with up to 15 labels. This does not seem very credible/realistic unless the authors made the experts spend an extreme amount of time on labelling. Lines 876f. in the appendix say that each annotation session took approximately 60 minutes and was rewarded with USD 100. If each expert only completed one session, this would imply that they labelled approximately 4 instances per second. This seems unrealistic. Alternatively, assuming that one example takes 30 seconds to label, the entire labelling process would have taken 15,000 x 30 / 3,600 = 125 hours and cost USD 125,000 in total. These numbers seem highly unrealistic and the authors should clarify the exact labelling procedure and extent.
+
+At several points, concepts are referenced before being properly introduced or are not being sufficiently introduced at all, e.g.,
+- The concept of pseudo-labels is referred to several times (lines 78, 274) before being implicitly explained only in lines 290ff.
+- In line 237 the function R(h) is being referred to, without being defined or explained.
+- In line 221, the abbreviation SPMLL is mentioned but not explained and no full-form name is given, leaving the reader guessing what SPMLL is in subsequent uses (e.g., line 230).
+- Line 356 mentions the two metrics mAP and LRL without explaining them. Readers can only find their full-forms when looking at Table 2 on the subsequent page.
+- The authors' own method LEPL-MLL is mentioned (e.g., in line 135) but no full-form is given.
+- Lines 95f. refer to label counts being shown in Figure 2b. However, Figure 2b shows something entirely different.
+
+The presentation and format have some issues:
+- The citation format is inconsistent. In most sections, author names are put right into the sentence without parentheses around them, whereas the beginning of section four properly wraps them in parentheses.
+- Some figures are very small and only readable when zooming in very far, e.g., Fig 3, 7, and especially 6. The authors should consider increasing font sizes and perhaps using shared axis labels to save some space.
+- Some mathematical formalizations use quite an unusual notation. For instance, line 201f. defines X as a set of length n, which again contains sets (which should be tuples?) coming from R^d.
+
+There are some validity issues with the methods chosen:
+- The shown examples of prompts included in the datasets all seem rather simple to detect for state-of-the-art models. A state-of-the-art benchmark should hence include also more difficult examples, e.g., those where the toxicity is somewhat latent and not directly expressed in the content.
+- The PCA analysis described in lines 88f. and shown in Figure 2a does not seem like a valid way to make the point that toxicity class labels overlap, as it is unclear which aspects of the embeddings are represented in the final two PCA dimensions. These could be aspects entirely unrelated to toxicity and following any distribution, dependent or independent from each other. Thus, overlapping datapoints in the 2-dimensional PCA plot would be the expected result, even if toxicity labels were mutually exclusive.
+- Figure 4d indicates that labels in the validation and test datasets follow quite different distributions across classes 1-11. There is no explanation why these distributions are so different any why no balancing attempt was made to make the two datasets more similar to each other. Yet, the validation dataset is used to learn the pseudo-labels (lines 292ff.); with the validation and test datasets having such different label distributions, the datasets may make it unfairly hard for models to generalize to the test dataset.
+- It is unclear why the training dataset only involves single-label instances. Possibly, the authors wanted to demonstrate the strengths of their LEPL-MLL framework (which is one of their contributions) in generating accurate pseudo-labels from single-labelled instances. However, this seems to be an unnecessary constraint on the benchmark datasets (which are a different contribution). The benchmark datasets could have been a more well-rounded contribution if they had included at least some multi-labelled instances in the training set as well, or come with two sets of labels (single-labels and multi-labels). Thus, the datasets are useful only for the specific case of training on single-labelled data and testing on multi-labelled data.
+
+Some decisions on space management are questionable:
+The discussion of related work was entirely moved into the appendix. In my opinion, research papers should allocate at least some space in their main parts to discuss the most relevant related work. Arguably (again my opinion), the extensive theoretical proof (contribution 2) should have been switched with the related work and thus have been moved to the appendix. Since there is an extensive empirical evaluation that uses the datasets, a complex theoretical proof may not even be necessary.
+
+The paper includes some typos and language mistakes, e.g.,
+- Line 59: "which will resulting"
+- Lines 149f.: "Three Multi-LabelS LLM Toxicity Benchmark[s]" (incorrectly placed plural S)
+- Line 192: "label" (missing plural s)
+- Line 256: "The it follows"
+- Line 338: "we uses"
+- Line 384: "men Average Precision"
+
+### Questions
+Questions related to the mentioned weaknesses:
+1. How exactly were the datasets constructed and how are they different from each other?
+2. Is there a misunderstanding on the extent of the labelling procedure using the 10 (or 16, respectively) experts? How can each of them possibly have labelled over 15,000 instances?
+3. Do the datasets also include more difficult instances (e.g., ones with latent toxicity) than the ones shown? Are there even instances that are entirely non-toxic?
+4. Why is the label distribution between the validation and test sets so different (Figure 4d) and how did that affect model generalizability?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposes three benchmarks and a three-stage method to evaluate multi-label toxicity detection for Large Language Models (LLMs). The authors introduce three benchmarks covering two tasks: The first task focuses on identifying toxicity categories in user-generated prompts (Q-A-MLL and H-X-MLL), while the second task targets identifying toxicity categories in LLM-generated responses (R-A-MLL).  The proposed method is proposed to solve the issue of the high cost of multi-label annotation by leveraging partial-label learning. It consists of three stages: (1) recover a dense soft label distribution, (2) derive binary pseudo labels on the validation set, (3) refine the model predictions by learning label correlations with a graph convolutional network-based classifier generator. The resulting detector surpasses both the DeepSeek moderation model and GPT-4o on all three benchmarks
+
+### Strengths
+The motivation for addressing multi-label toxicity detection is well-justified. This is an important problem in LLM safety, as toxicity often manifests in multiple forms simultaneously, and accurate detection is crucial for ensuring safe and responsible AI deployment. The ablation studies are comprehensive and demonstrate the effectiveness of each component of the proposed method.
+
+### Weaknesses
+1. The description of the three benchmarks is not very clear. The authors should provide more details about the datasets, such as the number of samples, the distribution of toxicity categories, and how the data was collected and annotated for each dataset. The difference between the datasets should also be clarified.
+
+2. The proposed method involves multiple stages, but the rationale behind the design choices is not well-explained. For example, why is a graph convolutional network chosen for modeling label correlations? Are there alternative approaches that were considered? More discussion on the design decisions would strengthen the paper.
+
+3. There lacks some comparison with existing multi-label or single label toxicity detection methods. While the authors compare their method with DeepSeek and GPT-4o, it would be beneficial to include comparisons with other baselines that specifically trained for toxicity detection, such as LlamaGuard or openai moderation models.
+
+### Questions
+1. It is unclear in the proof of Theorem 4.2, lines 254-256, why the inequality holds. Please clarify.
+
+2. How to interpret the different performance of the proposed method on the three benchmarks? Are there specific characteristics of the datasets that influence the effectiveness of the method?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper focuses on detecting toxicity from user prompts (e.g., intent, jailbreak). The authors claim that multi-label annotation is natural but prohibited in terms of annotation cost. Accepting the challenge, the provide three benchmark datasets and experiment with pseudo-labelling, showing that it is better (both, in terms of results and theoretically) compared to single-labels.
+
+### Strengths
+* Well motivated: detecting toxicity in the user prompts rather than the generated response is valid and important.
+* Intuitive hypothesis: many NLP tasks are multi-label in nature while treated as multi-class for modelling ease.
+* Resources: datasets and extensive benchmarks provided, which can be useful to the community
+
+### Weaknesses
+* **Agreement** No inter-annotator agreement (Cohen's Kappa) results are shared, not allowing one to assess the quality of the shared resource. In lines 152-160, the existence of noise is addressed by using majority voting, but we need to know the noise level first.
+* **Bias** Gender and regional bias may be present (only male annotators employed from the same country), because the perception of toxicity is subjective (not objective as stated in the Appendix) - see this for a recent example (https://aclanthology.org/2024.eacl-long.117/). This is a limitation that should be stated explicitly. Also, the disaggregated annotations should be shared (all annotations per text, all demographics per annotator) to allow follow up studies.
+* **Presentation** All figures were non readable in print.
+
+### Questions
+A) In Figure 2, data points fall close to each other forming a dense space, but this is not a proof of the multi-label nature of the dataset. Also, the counts (Line 097) are not shown at the dataset level, only examples were shown (Figure 2-3). How many texts were multi-labelled (by the majority) compared to single-labelled in your human-annotated dataset? 
+
+B) In Table 1, where is the comparison between single and multi label shown exactly?
+
+C) Multi-label annotation is considered expensive compared to single-labelled, but this is not self-evident. How much more time (and hence, cost) does multi-label annotation demands? Given that often it a single-label is often the case also in multi-labelled datasets (e.g., not toxic), this hypothesis should be investigated more.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the limitation that existing toxicity detection benchmarks use single-label annotations while real-world toxic content inherently violates multiple safety guidelines simultaneously. The authors introduce three multi-label toxicity detection benchmarks (Q-A-MLL, R-A-MLL, and H-X-MLL) with a unified 15-category taxonomy, and propose LEPL-MLL, a pseudo-label-based detection framework that leverages contrastive label enhancement and graph convolutional networks to model label correlations. Experimental results demonstrate that their method significantly outperforms strong baselines including GPT-4o and DeepSeek across all benchmarks, while reducing annotation costs through a hybrid labeling strategy.
+
+### Strengths
+1. This paper found a key point that multi-label annotation is quite important in toxicity detection.
+2. I like the proposed method and it is quite intuitive and reasonable. The theoretical part of this paper makes it look more rigorious and solid.
+3. The collected datasets would be quite useful for safety community.
+
+### Weaknesses
+1. In fact, there exists a straightforward baseline that seems overlooked: a model trained only on single labels inherently possesses the capability to predict multiple labels by examining its prediction probabilities (e.g., selecting top-k labels based on confidence scores). This approach appears to be the most intuitive and direct solution, at least from my perspective. Have you evaluated this baseline? If so, what were the results? Interestingly, your first stage—Contrastive Label Enhancement—implicitly leverages this very capability of the model itself.
+
+2. I find it quite puzzling and unexpected that you did not consider training directly with soft labels. First, your pseudo-label generation process is inherently uncertain (based on probability values rather than confident predictions). Second, soft labels have been proven by prior work to offer significant advantages in multi-label scenarios. In fact, your theoretical analysis introduces an "unreliability degree"—can your label recovery approach truly guarantee that it remains within a reasonable range? Without soft labels, you may be discarding valuable uncertainty information that could improve model robustness.
+
+3. I think the backbone models used in Table 2 are somewhat outdated. You should consider training on more recent architectures such as Qwen, GLM, or LLaMA. And I also wonder which version of DeepSeek is referenced in Table 2? Are you training the 671B MoE R1 model or a smaller variant? Additionally, did you incorporate reasoning capabilities during training, or are these purely classification-based fine-tuning experiments?
+
+### Questions
+See above
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

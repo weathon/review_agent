@@ -1,0 +1,226 @@
+# AdaDim: Dimensionality Adaptation for SSL Representational Dynamics
+
+- Decision: Reject
+- Scores: 2, 4, 2, 8
+
+## Abstract
+A key factor in effective Self-Supervised Learning (SSL) is preventing dimensional collapse, where higher-dimensional representation spaces ($R$) span a lower-dimensional subspace. Therefore, SSL optimization strategies involve guiding a model to produce $R$ with a higher dimensionality ($H(R)$) through objectives that encourage decorrelation of features or sample uniformity in $R$. A higher $H(R)$ indicates that $R$ has greater feature diversity which is useful for generalization to downstream tasks. Alongside dimensionality optimization, SSL algorithms also utilize a projection head that maps $R$ into an embedding space $Z$. Recent work has characterized the projection head as a filter of noisy or irrelevant features from the SSL objective by reducing the mutual information $I(R;Z)$.  Therefore, the current literature's view is that a good SSL representation space should have a high $H(R)$ and a low $I(R;Z)$. However, this view of SSL is lacking in terms of an understanding of the underlying training dynamics that influences the relationship between both terms. For this reason, we directly oppose the current literature's view of SSL representation spaces and instead assert that the best performing $R$ is one that arrives at an ideal balance between both $H(R)$ and $I(R;Z)$. Our findings reveal that increases in $H(R)$ due to feature decorrelation at the start of training lead to a correspondingly higher $I(R;Z)$, while increases in $H(R)$ due to samples distributing uniformly in a high-dimensional space at the end of training cause $I(R;Z)$ to plateau or decrease. Furthermore, our analysis shows that the best performing SSL models do not have the highest $H(R)$ nor the lowest $I(R;Z)$, but effectively arrive at a balance between both. To take advantage of this analysis, we introduce AdaDim, a method that leverages SSL training dynamics by adaptively balancing between increasing $H(R)$ through feature decorrelation and sample uniformity as well as gradual regularization of $I(R;Z)$ as training progresses. We show that AdaDim results in performance exceeding common SSL baselines without necessitating expensive architectural  strategies. However, in settings where we integrate these techniques, we demonstrate even further performance gains exceeding the state of the art in standard benchmark tasks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper explores the interaction between some components in a training loss for self-supervised learning (SSL), including the entropy of a representation and mutual information between the representation and projection embedding. The authors analyze the dynamics of those quantities along the training process, and observed some insights from both simulation and real datasets. From those insights, the authors propose to add two constants to the training loss, which can balance different properties of the trained representation. Finally, the authors evaluate their proposal and different SSL methods on standard benchmark datasets. The results suggest that their proposal can be competitive or better than those SSL methods.
+
+### Strengths
+- The authors demonstrate the clear interaction between the entropy and mutual information, which indicates some properties of the learned representations. Those interactions are reported to appear for popular SSL methods.
+- Their proposed balancing method was compared with different recent SSL methods. The method seems to be comparable or better than the baselines.
+
+### Weaknesses
+- The paper lacks lots of details: including important notations and experimentation setup. For instance,
+    - The key notations are not defined explicitly, e.g., 
+        - The entropy $H(R)$, mutual information $I(R,Z)$, the determinant, ...
+        - The key functions in their proposed loss: $s, v, c$
+        - Constants $\lambda, \mu, \nu$, ...
+    - PCA was used to visualize the dynamics. However, it is unclear about how the authors can ensure the accuracy of the dynamics when projecting onto a lower dimensional space by PCA. A control on this accuracy is important to investigate a dynamic in high-dimensional spaces.
+    - Some figures (and investigation) reports the eigenvalues of *unclear* matrices/objects.
+- The proposed loss introduces two more parameters, leading to too many parameters for their method and hence complicating model selection.
+- The experiments use ResNet18 and ResNet50, which are classic architectures. More recent (stronger) architectures should be investigated.
+- The overall writing is not very clear. Some figures (fig. 4) and tables (tab. 1, 3, 4, 5) are too small. Some typos remain, even for the paper title. Inconsistent notations remain, e.g., $ln$ and $log$.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper studies how the dimensionality of SSL representations H(R) and the mutual information between representation and embedding spaces  I(R;Z) affect the learning performance. The authors argue that many previous works believe higher H(R) and lower I(R;Z) always lead to better results, but this is not always true.
+They show, both theoretically and experimentally, that the best performance happens when there is a balance between these two terms. Based on this finding, they propose AdaDim, a training strategy that adaptively adjusts between feature decorrelation and sample uniformity while gradually regularizing I(R;Z). The method improves SSL performance by about 1–3% on several datasets without using extra modules such as momentum encoders or teacher–student networks.
+
+### Strengths
+- The paper brings a new view to self-supervised learning by linking representation dimensionality and mutual information. It gives both mathematical and empirical evidence to support this idea.
+
+- AdaDim is lightweight and easy to apply. It only changes the loss weighting dynamically and does not require any architectural modification.
+
+- The authors test on CIFAR, Tiny-ImageNet, medical datasets, and ImageNet-100. The method shows consistent improvement across settings.
+
+- The writing is well organized, and the results in tables and figures are easy to follow.
+
+### Weaknesses
+The reviewer's main concern is about the experiments:
+- The reported improvement in Table 4&5 is marginal.
+- The paper does not study how performance changes with different batch sizes or temperature values. These are well-known factors that strongly affect contrastive learning. Larger batch sizes might reduce the improvement effect.
+- The method is tested only on small or medium datasets. Results on larger benchmarks such as full ImageNet would better support the generalization claim.
+
+Minor formatting issue - There is no space above section 6 title and it seems to be squeezed in for page requirement.
+
+### Questions
+My main concern should refer to the weakness section, and I am willing to change the rating if the weakness is being explained or addressed.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The authors propose to study the training dynamics of SSL models by measuring the dimension of the representations (H(R)) as well as how much the projector affects I(R;Z). Showing that commonly used SSL methods have different training dynamics for those metrics, the authors posit that a better model can be obtained by finding the sweet spot between H(R) and I(R;Z), combining existing methods to do so. An additional loss term to help maximize I(R;Z) is introduced and a partially automated approach is introduced to simplify the hyperparameter search. Extensive experiments are conducted and an increase in performance is observed over the baselines.
+
+### Strengths
+- Incorporating I(R;Z) ( which is related to the degree of invariance of the representations) with the anti-collapse is useful. Similar ideas were studied in Figure 4 of [1] which could help enrich the discussion.
+
+- The analysis focusing on training dynamics is appreciated, as previous works mainly focus on the loss itself or the final representations.
+
+- The analysis of I(Y;R) is interesting, although since it is an upper and not lower bound it should be interpreted cautiously.
+
+- The introduction of multiple hyperparameters is mitigated by a partially automated strategy which simplifies the hyperparameter search.
+
+- In controlled settings, the authors demonstrate performance gains over baselines.
+
+[1] Li, Alexander C., Alexei A. Efros, and Deepak Pathak. "Understanding collapse in non-contrastive siamese representation learning." ECCV 2022.
+
+### Weaknesses
+1) While performance gains are visible with standardized hyperparameters, in more ideal setting (where every method is tuned to the best of their ability) gains are more marginal
+
+2) Misrepresentation of previous work line 85. [41](from the paper's numbering) Does use the degree of invariance of models to augmentations, which can be related to I(R;Z). [17](from the paper's numbering) also does not measure H(R) but H(Z), which can be related to both H(R) and I(R;Z).
+
+3) From Figure 6, it seems that AdaDim has dynamics for H(R) and I(R;Z) that are very close to VICReg, which puts into question the real gain of using SimCLR.
+
+4) The method appears overly complex for marginal gains over VICReg. While VICReg and SimCLR have different approaches to avoid collapse, they can be isolated from the loss (Variance and Covariance loss for VICReg, logsumexp of negative pair distances for SimCLR). Using those directly would lead to a simpler loss, removing the presence of the invariance loss term in each sub-loss.
+
+5) The goal of $L_{mut}$ seems unclear. If the goal is to maximize I(R;Z), couldn't this be done with improved weighting ? Looking at Figure 6, VICReg already has this I(R;Z) maximization effect. If it is mainly moderating the effect of SimCLR on I(R;Z), it again feels more like a weighing issue.
+
+6) From prior work (e.g [2]), VICReg and SimCLR losses have very similar goals but with different dynamics, as illustrated in the current work.Notably, VICReg's loss is a much stronger regularization, and SimCLR a weaker one (due to the logsumexp). Combining the two losses is a way to get the benefits of both as highlighted in this work.
+However, saying that the method proposed here interpolates between sample and dimension contrastive methods (lines 133-135) directly contradicts [2], especially theorem 3.3. This should be clarified in the paper.
+
+[2] Garrido, Quentin, et al. "On the duality between contrastive and non-contrastive self-supervised learning." ICLR 2023.
+
+### Questions
+1) In table 3, why is the performance on CIFAR100 much lower for all methods than in table 2 ? From the text (line 416) it seems that both tables are done in the same setup, which should lead to comparable numbers.
+
+2) $\beta$ is defined as $\gamma \times \alpha$ line 355, so how is it possible to have $\alpha$, $\beta$ and $\gamma$ all altered independently in Table 2 ?
+
+4) To update $\alpha$, ER(Z) is estimated by using a batch of size 256 (line 345-346) but the dimensionality of Z is 2048. This means that ER(Z) is bounded by the batch size which makes it a poor estimator the effective dimension of Z. Did you experiment with other strategies using larger batch sizes for the ER(Z) computation ?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+In this paper the authors study SSL (Self-supervised learning) training dynamics through the joint lens of representation dimensionality H(R) (measured via effective rank) and projection-head mutual information I(R;Z). They challenges the common view that “higher H(R) and lower 
+I(R;Z) are always better,” arguing instead that the best-performing models reach a balance between the two. 
+
+Using a Gaussian analysis and an information-flow bound, the authors show that early training increases H(R) via feature decorrelation which also increases I(R;Z). While later training increases H(R) mainly through sample uniformity, during which I(R;Z) plateaus or decreases. 
+
+Empirical studies on ResNet-18/50 across SimCLR, VICReg, NNCLR, BYOL, and multiple datasets corroborate these phases and the “sweet spot” relationship between H(R) and I(R;Z). Building on these insights, the paper introduces AdaDim, which 
+
+- (i) adaptively interpolates between a decorrelation loss (VICReg’s covariance term) and a sample-uniformity loss (NT-Xent) using an 
+α  schedule derived from the effective rank of Z, and 
+
+- (ii) gradually regularizes I(R;Z) with a Rényi-entropy-based term scaled by β=γα. 
+
+The authors show that AdaDim yields consistent improvements (up to ~3% Top-1) over matched SimCLR/VICReg setups and that AdaDim is competitive with state-of-the-art SSL methods on CIFAR-100, Tiny-ImageNet-200, CINIC-10, STL-10, and several MedMNIST datasets, while requiring only intermittent SVD computations.
+
+### Strengths
+- Clear dynamics story with theory. The Gaussian and information-flow analyses predict two phases (decorrelation vs. uniformity), and the measurements on real runs (eigenvalue trajectories, uniformity, matrix-MI) match those predictions, including the non-monotonic behavior of I(R;Z).
+
+- Low-overhead method. AdaDim’s α from effective rank(Z) plus β-scaled MI regularization is easy to implement (periodic SVD on a few batches) and does not require queues, clustering, student–teacher, or extra predictors. 
+
+- Wide empirical coverage. Demonstrated consistent benefits across CIFAR-10/100, Tiny-IN-200, CINIC-10, STL-10, and MedMNIST variants; competitive ImageNet-100 results vs. strong baselines (e.g., BYOL, MoCo v3, Barlow Twins).
+
+- Nice dissemination and comprehensive ablations. Tables/figures dissect fixed vs. cosine/linear α, with/without β, and γ sweeps; they show why adaptive schedules beat hand-crafted ones and why I(R;Z) regularization should be phased, not constant.
+
+### Weaknesses
+- Estimator and stability details for I(R;Z). The matrix-based Rényi-entropy estimator is used operationally, but its bias/variance, windowing, and normalization details are compactly stated. I could see a sensitivity study (batch size, feature dim, normalization choice) as beneficial.
+
+- Theory idealization. The Gaussian joint model and the assumption that I(Y;Z) approaches a constant simplify the narrative; stronger connections to non-Gaussian encoders/projectors or a small-scale non-linear toy model (beyond PCA) would further shore up generality. (Some neural projector simulations are in the appendix; surfacing them in main text might also be helpful.)
+
+- Scope of SOTA comparisons. While solo-learn baselines are strong, results focus on online linear eval and ~400-epoch training. Maybe a few shorter training regimes and transfer evals (linear probe on external datasets; few-shot) can further stress-test the “balance” claim. 
+
+- Hyperparameter coupling. β=γα ties MI regularization strictly to α. Some datasets may benefit from asynchronous schedules (e.g., a later spike in MI reg while α stabilizes). An ablation where β lags α could uncover improvements.
+
+### Questions
+- Estimator sensitivity. How sensitive are conclusions to the matrix-MI estimator choice (Rényi order, normalization, batch size)? Have the authors quantitative results about variance across seeds/batches and any bias relative to kNN-MI or MINE on low-dim toy data? 
+
+- Asynchronous schedules. Have the authors tried decoupling β from α (e.g., delayed ramp or piecewise schedule)? Can the authors explain more on that and/or add a plot of (H(R),I(R;Z)) trajectories under a few schedule families could validate the “balanced-path” intuition?
+
+- Short-train regimes. The authors note that a fixed I(R;Z) regularization seems tied to 400-epoch runs. What happens at 100–200 epochs (where many practitioners operate)? Does AdaDim still outperform fixed-λ MI reg?
+
+- Transfer and robustness. Beyond online linear eval, can the authors elaborate/explain how would the learned balance correlate with transferability (linear probes result on out-of-domain datasets or few-shot finetuning would be nice t have)? 
+
+- Compute overhead. Would be nice to see a wall-clock overhead breakdown for the SVD step (per epoch %) across datasets/batch sizes, and any approximate alternatives (e.g., randomized SVD or Nyström).
+
+- Failure modes. Are there datasets where AdaDim’s α quickly saturates to ~1 (or sticks near 0) and harms training? Could the authors elaborate whether a capped or layer-wise effective-rank signal would help there in such case.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

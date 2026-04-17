@@ -1,0 +1,228 @@
+# FlowGen: Synthesizing Diverse Flowcharts to Enhance and Benchmark MLLM Reasoning
+
+- Decision: Accept (Poster)
+- Scores: 4, 2, 6, 6
+
+## Abstract
+Flowcharts are widely used to represent processes and relationships through intuitive visual representations. However, accurately interpreting these diagrams remains challenging due to their structural complexity and high visual diversity. Existing flowchart datasets often lack fine-grained control over key properties such as graph complexity and rendering style, limiting their utility for training and testing of multimodal large language models (MLLMs) on visual reasoning tasks. To address these limitations, we introduce FlowGen, a controllable synthesizer that generates flowcharts that have customizable structural features and supports multiple renderer backends. FlowGen enables fine-grained control over graph properties such as graph order and size, branched arrows, and nested subgraphs, facilitating systematic evaluation of MLLMs' capabilities. Extensive experiments on open-source and proprietary MLLMs show that training on FlowGen substantially improves flowchart parsing and question answering (QA), while also enhancing generalization to other public datasets. Furthermore, FlowGen provides challenging test datasets that expose consistent weaknesses in current MLLMs, particularly related to high structural complexity and varied rendering styles. Our code and data are publicly available at https://github.com/nju-websoft/FlowGen.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces FlowGen, a controllable synthesizer designed to generate diverse and structured flowcharts for training and evaluating multimodal large language models (MLLMs). The authors conduct comprehensive experiments showing that fine-tuning on FlowGen significantly improves flowchart parsing and question answering, while also exposing weaknesses in current MLLMs under complex or cross-renderer conditions. However, some aspects of the dataset design and evaluation pipeline need further clarification and empirical support.
+
+### Strengths
+The paper addresses an important gap in multimodal reasoning benchmarks by introducing a controllable and scalable flowchart synthesis framework, which allows explicit control over graph complexity and rendering diversity.
+
+The proposed FlowGen synthesizer is technically sound and provides a reproducible pipeline for generating both training and testing data, with adjustable parameters such as graph order, branching patterns, and rendering style.
+
+The experiments are comprehensive, covering multiple flowchart-related tasks and a variety of open-source and proprietary MLLMs, which strengthens the empirical validity of the results.
+
+### Weaknesses
+Weaknesses and Questions
+
+The semantic content of the synthesized flowcharts is said to be drawn from 120 predefined application domains, each providing 40 node names and 40 edge labels. However, the paper does not explain the distribution and diversity of these domains, nor does it provide examples of the node and edge vocabularies. A more detailed breakdown would help readers assess how representative and balanced these semantic domains are. Additionally, the process of generating content “with GPT-4o and refined through human verification” is mentioned but not described in sufficient detail—clarifying this step would strengthen the reproducibility and credibility of the dataset.
+
+While the experiments focus on several flowchart-specific tasks, flowchart understanding is arguably a fundamental multimodal reasoning skill. It would be valuable to evaluate whether models fine-tuned on FlowGen also exhibit transfer improvements on broader benchmarks such as MathVista or MMMU, to demonstrate that FlowGen enhances general reasoning rather than only task-specific performance.
+
+In Section 3.2, the authors mention synthesizing a training set of 11,520 flowcharts but do not explain how the task components of each sample are structured. Are all samples associated with parsing tasks, or do they also include QA tasks or other forms of supervision? Beyond Table 2, more detailed statistics, such as the task type distribution and average tokens per sample, would help readers better understand the dataset’s design and scope.
+
+The evaluation setup involves prompting models with triplets extracted by Qwen2.5-VL-7B fine-tuned on FlowGen data. This design is not fully end-to-end, and may introduce error propagation from the extraction stage. A cleaner approach might be to evaluate each model’s direct performance on FlowGen-derived tasks (e.g., QA) using its own fine-tuned checkpoint, without intermediate feature extraction.
+
+The paper also introduces a synthetic test set generated using the same pipeline. However, it is unclear whether the test set underwent any manual inspection or quality assurance. Since the same generation process is used for both train and test data, some discussion of data overlap prevention and human verification would be helpful to ensure a fair and meaningful evaluation.
+
+Table 6 shows that models trained on specific subsets (e.g., Graph Easy, Medium, Hard) achieve their best results on the corresponding test subsets. This suggests possible limited cross-subset generalization. Have the authors tested a model trained on the entire training set (combining all difficulty levels) to examine whether it performs more robustly across test subsets? Such results would provide a clearer picture of the model’s generalization ability.
+
+### Questions
+Please see weaknesses
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper presents FlowGen, a controllable flowchart synthesizer for training and benchmarking multimodal LLMs. The generator exposes seven knobs (graph order, split/merge arrows, branching factor, density, unlabeled-edge ratio, nested subgraphs) and renders with Mermaid, Graphviz, PlantUML, and Diagrams to induce style diversity (Fig. 2, p.3). Using FlowGen, the authors build a 11,520‑image training set (Table 2, p.6) and a six‑subset test suite spanning structural difficulty and scanned‑image degradation. Across six parsing benchmarks, fine‑tuning open‑source MLLMs on FlowGen yields large F1 gains (e.g., Qwen2.5‑VL‑7B: FlowLearn 43.2→60.1 strict F1; hdBPMN 16.6→18.3; Table 3, p.6), and supplying triplets extracted by a FlowGen‑tuned model improves flowchart QA accuracy for multiple models (Table 4, p.7). A new FlowGen test set exposes low base performance for both open‑source and proprietary models (e.g., GPT‑4o ≤25% F1 on most subsets) and shows that FlowGen‑SFT substantially helps (Table 6, p.9). Ablations indicate multi‑renderer training and explicit modeling of nesting/split‑merge structures matter (Table 5, p.7).
+
+### Strengths
+- Combines controllable graph parameters with multi‑renderer outputs; introduces scanned‑style perturbations and a matched train/test pipeline
+- Extensive, multi‑model evaluation; clear ablations demonstrating the role of renderer diversity, nesting, and split/merge 
+- Well‑specified metrics and prompts (Appendix D) and transparent training setup.
+- Offers a scalable path to stress‑test MLLM reasoning over structured diagrams; highlights consistent weaknesses
+
+### Weaknesses
+1. Evaluation Design Masks True Model Capabilities
+
+Table 4's approach—feeding triplets extracted by a FlowGen-tuned Qwen-7B to all models—introduces two fundamental biases. First, it conflates extraction ability with reasoning capacity, making it impossible to isolate genuine question-answering performance. Second, it privileges models that happen to align with the chosen extractor's error profile. The paper should instead report: (i) QA performance without triplets as a baseline, (ii) QA with gold-standard triplets to measure pure reasoning, and (iii) QA using each model's self-extracted triplets to properly separate parsing from comprehension.
+
+2. Virtual Node Encoding Introduces Unvalidated Structural Bias
+
+The split/merge virtual-node representation deviates from standard BPMN conventions (gateways, arrow semantics) in ways that could fundamentally bias what models learn. While the authors acknowledge this as future work (Conclusion, p.9), no quantitative analysis compares this encoding against alternatives. Without understanding how much this choice shapes results, we cannot assess whether findings generalize to real-world diagram understanding.
+
+3. Underwhelming Performance on Real Data Raises Generalization Questions
+
+The best FlowGen-SFT result on hdBPMN remains modest—just 18.3% F1 for Qwen-7B (Table 3). This gap between synthetic training performance and real-world evaluation suggests the approach may not transfer beyond stylized, template-generated data. The paper needs substantially larger, truly out-of-distribution real-world test sets to validate practical applicability.
+
+4. Train-Test Splits Are Distribution-Matched, Not Truly Adversarial
+
+FlowGen's test sets are disjoint from training but deliberately distribution-matched (Sec. 4.1.1, p.8). This design choice likely inflates apparent robustness compared to unconstrained deployment scenarios. Cross-renderer evaluations (where training and test use different rendering engines) and unseen-topic tests would provide more realistic difficulty estimates.
+
+5. "Scanned" Augmentations Are Synthetic, Not Ecological
+
+Table 10's scanned-style effects (p.20) come from Pillow/OpenCV filters, not actual scanning or photography. Real documents exhibit sensor noise, lighting variation, physical degradation, and artifacts that synthetic perturbations cannot fully capture. Evaluation on genuinely scanned, photographed, and hand-drawn diagrams is essential for validating real-world robustness.
+
+6. Vocabulary Verification Lacks Transparency
+
+Node/edge vocabularies are generated by GPT-4o then "human-verified" (Sec. 2.2.2, p.4), but verification coverage and inter-annotator reliability are not reported. Without knowing what percentage was checked, by how many annotators, and with what agreement rates, we cannot assess label quality or rule out systematic template artifacts.
+
+7. "Unlimited Diversity" Claim Is Unsupported
+
+The assertion that FlowGen generates unlimited diverse flowcharts contradicts the method's reliance on 120 static domain dictionaries with fixed vocabularies. Examination reveals repetitive structures, especially in "complex" configurations. The system samples from finite pools—it does not model true domain variation or generate genuinely novel structures.
+
+8. Random Semantic Assignment Undermines Reasoning Validity
+
+Labels are randomly sampled from GPT-generated word lists without semantic validation or causal coherence. Many examples show nonsensical flows (e.g., "Health Coaching → Detox Program → Journaling Wellness"). This fundamentally undermines the benchmark's value as a reasoning test: models learn to parse arbitrary structures, not understand real-world logic or causal relationships.
+
+9. Methodologically Inappropriate Baseline Comparisons
+
+Comparing fine-tuned open-source MLLMs to proprietary reasoning-focused models like Gemini-2.5 is not methodologically sound. Gemini is architecturally designed for multi-step reasoning chains, not direct diagram parsing, making performance comparisons misleading. The evaluations conflate architectural differences with actual diagram understanding capability.
+
+10. Missing Critical Semantic Ablation
+
+The central claim—that FlowGen improves visual reasoning—depends on semantically labeled nodes and edges. Yet the paper never evaluates performance when semantic labels are removed or randomized. This omission is critical: observed improvements could stem entirely from textual cues in the image rather than genuine spatial or structural reasoning. Without this ablation, we cannot determine what models actually learn.
+
+11. Limited Conceptual Contribution
+
+Beyond reporting performance numbers, the paper provides little insight into why MLLMs struggle with flowcharts or how they might fundamentally improve. The work essentially demonstrates that synthetic fine-tuning increases scores on similar synthetic data—an expected result that doesn't advance our understanding of diagram comprehension or suggest paths toward more robust visual reasoning.
+
+### Questions
+- Can you report QA with (a) gold triplets, (b) no triplets, and (c) per‑model self‑extracted triplets? How sensitive are Table 4 gains to extractor accuracy?
+- Have you tried ontology mapping, lemmatization, or embedding‑based matching to reduce synonym penalties in triplet evaluation? How do rankings change? 
+- What is performance when training on one renderer and testing on another (full cross‑matrix), beyond the single‑renderer ablation in Table 5?
+- Can you quantify the gap between virtual‑node split/merge and a gateway/edge‑semantics encoding (e.g., BPMN‑style gateways) on hdBPMN?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper presents FlowGen, a controllable synthesizer that generates flowcharts with adjustable structural and visual complexity to evaluate and fine-tune multimodal large language models (MLLMs). The system defines parameters for graph order, branching, density, unlabeled edges, and nesting depth, and renders diagrams using multiple backends (Mermaid, Graphviz, PlantUML, Diagrams). The authors generate 11,520 flowcharts across 120 topic domains and three difficulty levels, fine-tune ten MLLMs, and evaluate on multiple flowchart parsing and QA datasets. Fine-tuning with FlowGen consistently improves performance, particularly on structurally complex diagrams. In addition, the authors use FlowGen to create challenging validation sets designed to probe model robustness along two controlled axes (graph complexity and scanned document degradation) which systematically expose consistent weaknesses in both open-source and proprietary models.
+
+### Strengths
+- **Novel and practical contribution:** FlowGen fills a significant gap in controllable synthetic flowchart generation for multimodal reasoning.
+- **Controlled and systematic flowchart synthesis:** The modular three-stage architecture (configuration, graph construction, rendering) allows manipulation of structural and stylistic parameters, producing flowcharts with diverse properties.
+- **Comprehensive experimentation:** Evaluations span multiple models, datasets, and difficulty levels, with well-designed ablations and detailed error analyses.
+- **Robustness dimension:** The introduction of degraded and complex test sets is a valuable step toward stress-testing MLLMs.
+
+### Weaknesses
+- **Limits of flexibility and variability:** While FlowGen enables controlled chart variability, the actual range of possible flowcharts likely depends on the set of semantic topics and predefined parameter ranges. A quantitative study of generated flowchart diversity within the same topic would help clarify the boundaries and potential limitations of the method. Moreover, the 120 topic domains used for across the experiments are insufficiently described; the source and diversity of these domains need more explanation.
+- **Unclear evaluation protocol:** The authors do not specify whether reported results on flowchart parsing and QA datasets are in zero-shot settings or if models were fine-tuned on the target evaluation datasets. This ambiguity makes it difficult to interpret the performance gains and assess true generalization.
+- **Dataset independence concerns:** In section 4, training and test sets are both generated by FlowGen, raising questions about evaluation fairness and true generalization. Clarifying how overlap and near-duplicates are prevented is essential.
+
+### Questions
+**Questions for Authors**
+
+1. Are the reported results on flowchart parsing and QA datasets obtained in zero-shot mode, or were the models fine-tuned on these evaluation datasets? Please clarify to properly interpret generalization performance.
+2. When using FlowGen-generated training and test sets, how do the authors ensure no overlap or near-duplicates exist between them?
+3. What is the source and diversity of the 120 topic domains used for generation? Are they drawn from existing ontologies?
+4. Have the authors computed any quantitative metrics to measure variability within the same topic and across difficulty levels? This could help to assess the true flexibility of FlowGen and potential limitations in coverage.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper introduces a system called FlowGen, which is a controllable flowchart synthesizer that generates diverse flowcharts with adjustable structural complexity and visual styles. The system enables large-scale, customizable datasets for both training and benchmarking multimodal large language models (MLLMs) on flowchart understanding and visual reasoning tasks. FlowGen supports multiple renderers (Mermaid, Graphviz, PlantUML, Diagrams) and configurable parameters (e.g., graph order, branching factor, nested subgraphs). Experimental results show that models trained with FlowGen data (e.g., Qwen2) achieve significant improvements in flowchart parsing and flowchart QA, with strong generalization to public datasets such as FlowVQA and FlowLearn. Moreover, FlowGen serves as a challenging evaluation benchmark, revealing weaknesses in even top proprietary models (GPT-4o, Gemini-2.5-Flash).
+
+### Strengths
+1. The motivation of the paper is strong. The authors motivate that prior work (including FlowchartQA, FlowVQA, FlowLearn) does not have control over structural and stylistic complexity, whereas FlowGen specifically introduces a parametric generation framework to address this limitation. The generation of synthetic data resembles the data augmentation which show indeed improvement in performance. 
+
+2. The paper presents a good experimental design with many MLLMs and two types of evaluation metrics (exact and relaxed metrics). The Easy/Medium/Hard complexity of the dataset seems interesting and allows for various analysis. 
+
+3. The paper contains good ablation studies that systematically isolate contributions from multiple perspectives: multi-renderer training; nested subgraphs; and split/merge arrows
+showing their distinct impacts on performance.
+
+### Weaknesses
+1. Semantic labels (node and edge names) are generated with LLMs and verified by humans. I wonder if this could introduce stylistic or linguistic biases, especially if similar LLMs are later tested on FlowGen data. 
+
+2. FlowGen by design enables controllable generation, but it would be interesting to see if synthetic diagrams may or may not fully capture the diversity and imperfections of real-world flowcharts (e.g., hand-drawn figures, inconsistent layouts, textual clutter). 
+
+3. Since training and test distributions share the same generative pipeline, models might implicitly learn renderer-specific biases, even if content instances differ. Did the authors observed such issues?
+
+### Questions
+What could happen if the authors generate data with different LLMs (open-source vs. closed-source MLLMs)? What is the impact of a less performant MLLM? To what extent the noise hurts the overall performance?
+
+Does a combination of MLLM generated and human generated data could improve performance and avoid potential biases that could be brought by the MLLM?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

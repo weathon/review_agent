@@ -1,0 +1,179 @@
+# Attention Smoothing: Correcting Causal Bias in Autoregressive Language Models
+
+- Decision: Reject
+- Scores: 4, 4, 6, 2
+
+## Abstract
+Autoregressive large language models (LLMs) suffer from causal bias: once attention states are cached under the causal mask, they cannot be revised, leading to information solidification and path-dependent errors. This structural limitation undermines contextual fidelity and amplifies hallucinations. We introduce Attention Smoothing, a decoding-time framework that revises attention after the entire context is observed. Our method models token-to-token information flow as an absorbing Markov chain, computes token-level surprisal scores, and derives a smoothed posterior attention distribution that corrects the causal bias. The framework is model-agnostic, training-free, and can be seamlessly integrated into existing inference pipelines. Experiments on multiple hallucination and factuality benchmarks show that Attention Smoothing consistently improves contextual faithfulness across model scales, highlighting the importance of managing information flow for more reliable LLM generation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+RAS models a sequence’s evolving “semantics” as an absorbing Markov chain (AMC) to quantify “semantic surprise” in prefixes, then performs a training-free two-pass adjustment that (i) computes an information score from the AMC and (ii) in a second pass removes the causal mask on selected layers/heads and blends this unmasked attention with the original masked attention to “retrofit” earlier queries with future context. The method reports consistent gains on TruthfulQA (MC), FACTOR (Wiki/News), and HaluEval using LLaMA-2/3.
+
+### Strengths
+*  Clear mechanism without retraining: uses absorbing Markov chain signals and a two-pass attention smoothing; the backbone stays frozen with only a few small hyperparameters like alpha, beta, and layer choice.
+
+*  Principled though heuristic: defines cover rate and log surprise, uses a fundamental matrix from the transition matrix, and builds an information score to reweight attention.
+
+*  Empirical gains across tasks and models: improves over DOLA and Activation Decoding on multiple datasets, with component and hyperparameter ablations.
+
+### Weaknesses
+* Semantic meaning in LLMs depends on the entire prefix, i.e., \(P(x_{t+1}\mid x_{1:t})\), so modeling “semantic pathways” as a first-order absorbing Markov chain over tokens is an approximation. The single-step transition \(\tilde{P}_z(z_i, z_{i+1})\) by itself does not encode full history, but the method aggregates multi-step effects via path products and the fundamental matrix \(N=(I-Q_z)^{-1}\); thus it can capture some nonlocal influence, even if higher-order, history-dependent interactions may still be missed.
+
+* The paper provides no evidence that semantic trajectories satisfy the Markov property
+
+* Lacks comparison to recent well-known baselines like Chen, Chao, Kai Liu, Ze Chen, Yi Gu, Yue Wu, Mingyuan Tao, Zhihang Fu, and Jieping Ye. "INSIDE: LLMs' internal states retain the power of hallucination detection." arXiv preprint arXiv:2402.03744 . I request the authors to find the contemporary research works and compare their method to the recent works.
+
+### Questions
+Same as above
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper models a sequence’s evolving “semantics” as an absorbing Markov chain (AMC) and computes an information/surprise score from the chain’s fundamental matrix to detect where prefix-based interpretations diverge from full-context meaning. It then runs a training-free, two-pass adjustment that (i) computes AMC signals from the full input and (ii) in a second pass reweights attention (removing the causal mask on selected layers) and fuses it back to reduce prefix dominance. Experiments on TruthfulQA (MC), FACTOR (Wiki/News), and HaluEval show consistent but modest gains over DOLA and Activation Decoding.
+
+### Strengths
+Casting semantic evolution as an absorbing Markov chain yields a principled handle (fundamental matrix, absorption flow) to quantify prefix vs. full-context divergence. 
+
+Training-free, plug-in smoothing. The two-pass, query-only attention adjustment is easy to bolt onto frozen LLMs. 
+
+Consistent multi-task gains. Improvements over DOLA/AD across TruthfulQA (MC), FACTOR, and HaluEval; ablations indicate both AMC signals and reweighting matter.
+
+### Weaknesses
+* The paper models semantic pathways as an absorbing Markov chain with tokens as states and uses causal masking to make Q upper triangular. However, this violates the Markov property because in LLMs, the transition from token i to token j depends on all previous tokens (x₁...xᵢ), not just state xᵢ. The paper conflates token positions with semantic states without justification.
+
+* The paper defines r(z) = E[T/τ] where τ is cover time, then claims r(z) = ∏P̃z(zᵢ,zᵢ₊₁). This is mathematically incoherent: the left side is an expected ratio, while the right side is a product of transition probabilities with no expectation operator. The equation mixes discrete path probability with expected value without proof.
+
+* Please compare the method to recent studies like INSIDE, Loopback Lens for robustness of the method.
+
+### Questions
+Please refer the weakness for questions
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+1. The paper proposes a formal framework, based on absorbing Markov chains, to quantify the semantic bias introduced by the causal (autoregressive) design of LLMs.
+2. The authors also introduce a complementary mitigation framework to address hallucinations arising from these biases and report strong empirical results supporting its effectiveness.
+3. Unlike methods that operate only on the outputs of LLMs, this research intervenes inside the model, proposing modifications to the attention mechanism at each layer.
+
+### Strengths
+1. Strong empirical results, with clear experimental support demonstrating consistent improvements.
+2. A new approach that operates at the attention level in each layer. This is likely more powerful than methods that only modify the output, since the adjustment is propagated through the network and effectively allocates more FLOPs to the change.
+3. Notably, the method works without any training (zero-training / parameter-free), which is both practical and impressive.
+
+### Weaknesses
+1. While the Markov chain framework is compelling, the current method appears to rely on a heuristic. How far does this heuristic drift from the original theoretical formulation? It would help if the authors clarified the mapping from theory to implementation, including what assumptions are introduced, which components are approximated, and what, if anything, is sacrificed from the original framework in terms of guarantees, scope, or fidelity.
+
+2. The idea of modifying attention is strong, but it would be useful to characterise the runtime tradeoffs. Specifically, how much slower is the proposed method relative to approaches that operate only on the output of the LLM? Please provide wall-clock timings or throughput comparisons across model sizes to quantify the latency and efficiency impact of intervening at every layer.
+
+### Questions
+See weaknesses + a few more minor questions:     
+1.  Does the modified attention still normalise to 1? If not, is this a potential problem?    
+2. Why is the second adjustment on the output needed (equation 11)? Any insights?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a method for post-hoc correction to attention scores in causal language models. The method reframes the attention score matrix as an absorbing Markov chain (AMC), and computes various quantities from the theory on AMCs, which are used in their method. The final design of their corrector is a heuristic approach to adjusting the scores which makes use of the Information Score, and Utilization of a node. The adjustment itself does not come from the theory, but is of the authors own design. The method introduces a variety of hyperparameters. It is shown to improve language model performance detecting hallucinated content.
+
+### Strengths
+* The idea of semantically aligning the token representations to agree with the complete input is interesting, and intuitively makes sense.
+* Drawing the connection from the attention score matrix to AMC theory is also interesting.
+* Some of the diagrams are helpful aids to the writing.
+
+### Weaknesses
+* Very limited experimental results. Hallucination detection is their only comparison against other methods, and it uses all similar scale instruct models: 7B, 8B, 13B. They provide some analysis of their method on a different dataset HotPotQA but do not provide an benchmarking on that dataset. This method needs much more thorough empirical validation than what is presently offered in the paper.
+* Detection results in Table 1 show the proposed method only offers very slight improvements most of the time.
+* The method introduces a number of hyperparameters but discussion of setting and/or tuning these hyperparameters is only mentioned briefly in the appendix, however, this is an important detail for those wishing to use your method.
+* The paragraph starting on line 421 claims that they demonstrate their method helps regardless of"dataset type, reasoning style, or model capacity" but they only test the method with a very narrow range of model sizes (7-13B) on one task (hallucination detection). The results presented in the paper do not justify such strong claims.
+* The writing would benefit from clearer language -- there is a lot of jargon (e.g. line 079 "semantic pathways in semantic space", line 022 "guide a smoother", line 246 "intermediate semantics along the prefix pathway"). It would help the reader to use more concrete language instead of vague terminology.
+* As the heuristic adjustment, introduced in section 4.2, does not have rigorous theoretical backing it would be helpful to provide the intuition behind its design.
+* The case study visualization in section 5.4 is difficult to parse. The section would benefit from more thorough discussion of what the reader should take away from this figure.
+* There is a typo in Figure 1 "Liver replies on sunlight" should be "Liver relies on sunlight".
+* The matrix $N_{dg}$ is not defined in the paper.
+* The matrix $V$ is not defined in the paper.
+* The text in Figure 4 is much too small. The text in Figure 5 is better but still on the small side.
+
+### Questions
+* In Table 1, baselines Dola and AD both underperform the base model. Dola consistently underperforms by significant margin, and AD occasionally underperforms but again by a noticeable margin. Why is this?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

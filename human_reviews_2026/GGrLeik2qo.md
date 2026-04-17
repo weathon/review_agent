@@ -1,0 +1,204 @@
+# MaRS: Memory-Adaptive Routing for Reliable Capacity Expansion and Knowledge Retention
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 2, 8
+
+## Abstract
+Large pre-trained models (LPMs) serve as universal backbones for vision and language tasks, but continual learning (CL) with frozen LPMs remains challenging, since shallow adaptation modules face the stability–plasticity dilemma and are prone to catastrophic forgetting. To address this problem, we propose MaRS (Memory-adaptive Router with Statistical control), a modular framework that decouples stable representation from adaptive capacity through three components: a frozen encoder, a slot-based memory router, and a lightweight classifier. On this basis, we design two mechanisms: (i) Statistically-Grounded Slot Expansion (SGSE) formulates expansion as a statistical decision problem, ensuring controlled growth with guarantees on false alarms and detection delay; (ii) Dual-Stage Contrastive–Distillation Adaptation (DCDA) integrates new slots through supervised contrastive learning and knowledge distillation, preserving prior knowledge without raw replay. Experiments on diverse benchmarks show that MaRS achieves state-of-the-art performance in continual learning with frozen LPMs, combining adaptability, efficiency, and retention.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper introduces MARS, a framework for continual learning with frozen large pre-trained models. MARS decouples stable representation from adaptive capacity using a frozen encoder, a slot-based memory router, and a lightweight classifier. It has two core components: SGSE formulates capacity growth as a statistical decision problem with guarantees and DCDA integrates new capacity through contrastive learning and anchor-based knowledge distillation without raw replay. Together these components provide a principled way for efficient adaptation and the authors demonstrates strong results on both vision and NLP benchmarks.
+
+### Strengths
+- **statistical guarantee on slot expansion is novel**: previous approaches rely on heuristic ways to determine parameter growth. SGSE formulates capacity growth as a statistical decision problem and shows statistical guarantees which is a novel way of approaching this problem. 
+
+- **retention without replay**.  The proposed DCDA approach preserves prior knowledge without relying on raw data replay, enabling memory-efficient and privacy-friendly continual learning while maintaining high retention performance. 
+
+- **nice presentation**. The presentation of the paper is clear and easy to follow.
+
+### Weaknesses
+- **scalability**: how scalable is the method? Would this work beyond the small datasets benchmarked in the paper? 
+
+- **interplay between alpha and beta parameter**: the alpha and beta parameter in SGSE both controls a balance between a balance between stability and responsiveness. In pratice, how to pick the correct combination of both beyond the default parameter. How would you tune this in practice?
+
+- **training hyperparameter selection**: in the experimental setup, it is said that the stage 1 tuning happens first for 20 epochs and then the stage 2 tuning. How would you know the number of epochs required for each stage and how would one select it in practice?
+
+### Questions
+- what is the computation time for the model on the empirical experiments? 
+- line 247 yielding about 15% faster convergence and reduced redundancy. What is the 15% improvement in relation to? 
+- what happens when you perform stage 1 and stage 2 together, i.e. tuning memory parameters together with the classifier parameters (instead of the two stage approach)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+MARS is a continual-learning framework for frozen LPMs that shifts adaptation to a slot-based memory router plus a lightweight classifier. It expands capacity only when SGSE flags novelty, using an EMA high-quantile tracker of routing confidence and a one-sided Wilson bound to provide predictable detection delay and per-test false-expansion control. Knowledge retention is handled by DCDA: Stage-1 contrastive alignment of memory parameters and Stage-2 head-only training with cross-entropy, LwF, and anchor distillation, avoiding raw replay. Experiments report state-of-the-art performance under this frozen-backbone protocol.
+
+### Strengths
+1. Functionalities are well split into a frozen encoder, slot-based router, and classification head
+2. The proposed method is well-motivated and easy to follow
+3. Principled expansion logic. SGSE uses a smoothed high-quantile of top-slot confidence and a one-sided Wilson score
+
+### Weaknesses
+1. Justify using CLIP-ViT when the text encoder is unused and a separate classifier is trained, and add comparisons against a standard ImageNet-pretrained ViT under the same frozen-backbone regime.
+2. Compare against CLIP-focused/frozen baselines (e.g., CLAP4CLIP [A]).
+3. P(i) in Eq. 18 is not defined; specify it explicitly (I'm guessing the index set of positive samples for data i as in supcon).
+4. The method introduces many hyperparameters for both stages, and needs more sensitivity/ablation studies to demonstrate robustness and generalization.
+5. Benchmark coverage. Expand the benchmarks as in other CLIP/PEFT-oriented baselines in the vision domain (CODA-Prompt [B], EASE [C], DIKI) and the language domain (O-LoRA [D]), and consider larger or more diverse datasets.
+6. Report wall-clock time, memory, and inference overhead for the two-stage training vs. prior methods
+7. Provide qualitative results (e.g., nearest-token/phrase visualizations) that anchor capture domain-specific semantics.
+8. Router/slot introspection. Add diagnostics/visualizations such as slot-usage over tasks and growth curves to substantiate controlled expansion and specialization.
+
+[A] Jha, S., et al. Clap4clip: Continual learning with probabilistic finetuning for vision-language models. NeurIPS 2024.
+
+[B] Smith, J. S., et al. Coda-prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. CVPR 2023.
+
+[C] Zhou, D.W., et al. Expandable subspace ensemble for pre-trained model-based class-incremental learning. CVPR 2024.
+
+[D] Wang, Xiao, et al. "Orthogonal subspace learning for language model continual learning." EMNLP 2023.
+
+### Questions
+see weakness
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents MARS, a modular approach designed for continual learning with pre-trained models (PTMs). The architecture is composed of three key components: a frozen pre-trained encoder, a slot-based memory module, and a lightweight classifier. The authors propose two primary mechanisms to address catastrophic forgetting: (i) Statistically-Grounded Slot Expansion (SGSE), which formulates memory expansion as a statistical decision problem to ensure controlled growth, and (ii) Dual-Stage Contrastive-Distillation Adaptation (DCDA), a replay-free method that integrates new knowledge through supervised contrastive learning and retains past information via knowledge distillation. Experimental results on standard continual learning benchmarks for both vision and NLP validate the effectiveness of the proposed framework.
+
+### Strengths
+- The introduction of SGSE, which uses statistical tests to determine when to expand model capacity, is an interesting contribution, as prior methods typically increase sub-modules (e.g., prompts) linearly with the number of tasks.
+- The effectiveness of MARS is demonstrated through evaluations on both vision and NLP datasets.
+- The experiments include detailed ablation studies that probe the impact of key components (SGSE, anchors, and each DCDA stage), as well as analyses of important hyperparameters.
+
+### Weaknesses
+- Proposition 1 appears to be both incorrect and irrelevant to the context. It neglects the term $\frac{dA}{dc}$, even though both $A$ and $c$ are functions of $x_t$. Consequently, the proofs and resulting claims seem invalid. A counterexample can be illustrated as follows: when $S_t = 3$ and $a_1 = 3, a_2 = 3, a_3 = 3$, we have $c_t = 3$ and $s_t = 1/3$. However, when $a_1 = 2, a_2 = 1, a_3 = 1$, then $c_t = 2$ and $s_t = \frac{e^2}{2e + e^2} > 1/3$. Thus, the claim that $s_t$ is strictly increasing with respect to $c_t$ is false. This represents a fundamental flaw. Moreover, the interpretation in Lines 185–187 appears vague and not directly relevant to the CL context.
+
+
+- The paper suffers from a lack of clarity in its presentation. Key variables are used without prior definition, such as $w$ in Equation (10) and $P(i)$ in Equation (18). The writing structure is also confusing; for example, the Router-weighted EMA in Equations (7-8) is introduced prematurely, disrupting the logical flow of the methodology section.
+
+- The most critical concern is that, while SGSE aims to determine when to dynamically expand model capacity, the paper provides no analysis of how the number of slots $S_t$ grows with the number of tasks. The experiments report only accuracy results. This is a very shallow investigation that undermines a central contribution of the paper.
+
+- Another major issue is that the authors completely ignore most CL methods based on pre-trained models (e.g., L2P [1], HiDe-Prompt [2], NoRGa [3], and SD-LoRA [4]), comparing instead only with conventional CL approaches.
+
+- The paper lacks empirical analysis regarding the number of parameters and computational cost compared to other methods.
+
+- There is no investigation into the effect of different pre-trained models (e.g., iBOT, DINO). This omission is concerning, as the proposed method may rely heavily on the frozen representations of the pre-trained backbone.
+
+[1] Learning to Prompt for Continual Learning, CVPR 2022
+
+[2] Hierarchical Decomposition of Prompt-Based Continual Learning: Rethinking Obscured Sub-optimality, NeurIPS 2023
+
+[3] Mixture of Experts Meets Prompt-Based Continual Learning, NeurIPS 2024
+
+[4] SD-LoRA: Scalable Decoupled Low-Rank Adaptation for Class Incremental Learning, ICLR 2025
+
+[5] RanPAC: Random Projections and Pre-trained Models for Continual Learning, NeurIPS 2023
+
+### Questions
+In addition to the issues raised above, I have the following questions for the authors:
+
+- What is the architecture of the lightweight classifier head $g(\cdot)$? Is it an MLP or a simple linear layer?
+
+- How does the number of slots $S_t$ vary: (i) across tasks, (ii) with different task orders, and (iii) under different class distributions within each task?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper addresses the problem of catastrophic forgetting in the context of continual learning (CL) with large, frozen pre-trained models (LPMs). The authors argue that the stability-plasticity dilemma is particularly severe in this parameter-efficient setting, where adaptation is confined to shallow modules. To tackle this, they propose MARS (Memory-adaptive Router with Statistical control), a modular framework that decouples the frozen encoder from an expandable, adaptive capacity layer. The core contributions are two-fold: (1) Statistically-Grounded Slot Expansion (SGSE), a mechanism that formulates the decision to add new model capacity (slots) as a statistical test based on router confidence, providing formal guarantees against uncontrolled growth; and (2) Dual-Stage Contrastive-Distillation Adaptation (DCDA), a replay-free strategy that integrates new slots using supervised contrastive learning and preserves knowledge from past tasks via anchor-based distillation. Experiments on diverse vision (CIFAR-100, Tiny-ImageNet) and NLP (ASC) benchmarks demonstrate that MARS achieves state-of-the-art performance, outperforming strong baselines in the frozen-encoder setting.
+
+### Strengths
+1. Principled and Theoretically Grounded Capacity Expansion: The standout contribution of this work is SGSE. It replaces common heuristic-based triggers for network expansion with a rigorous statistical framework. 
+2. Effective and Replay-Free Knowledge Retention: The DCDA mechanism is an elegant and effective solution for integrating new knowledge while preserving old. 
+3. High Relevance to Modern Machine Learning Paradigms: The paper is exceptionally well-positioned within current research trends.
+4. Comprehensive and Rigorous Empirical Validation: The authors validate MARS on a diverse suite of benchmarks, including multi-task vision classification
+
+### Weaknesses
+1. Dependence on Frozen Encoder Quality: The performance of MARS is fundamentally tied to the quality of the representations from the frozen LPM. 
+2. System Complexity and Hyperparameter Sensitivity: The complete MARS system, while modular, involves a significant number of components and associated hyperparameters
+3. Potential Scalability Concerns for the Router: The per-example computational overhead scales linearly with the number of active slots as shown in Theorem 3
+
+### Questions
+1. The SGSE mechanism is a cornerstone of your method, designed to control the rate of "false alarm" expansions. Could you please report the final number of slots ($S_{T}$) created in the CIFAR-100, Tiny-ImageNet, and ASC experiments
+2. Theorem 2 provides a retention bound that relies on the assumption that old-class features are well-approximated by the stored anchors (i.e., they lie within a distance $\delta$). How is this coverage assumption maintained in practice, especially as the number of tasks increases and the fixed number of anchors per slot must represent an increasingly diverse set of feature distributions?
+3. The DCDA mechanism is entirely replay-free. Have you considered a hybrid approach where a small, fixed-size replay buffer is used to supplement the anchor-based distillation?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4

@@ -1,0 +1,243 @@
+# On the Scaling Flaws of Verifier-Guided Beam Search
+
+- Decision: Reject
+- Scores: 6, 8, 2, 2, 4
+
+## Abstract
+Large language models (LLMs) struggle with multi-step mathematical reasoning, for which inference-time scaling—via sequential or parallel scaling—has emerged as a promising strategy. While recent advances have focused on sequential scaling, we revisit the less-explored parallel scaling approach, verifier-guided beam search, to examine its limitations. In this paper, we argue that its strength is, paradoxically, also its limitation: verifiers can boost performance under limited sample sizes by elevating promising reasoning paths, yet the same mechanism can also hide or cut off the valid paths that lead to correct answers. Empirically, we uncover a systematic issue--scaling flaws--in verifier-guided beam search, across models, benchmarks (GSM8K, MATH, AIME25), and verifier types (outcome value models, process reward models). Specifically, the search outperforms repeated sampling at small sample sizes but its advantage diminishes—and ultimately reverses—as the sample size grows. We attribute this to verifier failures: imperfect verifiers misrank candidates and can erroneously prune all valid paths, with these effects exacerbated on more challenging scenarios. To mitigate verifier failures, we explore reducing reliance on verifiers and conduct preliminary investigations using two simple methods.
+Overall, our findings expose fundamental limitations of verifier-guided beam search and  explain why this line has struggled to realize its potential.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper investigates the scaling properties of verifier-guided beam search and finds that at higher sample sizes, it is outperformed by simpler methods such as repeated sampling (in terms of coverage) for math reasoning benchmarks. The experimental setup considers different verifier-guided search methods (OVM, PRM) on different benchmarks (AIME, GSM, MATH), using different models (Mistral, DeepSeek, Qwen). The results are compelling and would make a decent contribution to the literature. The clarity of the results and findings could be improved significantly. I offer some suggestions, and would be happy to increase my score if the authors implement these changes.
+
+### Strengths
+- ***Experiments across models and settings***: I was impressed by the breadth of experiments in the paper. The authors analyze models by 3 providers, and conduct reasonable ablations to pinpoint the source of flaws.
+- ***Insights***: The result of these experiments is that the paper offers many insights on the nature of inference scaling with verifier-guided sampling, such as verifiers discounting valid paths.
+- The experimental setup of finding "valid" paths by completing partial rollouts is really interesting.
+
+### Weaknesses
+- Some relevant literature is not cited (e.g. scaling flaws appeared in a paper titled "inference scaling flaws" that has similar findings in the case of repeated resampling, which is a similar setting as the paper. It would be good to clarify the differences between the settings)
+- Math is the only domain that is considered. While this is not a big drawback, the authors should be more careful in making claims about broad generalizability of their results across domains.
+- The writing could be improved significantly. I had to read the paper multiple times to understand basic things about the setting and results. 
+- Is the comparison between repeated sampling and verifier-guided search a fair comparison? I think the comparison should be based on the amount of compute used for generating the results, rather than the number of candidate solutions, but I think there isn't a strong corollary between these two right now.
+
+### Questions
+I think the paper is promising, and I would be happy to increase my score if the following questions/concerns are addressed:
+- Make it clear that the paper is focused on mathematical reasoning, not general reasoning, in the abstract/intro (It is currently addressed at the tail end of the paper and mentioned in section 2, though the abstract and intro mention the benchmark names)
+- Make a fair comparison between repeated sampling and verifier-guided search (based on compute used, rather than just sample size)
+- Improve writing (some suggestions for doing so: reduce jargon in the main text; explain the methods used for alleviating verifier failures more clearly;
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+It's an open secret in the test-time compute world that PRMs don't really work. This paper does a deep dive into that.
+
+Framing: Modern test-time scaling methods for multi-step reasoning can be broadly categorized as sequential generation (e.g., R1), and parallel generation (e.g., beam search, MCTS, etc.) However, the parallel methods usually perform worse in practice, especially as the problem difficulty scales. The authors explore this specific phenomenon in this paper, and they call this behavior "scaling flaws of verifier-guided beam search". The authors show that verifier-guided beam search outperforms repeated sampling at small sample scale but underperforms it at large sample scale. They attribute these scaling flaws to verifier failures which may erroneously prune valid tasks.
+
+Experiments are done on math datasets (GSM8k, AIME25, MATH), using various 7B models (Mistral, DeepSeek, Qwen)
+
+### Strengths
+- I think the paper is a very relevant finding/exploration in a field that's currently very popular
+- Experiments are very thorough, covering various models, eval benchmarks, and verifier types (ORM and PRM)
+    - I also like that the authors were careful with the specific details like repeating the experiment 3 times and reporting the average.
+    - Lots of experiments conducted and reported.
+- Exposition and motivation framing are well done. I like that the authors took time to explain key concepts even though they may be simple to readers with more context (e.g., "coverage")
+
+### Weaknesses
+- The conclusion seems a bit obvious to me, and I don't feel like it's very groundbreaking. I mean -- Mathematically, if the verifiers were always correct (i.e., oracle verifier), then the parallel scaling is mathematically guaranteed to perform stronger than the sequential scaling. By this line of reasoning, the contrapositive would suggest that the fact that it doesn't perform stronger means that the issue is with the verifiers being wrong.
+- From my understanding of the paper, it's claiming that these scaling flaws are dependent on imperfect verifiers. However, I'm not confident how well these conclusions will still hold if we boost the strength of the verifiers. If we use a very strong verifier, I imagine that these scaling flaw effects will diminish. I think this exploration would add some value to the paper.
+
+### Questions
+- I think the countdown task is something that would be quite appropriate for this exploration, since the verification step for that task is very simple.
+- Other domains like code would also be nice to explore
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper investigates test-time scaling with verifier guidance (specifically, outcome value models (OVMs) and process reward models (PRMs)), and argues that a significant bottleneck for verifier-guided beam search is "verifier failures", i.e. imperfections in the verifiers which causes them to dismiss correct solution paths.
+
+Overall, I believe the paper lacks clarity and novelty (see below), and **I recommend rejection.**
+
+### Strengths
+The evaluation of limitations of verifier-guided beam search in the form of this paper seems novel and interesting. The authors convincingly show that a major bottleneck lies in the verifier, not the generating model, through experiments across datasets, verifiers, and generation models.
+
+### Weaknesses
+**Clarity.** The paper lacks clarity. Often, concepts are used without being defined, or only being defined later in the paper (see "Questions" below). Sometimes the descriptions the authors provide (e.g., of an experiment) are somewhat vague.
+
+**Novelty.** The fact that verifiers lack behind pass@k of parallel generation (which is the baseline the authors compare against in this paper) is well-known in the context of best-of-n sampling, e.g. compare [1]. While I'm not aware of any work that shows similar results for beam search (as this paper does), it is not too surprising that the same result is true for beam search, and the contribution of this paper is limited.
+
+**Unclear Methodology.** The reasons for the way the authors conduct their experiments is unclear, e.g.: why do you train your own verifiers (instead of using pretrained verifiers)? (In particular, the Appendix looks like you are training separate generation models for both types of verifiers -- why?) Why do you only evaluate pass@k (instead of downstream accuracy)? Why is the way you  evaluate the "validity" of paths (by sampling either 4 or 16 rollouts) reasonable? (E.g. it is unclear why the number of rollouts differs across datasets, and why 4 or 16 rollouts would be sufficient for measuring validity as defined by the possibility of generating a correct complete path from a partial path.) Some of the results are also not clear, e.g. Figure 1 and Figure 2 (compare with the "Questions" below). Other weaknesses of the experiments are outlined in "Questions" below.
+
+
+
+
+
+
+
+[1] Zhang, Z., Zheng, C., Wu, Y., Zhang, B., Lin, R., Yu, B., Liu, D., Zhou, J., & Lin, J. (2025). The Lessons of Developing Process Reward Models in Mathematical Reasoning. arXiv preprint arXiv:2501.07301. Available at https://arxiv.org/abs/2501.07301.
+
+### Questions
+- a lot of the fonts in all four figures are a bit too small
+- "Definition" (line 76) not very clear. E.g., could you define the underlying spaces here (vocabulary, tokens, ...)? Is $a$ contained in $s^T$?
+- definition of "repeated sampling" (line 84ff): the definition is not very clear either; "repeatedly sampling a set of solution paths" almost sounds like sequential sampling. It should be made more clear here that this refers to independently sampling the paths (likely in parallel).
+- typo line 123: use -> uses
+- section 2.3, the definitions of OVM vs PRM are very vague. In particular, I was not familiar with OVMs and had to look up the paper to understand how they differ from PRMs. (The definition of PRMs is equally vague.) I think the paper would benefit from a more detailed description of these two concepts (in particular how OVMs and PRMs differ in how they're trained)
+- why are you training the OVM/PRM models? At least for PRMs there are strong pretrained models available, why not use those?
+- section 3.1: at first glance it is unclear what you plot in Figure 1 and how you evaluate different strategies. The figure/caption should make it more clear that you're evaluating "pass@k" (which is a more common name for this metric than "coverage" I believe). In particular, you're using "coverage" in section 3.1 but only defining it in section 3.2
+- In Figure 1, "Repeated Sampling" does not rely on any OVM or PRM, right? Why is it then that the plots for OVM vs PRM show different lines for "Repeated Sampling"? I would've expected a single plot with lines for 1) repeated sampling, 2) OVM-guided search, 3) PRM-guided search.
+- what's not taken into account e.g. in Figure 1 is that beam search with beam width b is computationally much more expensive than "repeated sampling" with number of samples equal to b (since beam search has to create $b*k$ beams in each iteration). Maybe a more fair comparison would be in terms of FLOPs/tokens generated/latency
+- Figure 2: I interpret Figure 2 as keeping the number of beams fixed, and increasing the number $K/b$ of candidates per beam. However, this is not entirely clear from the description and should be made more clear. Also, Figure 2 seems a bit misleading as the x-axis starts at $2^4$; what does this look like for $x\in [1,2^4]$?
+- line 266: This is not really a "Definition"
+- line 269: fix section title positioning
+- line 294ff: This paragraph is not clearly written including grammar mistakes. In particular, it's not clear what exactly the authors mean with "selection stage" (reading the next section it seems you're talking about generation vs. selection). The following paragraph is also unclear (e.g., what do you mean by "whether at least one valid path is selected when valid paths are available"? Do you mean if one of the $K$ generated continuations could lead to a correct outcome whether one of these is selected into the set of $b$ beams?)
+- why does the number of rollouts differ across datasets? Also, it is unclear why this procedure (4 or 16 rollouts) is an accurate measure of a path being "valid". An ablation over the number of rollouts would be helpful (which should show that the "validity" of paths really plateaus at 4 or 16; intuitively I would've thought you'll need many more rollouts than that)
+- Table 2: add exact model names. Also, the table would be more readable if the table itself contained more expressive descriptions instead of abbreviations. Furthermore, these results would be much stronger if the authors evaluated all three of their models on all three datasets (currently each dataset seems to have a random selection of the three models)
+- section 4.3: "First, we group the valid path sparsity across all selection stages of unsolved problems into four uniform categories": unclear what you do here. What do you mean with "unsolved problems"? How do you "group uniformly"? (Figure 4 shows bins of $<0.08$, $0.08-0.2$, $0.2-0.4$, $>0.4$, I don't see what's uniform about this?)
+- in the abstract you mention "sequential scaling (exemplified by O1 and DeepSeek)"; the abstract makes it sound like you go on to explain the gap between beam-search and sequential scaling. However, that's not what the paper does.
+- Appendix A.5.3: why are you selecting different hyperparameters (temperature, top-k, max tokens, max steps, top-p) for each dataset?
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper investigates why beam-search-based methods using verifiers don't appear to scale as well empirically as randomized approaches. The authors conduct experiments across various models and benchmarks (GSM8K, MATH, AIME25) and identify a phenomenon they term "scaling flaws." Specifically, they find that while verifier-guided beam search outperforms repeated (i.i.d.) sampling at small computational budgets, its performance advantage diminishes and ultimately reverses as the sample size (and thus the computational budget) grows. The authors attribute this to "verifier failures," where an imperfect verifier misranks candidates and prunes all valid reasoning paths from the search beam; hence they are never surfaced even when the beam is large. This does not happen in repeated sampling: performance increases as the number of samples increases (as expected).
+
+### Strengths
+The paper addresses a practical and impactful question in LLM inference, i.e., how to best allocate finite computational budget for inference time scaling. The paper does a good job at outlining some of the regimes where guided search outperforms repeated sampling, and vice versa. Clearly identifying the observed scaling flaw is also a useful contribution and documentation (for a phenomenon that may have only been observed anecdotally).
+
+### Weaknesses
+The main finding of this paper, though empirically well-demonstrated, seems theoretically obvious. Repeated sampling has a well-defined scaling property, i.e., if the probability of an iid sample $Y$ from an LLM being correct is $p$, the the probability of sampling at least one correct response in a set $\mathcal{C}$ of $n$ candidates is $P(y^* \in \mathcal{C}) = 1 - (1 - p)^n$ (this is the "infinite monkey theorem", also discussed in Brown et. al. 2024). Verifier-guided beam search, however, does not have this randomized property, and can break catastrophically if the verifier is imperfect/biased in ways that causes correct solutions to be pruned early on. In fact, opposite of repeated sampling, we can think of the probability of catastrophic verifier failure / correct candidate pruning as _growing_ with sequence length. Given this, it is not surprising that, with a large enough budget, repeated sampling will eventually outperform the greedy beam search approach. The randomized approach in Section 5 is an clear next step in ameliorating this. 
+
+[1] Brown et al 2024. https://arxiv.org/pdf/2407.21787
+
+### Questions
+- It would be interesting to know what specific properties of correct reasoning paths cause a verifier to rank it lower than an invalid reasoning path. Clearly verification failures can happen, but an error analysis on some of the common modes here would be useful?
+- The results focus on coverage, but in practice repeated sampling is followed by a best-of-N procedure. Verifier-guided search may still lead to an increase in accuracy of the selected response over repeated sampling (as also shown in prior works such as Setlur et. al 2024).
+- MCTS is dismissed in Footnote 1, but the randomized approaches in Section 5 are somewhat similar. I'm curious if the authors tried to compare.
+
+[1] Setlur et. al. 2024. https://arxiv.org/pdf/2410.08146
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper studies why verifier-guided search—where large language models use verifiers like outcome value models or process reward models to rank reasoning paths—fails to scale effectively. It finds that while verifier-guided methods outperform repeated sampling at small sample sizes, their performance grows more slowly and eventually underperforms as sample counts increase.
+
+### Strengths
+- Identifies a previously unreported failure mode—the “scaling flaw” of verifier-guided search—showing that its advantages vanish as sample size grows.
+
+### Weaknesses
+- Is missing some core citations to closely related work [1], [2] which have studied the scaling flaws when working with imperfect verifiers when doing weight updating, and repeated sampling. 
+- The empirical evidence supporting the claims of the authors is limited to small, outdated models and older benchmarks (GSM8K, MATH). Validation of the claims on a broader range of models and tasks is required. 
+- Task diversity limited to math reasoning
+- The paper stops short of connecting findings to concrete guidance for using verifier-guided inference scaling methods (e.g., how to tune beam width or combine verifier and self-consistency scores). Making this connection would significantly raise its applied impact.
+- No qualitative analysis and understanding of the type of false positive samples that strategies are differently affected by. Overall, more evidence and understanding of the described phenomenon is desirable.
+
+
+[1] https://arxiv.org/abs/2411.17501
+[2] https://arxiv.org/abs/2210.10760
+
+### Questions
+- A few controlled ablations with stronger, larger, or more calibrated verifiers to understand better what is causing the differing rates of false positives [1]
+- How does this phenomenon reproduce on other domains, bigger models, newer tasks? 
+- What types of false positives are affecting beam search more than repeated sampling qualitatively?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

@@ -1,0 +1,196 @@
+# LogiStory: A Logic-Aware Framework for Multi-Image Story Visualization
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 6, 6
+
+## Abstract
+Generating coherent and communicative visual sequences, such as image sequences and videos, remains a significant challenge for current multimodal systems. Despite advances in visual quality and the integration of world knowledge, existing models still struggle to maintain logical flow, often resulting in disjointed actions, fragmented narratives, and unclear storylines. We attribute these issues to the lack of attention to visual logic, a critical yet underexplored dimension of visual sequence generation that we define as the perceptual and causal coherence among characters, actions, and scenes over time. 
+To bridge this gap, we propose a logic-aware multi-image story visualization framework, LogiStory.
+The framework is built around the central innovation of explicitly modeling visual logic in story visualization. To realize this idea, we design a multi-agent system that grounds roles, extracts causal chains, and verifies story-level consistency, transforming narrative coherence from an implicit byproduct of image generation into an explicit modeling objective. This design effectively bridges structured story planning with visual generation, enhancing both narrative clarity and visual quality in story visualization.
+Furthermore, to evaluate the generation capacity, we construct LogicTale, a benchmark comprising richly annotated stories, emphasizing causal reasoning, and visual logic interpretability.
+We establish comprehensive automatic and human evaluation protocols designed to measure both visual logic and perceptual quality. 
+Experiments demonstrate that our approach significantly improves the narrative logic of generated visual stories. This work provides a foundational step towards modeling and enforcing visual logic in general image sequence and video generation tasks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper proposes a logicaware multi-image story visualization framework, LogiStory. The framework is built around the central innovation of explicitly modeling visual logic in story visualization. This paper also introduces LogicTale, a benchmark comprising richly annotated stories, emphasizing causal reasoning, and visual logic interpretability.
+
+### Strengths
+- This paper introduces LogicTale, a new benchmark comprising richly annotated stories based on not only classical stories but also original stories, to validate on new stories.
+- This paper also proposes a logicaware multi-image story visualization framework, LogiStory to address the challenges of visual consistency and logical coherence in a series of story visualizations by constructing a new benchmark dataset. The results show high performance of LogiStroy on LogicTale.
+- LogiStroy was evaluated on ViStoryBench-Lite to assess the generalizability of the framework. Ablation studies are also included to evaluate each module.
+
+### Weaknesses
+- The framework is composed of a complex pipeline based on a multi-agent system. 
+- The evaluation dimensions using LogiStory and the focus points of the agents are closely related, which raises the possibility that the framework may be somewhat dependent on the evaluation aspects.
+
+### Questions
+- It was stated that "no existing benchmark systematically measures whether a visual sequence, either image-based or video-based, successfully communicates the intended story in a logically coherent manner," but VinaBench[1] is a benchmark dataset that considers commonsense links and visual consistency as visual narrative generation.
+
+[1] VinaBench: Benchmark for Faithful and Consistent Visual Narratives（CVPR2025）
+
+- Will the benchmark dataset, source code, and checkpoints be made publicly available?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses a significant and well-known challenge in visual sequence generation: the lack of logical and causal coherence. The authors argue that while current models excel at generating high-fidelity images, the resulting sequences often fail as narratives, presenting disjointed actions and fragmented storylines.
+
+### Strengths
+- The problem proposed in this paper is convincing. The motivation of the paper is very clear. It correctly identifies a key gap in generative models—moving beyond single-image fidelity to narrative coherence. The explicit modeling of "visual logic" is a significant conceptual contribution.
+
+- The creation of the LogicTale benchmark is a valuable contribution to the community.
+
+### Weaknesses
+- The proposed framework is complex, involving three distinct planner agents, a global causal graph, a state recorder, a local memory buffer, and a two-stage verification loop.
+
+- The scale of the benchmark is too small to fully evaluate the method.
+
+### Questions
+- I am curious about the computational cost required to generate a story. How many refinement steps (either full regeneration or editing) are typically required per story? Does this number vary significantly with the 'Hard' difficulty stories?
+
+- How robust is this LogicMiner agent to variations in narrative style? Does it perform equally well on highly implicit causality (e.g., "The dog, remembering his master, felt sad") versus the explicit physical causality shown in the examples (e.g., "crow put pebbles into the cup," -> "rising water level" )?
+
+- The baseline naming in the results is slightly inconsistent. Section 5.1 lists GPT-4-image-1 as a closed-model baseline. However, Table 1 lists GPT4o-+GPT-image-1 , and Section 5.2.1 discusses the performance of GPT-4o. Could you clarify if these are the same model, or if GPT40-+GPT-image-1 implies a pipeline using two different models?
+
+- The qualitative results are very strong. To help the community understand the current boundaries of LogiStory, would it be possible to include a qualitative example of a failure case, perhaps from one of the 'Hard' stories? This would provide valuable context for the acknowledged limitation in "high-entity scenarios".
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper presents LogiStory, a framework for generating multi-image visual stories with a focus on logical coherence. The authors introduce the concept of "visual logic" and propose a multi-agent system to plan the narrative, combined with verification modules to refine the generated images. To evaluate their approach, they construct a new benchmark, LogicTale. The paper is well-written, and the problem it addresses is both interesting and relevant to the community.
+
+### Strengths
+1.  **Interesting and Important Task:** The paper successfully highlights "visual logic" as a critical dimension in visual storytelling. This focus enriches the task by moving beyond per-image quality to sequence-level narrative coherence, which is an important and challenging problem.
+
+2.  **Effective Framework Design:** The proposed framework, with its planning and verification stages, appears to be an effective solution to the problem identified. The qualitative results demonstrate its capability to produce more logically consistent visual narratives compared to several strong baselines.
+
+3.  **Contributions of a New Benchmark:** The introduction of the LogicTale benchmark is a valuable contribution. It provides a dedicated resource for evaluating narrative logic, and the paper's experiments on this benchmark effectively showcase the performance of the proposed method.
+
+### Weaknesses
+1.  **Limited Novelty in Core Methodology:** While the overall system is well-engineered, the primary contribution appears to be the careful orchestration of existing, powerful models (LLMs, MLLMs, and diffusion models like Flux) into a sophisticated pipeline. The novelty in terms of fundamental model architecture or learning paradigms seems limited. 
+
+2.  **System Complexity and Robustness Concerns:** The framework's effectiveness seems heavily dependent on the consistent and reliable performance of each component model (e.g., the agents). As a multi-stage pipeline, it is susceptible to error propagation, where an issue in an early stage could negatively impact the entire sequence. Additionally, this cascaded design naturally incurs significant computational overhead and latency, which could be a practical concern.
+
+3.  **Fairness of Experimental Comparison:** The experiments compare LogiStory, a highly customized pipeline for this specific task, against end-to-end models like GPT-4o and Gemini. This comparison, while informative, may not be entirely fair, as the proposed method leverages the combined strengths of multiple specialized models. It would be beneficial to discuss or explore fairer comparison settings, perhaps by comparing against other modular pipelines or by breaking down the performance gains attributable to each component.
+
+### Questions
+My main questions are related to the weaknesses detailed above. In addition, I would like to ask the following:
+
+1. **Robustness of the MLLM-based evaluation metrics:**  For instance, during the VQA-based `Narrative Causality` assessment, how can we distinguish between failures of the "evaluator" MLLM and genuine logical flaws in the generated images? Have you conducted any analysis on the reliability of the evaluator models themselves?
+
+2.  The Global Causal Verifier relies on a pre-constructed causal graph. How does the framework handle stories with very complex, non-linear, or ambiguous causal structures?
+
+I would be open to raising my score should the authors address the concerns noted above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces the concept of "visual logic" to address the challenge of generating causally and perceptually coherent visual story sequences. The authors define visual logic as the perceptual and causal coherence among characters, actions, and scenes over time. To tackle this, they propose `LogiStory`, a framework composed of two main parts:
+1.  **Logic-Aware Multi-agent System:** This system performs structured narrative planning. It uses three agents (`SceneCrafter`, `LogicMiner`, `ShotPlanner`) to decompose a story text $S$ into character/object definitions $E$, extract a causal chain of key events $K$, and plan a sequence of detailed visual shot specifications $P = \\{p_1, ..., p_T\\}$.
+2.  **Visual Logic Enhancement Module:** This module enforces coherence during the generation of the image sequence $I = \\{I_1, ..., I_T\\}$. It includes:
+    *   A **Local Causal Monitor** that checks step-by-step narrative plausibility by calculating a causal score $\\psi_t = C_p(I_t | M_{t-1})$ based on a memory buffer $M_{t-1}$.
+    *   A **Global Causal Verifier** that uses a story-level causal graph $G_{causal}$ to validate state transitions and guide an image refinement process based on predefined thresholds $\\tau_1$ and $\\tau_2$.
+
+To facilitate development and evaluation, the authors construct `LogicTale`, a new benchmark of 60 stories with rich annotations for causal events. They also propose a comprehensive evaluation protocol that measures "visual logic" and perceptual quality. Experiments show that `LogiStory` significantly outperforms strong open-source and closed-source baselines, particularly in metrics related to narrative logic and readability.
+
+### Strengths
+1.  **Novel and Important Problem Formulation:** The paper's primary strength is its formalization and focus on "visual logic." This provides a clear, principled target for a key failure mode of current generative models—the lack of narrative and causal coherence in sequences.
+2.  **Well-Designed and Interpretable Framework:** `LogiStory` is a thoughtfully engineered system. The multi-agent planner provides an interpretable intermediate representation, and the dual-level verification (local and global) robustly enforces logical consistency.
+3.  **Comprehensive and Rigorous Evaluation:** The experimental evaluation is a major strength. The authors compare against a wide range of powerful baselines, including top-tier commercial models, and use a combination of automatic and human studies for robust validation.
+4.  **Creation of a Valuable Benchmark:** `LogicTale` is a significant contribution in its own right, enabling the community to move beyond simple frame-level metrics and systematically evaluate the storytelling capabilities of generative models.
+5.  **Exceptional Clarity and Presentation:** The paper is written with outstanding clarity. Complex ideas are explained intuitively, and the high-quality figures and detailed appendix make the work easy to understand and reproduce.
+
+### Weaknesses
+1.  **Scale of the LogicTale Benchmark:** The most apparent weakness is the scale of the `LogicTale` benchmark (60 stories). While the authors justify this with a saturation analysis, a larger dataset would provide stronger evidence for the generalizability of the findings.
+2.  **Reliance on MLLMs for Automatic Evaluation:** The automatic evaluation protocol for core visual logic metrics relies on judgments from MLLMs, which raises concerns about potential evaluation bias (an "LLM-evaluating-LLM" loop). While mitigated by high correlation with human ratings, this is a methodological limitation.
+3.  **Complexity and Latency:** `LogiStory` is a multi-stage pipeline involving several LLM/MLLM calls, which likely entails significant computational cost and latency. A discussion on the framework's efficiency and robustness to component failures would be beneficial.
+4.  **Insufficient Ablation of Refinement Mechanism:** The paper states that refinement is done via "image editing tools" for scores in the range $[\\tau_1, \\tau_2)$. A more detailed analysis or ablation of this step (e.g., frequency of use, comparison to simple regeneration) would strengthen the paper.
+
+### Questions
+1.  **On Evaluation and Potential Bias:** Did you experiment with different families of MLLMs for evaluation (e.g., using an open-source model to evaluate proprietary model outputs) to test the robustness of the evaluation scores?
+2.  **On the `LogicMiner`'s Robustness:** The `LogicMiner` agent is crucial for constructing the causal graph. How robust is its capability to infer implicit events, especially for subtle logic? What are its common failure modes, and how does the framework handle an incorrect causal graph?
+3.  **On Verifier Interaction:** In Table 3, the `Instance Consistency` score for "Ours (w/ local)" is 4.24, while for "Ours (w/ both)" it is 4.23. This is a minor, perhaps insignificant, difference. Could you offer any insight into why adding the `Global Causal Verifier` might not strictly improve this specific metric?
+4.  **On the Refinement Process:** Regarding the image refinement step triggered when $\\psi_t \\in [\\tau_1, \\tau_2)$, could you provide statistics from your experiments on the frequency of this action (accept vs. refine vs. regenerate)? What is the computational overhead of this step compared to a simple regeneration?
+5.  **On Scalability:** How do you envision the framework scaling to more complex narratives with many characters, parallel plotlines, or non-linear temporal structures? Would the current causal graph representation be sufficient?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

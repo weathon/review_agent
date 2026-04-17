@@ -1,0 +1,162 @@
+# RAEE: A Robust Retrieval-Augmented Early Exit Framework for Efficient Inference
+
+- Decision: Accept (Poster)
+- Scores: 6, 8, 2
+
+## Abstract
+Deploying large language model inference remains challenging due to their high computational overhead.
+Early exit optimizes model inference by adaptively reducing the number of inference layers.
+Current methods typically train internal classifiers or use heuristic methods to determine the exit layer.
+However, those methods either introduce significant training overheads or lead to performance degradation.
+To address these limitations, this paper proposes RAEE, a robust Retrieval-Augmented Early Exit framework that not only enables early exit but also enhances model performance through corrective exit information at intermediate layers.
+This paper first demonstrates that the early exit problem can be effectively modeled as a distribution prediction problem, in which the distribution can be further approximated through the exit information of similar data. 
+Subsequently, this paper introduces the process of collecting exit information of correct predictions and the steps to construct the retrieval database.
+Finally, leveraging the pre-constructed retrieval database, RAEE utilizes the exit information from retrieved similar data to guide the backbone model's exit.
+Experimental results demonstrate that RAEE can not only accelerate inference while achieving robust zero-shot performance across eight downstream tasks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes RAEE, a robust Retrieval-Augmented Early Exiting framework for efficient inference. RAEE first builds the retrieval dataset that records the correct exit layer, then retrieves the nearest neighbor to get the exit layer. Experimental results show its effectiveness.
+
+### Strengths
+1. Using $k$NN-based retrieval method for early exiting is novel. 
+2. This paper is simple, effective, and intuitive, even without additional technical contributions.
+3. Experimental results are good.
+
+### Weaknesses
+1. The paper lacks a visualization of early-exit layers. What proportion of data exits early at each layer for each dataset?
+
+2. Why does your method introduce additional time overhead on T5 in Figure 3?
+
+3. Is the proposed method effective for supervised methods? For example, for a T5 model fine-tuned on SST-2.
+
+4. Section 4.5 may not be very solid. Could you provide the performance when using a fixed layer, for example, the six values from layers 27 to 32?
+
+### Questions
+See weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper proposes RAEE (Retrieval-Augmented Early Exit), a training-free early exit framework that leverages a retrieval database built from the training set to dynamically select an optimal exit layer during inference. The key insight is that early exit can serve not only as an acceleration mechanism but also as a **corrective** one—intermediate layers sometimes outperform the final layer. RAEE models early exit as a distribution prediction problem and approximates this distribution by aggregating exit behaviors of semantically similar training examples retrieved via FAISS. Experiments across eight GLUE tasks and multiple backbone models (RoBERTa-Large, T5-Large, Llama-3-8B, Gemma-7B) show that RAEE consistently reduces latency (by nearly half for large models) while **improving accuracy**, often surpassing the full model baseline.
+
+### Strengths
+1. Originality: Proposes a novel perspective—early exit as a corrective mechanism—and implements it via retrieval augmentation, avoiding the need for trainable classifiers.
+2. Quality: Comprehensive experiments across 8 tasks and 4 model families; includes ablation on $k$, database size, and OOD generalization.
+3. Clarity: Figures 1–2 and Algorithms C.1–C.2 make the method transparent. The “correct ratio” analysis (Figure 1b) is particularly compelling.
+4. Significance: Offers a practical, zero-shot solution to LLM inference efficiency that simultaneously boosts accuracy—a rare win-win in model compression.
+
+### Weaknesses
+1. Dependency on in-distribution labeled data: RAEE requires access to the **training set with ground-truth labels** to build the database. This limits applicability in zero-shot or unsupervised settings. The paper acknowledges this but does not explore alternatives (e.g., using pseudo-labels or confidence-based proxies).
+2. Inconsistent gains across tasks: Performance improvements vary widely (e.g., CoLA: +12.45%; SST-2: +1.03% with RoBERTa). The paper does not analyze **why**—e.g., whether task difficulty, label distribution, or model calibration plays a role.
+3. Embedding quality sensitivity: The method assumes that the query embedding (from backbone or BERT) captures semantic similarity well. No ablation compares different embedding sources (e.g., [CLS] vs. mean pooling vs. Sentence-BERT).
+4. Limited OOD validation: Only tested on summarization with WikiText→CNN/XSum. More diverse OOD shifts (e.g., domain, style, language) would better assess robustness.
+5. Scalability concerns: The retrieval component's latency with larger databases remains unexplored, raising practical deployment questions.
+
+### Questions
+1. The performance gain is dramatic on CoLA but marginal on SST-2. Can the authors provide an analysis of **which types of tasks or data distributions benefit most** from RAEE? Is it related to task difficulty or the full model’s calibration?
+
+2. RAEE requires ground-truth labels to build the database. Have the authors considered a **self-supervised variant** that uses high-confidence predictions (e.g., $p > 0.95$) as pseudo-labels? This would extend applicability to unlabeled data.
+
+3. In Algorithm C.1, the key is the embedding from the backbone’s first layer ($h_0$). How sensitive is performance to the choice of embedding layer or pooling strategy? A brief ablation would strengthen the method’s robustness claim.
+
+4. The OOD experiment uses a next-token prediction setup on WikiText. Could RAEE be adapted to **classification tasks without labels** in the OOD setting? If not, what are the fundamental limitations?
+
+5. Given the observed variance in baseline performance, could the authors provide more details about their baseline implementation and evaluation protocol? Specifically, were the reported baseline scores obtained through standard evaluation procedures or customized setups?
+
+6. As the retrieval database scales up, how does the method maintain inference efficiency? Have the authors tested the framework with larger database sizes (e.g., 100K+ examples) and measured the corresponding latency impact?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper presents a retrieval-augmented early exit framework that enhances the overall model performance by classifying the input at one of the intermediate exit points. The proposed RAEE model can outperform the full model performance while improving the inference speed of the model. The method does not require any training or additional classifiers to which makes the method efficient. The method is tested upon eight downstream tasks which further validates the method importance.
+
+### Strengths
+1. The method improves the efficiency of a model by early exiting where the decision to make an exit is based on the analysis of similar previously seen samples helping in training free-exiting.
+
+2. The method utilises the data characteristics like word embedding to map the incoming sample to the existing database and then directly assigning the layer to exit based on the samples in database to which the incoming sample closely resembles.
+
+### Weaknesses
+1. While authors claim that the method is zero-shot while they use the training samples to create the database making the method supervised, this claim makes the proposed method confusing.
+
+2. The provided method cannot be easily generalised to other tasks except classification which is a major issue with this work.
+
+3. Why there are different baselines with different backbone, this makes it unfair for a fair comparison all methods should be tested on the same underlying backbone model. For instance, DeeBERT can be applied to T5 and Gemma but authors do not report.
+
+4. The methodology of the work closely aligns with an existing work [1] still no comparison with it is found.
+
+5. There are multiple methods which prove and show that if monitored properly early exits can outperform the full models which are not compared and not even cited which shows that the method has a less hold of the existing literature [2], [3], [4], [5] and many more.
+
+[1] https://ieeexplore.ieee.org/document/11161749
+
+[2] https://arxiv.org/abs/2502.00745 [ICLR 2025]
+
+[3] https://proceedings.neurips.cc/paper_files/paper/2024/file/ea5a63f7ddb82e58623693fd1f4933f7-Paper-Conference.pdf
+
+[4] https://openaccess.thecvf.com/content/WACV2024/papers/Meronen_Fixing_Overconfidence_in_Dynamic_Neural_Networks_WACV_2024_paper.pdf
+
+[5] https://aclanthology.org/2025.findings-acl.1209.pdf
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,197 @@
+# Safe Learning Through Controlled Expansion of Exploration Set
+
+- Decision: Reject
+- Scores: 2, 2, 2, 4
+
+## Abstract
+Safe reinforcement learning (RL) aims to  maximize expected cumulative rewards  while satisfying safety constraints, making it well-suited for safety-critical applications. In this paper, we address the setting where the safety of state-action pairs is unknown a priori, with the goal of learning an optimal policy while keeping the learning process as safe as possible. To this end, we propose a novel approach that guarantees almost-sure safety by progressively expanding an exploration set, leveraging previously verified safe state-action pairs and a predictive Gaussian Process (GP) model. We provide theoretical guarantees on asymptotic convergence to optimal policy and bound on the online regret. Numerical results on benchmark problems with both discrete and continuous state spaces show that our approach achieves superior safety during  learning and effectively converges to optimal policies.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper studies safe reinforcement learning (Safe RL) under unknown safety constraints and proposes an algorithm that guarantees almost-sure safety by gradually expanding an exploration set based on Gaussian Process (GP) predictions. While the topic is relevant and important, I find that the paper does not meet the scientific and originality standards expected at ICLR. The main concerns are the lack of novelty, insufficient discussion of related work, and limited empirical evaluation.
+
+### Strengths
+1. This paper is easy to follow. Motivations behind this paper is clearly explained.
+1. The proposed method is technically sound.
+
+### Weaknesses
+1. Several existing studies have already addressed Safe RL with almost-sure safety guarantees, such as Turchetta et al. (2016) and Wachi et al. (2020). These works also model the safety cost function with Gaussian Processes and define safe regions based on pessimistic predictions. The present paper does not cite or discuss these prior studies, nor does it explain clearly what distinguishes its setting or contributions.
+
+    - Turchetta, Matteo, Felix Berkenkamp, and Andreas Krause. "Safe exploration in finite markov decision processes with gaussian processes." Advances in neural information processing systems 29 (2016).
+    - Wachi, Akifumi, and Yanan Sui. "Safe reinforcement learning in constrained markov decision processes." International Conference on Machine Learning. PMLR, 2020.
+
+1. Although the authors may want to argue that the above previous works assume deterministic transitions or state-only safety functions, they do not analyze how these assumptions fundamentally change the problem or the level of difficulty. A more detailed comparison and discussion are necessary to clarify the true novelty of this work.
+
+1. The core ideas (i.e., using a GP to predict the safety cost function and defining a safe region via upper confidence bounds) are already established in the above literature. The proposed method seems to be a minor variation rather than a conceptual advancement. The paper should better articulate what technical challenge is being solved here that was not addressed by earlier approaches.
+
+1. The regret bound and convergence results appear to be straightforward extensions of existing results for safe exploration and constrained MDPs. The derivations largely follow standard arguments, and no genuinely new theoretical insight is provided. The theoretical section does not contribute sufficient novelty to justify publication.
+
+1. The experimental evaluation is not convincing. Overall, the experiments are too limited to support the claims of effectiveness.
+    - The comparison with ActSafe is limited to a simple Gridworld toy example.
+    - The results on the Safety-Gymnasium benchmark include only CPO as a baseline. However, CPO handles different types of constraints, so the comparison is not entirely fair or sufficient.
+    - While Safety-Gymnasium is a suitable benchmark, a broader set of baselines are needed to demonstrate the advantage of the proposed method.
+
+### Questions
+I do not have any question.
+
+In summary, the paper lacks sufficient novelty in both algorithmic and theoretical aspects. The related work section does not adequately situate the contribution in the context of prior Safe RL research, and the experimental results are not strong enough to justify publication. I therefore do not recommend acceptance at ICLR.
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a safe exploration method with a predictive Gaussian process model. Asymptotic convergence to the optimal policy and a bound on online regret are provided.
+
+### Strengths
+The addressed problem is important, and the presentation of the paper is fair.
+
+### Weaknesses
+**Weaknesses:**
+1. The framework of safe exploration and expansion with a predictive Gaussian Process (GP) model is not novel; similar ideas have already been explored in [1]. Moreover, previous works [1–3] have addressed the case without any prior knowledge of the safety or cost functions. None of these studies is cited or discussed in the related works, which gives the impression that the authors are not fully aware of existing research in this area.  
+2. The theoretical results presented in Theorem 1 and Theorem 2 appear to be very similar to those in [1]. However, the paper does not clearly articulate how these results differ from or improve upon prior work. This omission raises concerns about the originality and depth of the theoretical contribution.  
+3. The proposed method does not effectively address safety during exploration, a key issue that has already been handled in prior GP-based frameworks such as [2]. As a result, the claimed novelty in “safe exploration” seems unsubstantiated.  
+4. The experimental evaluation is limited and lacks diversity. The gridworld environment is overly simplistic, while CartPole and PointGoal1 are of comparable complexity and fail to demonstrate scalability. The experimental section also lacks logical organization and a comprehensive summary. Since all case studies show similar trends, presenting them separately in the main text seems unnecessary.
+
+[1] A. Wachi, Y. Sui, Safe reinforcement learning in constrained Markov decision processes. ICML 2020.
+[2] A. Wachi, and et al, Safe exploration in reinforcement learning: a generalized formulation and algorithms, NeurIPS 2023. 
+[3] Akifumi Wachi, Wataru Hashimoto, Kazumune Hashimoto, Long-term Safe Reinforcement Learning with Binary Feedback, AAAI Conference on Artificial Intelligence (AAAI), 2024.
+
+### Questions
+Given the limited theoretical contribution and the lack of comprehensive experimental validation, I do not have further questions for the authors.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces LearnSEES, a novel algorithm for Safe Reinforcement Learning in an online episodic setting. The core objective is to maximize cumulative reward subject to an almost-sure safety constraint, meaning every single transition must satisfy $c(s_t, a_t) \le \epsilon_{\text{risk}}$. Crucially, the cost function $c(s, a)$ is assumed to be unknown. The method addresses this by starting with an initial safe set and iteratively expanding it. At each episode, a Gaussian Process (GP) is trained on collected cost data to provide a pessimistic upper confidence bound (UCB) on the cost for unvisited state-action pairs. This bound is used to define a new, larger safe exploration set $S_n$. Within this set, a policy is learned using a UCB-augmented Q-learning approach, which explicitly penalizes observed unsafe transitions. The authors provide theoretical guarantees for asymptotic convergence to the optimal safe policy and a finite-episode online regret bound. Experiments on Gridworld, CartPole, and Safety-Gymnasium benchmarks demonstrate superior safety performance during training compared to baselines.
+
+### Strengths
+The paper presents a novel combination of techniques to enforce a very strong safety guarantee. The use of a GP-based pessimistic UCB to define a progressively expanding, almost-surely safe exploration set $S_n$ is a creative and sound approach to tackle the unknown safety constraint problem. While the concept of safe set expansion is not new (e.g., Berkenkamp et al., 2017), the integration with finite-horizon Q-learning and the explicit focus on almost-sure safety for every transition during the entire learning phase is a valuable contribution to the Safe RL literature. 
+
+The paper is well-structured, and the technical development is rigorous. The theoretical analysis, including the asymptotic convergence proof (Theorem 4.1) and the online regret bound (Theorem 4.2), provides a solid foundation for the proposed algorithm. The explicit handling of unsafe transitions by setting $Q(s, a) = -1$ is a clean, practical mechanism within the Q-learning framework to discourage high-risk exploration.
+
+### Weaknesses
+1. The entire framework hinges on the use of a Gaussian Process (GP) to model the cost function $c(s, a)$ and provide reliable uncertainty estimates. While GPs are excellent for low-dimensional, continuous problems, they are notoriously non-scalable. The computational complexity of GP inference is typically $O(N^3)$, where $N$ is the number of data points. For any realistic robotics task (e.g., manipulation, locomotion) with high-dimensional state and action spaces, the number of required samples $N$ quickly becomes intractable. The authors mention that other models could be substituted if they provide epistemic uncertainty, but the theoretical guarantees rely directly on the GP's properties (e.g., the confidence bound in Eq. 3). This reliance severely limits the practical applicability of LearnSEES to the very domain (robotics) that motivates the strong safety guarantees.
+
+2. The theoretical analysis and the Q-learning update (Eq. 4) implicitly assume a finite or discretizable state-action space, which is a standard limitation for UCB-style Q-learning. While the GP handles continuous spaces, the overall framework, especially the regret analysis, is more aligned with tabular or heavily discretized settings. The paper needs to be more explicit about how the algorithm handles continuous state-action spaces in the Q-learning and exploration phases, beyond just the GP prediction.
+
+3. The experiments, while demonstrating the safety advantage, are conducted on relatively simple environments (Gridworld, CartPole, and a few Safety-Gymnasium tasks). To truly validate the method's significance for robotics, a demonstration on a more complex, high-dimensional continuous control task (e.g., a challenging MuJoCo environment or a real-world system) is essential. The current results, while positive, do not fully alleviate the concerns about scalability and the GP's performance in complex domains.
+
+### Questions
+1. The $O(N^3)$ complexity of the GP is a major bottleneck. Can the authors elaborate on how they envision scaling this approach to high-dimensional continuous control problems (e.g., 10+ state dimensions, 3+ action dimensions)? Have the authors considered sparse GP approximations or deep kernel learning to maintain the uncertainty estimates while improving scalability? If so, how would the theoretical guarantees (Theorems 4.1 and 4.2) be affected by the approximate nature of these models?
+
+2. The policy update uses $\max_{a' \in A} Q_t^n(s', a')$ in Equation 4, which is characteristic of discrete action spaces. Given that CartPole and Safety-Gymnasium are often treated as continuous control problems, how is the continuous action space handled in practice? Is the action space discretized, and if so, how does the discretization density affect the almost-sure safety guarantee?
+
+3. The algorithm requires an initial safe exploration set $S_0$. In real-world applications, identifying a non-trivial $S_0$ that is guaranteed to be safe can be a significant challenge, often requiring expert knowledge or extensive pre-testing. Can the authors discuss the sensitivity of LearnSEES to the size and quality of $S_0$? For instance, what happens if $S_0$ is too small or, worse, contains a few unverified unsafe points?
+
+4. While the paper correctly notes that CMDP methods enforce constraints in expectation, a more direct empirical comparison to state-of-the-art model-free Safe RL algorithms (e.g., CPO, PPO-Lagrangian) on the Safety-Gymnasium tasks would strengthen the paper. Specifically, a plot showing the instantaneous constraint violation (not just cumulative) for LearnSEES vs. a well-tuned CMDP method would clearly highlight the benefit of the almost-sure safety approach during the early, critical phases of learning.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a model-free Safe Reinforcement Learning (Safe RL) algorithm, LearnSEES, that aims to ensure safe exploration by progressively expanding an exploration set of verified safe state–action pairs. A Gaussian Process (GP) model predicts the cost and uncertainty of unexplored pairs, and the safe region is expanded cautiously based on upper confidence bounds. Learning occurs only within this safe set via Q-learning with an exploration bonus.
+The authors prove asymptotic convergence to the optimal policy within the safe sub-MDP (Theorem 1) and establish a finite-time regret bound of O(logN) (Theorem 2). Experiments on several benchmarks demonstrate that the method attains low violation rates and near-optimal performance compared with baselines.
+
+### Strengths
++ Introduces an incremental safe-set expansion mechanism using GP uncertainty estimates.
++ Provides asymptotic and finite-time theoretical analyses that link safe exploration to standard Q-learning bounds.
++ Achieves low empirical violation rates in both discrete and continuous benchmarks.
+
+### Weaknesses
+-  Violations may still occur during training and are merely controlled per episode.   The theory only supports a high-probability bound on the number of violations created by the Gaussian Process (GP), not a zero-violation or truly almost-sure guarantee.
+
+- Equation (3) defines the exploration set as 
+$
+    S_n = \{(s,a) : \max_a \mu_n(s,a) + \alpha_n k_n(s,a;s,a) \le \epsilon_{\text{risk}}\},
+$
+    which requires all actions at a state to be safe. This contradicts Definition~3.1, which states that a state is safe if there exists at least one safe action.
+
+- The paper does not define the noise model, kernel family, or confidence parameter $\alpha_n$ that ensure a uniformly valid upper confidence bound (UCB) over all  queried $(s,a)$ pairs.  The proofs of Theorems~1--2 do not condition on or invoke the GP concentration events, meaning the claimed probabilistic safety guarantees are not rigorously established.
+
+- The regret proof builds on Yang et~al. (2021), which assumes specific step-size and UCB schedules not verified for the proposed implementation.
+
+### Questions
+How is “almost-sure safety” defined formally?  Is it per step, per episode, or over all training trajectories?
+
+How are the GP kernel, noise variance, and $\alpha_n$ selected to achieve valid uncertainty bounds?
+
+How does the regret bound scale if the GP misclassifies a safe pair as unsafe?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3

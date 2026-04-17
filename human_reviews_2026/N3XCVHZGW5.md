@@ -1,0 +1,193 @@
+# Compositional amortized inference for large-scale hierarchical Bayesian models
+
+- Decision: Accept (Poster)
+- Scores: 2, 6, 4, 4
+
+## Abstract
+Amortized Bayesian inference (ABI) with neural networks has emerged as a powerful simulation-based approach for estimating complex mechanistic models. 
+However, extending ABI to hierarchical models, a cornerstone of modern Bayesian analysis, has been a major hurdle due to the need to simulate and process massive datasets. 
+Our study tackles these challenges by extending compositional score matching (CSM), a divide-and-conquer strategy for Bayesian updating using diffusion models. 
+We develop a new error-damping estimator to address previous stability issues of CSM when aggregating large numbers of data points. 
+We first verified the numerical stability with up to 100,000 data points on a controlled benchmark. 
+We then evaluated our method on a hierarchical AR model, achieving competitive performance to direct ABI baselines on smaller problem sizes while using less than one full model simulation for larger problem sizes. 
+Finally, we address a large-scale inverse problem in advanced microscopy with over 750,000 parameters, demonstrating its relevance to real scientific applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes a compositional diffusion model technique for tackling inference in hierarchical Bayesian models with large amounts of variables, which could be especially useful in the case where generating data from the model is a significant bottleneck. Further, we may not have access to an explicit likelihood function. Given a hyperprior $p(\eta)$, priors $p(\theta_j | \eta)$ and likelihoods $p(y_j | \theta_j)$, where $j \in {1,...,J}$, the task is to get the posterior $p(\eta, \theta_1,...\theta_J | y_1,...y_J)$. The paper tackles this by training diffusion models to approximate the conditional distributions $p(\eta|y_1,...y_J)$  and $p(\theta_j| \eta, y_j)$. In a similar situation, previous literature replaces the score function for noise level t with $\nabla \log p(\eta_t|y_1,...y_J) \rightarrow (1-J)(1-t)\nabla \log p(\eta_t)  + \sum_j \nabla \log p(\eta_t|y_j)$, and corrects errors with, e.g., Langevin dynamics. In the hierarchical model context, this necessitates only training score functions for $\nabla \log p(\eta_t|y_j)$, which is beneficial because we can get much more data per simulation than the joint score if we use the same neural network to represent the denoiser for all $j$. This is also more computationally scalable. The paper shows that this naive "bridging score" is unstable in the case of very large hierarchical models, however, and proposes a stabler alternative that scales better through a damping schedule and minibatching on the compositional score, and a sampling noise schedule adjustment that puts less emphasis on high noise levels.
+
+### Strengths
+- The problem itself is well motivated, and seems to address limitations with previous diffusion methods that could be applied in this domain. Scalability of compositional techniques seems to be a clear problem and the paper proposes sensible ideas for addressing it. 
+- While the SDE sampler used in the experiments does not seem to have guarantees of converging to the correct posterior in some limit, the ideas presented here seem to be applicable more broadly to methods with guarantees that include, e.g., MCMC correction steps in the generative process. 
+- The inference-time hyperparameter optimization is a pragmatic approach that seems to work quite well in practice. 
+- The paper is clearly written and is easy to follow. 
+- Ablations for different aspects of the method are in place, and increase confidence that they are useful in tackling the issue.
+
+### Weaknesses
+While I like the idea and the experiments that are present in the paper, it seems that the paper could be improved significantly:
+
+*Baselines.* The quantitative baselines in the paper are quite scarce, and it seems to be that the few baselines chosen are not particularly strong. I am not an expert on hierarchical Bayesian models, however, and it may be that I missing some wider context. Problems that occur to me: 
+- For the Gaussian toy example, comparisons to other compositional diffusion methods are presented, but we do not have quantitative results. If the main contribution of the paper is the scalable compositional diffusion method, it would seem appropriate to have quantitative comparisons on wall-clock time and inference accuracy for all the data sets against these methods.
+- On the other hand, if the focus is on improving hierarchical Bayesian models in general, then it seems that baselines from that literature should be present. It seems that the cited papers of Habermann, Arruda, Heinrich and Rodrigues would be relevant baselines. It is claimed that they are not scalable to large J, but it would be good to show this concretely at least with some of the methods, comparing to the proposed method with a given simulation budget. 
+- For the AR(1) model, comparison to an MCMC method (NUTS) as a gold standard is presented. The key improvement compared to MCMC is highlighted to be improvement in wall-clock time, but a key reason for why the wall-clock time is good is the minibatching. It seems to me that this is a technique also applicable in the real of MCMC methods, i.e., SGLD [1]. This is not directly applicable to the likelihood-free setting, but the experiments also do not consider cases where the likelihood is intractable. 
+- For the Fluorescence Lifetime Imaging experiment, the baseline is a non-hierarchical maximum likelihood estimation model. Could one not also do, e.g., MAP estimation with the full hierarchical model? It seems that the likelihood can again be minibatched for efficiency in a similar manner as in the proposed method. 
+
+*Datasets.* 
+- The paper positions itself as a simulation-based inference paper, but it does not seem to have any inference tasks where the likelihood is intractable. I understand that the method may be more scalable than many alternatives even with likelihoods accessible and extending the method to likelihood-free cases it trivial, but it seems that this would solidify the results in the paper. I do not see this as a major concern, however.
+
+*Theoretical guarantees.* The following are not major concerns, as I think they can be alleviated with methods that are mostly orthogonal to this work. See also question regarding this. 
+- The proposed method does not seem to have a guarantee of converging to the correct posterior distribution in some limit, as opposed to the standard approach of training the score $\nabla \log p(\eta_t | y_1, ... y_J)$ directly. It seems that this may make it more difficult to work with the model in practice, although the inference-time hyperparameter optimization does help here. 
+- Further, the minibatching introduces some noise into the obtained combined score functions, even at low noise levels at which the full compositional score becomes accurate. 
+
+References:
+
+[1] Welling, Max, and Yee W. Teh. "Bayesian learning via stochastic gradient Langevin dynamics." Proceedings of the 28th international conference on machine learning (ICML-11). 2011.
+
+### Questions
+- It seems that interleaving Langevin dynamics with the SDE steps would help with the theoretical guarantees. Do you think that this would be an aspect of the approach that is worth highlighting? Would this require some different design choices w.r.t. the damping factor and noise schedule? If so, it seems like adding analysis on how to apply the idea to the Langevin dynamics case would strengthen the paper.
+- The baseline where we literally train $\nabla \log p(\eta | y_1, ... y_J)$ is also missing (e.g., with some variant of the Deepset architecture). I understand that this will likely be less scalable than the proposed method and the subset examples are, and in practice the GPU memory may easily run out with a naive implementation. But it seems that the denoiser architecture could be optimized to handle large amounts of inputs $y_j$. Do you think this would be possible? 
+- Small detail: In the Appendix, it is mentioned that the noise-prediction becomes unstable for t close to 0. Is it not the opposite, that it becomes unstable at t close to 1? The v-parameterization is equivalent to the epsilon-parameterization at low noise levels since alpha_t=1 and sigma_t=0.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper targets large-scale hierarchical Bayesian inference where many conditionally independent groups share global hyperparameters. The authors build on compositional score matching and propose an SDE-based composition of group-wise posteriors that enables amortized inference at scale. To address the numerical instabilities of compositional approaches in high-noise regimes and with many groups J, they introduce a set of practical improvements: (i) an error-damping bridge that down-weights group contributions in the high-noise part of the diffusion path. (ii) An unbiased mini-batch estimator of the compositional score for large J. (iii) An inference-time noise-schedule shift to shorten the unstable region. Experiments on both toy models and a real-world fluorescence lifetime imaging application with over 750,000 parameters demonstrate that the approach is scalable, fast, and produces practically useful posterior summaries.
+
+### Strengths
+* The main strength of the paper is that it extends the amortized SBI methods to large-J hierarchical models, where previous compositional methods often failed numerically. The combination of SDE-based composition + error-damping bridge + unbiased mini-batching + inference-time schedule shift is well-motivated and empirically effective. These design choices are clearly ablated and explained.
+* The experiments are well-designed, toy cases provide insight, while the FLI case shows real-world value and impressive runtime.
+* The paper provides detailed code and settings, aiding verification and reuse.
+
+### Weaknesses
+* Writing is generally clear, but for SBI audience, it would be great if the authors could add more background about diffusion/SDE and the introduction about previous score-based SBI methods to make the paper more accessible. 
+* Line 51, The paper lists SBI and ABI as parallel notions. Consider rephrasing to avoid implying ABI is separate from SBI, and the cited ABI reference (Glöckler et al., 2024a) is itself an SBI paper. 
+* The paper cites multiple amortized hierarchical approaches but does not compare against them. Even if some implementations are hard to scale, I would appreciate it if the authors could (a) explain the obstacles and (b) add at least one baseline in a moderate-scale scenario to anchor performance and calibration.
+* The error-damping bridge alters the diffusion path by down-weighting scores in the high-noise regime; while highly effective, it likely changes the target path measure. Could you add a theoretical discussion (e.g., a bound on bias in expectations, or conditions under which the deformed path still converges to the correct posterior in the small-noise limit). Even a formal statement plus intuition would strengthen the contribution.
+* The paper limits its scope to two levels. It would help to outline how the method might extend to deeper hierarchies.
+
+### Questions
+* For the composed posterior, why does the reverse SDE start from N(0,I/J)? I’m not a diffusion expert—an accessible derivation would help readers (this is not critical, just a clarity request).
+* Have you tried to run any hierarchical ABI baselines? What were the blockers (memory, instability, code availability)? Could you include one controlled comparison?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The proposed method aims to perform amortized Bayesian inference for hierarchical models. It does this by extending the framework of Geffner et al., Factorized Neural Posterior Score Estimation (F-NPSE) to hierarchical models. The proposed method separately considers local and global variables of the hierarchical model. Global variables can be targeted in the same way as F-NPSE, but conditioning on groups of datapoints rather than individual observations (S3.1-S3.2). The authors additionally propose a dampening scheme to improve the estimation of the intermediate densities. For targeting inference on local variables, the authors use separate F-NPSE score-based models: for these models, the conditioning set also includes global parameters $\eta$. Both the inference models on the local and global variables can be trained jointly within the same score-matching objective.
+
+### Strengths
+- Many problems can be cast within the hierarchical modeling framework, making the proposed methodology applicable to a wide variety of settings potentially
+- To my knowledge, the adaptive solver contribution is novel (cf. the gains illustrated in Table 1), as is the use of the dampening adjustment (Eq. 7)
+- I find the work fairly straightforward to understand, provided the reader is familiar with score-based generative modeling. The paper is generally well-written overall
+- The use of mini-batching is indeed a substantial gain in memory for large-scale problems if this has not been done before
+
+### Weaknesses
+- When analyzing the contribution of the authors, the F-NPSE and score-based generative modeling components, while critical to the method, are both established work. Rather than a “new method”, I consider the work to be more of an application of the F-NPSE to the hierarchical setting, albeit with numerical stability improvements via the damping and minibatching. This is still a contribution, but has implications to overall novelty and the efficacy of the experimental results.
+- Competing methods for simultaneously handling local and global latent variables are not adequately discussed. For models with local and global variables, neural posterior estimation (NPE), a competing approach to conditional generative modeling that is based on e.g. normalizing flows rather than score-based sampling, is known for its marginalization capabilities (see, e.g. Forward Amortized Variational Inference (Ambrogioni et al.), and works that cite this one). Paired with permutation-invariant neural network architectures, this seems like a powerful competing method that could be used to target arbitrary local or global variables.
+
+### Questions
+- A standard two-layer hierarchical model might be something like: draw global mean $\eta \sim p_\eta$, then draw group means $\theta_1, \dots, \theta_J$ in a region nearby the global mean $\eta$. Thereafter, draw observations $Y$ around each group mean. In a setting like this, learning posteriors on the $\theta_j$ by conditioning on its group of points $Y_j$ seems reasonable. Question: did the authors consider or experiment with learning a posterior $q_\psi^{local}(\theta \mid Y_j)$ that does not require conditioning on $\eta$? This is a question about the utility of the inverse factorization.
+- To that end, say we have a hierarchical Gaussian model like the above, but the group memberships are unknown (the EM algorithm is typically illustrated on such problems). Can your approach be applied when the group memberships of the $Y$’s are unknown? In other words, we don’t know precisely which $Y$’s depend on each local $\theta_j$
+- Can you give examples of problem settings there the number of groups $J$ becomes overly large (motivating lines 220 and 221 more?)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper introduces an approach to hierarchical modeling for ABI that builds on compositional score matching. Existing approaches struggle to scale with the data requirements for complex hierarchical settings, making it difficult to capture the full, amortized posterior without hitting computational bounds. The proposed method incorporates a CSM reformulation that makes smaller step sizes feasible (needed for larger numbers of groups) and leverages inverse factorization to model different hierarchical levels with separate score estimators. The approach is evaluated on three tasks that include complex hierarchical relationships and high data/parameter counts.
+
+### Strengths
+- The paper is well-organized, includes a comprehensive literature review, and provides high quality figures/diagrams.
+- The paper's stated contributions are clear and address a difficult problem in the SBI/ABI space. Scalability to large parameter spaces is a critical difficulty even for state of the art methods, and common workarounds often require heavy summarization or tradeoffs in generality (e.g., using non-amortized methods). Formulations that help stabilize score matching or flatten hierarchical modeling to handle or lighten large data burdens seem like an important step in addressing existing drawbacks in the field.
+- I found the real-world experiment (FLI) to be an intriguing evaluation setting, and the ability to scale to 750k parameters to be an encouraging demonstration of the computational feasibility of the approach.
+
+### Weaknesses
+- The empirical evaluation of the proposed method is lacking with respect to existing approaches. While the proposed experiments are larger than many benchmarks common in SBI/ABI, there is virtually no mention of competing SBI/ABI methods, of which there are many in the literature (e.g., variants SNPE/SNLE/SNRE and score-based NPSE/FMPE). Recent papers often push the number of simulated samples to the realm of 100k+, certainly for simpler toy models (e.g., experiment 1), so comparison is feasible when it comes to evaluating posterior accuracy. Without these points of reference, it is very difficult to assess the real-world impact of the proposed contributions.
+
+  The only mention of competing methods is that of NUTS in the hierarchical AR(1) setting, and while the computation time is an order of magnitude larger for this MCMC baseline, it attains consistently better RMSE scores in both global and local settings over the proposed method.
+- Similar to the above point, the paper is lacking an analysis of the training-to-performance tradeoffs of the proposed method. The approach flattens the hierarchical modeling setup to reduce the sample size burden, but there is little in the way of characterizing how this might affect performance or posterior accuracy. Figure 1 portrays the naive hierarchical training alternative; it would be nice to see an analysis of performance vs simulation sample size between these two approaches to better highlight the practical benefits of the proposed method.
+- The presentation of Table 1 is somewhat confusing, in that the number of compositional sampling steps and max runtime feel arbitrarily chosen. Plotting or listing the time-to-convergence of each method instead (if they in fact converge) at each of the listed sample sizes would be far more insightful, making it easier to see the complexity of each method at a glance as $N$ grows.
+
+### Questions
+- Why the lack of baseline comparisons to the many existing SBI/ABI methods? Can it be reasonably assumed that the proposed method performs on par with CSM (or other competitive baselines) before hitting typical scaling boundaries, or does one sacrifice performance on smaller problems in exchange for a more scalable approach?
+- In Figures 6 and 7 provided in the Appendix, what explains the fairly consistent upward trend in KL divergence and calibration error?
+- For the hierarchical AR(1) model (experiment 2), is there deeper justification behind why NUTS consistently outperforms the proposed method, the large runtime disparity between the two methods notwithstanding?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

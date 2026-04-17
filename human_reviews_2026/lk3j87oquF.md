@@ -1,0 +1,196 @@
+# LUSB: Formalizing and Benchmarking Unlearning Attacks and Defenses against Large Language Models
+
+- Decision: Reject
+- Scores: 0, 8, 6, 2
+
+## Abstract
+In recent years, large language models (LLMs) have achieved remarkable advancements. However, LLMs can inadvertently memorize sensitive or copyrighted content, raising privacy and legal concerns. Due to the high cost of retraining from scratch, recent research has introduced a series of promising machine unlearning techniques, namely LLM unlearning, to selectively remove specific content from LLMs. Yet, as a new paradigm, LLM unlearning may introduce critical security vulnerabilities by exposing additional interaction surfaces that adversaries can exploit, leading to emerging security threats against LLMs. Existing literature lacks a systematic understanding and comprehensive evaluation of unlearning attacks and their defenses in the context of LLMs. To bridge this gap, we introduce Language Unlearning Security Benchmark (LUSB), the first comprehensive framework designed to formalize, evaluate, and benchmark unlearning attacks and defenses against LLMs. Based on LUSB, we benchmark 16 different types of unlearning attack/defense methods across 13 LLM architectures, 9 LLM unlearning methods, and 12 task datasets. Our benchmark results reveal that unlearning attacks significantly undermine the security performance of LLMs, even in the presence of traditional LLM security defenses. Notably, unlearning attacks can not only amplify adversarial vulnerabilities of LLMs (e.g., increased susceptibility to jailbreak attacks) but also be exploited to gradually activate traditional poisoning or backdoor behaviors in LLMs. Further, our results underscore the limited effectiveness of existing defense strategies, emphasizing the urgent need for more advanced approaches to LLM unlearning security. We provide our benchmark in the supplementary material to facilitate further research in this area.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+3
+
+### Summary
+This work introduces Language Unlearning Security Benchmark (LUSB), a framework to formalize, evaluate and benchmark unlearning attacks and defenses on LLMs. Authors evaluate multiple combinations of attacks, defenses, unlearning methods, datasets and LLMs, showing that unlearning attacks enhance the vulnerability of LLMs to adversarial (backdoor, prompt injection or jailbreaking) attacks. Authors emphasize that existing defenses are not effective for unlearning attacks.
+
+### Strengths
+Authors evaluate multiple LLMs, datasets, unlearning methods, attacks and defenses.
+
+Nice visualisations of different attack scenarios in Figure 1.
+
+Extensive appendix with experimental details and additional comments on results.
+
+### Weaknesses
+My main concerns with this work are regarding its relevance and missing connections with the fine-tuning attacks community.
+
+Authors claim that they introduce “the first comprehensive framework designed to formalize, evaluate, and benchmark unlearning attacks and defenses against LLMs”, however, the formalisation of each method is rather poor. Authors simply mention that the unlearning attack problem can be captured as finding a set of unlearning requests $D_{f}$, such that a set of constraints $C_i$ are met. While authors provide some examples of such constraints in lines 212 and 227, this is not enough as a formalization. For the framework to be general and useful, all the methods studied in this work should be formalised into this framework. As an example, for “Training-unlearning attack constraints.”, authors mention that “stealth” or “attack activation” constraints can be implemented. However, it’s completely unclear what these are or how they can be implemented.
+
+A connection to fine-tuning attacks is missing. Unlearning methods can be thought of fine-tuning methods with the specific objective of “forgetting” training samples. For example, gradient ascent or other objectives can be used for unlearning [1,2]. It is well known that simply fine-tuning on a benign dataset can revert the alignment of LLMs [3]. Crafting the examples to use for fine-tuning to further elicit unsafe behaviours has recently gained traction [4]. If unlearning is just fine-tuning, how does your work fit within the vast harmful fine-tuning literature? Can’t you use any of the attacks and defenses described in [4] for unlearning?
+
+Abuse of “\vspace{-x}” throughout the paper. The formatting of the paper has been broken by drastically reducing the margins of section headers and space before and after figures. The paper looks cluttered.
+
+The paper heavily relies on the reader going back and forth to the appendix for details. Figure captions are rather short and many metrics and terms are deferred to the appendix. This makes it difficult to read and understand the paper.
+
+**References**
+
+[1] Zhang et al., Negative Preference Optimization: From Catastrophic Collapse to Effective Unlearning, COLM 2024
+ 
+[2] Golatkar et al., Eternal Sunshine of the Spotless Net: Selective Forgetting in Deep Networks, CVPR 2020
+
+[3] Qi et al., Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!, ICLR 2024
+
+[4] Huang et al., Harmful Fine-tuning Attacks and Defenses for Large Language Models: A Survey, ArXiv 2024
+
+### Questions
+- Are you able to capture all of the cited methods within your framework?
+- What are the key differences between unlearning attacks and the broader class of fine-tuning attacks?
+- Why do we need a new framework specifically for unlearning attacks?
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper introduces LUSB, a comprehensive framework and benchmark for evaluating the security risks of LLM unlearning. The authors argue that the process of removing data from models, a technique often required for privacy, creates a novel and serious attack surface. They formalize this threat into a taxonomy of four distinct attack scenarios, including sophisticated cross-stage attacks that combine training, unlearning, and inference. Through a large-scale benchmark across 13 different LLMs, 9 unlearning methods, and 12 datasets, the authors demonstrate that these unlearning attacks are highly effective. The key findings reveal that attacks can not only amplify existing vulnerabilities like jailbreaks but also activate "dormant" backdoors. The study concludes by showing that existing defenses are largely ineffective against these new threats, highlighting a critical and unaddressed area of LLM safety.
+
+### Strengths
+**Originality**: The paper is highly original. While the concept of unlearning exists, this paper is, to my knowledge, the first to provide a comprehensive formalization and taxonomy of the security risks introduced by the unlearning process itself. The categorization into four cross-stage attack scenarios (Figure 1) is a novel and insightful conceptual contribution that provides significant clarity to a new problem space.
+
+**Quality**: The quality of the work is outstanding. The paper is not a small-scale proof-of-concept; it is a massive-scale benchmark. The experimental rigor is impressive, spanning 13 models, 9 unlearning methods, and 12 datasets. This breadth provides strong evidence for the authors' claims, demonstrating that their findings are not an isolated artifact but a general vulnerability. The claims are well-supported by the extensive results in the main paper and the exceptionally detailed appendix, which also ensures reproducibility.
+
+**Clarity**: The paper is exceptionally well-written and easy to follow. The introduction clearly motivates the problem. Figure 1 is a standout, serving as a clear, intuitive anchor for the entire paper by visualizing the four proposed attack scenarios. The formalization in Section 3 is clear, and the experimental section is logically structured around the proposed taxonomy.
+
+**Significance**: The significance of this work is high. As privacy regulations like the "right to be forgotten" become more prominent, unlearning is poised to become a required, production-level feature for deployed LLMs. This paper serves as a critical and early warning, systematically demonstrating that this feature creates a new, non-trivial attack surface. The finding that unlearning can "activate" hidden backdoors (the training-unlearning-inference scenario) is particularly impactful and of great interest to the AI security community. The LUSB benchmark itself is a valuable public contribution that will undoubtedly spur further research in this area.
+
+### Weaknesses
+**Depth of Defense Analysis**: The paper convincingly demonstrates that existing defenses (both detection- and mitigation-based) are "generally ineffective" (Figs 10, 11). However, the analysis of why they fail is somewhat brief. The work proves the "what" (they fail) but could be strengthened by exploring the "why" in more detail. A deeper analysis here could provide a more concrete foundation for the "urgent need for more advanced approaches" that the authors call for.
+
+**Practicality of Threat Models**: The four scenarios presented are excellent conceptually, but their practical threat models could be discussed in more detail. The "Training-Unlearning-Inference" attack, for example, is very powerful but assumes an attacker who can both poison the training data and later issue a specific unlearning request. This is a very high bar. The paper would be strengthened by a more detailed discussion of the practical adversary for each scenario (e.g., is it a malicious data provider, a malicious MLaaS user fine-tuning a model, or a state-level actor?).
+
+### Questions
+* Could you elaborate on a realistic threat model for the "Training-Unlearning-Inference" attack? Who is the adversary you envision, and what kind of access would allow them to both poison a model's training set and later trigger a specific unlearning API call to activate their backdoor?
+
+* For the query-based black-box attacks (Fig 9), could you provide more detail on the query complexity? How many queries were required to generate the adversarial unlearning data, and do you believe this number is practical against a production-level, rate-limited API?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+Authors introduces LUSB (Language Unlearning Security Benchmark) — a comprehensive framework to systemetically studying unleanring attacks and defenses. LUSB formalizes threat models and evaluations for both attack and defense, covering 16 attack/defense strategies, 9 unlearning methods, and 12 datasets. Extensive experiments reveals that forgotten data can still be recovered or inferred and unlearning decrease model's robustness.
+
+### Strengths
+1. This paper studies an under-explored topic. Such systematic analysis sets the standard for future unlearning studies. 
+
+2. The benchmark is comprehensive, covering 16 attack/defense strategies, 9 unlearning methods, and 12 datasets. 
+
+3. The paper is well written, with great
+
+### Weaknesses
+1. More in-depth analysis with experiments on why unlearning reduce robustness of models can strengthen this paper. While results show unlearning may reduce robustness, the paper doesn’t deeply analyze why (e.g., which layers/features are disrupted).
+
+2. New unlearning strategies based on the analysis and results would further strengthen the paper.
+
+### Questions
+Please address weakness mentioned above
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper aims to summarize and reproduce results from several frameworks related to LLM unlearning. The study includes evaluations of various attack methods, defense methods, unlearning strategies, and their combinations across 12 datasets using multiple model families (Qwen, Vicuna, Mistral, and Llama) with different parameter scales (1.5B, 7B, 14B, 32B, 70B, etc.). The paper appears to introduce no novel scientific ideas or methodological contributions. The work primarily reports empirical observations without offering theoretical explanations, analyses, or insights that could help interpret the results.
+
+### Strengths
+The experiments are extensive and cover a wide range of open-access LLMs, demonstrating significant computational effort.
+
+### Weaknesses
+## Major Issues
++ The motivation for conducting experiments with very high unlearning ratios (greater than 50%, and in some cases up to 100% of the dataset) is unclear. Such scenarios are not representative of realistic scenarios in LLM unlearning. The authors should justify this design choice and explain its practicality. 
++ Problem formulation and threat models: the paper works on adversarial attacks and defenses, but no formal problem formulation and threat models are defined. 
++ *Inconsistency between claims and reported results*:  The paper emphasizes large-scale experiments and comprehensive evaluation, yet the actual results reported did not consider all possible considerations, thus missing generalization behaviors. I raise concerns about the precision and reliability of findings.
++ For clarity, essential results should be included and discussed in the main paper rather than relegated to supplementary material. For example, methods such as WHP and RMU are introduced as key approaches, yet their experimental outcomes are reported only in the Appendix rather than in the main body. The experimental configurations, including both the unlearning procedures and the evaluation metrics, are insufficiently detailed in the main text, although some descriptions are provided in the Appendix. In my assessment, the paper's presentation is poor. 
++ According to Figure 8, the reported performance degradation reaches 100%, calculated as $(P_f - P_u) / P_f$, where $P_f$ represents the original model performance and $P_u$ the post-unlearning performance. This implies that the model achieves 0% performance after unlearning. Such a result seems implausible for modern LLMs. The authors should clarify whether this is an artifact of measurement, an error in reporting, or an intended result supported by evidence.
++ Several comparison tables are difficult to interpret, with unclear indications of which results are superior or which models/configurations perform best under specific conditions. Tables should highlight key findings and guide readers on interpreting performance differences (e.g., higher vs. lower values).
+
+## Minor Issues
+
+* The *figure references* are inconsistent. For example, Figure 5 is cited before Figures 3 and 4, and Figure 7 appears before Figure 6.
+* In Figure 5, instead of describing the attack method, the authors only include a paper reference, which makes the figure difficult to interpret. The same issue occurs in Figure 11.
+* The structure and flow of figures and tables could be improved for better readability and coherence.
+I spotted several issues like that, but I will not correct everything. I suggest the authors carefully check the paper again.
+
+### Questions
+Please see the weaknesses
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2

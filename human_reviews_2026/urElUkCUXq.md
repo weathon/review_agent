@@ -1,0 +1,151 @@
+# Achieve Performatively Optimal Policy for Performative Reinforcement Learning
+
+- Decision: Reject
+- Scores: 4, 6, 6
+
+## Abstract
+Performative reinforcement learning is an emerging dynamical decision making framework, which extends reinforcement learning to the common applications where the agent's policy can change the environmental dynamics. Existing works on performative reinforcement learning only aim at a performatively stable (PS) policy that maximizes an approximate value function. However, there is a provably positive constant gap between the PS policy and the desired performatively optimal (PO) policy that maximizes the original value function. In contrast, this work proposes a zeroth-order Frank-Wolfe algorithm (0-FW) algorithm with a zeroth-order approximation of the performative policy gradient in the Frank-Wolfe framework, and obtains the first polynomial computation complexity result to converge to the desired PO policy under the standard regularizer dominance condition. For the convergence analysis, we prove two important properties of the nonconvex value function. First, when the policy regularizer dominates the environmental shift, the value function satisfies a certain gradient dominance property, so that any stationary point of the value function is a desired PO. Second, though the value function has unbounded gradient, we prove that all the sufficiently stationary points lie in a convex and compact policy subspace $\Pi _ {\Delta}$, where the policy value has a constant lower bound $\Delta>0$ and thus the gradient becomes bounded and Lipschitz continuous. Experimental results also demonstrate that our 0-FW algorithm is more effective than the existing algorithms in finding the desired PO policy.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper explores the performative reinforcement learning (PRL) setting. In this problem, the transition kernel and the reward function depends on the deployed policy, leading to two solution concepts, namely performatively optimal points (PO) and performatively stable points (PS). As the authors mention, the literature is mainly focused on finding PO rather than the PS due to the policy dependence of the dynamics. However, there are cases where finding PO is important as the prior work shows that PS might be suboptimal. In order to find PO, the authors study the entropy regularized PRL (EntPRL) problem. The main contributions of this paper are a zeroth order estimation algorithm for performative policy gradient and a Frank-Wolfe algorithm (0-FW) that uses the zeroth order gradient to achieve performatively optimal point. The authors also provide the theoretical guarantees in the EntPRL setup. The assumptions made in the paper are standard in the PRL literature. A summary of the theoretical results are as follows:
+- Theorem 1 and Corollary 1: The EntPRL problem has a gradient dominance property. As a corollary, stationary points are approximately PO.
+- Theorem 2: Shows the existence of a performativity-dependent constant $\pi_{\min}$, for which any policy $\pi$ is lower-bounded by a function of $\pi_{\min}$ and the gradient of the EntPRL value function. This implies one can restrict the search space to the policies with minimum entry larger than $\Delta \in (0, \pi_{\min}]$.
+- Theorem 3: EntPRL value function is Lipschitz continuous and Lipschitz smooth.
+- Proposition 1: The error of the proposed two-point zeroth order gradient estimator is upper bounded by $O(\epsilon_V/\delta + \log (N/\eta)/ \sqrt{N} + \delta)$ with probability $1 - \eta$, where $\epsilon_V$ is the policy evaluation error and $2\delta$ is the distance between the two evaluated points.
+- Theorem 4: The proposed algorithm finds an (D$\epsilon$)-stationary policy of the EntPRL problem in $O(\epsilon^{-4})$ policy evaluations.
+- Proposition 2: For $\Delta < \pi_{\min} / 3$, any $\epsilon$-stationary point in the restricted policy space (s.t. the minimum entry of the policies is larger than $\Delta$) is $2\epsilon$-stationary in the full simplex.
+
+### Strengths
+- The focus in the PRL literature is on finding PS. The question in this paper of whether we can find performatively optimal points is important.
+- The paper is overall well-written. The remarks after the theoretical results are helpful. The intuition and novelty parts are also nice-to-read for the interested reader.
+- The authors contribute the first algorithm that finds $\epsilon$-PO in the EntRL problem and it's analysis. The results and analysis look theoretically sound and the presentation is easy-to-follow. The results are novel in PRL literature.
+
+### Weaknesses
+One important weakness of the paper is the experimental evaluation. The following should be addressed:
+- The baseline algorithm is a repeated retraining algorithm is from paper [1]. However, this paper is on entropy regularized zero-sum Markov games. In this case, since the setting is different, I would recommend to write down the baseline algorithm in the appendix. It would also be helpful to explain why this algorithm is picked. Moreover, it would interesting to compare the 0-FW algorithm with the algorithms from [2, 3]. I would particularly like to see how 0-FW compares against the standard policy gradient ascent (PGA) and natural policy gradient (NPG) algorithms work in this setting as they are the other gradient-based algorithms which are shown to converge to a PS in a performative setting.
+- The initial policy for the baseline RR algorithm is a PS policy. Therefore, the repeated retraining algorithm is stuck. It would be better to see the behavior for different initial policies to make a better judgement.
+- The experiments are done using one initial seed; it would be better to see the mean behavior and the variance over multiple seeds. It would also be helpful to see the behavior for different hyperparameters.
+
+Therefore, I believe the experiments section could be improved. Overall, I believe the theory part of the paper is fine but there are some gaps in intuition and experiments that should be filled as I have tried to list in the weaknesses and questions sections.
+
+Minor Suggestions:
+- I find the "intuition and novelty" paragraphs interesting but they are not integral to the main story. The authors could consider placing all these parts in a separate section or in the appendix to improve the flow of the paper.
+
+[1] Shicong Cen, Chen Cheng, Yuxin Chen, Yuting Wei, and Yuejie Chi. Fast global convergence of natural policy gradient methods with entropy regularization. Operations Research, 70(4): 2563–2578, 2022.
+
+[2] Debmalya Mandal, Stelios Triantafyllou, and Goran Radanovic. Performative reinforcement learning. In Proceedings of the International Conference on Machine Learning (ICML), pp. 23642–23680, 2023.
+
+[3] Sahitaj, R., Sasnauskas, P., Yalın, Y., Mandal, D. and Radanovic, G., 2025, April. Independent Learning in Performative Markov Potential Games. In _International Conference on Artificial Intelligence and Statistics_ (pp. 3304-3312). PMLR.
+
+### Questions
+In addition to the comments in strengths and weaknesses sections, I have the following questions:
+- Algorithm 1 is run for $T = 401$ iterations where each iteration requires $N = 1000$ policy evaluations. What is the case for the baseline algorithm? Is it fair to make the comparison by simply setting the iteration counts to $T = 401$ for both algorithms? Would the wall-clock time be a better x-axis for this case?
+- Theorem 4 states that the output of Algorithm 1 is an $\epsilon$-PO policy if $\mu \ge 0$. However, as noted in Theorem 1 and the related remark, $\mu = [O(1) - O(\epsilon_p + S_p)] \lambda - O(\epsilon_p + \epsilon_r + S_p + S_r)$, i.e., $\mu \ge 0$ if the regularizer dominates performative effects with $\lambda \ge \frac{O(\epsilon_p + \epsilon_r + S_p + S_r)}{O(1) - O(\epsilon_p + S_p)}$. In addition, in regularized MDPs, the regularized value can be $O(\lambda)$ away from the original value [4]. On the other hand, [3] shows that under the sensitivity assumption every PS is an $O(\epsilon_r + \epsilon_p)$-PO. Therefore, it is unclear whether finding a PO in EntPRL is better than finding a PS in PRL in terms of the value function. Moreover, while some robustness properties of MaxEntRL are explored in the standard RL case [5, 6], it is unclear what happens in the PRL setting. Then, how does one justify the additional cost of seeking a PO in EntPRL if one can simply use PGA or NPG with or without regularization (e.g. as in [3])?
+
+[3] Sahitaj, R., Sasnauskas, P., Yalın, Y., Mandal, D., and Radanovic, G. (2025). Independent learning in459 performative markov potential games. ArXiv:2504.20593.
+
+[4] Matthieu Geist, Bruno Scherrer, and Olivier Pietquin. A theory of regularized markov decision processes. In International Conference on Machine Learning, 2019.
+
+[5] Eysenbach, B.; Levine, S. If MaxEnt RL is the Answer, What is the Question? arXiv 2019, arXiv:1910.01913.
+
+[6] Eysenbach, B.; Levine, S. Maximum entropy rl (provably) solves some robust rl problems. arXiv 2021, arXiv:2103.06257.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+To solve the challenge in performative reinforcement learning (PRL) where algorithms fail to find the optimal policy, this paper proposes a zeroth-order Frank-Wolfe (0-FW) algorithm. It is the first method to guarantee polynomial-time convergence to the performatively optimal (PO) policy under certain conditions. By leveraging an estimation technique that bypasses the need for environment gradients, the algorithm is shown experimentally to outperform traditional methods, establishing a new learning paradigm for the field.
+
+### Strengths
+1. Establishes a gradient dominance result that certifies (approximate) stationarity implies (approximate) PO under a regularizer dominance condition, going beyond prior work that targets PS. The paper also proves a policy lower bound and Lipschitz properties on a compact policy subspace, addressing the unbounded performative gradient challenge and enabling principled algorithm design.
+2. Designs a PRL-compatible zeroth-order gradient estimator which removes the need to compute gradients of policy-dependent dynamics. Coupled with a Frank-Wolfe framework, the approach yields polynomial-time convergence and is compatible with common variance-reduction techniques.
+
+### Weaknesses
+1. The stationarity-implies-PO guarantee requires µ ≥ 0 (the “regularizer dominance” condition). While the paper provides a clear expression and discussion, in practice this may necessitate a sufficiently strong regularization coefficient λ relative to environment sensitivity/smoothness, which could constrain the usable range of λ and warrants further empirical sensitivity analysis.
+2. Experiments are limited to a small synthetic setting (5 states, 4 actions). The absence of standard PRL benchmarks (e.g., recommender-system simulations, multi-agent Stackelberg games) and higher-dimensional control tasks (e.g., MuJoCo) leaves scalability and robustness in complex environments underexplored.
+3. Intuitive explanations for key concepts (PO vs. PS, gradient dominance) are brief. A minimal illustrative example (e.g., two-states two-actions) could clarify the differences and implications. Moreover, explicit quantitative performance gaps between approximate PO and PS (in theory or practice) are not fully highlighted.
+
+### Questions
+see above section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper studies performative reinforcement learning (PRL), where the environment’s transition and reward functions depend on the deployed policy. It introduces an entropy‑regularized objective and proves a gradient dominance inequality any sufficiently stationary policy is near performatively optimal (PO). The authors  design a zeroth‑order Frank–Wolfe method with a zeroth order estimator on the policy gradient and prove finite‑time convergence to PO with polynomial complexity.
+
+### Strengths
+- This work targets performatively optimal  in PRL (rather than the standard  performatively stable fixed‑point) and obtains the first polynomial-time convergence to the desired PO policy.
+- Under occupancy lower bound and smoothness assumptions, the authors derive a policy lower bound  showing stationary points live in a compact policy subset that overcomes the fundamental challenge of  unbounded performative policy gradient.
+- Theory is careful and technically nontrivial: (i) the three‑step proof sketch for gradient dominance is convincing; (ii) Proposition 1 provides a clear bias–variance trade‑off for the zeroth‑order estimator; and (iii) the Frank–Wolfe subproblem has a closed form.
+- Overall good writing. The paper states assumptions upfront, gives proof intuition before technical details, and provides complete proofs in the appendices.
+
+### Weaknesses
+- Assumption 3 requires a uniform lower bound of occupancy for all policies and dynamics, which is very strong in large or structured MDPs.
+- The guarantee hinges on a sufficiently large entropy coefficient $\lambda$ relative to sensitivity/smoothness constants. In practice a large 
+this may distort the target and slow exploitation. Moreover, guidance for setting $\lambda$  is missing. 
+- Experiments are minimal and seems to show limit real-world impact.
+
+### Questions
+- Can you provide a practical procedure to estimate $\epsilon_p, \epsilon_r, S_p,S_r$ and choose $\lambda$?
+- Can the policy lower‑bound and Lipschitz arguments be reproduced under standard mixing conditions, instead of a uniform occupancy lower bound?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

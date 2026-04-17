@@ -1,0 +1,232 @@
+# STAGE: Stable and Generalizable GRPO for Autoregressive Image Generation
+
+- Decision: Reject
+- Scores: 4, 6, 4, 4
+
+## Abstract
+Reinforcement learning has recently been explored to improve text-to-image generation, yet applying existing GRPO algorithms to autoregressive (AR) image models remains challenging. The instability of the training process easily disrupts the pretrained model capability during long runs, resulting in marginal gains, degraded image quality, and poor generalization. In this work, we revisit GRPO for AR image generation and identify two key issues: contradictory gradients from unnecessary tokens and unstable policy entropy dynamics. To address these, we introduce STAGE, a stable and generalizable framework that leverages two targeted solutions: 1) Advantage/KL reweighting. Similarity-aware reweighting to alleviate conflicting updates; and 2) Entropy reward. An entropy-based reward corresponding to reference model to stabilize learning. With the help of alleviating conflicts between tokens and an entropy reward for stabilizing training, we reduce disruption of the pretrained distribution and mitigate reward hacking, which in turn improves generalization and transfer better to other benchmarks. Experiments across multiple benchmarks show that STAGE consistently improves visual quality, stability, and cross-task generalization compared to baseline GRPO.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces several techniques to enhance GRPO training for autoregressive (AR) image models. First, the authors observe that even when two generated images have opposite advantage values, many of their corresponding tokens remain similar. This causes conflicting gradients for those tokens, leading to unstable training. To address this issue, the authors propose to downweight the advantages of such tokens and to increase their KL regularization. Second, to mitigate the problem of low diversity, they add the entropy of token distributions as an additional reward term. Experimental results demonstrate that the proposed techniques improve both image quality and training stability.
+
+### Strengths
+* The observation about contradictory gradients is insightful and may have broader applications beyond this specific problem.
+
+* The proposed methods are simple and easy to implement.
+
+### Weaknesses
+* The presentation of the paper—particularly in the experimental section—requires significant polishing. There are currently many unclear points; see the questions below for details.
+
+* The evaluation is limited to a single model, which makes it difficult to assess the generality of the proposed approach.
+
+### Questions
+## Questions about Presentation and Clarity
+
+* Line 236: The equation includes a clip function, but the clipping range is not specified.
+
+* Section 3.3: The paper claims that the entropy reward is designed to stabilize training. However, based on the description and the experimental evidence, it appears to primarily encourage greater sample diversity—related to, but not equivalent to, training stability.
+
+* Line 257: The authors state that "As shown in Fig. 2, decreasing τ leads to more deterministic samples". Whether samples are deterministic can only be evaluated with multiple generations per prompt. However, Figure 2 provides only one image per temperature. Appendix D.1 (Figure 13) referred there also shows just one image per temperature per prompt.
+
+* Line 257 (continued): The claim that "As shown in Fig. 2, decreasing τ .. may lower image quality, while increasing τ enriches content at the cost of structural accuracy." is not clearly supported by Figure 2. I do not observe a significant difference in image quality or structural accuracy across temperatures, and the HRS scores show no clear trend.
+
+* Figure 4: The prompt "A photo of a bench left of a" appears incomplete.
+
+* Eq 11: Intuitively, R_i^{ent} could be any decreasing function of \delta H. Why was this particular form chosen?
+
+* If I understand correctly, the proposed approach requires a set of prompts. Which dataset of prompts was used in training?
+
+* Line 353: The phrase "the latter applied only for GenEval reward" is unclear. Does it mean that the entropy reward is applied only when using the GenEval reward? If so, I have two follow-up questions:
+    * Line 323 states that all experiments use "GenEval rules as the reward." However, the above sentence implies other rewards are used as well. Please clarify.
+    * Why is the entropy reward not applied to other rewards? Does it hurt performance or is there another reason?
+
+* Line 361: The sentence "Additionally, the model trained with HPS+Gdino+Git mixed reward (“Baseline” and “Ours”) further demonstrates the stability improvement of structures and layouts in generated images." reads awkwardly. It does not reference specific results, and HPS+Gdino+Git is discussed in more detail only in the following paragraph.
+
+* Line 364: The discussion here involves additional rewards, but Line 323 previously stated that all experiments use "GenEval rules as the reward." This inconsistency is confusing.
+
+* Line 375: The sentence "For models trained with GenEval reward, we evaluate effects of different training settings on T2I-Compbench, ImageReward and provide visualizations on GenEval" repeats information already covered in the preceding "T2I-Compbench" paragraph. 
+
+* Line 404: The statement "Removing the entropy reward or dynamic reweighting negatively affects image quality and generalization; by contrast, our method better balances performance and generality." does not point to specific results, and the detailed discussion actually appears later in Section 4.3.
+
+* Figure 9: The caption claims that all three methods show worse diversity. Without visual comparison to the base model, this conclusion is not well-supported.
+
+* The naming conventions throughout the experiments are confusing. For example:
+    * Figures 9 and 10 define "Full" as "Baseline + Entropy reward." This is unconventional—"Full" typically implies all proposed components are included, yet this version omits advantage and KL reweighting.
+    * Does "Ent" in the method names (e.g., in Table 4) denote "Entropy reward"?
+    * Table 4 labels "w/o Ent" as "Baseline." I thought "Baseline" is referred to the base Janus-Pro 7B model with vanilla GRPO. If "Baseline" actually means "w/o Ent," then the naming "Baseline + Entropy reward" in Figures 9 and 10 becomes self-contradictory.
+    * In Table 4, what is the difference between "w/o Reweight" and "w/o KL"? Does "w/o Reweight" remove both advantage and KL reweighting, while "w/o KL" removes only KL reweighting?
+    * In Table 4, does "w/o Ent & KL" mean that only advantage reweighting is applied?
+
+## Questions about Experiments
+
+* Line 236: The parameters a and b are fixed to 0.5. Please clarify the rationale behind these choices and/or provide a sensitivity analysis.
+
+* The paper only evaluates the method on a single model (Janus-Pro 7B). Does the approach generalize to other models?
+
+* How do advantage reweighting and KL reweighting individually affect performance? An ablation study would clarify their respective contributions.
+
+## Questions about Related Work Discussion
+
+The discussion on parallel multi-token generation (Section 2.1) omits an important line of work--Distilled Decoding--which enables generating all tokens in a single pass (see [ICLR 2025, https://arxiv.org/abs/2412.17153 ] and [NeurIPS 2025, https://arxiv.org/abs/2510.21003 ]). While the NeurIPS 2025 paper have appeared too recently to be known to the authors, the ICLR 2025 paper has been publicly available for quite some time.
+
+## Summary
+
+Overall, I find the experimental section difficult to follow, and I am unable to fully understand or assess the reported results at this stage. Consequently, I am assigning a negative score for now. Once the authors clarify these issues, I will carefully re-read the experimental section and am open to re-evaluating my score based on the revised version.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces STAGE, a novel GRPO framework tailored for autoregressive (AR) image generation, addressing challenges like contradictory gradients and unstable entropy dynamics. By leveraging similarity-aware advantage/KL reweighting and entropy-based rewards, the proposed method enhances generalization, structural consistency, and visual quality, outperforming baseline GRPO across multiple benchmarks.
+
+### Strengths
+* Innovation: Pointing out the differences between AR image generation and text, identifying naive GRPO's limitations. 
+* Performance: Demonstrates clear improvements in generalization, structural stability, and image quality, validated across diverse benchmarks.
+* Comprehensive Methodology: Combines reweighting and entropy-based rewards to tackle training instability and reward hacking in AR image generation.
+
+### Weaknesses
+1. Some claims lack precision. For example, the motivation states AR models are "highly sensitive to small distribution shifts," but many studies show spatial image tokens exhibit weak sequential characteristics[1][2], requiring more rigorous explanation.
+
+2. Differences between text and image tokens in GRPO lack sufficient evidence. Additionally, entropy-based regularization has been applied to language models[3], but the paper does not clearly distinguish its contributions from prior work.
+
+3. The correspondence between the proposed solutions and the three identified challenges is not clearly articulated, making the problem-solution mapping somewhat ambiguous.
+
+ref:
+
+[1]Elucidating the design space of language models for image generation
+
+[2]Generative Multimodal Pretraining with Discrete Diffusion Timestep Tokens
+
+[3]Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction
+
+### Questions
+1. The paper mentions setting the entropy regularization coefficient λ to 0.4. What is the impact of this value, and does it require fine-tuning for different tasks or models?
+
+2. Could the authors provide more empirical analysis to clarify the differences between language and image tokens in GRPO?
+
+3. How does the method perform with varying tokenization strategies, such as VAR[4] or DDT[2], or reward functions?
+
+ref:
+
+[4]Beyond the 80/20 Rule: High-Entropy Minority Tokens Drive Effective Reinforcement Learning for LLM Reasoning
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper identifies several issues when adopting GRPO to image autoregressive (AR) models. Specifically, the authors firstly attribute the structural degradation of generated image to the noisy and conflicting gradient during the training. To tackle this problem, the authors propose to reweight the advantage and the KL term according to the similarity between the current token and other tokens in tha batch. Additionally, the authors identify the entropy collapse during training and add an extra term of reward which aligns the current entropy with the reference entropy. Experiments show that the proposed method surpasses the vanilla GRPO significantly across all metrics.
+
+### Strengths
+1. This paper identifies issues in the GRPO training process and offer targeted solutions.
+2. Experimental results show that the proposed method outperforms the baseline method by a large margin.
+
+### Weaknesses
+1. The correlation between structural degradation and noisy gradient seems not straightforward for me. The authors should provide more direct discussions or experiments to verify it.
+2. I suggest the authors directly show the gradient correlation among samples within a batch to more clearly demonstrate that the proposed method reduces gradient variance across samples generated from the same prompt, and thus leads to better performance.
+3. I agree that entropy is strongly correlated with performance, where excessively high or low entropy can both lead to poor quality. However, it’s unclear to me why aligning with the reference model’s own entropy necessarily yields good results. I suggest the authors include more discussion on this point.
+4. Do all experiments use the same model Janus-Pro 7B? If so, validation on other models is needed to support your claim.
+
+### Questions
+1. It seems that the different metrics in Table 1 are tested using models trained with different rewards. Is such in-distribution evaluation rather than task-generic evaluation a common practice in related papers? Are the baseline method evaluated in the same way?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper proposes an approach (STAGE) that effectively stabilizes GRPO training through advantage reweighting and entropy regularization. It demonstrates improved training stability and generalization across multiple benchmarks, with clearer and more consistent image generation results.
+
+### Strengths
+1. It is intuitively reasonable to decrease the advantage weight at positions that have high similarity to other images.
+2. The training curves reported in Figures 3, 5, and 8 demonstrate improved training stability with the proposed method.
+3. The paper is well organized.
+
+### Weaknesses
+1. The proposed methods (advantage & KL reweighting and entropy regularization) appear to be a combination of training techniques, and the technical contribution is somewhat limited.
+2.  To my understanding, the entropy reward is mainly introduced to address the issue in GenEval, where different image variations may receive identical rewards. Wouldn’t the simplest solution be to combine other existing rewards instead? 
+3. It also seems that the ablation study on the entropy reward was conducted only under the GenEval reward setting. Would the entropy reward also provide benefits when applied to other reward functions?
+
+Minors:
+1. In Figure 1(c), the bracket should span from $o_0$ to $o_3$.
+2. In Figure 11, the signs of "fire" and "snowflake" are reversed.
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

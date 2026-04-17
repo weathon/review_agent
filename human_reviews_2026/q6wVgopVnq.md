@@ -1,0 +1,178 @@
+# RoboTrust: Evaluating the Interaction Trustworthiness of Multi-modal Large Language Models in Embodied Agents
+
+- Decision: Reject
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Multimodal large language models (MLLMs) show great potential for embodied tasks, offering pathways toward real-world applications. Yet trustworthy embodied intelligence, which is difficult to ensure in dynamic and complex environments, remains a necessary prerequisite, and no unified benchmark currently exists for its evaluation. To fill this gap, we introduce **RoboTrust**, a comprehensive benchmark for trustworthy embodied intelligence. We provide the first formal and systematic definition of trust in embodied agents, decomposing it into five key dimensions—*Truthfulness*, *Safety*, *Fairness*, *Robustness*, and *Privacy*. Building on this foundation, RoboTrust evaluates these dimensions through 12 fine-grained tasks probing factual consistency, risk perception and response, bias and preference, resilience under perturbations, and privacy protection. Unlike static evaluations, RoboTrust integrates interactive environments with unexpected risks and disturbances, reflecting the complexity of real-world deployment. We benchmark 19 state-of-the-art MLLMs and reveal substantial deficiencies in embodied trust, with models almost uniformly failing on privacy protection and proactive risk avoidance. Furthermore, we observe no positive correlation between trustworthiness and model capability, and explicit reasoning traces offer little improvement, underscoring a fundamental absence of trust awareness in current systems. RoboTrust provides a unified and interactive platform for comprehensive trust evaluation, revealing critical shortcomings of current MLLMs and offering valuable insights for the development of trustworthy embodied agents.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces RoboTrust, a comprehensive benchmark for trustworthy embodied intelligence. RoboTrust offers the first formal and systematic definition of trust in embodied agents, decomposing it into five key dimensions: Truthfulness, Safety, Fairness, Robustness, and Privacy. Building on this foundation, RoboTrust evaluates these dimensions through 12 fine-grained tasks that assess factual consistency, risk perception and response, bias and preference, resilience under perturbations, and privacy protection.
+
+### Strengths
+The topic is both interesting and timely. The investigation covers Truthfulness, Safety, Fairness, Robustness, and Privacy.
+
+### Weaknesses
+The primary weakness lies in the overly heuristic design of the hazards. There appears to be no theoretical framework to guide the definition of robot trustworthiness or to outline the underlying principles. This leads to somewhat arbitrary design choices. For instance, for the instruction "Move the id card to the chair," the action "Pick up the id card" is defined as a Privacy Invasion Action, a rationale that seems unsupported. Similar issues are present elsewhere.
+
+Furthermore, the evaluation methodology of RoboTrust is unclear. It is not evident whether it assesses the model's output by evaluating its semantic consistency with the goal action or by checking the final state within a simulation sandbox.
+
+### Questions
+Does RoboTrust provide a sandbox or an adapter to translate MLLM outputs into executable instructions?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a framework for evaluating the trustworthiness of multimodal large language models (MLLMs) in embodied agent tasks. This paper defines trust in embodied agents across five dimensions: Truthfulness, Safety, Fairness, Robustness, and Privacy. The benchmark comprises 150 interactive tasks across 12 categories in household environments. They evaluate 19 state-of-the-art MLLMs on their benchmark and reveal that there are major deficiencies in trustworthiness and privacy, even in recent state-of-the-art models.
+
+### Strengths
+This paper addresses an emerging and critically important area of research: the trustworthiness of embodied LLM agents that interact with the physical world. As our community and society increasingly deploy such systems, systematic evaluation of their reliability becomes essential. I appreciate several aspects of this work. The evaluation covers 19 models, including both closed-source and open-source systems, and the results imply important findings about the disconnect between general capabilities and trustworthiness.
+
+### Weaknesses
+I have the following major concerns about this paper:
+
+### Insufficient justification for the necessity of a new benchmark
+
+I am still concerned about the necessity for creating yet another safety benchmark, given the existence of multiple recent benchmarks as listed in Table 1. While the paper criticizes existing benchmarks listed in Table 1 for limitations such as a lack of process evaluation, single-dimensional focus, or low realism in simulators, these criticisms are not evidenced by concrete experimental analysis. This paper should demonstrate specific cases where existing benchmarks fail to capture important trustworthiness issues that RoboTrust successfully identifies. Their benchmark can cover truthfulness and privacy, but this paper should show the quality of the benchmark for these areas with critical cases. Otherwise, the current evaluation looks like just applying many existing LLMs for a random benchmark, in which we hardly draw generalizable findings.
+
+### Lack of quality assessment of the proposed benchmark
+
+I am concerned that this paper primarily constructs a benchmark with a simulator and evaluates many models on it, without sufficient discussion of the broader impact/meaning, and implications of this research. While this paper claims that "our results reveal substantial deficiencies in reliability across all systems, highlighting the urgent gap between current model capabilities and the requirements for trustworthy embodied intelligence", I do not think the current results are enough to support this claim because we still do not know if the constructed benchmark covers representative scenarios to claim this. If the scenario is totally unrealistic or wrong, we cannot obtain any insights from it. As the technical contribution of this paper should be in the benchmark construction methodology, this paper should first demonstrate that this paper systematically covers the issues in the real world.
+
+### Limited comparison with safety-specific baselines
+
+I appreciate their evaluation with 19 MLLMs, but I am concerned that this work does not evaluate methods explicitly designed for safety. The related work mentions several safety-focused approaches (e.g., SafeAgentBench's ThinkSafe, LogicGuard), but these are not included in the experimental comparison. Without comparing against such baselines, it is difficult to assess whether the observed deficiencies are fundamental limitations of current MLLMs or whether existing mitigation strategies could address them. As the measurement analysis is a core part of this paper, this paper should comprehensively cover the recent efforts in safety-specific baselines.
+
+### Questions
+- While having more benchmarks is good, what are the main advantages of this benchmark over existing ones? How are these advantages verified in this paper?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces RoboTrust, a comprehensive benchmark designed to evaluate the trustworthiness of multimodal large language models (MLLMs) when deployed as embodied agents. The authors identify five critical dimensions of trust (Truthfulness, Safety, Fairness, Robustness, and Privacy) and design 150 interactive tasks within a simulated embodied environment (EB-Habitat). RoboTrust emphasizes interactive, dynamic, and realistic evaluation, contrasting with prior static benchmarks. Extensive experiments on 19 state-of-the-art MLLMs reveal systemic deficiencies, particularly in safety and privacy dimensions, and highlight that model capability does not correlate with trustworthiness. The authors also test trust-enhancing prompts, finding limited improvements, and call for deeper integration of trust objectives into model training. Overall, RoboTrust represents a valuable step toward formalizing and quantifying trust in embodied AI systems
+
+### Strengths
+- The paper presents the first unified and systematic definition of embodied trustworthiness across five well-defined dimensions, supported by clear formalizations and task decompositions.
+
+- RoboTrust introduces interactive embodied tasks that simulate real-world uncertainty, providing a realistic stress test for embodied models.
+
+- The large-scale comparison across 19 models, including both open- and closed-source systems, offers robust empirical insights and establishes strong baselines for future work.
+
+### Weaknesses
+- While the five trust dimensions are well-motivated, their conceptual relationships (e.g., causal or hierarchical dependencies among safety, fairness, and robustness) are not deeply explored.
+
+- All tasks are conducted within EB-Habitat, which may limit generalization to physical robots or open-world interactions; the paper could better discuss this domain gap.
+
+- Although prompt-based mitigation is tested, other forms of model-level or training-level interventions are not explored, leaving the improvement strategies relatively shallow.
+
+### Questions
+- How does the benchmark ensure consistency and reproducibility across dynamic tasks—e.g., are random seeds or environment resets standardized?
+
+- Could the authors elaborate on how these five critical dimensions' conflicts are handled when they co-occur in a single task?
+
+- How scalable is RoboTrust for real-robot evaluation—are the task specifications exportable to physical environments or simulators beyond EB-Habitat?
+
+- Given that explicit reasoning traces did not enhance trust, what hypotheses do the authors have for designing intrinsically trust-aware models?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces RoboTrust, a unified benchmark to evaluate the trustworthiness of multimodal LLM-driven embodied agents. It formalizes trust for embodied AI along five dimensions, Truthfulness, Safety, Fairness, Robustness, and Privacy with their individual sub tasks. RoboTrust contains 150 interactive tasks across 12 categories. The experiments find many deficits of current existing MLLM on these benchmarks.
+
+### Strengths
+1.Trustworthiness for embodied MLLMs is critical and under-explored.  The authors study an important question. 
+2. The paper overall is well-structured and easy to follow.
+3. The benchmarks could be valuable to the research community
+4. The experiments are extensive and reveal the performance of many existing SOTA LLMs on these tasks.
+
+### Weaknesses
+Weaknesses
+1.Ambiguity in “Truthful Trajectory” Definition. The paper defines a truthful trajectory as one in which every action is non–fact-violating. I find this formulation potentially problematic. In real-world embodied settings, an agent may need to perform intermediate actions that temporarily appear inconsistent with immediate facts but are necessary for eventual goal completion.
+For instance, consider a navigation scenario where the agent intends to travel east, but the only feasible route requires first moving west to make a U-turn. Under the current definition, this would be classified as “untruthful” despite being the correct and rational plan. This raises concerns that the benchmark penalizes valid strategies whenever optimal behavior requires transient divergence from a literal interpretation of the goal.
+2.The current safety metric evaluates success based on whether the final state satisfies all safety constraints. However, this definition may overlook critical failure modes. In many embodied scenarios, entering a hazardous state at any intermediate step can lead to irreversible or catastrophic consequences, even if the agent eventually returns to a safe final state. Thus, a trajectory that temporarily violates safety constraints but ends safely should arguably still be considered unsafe
+3.Heavy reliance on authored scenarios. The scenarios are created by the authors which might come with implicit assumptions or bias.
+
+### Questions
+Please see the above weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

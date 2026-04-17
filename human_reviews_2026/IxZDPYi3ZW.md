@@ -1,0 +1,181 @@
+# A Unifying Framework for Gradient Aggregation in Multi-Objective Optimization
+
+- Decision: Reject
+- Scores: 6, 4, 2, 4
+
+## Abstract
+Many machine learning problems involve multiple inherent trade-offs that are best addressed by gradient-based multi-objective optimization (MOO) algorithms. Existing methods are often proposed with various motivations, analyzed case by case, and differ algorithmically in how the component gradients are aggregated at each step. In this work, we develop a unifying framework for gradient aggregation in MOO, establishing (optimal) rates of convergence to Pareto stationarity—the standard measure of performance in MOO. Central to our analysis is a sufficient alignment condition, from which we derive a theorem showing that non-conflicting directions, when chosen within the convex hull of gradients, form a fundamental sufficient condition for convergence. We further show that feasibility can be ensured through projection onto the dual cone, broadening the scope of methods that admit convergence guarantees. In parallel, we present a primal optimization perspective of gradient aggregation that encompasses established algorithms, clarifies their theoretical relationships, and enables the design of new variants. As an illustration, we introduce capped MGDA, derived from a CVaR-based formulation, and demonstrate its robustness in adversarial federated learning. Finally, we validate our theory through experiments on synthetic problems and practical fairness benchmarks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposed a unified gradient-aggregation multi-objective framework, covering multiple existing MOO methods, and providing a simplified convergence analysis. The core criterion of this framework is the sufficient alignment condition. This condition states that as long as the update direction aligns well with the gradient of a fixed surrogate function, such as the sum of objective functions, then it is guaranteed to converge to a Pareto stationary point. 
+
+Additionally, Theorem 2 and Theorem 4 provide two ways to get the desired update $d_t$. The former requires a non-conflicting direction, and the latter allows conflict through the construction of the primal subproblem. This framework not only serves as an analysis tool for existing methods, but also provides guidelines for designing new MOO methods. Following this guideline, this paper proposes capped MGDA, which is more robust than vanilla MGDA. 
+
+Experiments on the existing methods validate that Pareto stationary points can be achieved, which is consistent with the framework analysis. Experiments on the federated learning setting demonstrate the robustness of capped MGDA, further demonstrating that the proposed framework can provide practical guidelines to design new MOO methods.
+
+### Strengths
+1. This paper proposes a clear and reusable framework, providing not only simplified convergence analysis for existing MOO methods, but also guidelines for designing new variants. 
+2. This paper provides a comprehensive convergence analysis, including convex and non-convex cases. 
+3. Experiments on both synthetic and realistic benchmarks demonstrate the feasibility of the framework.
+
+### Weaknesses
+1. The selection of $\Gamma_t$ should be clarified. Line 201,206,209 suggest different choices. Are there any requirements or constraints for $\Gamma_t$? Theorem 1 provides little information on this aspect, which makes the explanation confusing.
+2. The discussion of power-mean-based directions in Section 4.3 is limited. The harmonic mean case (when $p=-1$) is closely related to the minimum potential delay fairness used in FairGrad [1] and PIVRG [2].
+
+3. Experiments in Section 5.1 are somewhat trivial. The goal is to show existing methods converge to Pareto stationary points, thus demonstrating consistency with the theoretical results of the proposed framework. However, the convergence of most existing methods has already been discussed in their original papers. Therefore, it would be better to provide more comparisons across these methods. 
+Table 1 shows that these methods solve different subproblems by using different $s(x),r,q_t$. Figure 2 and 3 present different learning behaviors of these methods, even though they all achieve Pareto stationarity. So, it would be helpful to explain these different behaviors from the perspective of their corresponding subproblems.
+
+4. Experiments in Section 5.2 validate that the proposed framework can be used as practical guidelines to design new MOO variants. The capped MGDA replaces MGDA’s maximizing the worst task progress $\langle g_k, d \rangle$, with a CVaR-style objective that emphasizes tasks whose progress is below a threshold $\alpha$. So, it is somewhat expected to perform more robustly than MGDA under adversarial attack. To isolate why it helps, it would be better to compare MGDA + cap constraints, as well as to provide more details on hyperparameter selection.
+
+
+[1] Fair Resource Allocation in Multi-Task Learning. [ICML 2024] 
+
+[2] Revisiting Fairness in Multitask Learning: A Performance-Driven Approach for Variance Reduction. [CVPR 2025]
+
+### Questions
+See the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a unified framework for MOO algorithms that non-conflicting directions, when chosen within the convex hull of gradients, form a fundamental sufficient condition for convergence. This framework guides further MOO algorithm design.
+
+### Strengths
+1. The unified framework for MOO is critical and novel. 
+2. The experiments validate the theorem somehow.
+
+### Weaknesses
+**Minor issues**
+1. Some notations are not clearly defined. For example, $\lambda$ is first defined as a simplex vector. However, in the eq. (7), the $\lambda$ is reused in the definition of the cone, and it is not a simplex. Another new notation can be used here for better clarification.
+
+**Theoretical analysis issues**
+
+2. In Theorem 1, to prove $\lim_{t\rightarrow\infty} \mathcal{T_t}=0$, a condition $\sum_{t}c_t^2=\infty$ should be added. I saw this in the appendix in line 926, but this statement is missing in Theorem 1.
+3. In Theorem 2, the formulation of $F$ should be mentioned. Again, $ F=\sum_k f_k$ is shown in the appendix, but missing in Theorem 2. Moreover, Theorem 2 is not rigorous, and the result $C_t\equiv1$ cannot be derived. From the proof, it is true that $\langle d_t,\nabla F (w_t)\rangle\geq\\|d_t\\|^2$. To derive $C_t\equiv1$, another part $\langle d_t,\nabla F (w_t)\rangle\leq\\|d_t\\|^2$ is needed. Or $C_t$ can be any value in the range $(0,1)$.
+4. In Theorem 3, the statement says "a proper $d_t$ allows function values ${f(w_t)}$ monotonically decrease". I have to admit that I cannot see the reason, and there is no proof for it. For a single task case, it can be guaranteed, but does it hold for multi-task cases? If not, the derivation will be incorrect.
+5. Can theorems be directly applied in stochastic settings? What will be the convergence rate?
+
+**Framework issues**
+
+6. What is the connection between $F$ and ${f}$? I am aware that $F$ can be a sum/weighted sum of ${f}$, but the format will depend on the algorithm. For those dynamic weighting methods, such as MGDA, Nash-MTL, etc, the weights are changing, and can these methods be unified in the framework?
+
+**Experiment issues**
+
+7. In Figure 2, the convergence rates for different methods vary. Can authors have an explanation for it?
+
+### Questions
+Please check the weakness part.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces a unifying framework for gradient aggregation in multi-objective optimization, establishing convergence rates to Pareto stationarity by defining a sufficient alignment condition and providing a primal optimization perspective that unifies and clarifies the theoretical relationships between existing algorithms.
+
+### Strengths
+1. This paper attempts to propose a unified framework.
+2. Supported by extensive proof combining theory and experiments.
+
+### Weaknesses
+1. CAPPED MGDA not compared in Table 2?
+2. Figure 4 does't include comparisons with other methods?
+3. This framework may only be applicable to all current methods.
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces a unifying convergence analysis for multi-objective optimization (MOO) algorithms. Specifically, it introduces a set of general conditions and results based on the well-known feasible direction lemmas. Then it shows how non-conflicting gradient condition satisfies the general result. The unifying framework is able to provide convenient analysis for a large family of MOO methods, including new ones proposed by this paper. Experiments on a synthetic task and federated image classification are provided to support the result.
+
+### Strengths
+1. This paper is well-written and relatively easy to follow.
+2. The unifying analysis provides a convenient check for new MOO updates.
+
+### Weaknesses
+My main concern on this paper is on its theoretical originality/novelty and its experimental soundness. The main theoretical results are not new, and the newly proposed algorithms are not sufficiently tested with experiments. As an example, the convergence analysis of Theorem 1 (which is the key result for the theories in this paper) is very similar to that of the single-objective case. The new algorithm Capped-MGDA is tested in a federated image classification task under adversarial attacks, which might be too toy to verify its broad effectiveness., e.g., in normal settings with no attacks or federated aggregations.
+
+### Questions
+In line 120--121, the author argued that non-conflicting condition is not merely a preference, but a fundamental condition for convergence to a Pareto stationary point. This is later supported by Theorem 2, which shows that non-conflicting condition leads to the convergence result to Pareto stationary points (Corollary 1). However, even optimizing an arbitrary convex combination of the smooth objectives lead to convergence to Pareto stationary points. In this sense, why is non-conflicting aggregation crucial and how does Theorem 2 support it?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,205 @@
+# Multiplicative Diffusion Models: Beyond Gaussian Latents
+
+- Decision: Accept (Poster)
+- Scores: 4, 8, 6, 6
+
+## Abstract
+We introduce a new class of generative models based on multiplicative score-driven diffusion. In contrast to classical diffusion models that rely on additive Gaussian noise, our construction is driven by skew-symmetric multiplicative noise. It yields conservative forward-backward dynamics inspired by principles of physics. We prove that the forward process converges exponentially fast to a tractable non-Gaussian latent distribution, and we characterize this limit explicitly. A key property of our diffusion is that it preserves the distribution of data norms, resulting in a latent space that is inherently data-aware. Unlike the standard Gaussian prior, this structure better adapts to heavy-tailed and anisotropic data, providing a closer match between latent and observed distributions.
+On the algorithmic side, we derive the reverse-time stochastic differential equation and associated probability flow, and show that sliced score matching furnishes a consistent estimator for the backward dynamics. This estimation procedure is equivalent to maximizing an evidence lower bound (ELBO), bridging our framework with established variational principles.
+Empirically, we demonstrate the advantages of our model in challenging settings, including correlated Cauchy distributions and experimental fluid dynamics data (d=1024). Across these tasks, our approach more accurately captures extreme events and tail behavior than classical diffusion models, particularly in the low-data regime.
+Our results suggest that multiplicative conservative diffusions open a principled alternative to current score-based generative models, with strong potential for domains where rare but critical events dominate.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes multiplicative score-based generative models, replacing the usual additive Gaussian noise with skew-symmetric multiplicative noise that preserves data norms and yields conservative dynamics. The author prove properties of the forward process and show that norm is invariant, leading to a tractable, non-Gaussian latent that is data-aware. The proposed method is tested on heavy-tailed correlated Cauchy vectors and experimental fluid vorticity data.
+
+### Strengths
+- Using skew-symmetric multiplicative noise preserves data norms, yielding a principled generalization of Gaussian latents.
+- Reverse SDE/ODE is derived and the equivalence to ELBO is proved for the proposed method.
+- Experiments show meaningful improvements.
+
+### Weaknesses
+- The dense third-order tensor $G$ has $O(d^3)$ parameterse and should be prohibitive for high-dimensional applications.
+- The reported CPU time is also an order of magnitude higher for MSGM than SGM, which may limit practicality.
+- While the focus on heavy-tailed distributions is interesting, adding stronger baselines or more metrics showing the proposed method's improvement in this setting would better support the superiority claims.
+
+### Questions
+- How sensitive are results to the choice and structure of the tensor $G$? Could physics-motivated sparse or low-rank $G$, as discussed, preserve the theory while reducing cost?
+- While the multiplicative noise idea is interesting, the derivation of the reverse process and training objective is solid, and the experiments are clear and well-motivated, I suggest the authors include missing related literature [1,2] that has already addressed similar generalizations of diffusion models or the so-called denoising Markov models from a higher level. Especially, Section 5.1 of [2] designs a denoising diffusion model with geometrical Brownian motion, which looks very much a prototype of the multiplicative noise studied in this manuscript.
+- It seems that the authors claim that using multiplicative noise could lead to possible steady norm through the forward/backward process. I wonder if the same objective could be achieved by Riemannian manifold-related techniques, e.g., in [3].
+
+[1] Benton, Joe, et al. "From denoising diffusions to denoising markov models." Journal of the Royal Statistical Society Series B: Statistical Methodology 86.2 (2024): 286-301.
+[2] Ren, Yinuo, Grant M. Rotskoff, and Lexing Ying. "A unified approach to analysis and design of denoising markov models." arXiv preprint arXiv:2504.01938 (2025).
+[3] De Bortoli, Valentin, et al. "Riemannian score-based generative modelling." Advances in neural information processing systems 35 (2022): 2406-2422.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper proposes to replace the additive Ornstein-Uhlenbeck (OU) diffusion process used in score-based generative models (SGM) with a *multiplicative* noising process $d \overrightarrow{\mathbf{x}}_s = \mathbf{G}(\overrightarrow{\mathbf{x}}_s) \circ d \overrightarrow{\mathbf{B}}_s$ where $\mathbf{G}: \mathbb{R} \to \mathbb{R}^{d \times d}$ is linear with $\operatorname{rank}(\mathbf{G}(\mathbf{x})) = d-1$ and each slice $\mathbf{G}^k$ is skew-symmetric, which is inspired by transport noises in fluid dynamics.
+The authors provide the corresponding reverse SDE and probability-flow ODE and show that the forward SDE preserves the distribution of data norms, while the distribution of the directions converge exponentially fast to the uniform distribution on the sphere. Hence, the latent distribution is non-Gaussian, which may be more appropriate for heavy-tailed and anisotropic data, while still being easy to sample.
+Since an analytic solution for the conditional score is unavailable, popular denoising score matching losses cannot be used, and the authors resort to sliced score matching to train multiplicative SGMs, which is shown to be equivalent to ELBO maximization.
+Empirical results on low-dimensional data (correlated Cauchy, fluid dynamics data) suggest that multiplicative SGMs fit the data distribution's tail more accurately than vanilla SGMs.
+
+### Strengths
++ **Novel diffusion process in generative modeling**
+	+ Modifying the diffusion process which underlies modern SGMs is an important line of research, as it may lead to more meaningful latent spaces, and can incorporate prior knowledge into the corruption process (e.g. physical priors in $\mathbf{G}$). to yield data-dependent latent distributions adapt to the   and the standard forward process  
++ **Data-dependent latent distribution**
+	+ Typical OU diffusion processes yields a latent distribution independent of the data, while multiplicative SGMs (MSGMs) are equipped with a latent distribution which depends on the data distribution, which may be beneficial in low-data environments, or in distributions where rare events dominate.
+	+ While the latent distribution is non-Gaussian in MSGMs, it is still easy to sample by e.g. using the 1D empirical CDF of data norms.
++ **Theoretical results**
+	+ The authors provide an extensive theoretical analysis of the proposed technique, which is an important contribution. Future work on multiplicative diffusion processes may benefit from these results.
+
+### Weaknesses
++ **Model training & Scalability**
+	+ Since the conditional score does not admit a known analytic solution (in finite time), denoising score matching (DSM)---the de-facto standard approach to train modern diffusion models---cannot be used to train MSGM, and techniques like sliced score matching must be used, which are less stable in practice.
+	+ The forward SDE must be numerically integrated since no analytical solution is known for $d > 2$. This is computationally expensive, which hinders scalability to larger models/problems. 
+	+ A dense tensor $\mathbf{G}$ requires $d^3$ coefficients, which prohibits the use of this general method in high-dimensional problems (e.g. images, video, physical problems).
+	
++ **Empirical results**
+	+ The empirical results in the main text are purely qualitative. While there are quantitative evaluations in the appendix, I suggest that important results are moved to the main text.
+	+ Some of the experimental results are unconvincing: For example, I cannot see any improvement over SGM in Figure 4, and Figure 7 (right) seems to suggest that SGM converges faster to the data distribution (in terms of MMD).
+	+ Due to the computational burden, only low-dimensional experiments are conducted. However, as SGMs thrive especially in complex, high-dimensional domains, providing experiments in these settings would be a valuable addition to this work.
+	
++ **Experimental setup**
+	+ The main text is missing important details regarding the experimental setup, especially w.r.t. the baseline SGM: Was it trained with DSM or also with SSM?
+
+### Questions
++ It seems that in all experiments, $\mathbf{G}$ is randomly constructed (Eq. 6.1) and all $\mathbf{G}^k$ are independent. Would it make sense to "couple" them in a way that makes the forward process more benign? 
++ Could $\mathbf{G}$ be learned from data?
++ Since the network learns $a_\theta(\mathbf{x},t)\approx \mathbf{G}(\mathbf{x})^\top\nabla\log p_{T-t}(\mathbf{x})$, it seems that the network is tightly coupled to the choice of $\mathbf{G}$ in the forward process (which is different in regular SGMs). Under what conditions can the score be recovered from $a_\theta$?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The authors propose a "Multiplicative Score-based Generative Model" (MSGM), a new diffusion framework using skew-symmetric multiplicative noise instead of additive Gaussian noise. This construction preserves the $L_2$-norm of the data throughout the forward process. The resulting latent distribution is non-Gaussian; its norm distribution is identical to the data's norm distribution, and its direction is uniform on the d-sphere. The authors derive the reverse dynamics and an ELBO-equivalent score-matching objective. They demonstrate superior performance on low-dimensional, heavy-tailed data (Cauchy and fluid vorticity) compared to standard SGMs.
+
+### Strengths
+* **Novel Process:** The paper introduces a genuinely new forward diffusion process based on conservative, multiplicative noise. This is a clear theoretical departure from the standard additive noise paradigm.
+* **Theoretical Grounding:** The model is well-supported by theory. The authors provide the Fokker-Planck equationm prove exponential convergence to the latent distribution, and formally link the Sliced Score Matching loss to an ELBO , justifying the training procedure.
+* **Tractable Non-Gaussian Latent:** The key result—that the data norm is preserved—leads to a tractable, "data-aware" latent space. The 1D norm distribution can be modeled simply (e.g., with eCDF), and the direction is uniform. This avoids the prior mismatch (e.g., infinite KL divergence) that plagues standard SGMs when applied to heavy-tailed data.
+* **Empirical Niche:** The model shows strong performance in a specific, known-weakness area for SGMs: heavy-tailed distributions. The results on Cauchy data, while low-dimensional, are compelling and demonstrate a clear advantage in modeling both tail decay and directionality.
+
+### Weaknesses
+* **Prohibitive Scalability:** The model, as presented, is fundamentally unscalable. The multiplicative noise operator $G$ is a third-order tensor with $O(d^3)$ coefficients. The authors' experiments are restricted to trivial dimensions (e.g., $d=4, d=16$). The authors concede this $d^3$ cost is "prohibitive" for any high-dimensional application, such as image processing. This limitation confines the method to being a theoretical curiosity, not a practical tool.
+* **Computational Bottleneck:** The forward process 
+
+$d\vec{x}_{s}=G(\vec{x}_{s})\circ d\vec{B}_{s} $ 
+
+has no analytic solution for $d>2$. This forces the use of numerical SDE integration (SRK4) during *every single training step* to obtain $\vec{x}_s$. This adds a massive computational burden and introduces discretization error directly into the loss calculation, a problem SGMs with analytic forward processes do not have.
+* **Training Objective:** The lack of an analytic forward score compels the use of Sliced Score Matching (SSM). The authors admit this is a "less stable approach" than Denoising Score Matching (DSM). This instability is visible in the experiments (Figure 32), where the standard SGM (also trained with SSM) diverges completely, suggesting the training dynamic is brittle. MSGM's success here may be less about the superiority of its process and more about its "closer" prior simply making the unstable SSM objective *manageable*.
+* **Arbitrary Noise Operator:** The tensor $G$ is constructed by sampling random skew-symmetric matrices. This choice is arbitrary, lacks any physical or data-driven justification, and serves only to satisfy the theoretical assumptions (A1, A2) "almost surely". The authors' own "future work" suggestion to use sparse, physics-based tensors essentially acknowledges the non-viability of the operator used in the paper.
+* **Limited Scope:** The experiments are hyper-focused on a niche (low-d, heavy-tails) where the model is *designed* to win. There is no evidence it offers any advantage—and significant disadvantages in cost and complexity—for standard, high-dimensional benchmarks where SGMs are state-of-the-art.
+
+### Questions
+* The $O(d^3)$ complexity of the dense tensor $G$ is the primary barrier to practical use. You mention sparse tensors as future work. Have you investigated what degree of sparsity is permissible while still satisfying the rank condition (A2) and ensuring the empirical convergence to a uniform spherical distribution?
+*  The numerical integration of the forward SDE (Algorithm 1, line 5) is a major bottleneck. How sensitive is the final model quality to the number of steps ($N_T$) used in this integration? Using a small $N_T$ would be faster but would also increase the error in the $\vec{x}_s$ samples used to approximate the score matching loss.
+
+*  In the reverse process, the score for the direction is conditioned on the norm $||x_0||$. This implies the direction and magnitude are re-coupled during generation. Can you provide more intuition on how the learned score  successfully models this complex conditional distribution to reverse the "whitening" of the forward process?
+
+* The paper's premise is that preserving the data norm is a significant advantage over SGMs, whose latent norm converges to a $\chi_d$ distribution. However, in the high-dimensional regime ($d \to \infty$), the norm of a standard Gaussian vector $\vec{x} \sim \mathcal{N}(0, I_d)$ strongly concentrates around $\sqrt{d}$. If the input data is similarly normalized (a standard practice), the norm is effectively stable in the SGM forward process, just converging to a different constant. Does the exact preservation of the norm distribution offer a fundamental advantage over the concentration of the norm, especially given the $O(d^3)$ computational cost?
+
+* Relatedly, your argument for MSGM's superiority rests on modeling heavy-tailed data. In high dimensions, heavy-tailed distributions are often characterized by anisotropic, sparse, or low-dimensional structures, not just by an extreme radial (norm) component. Are you sure that this 1D norm-preservation mechanism is the correct inductive bias for high-dimensional heavy tails, or is the advantage you observe in low-d experiments an artifact that will not scale?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces a new framework for diffusion models based on the backward prcess corresponding to a forward process which incorporates a geometric brownian motion in its SDE. This geometric term is the result of multiplying a matrix to dB_t. They further assume this term is given by the product of a vector to a three dimensional tensor for which all the sliced matrices are skew symmetric. This skew symmetric property leads to a nice norm-invariant property for the forward and backward process. The authors claim that this norm invariance property enables the diffusion model to sample from rare events in the case where the target distribution is heavy tailed. In this case, the norm invariance implies the latent distributions are also heavy tailed, so one does not end of with a gaussian variable at the end. On the other hand, starting from a gaussian, one cannot transform a gaussian random variable back to the target using the backward process; e.g. the authors show the kl divergence of gaussian with a heavy tailed distribution such as Cauchy is infinite. Hence, this diffusion could cover cases in which the data distribution is heavy tailed.
+
+### Strengths
+The authors propose a new framework for diffusions which can be useful for heavy tailed targets, and cover more natural data distributions in some cases. The study the fokker plank equation for this process and drive the properties of the SDE such as norm-invariance.
+
+The writing and proofs are written in a clear way and without typos, unfortunately I didn't have time to check the details of most of the proofs.
+
+### Weaknesses
+Beyond the heavy tail case, they don't really study the effectiveness of their setup compared to traditional diffusion and normalizing flows, hence when would be beneficial to use their framework. their experiments in Figure 3 is vague and I don't understand the catch from the plot on the effectivess of their method compared to gassian diffusion. the amount of experiments is also very limited, and they further don't study this usefulness version traditional non-multiplicative frameworks theoretically.
+
+others:
+line 206 possibility of rare events is not clear at this point of the paper. maybe explain more what you mean
+
+### Questions
+1) is there a benefit of in adding a bias term to the forward process (eg f(x) = -x similar to the OU process) in the multiplicative framework?
+
+2) is there an argument one can make about the effectiveness of your method, either theoretically or empirically, compare to traditional diffusions beyond the heavy tail case?
+
+3) it would be nice to show the derivation of the loss and the backward sde for the new multiplicative diffusion.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

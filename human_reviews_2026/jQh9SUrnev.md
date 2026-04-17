@@ -1,0 +1,179 @@
+# LEGO-Puzzles: How Good Are MLLMs at Multi-Step Spatial Reasoning?
+
+- Decision: Reject
+- Scores: 8, 4, 6, 4
+
+## Abstract
+Real-world application of spatial intelligence, such as robotic control, autonomous driving, and automated assembly, often require spatial reasoning across multiple sequential steps, yet the extent to which current Multimodal Large Language Models (MLLMs) possess this capability remains largely unexplored. Based on LEGO construction, a recreational activity that critically relies on multi-step spatial reasoning, we introduce $\textbf{LEGO-Puzzles}$, a benchmark designed to systematically evaluate the spatial reasoning capabilities of MLLMs from basic spatial understanding to complex multi-step planning.
+LEGO-Puzzles contains two task sets. The $\textbf{Elementary}$ set covers $11$ visual question-answering (VQA) tasks with $1,100$ carefully curated samples to test elementary spatial reasoning skills that are cruical for LEGO assembly. The $\textbf{Planning}$ set directly requires the model to generate a step-by-step plan for assembling a target LEGO structure, where the number of intermediate steps required to complete the task varies from $1$ to $8$.
+Our evaluation of 23 state-of-the-art MLLMs shows that even the strongest models struggle with elementary reasoning tasks, falling at least 20\% behind human performance. The planning accuracy also quickly drops to $0\%$ as the number of steps increases, while our human participants solve all the tasks perfectly. Furthermore, changing the output format of LEGO-Puzzles tasks from multiple choice to image generation significantly reduces performance to near zero. Only GPT-4o and Gemini-2.0-Flash exhibit a limited ability to follow the image generation instructions, while other MLLMs either replicate the input image or generate completely irrelevant outputs. Overall, LEGO-Puzzles reveals critical limitations in current MLLMs’ spatial reasoning capabilities and highlights the need for substantial advances.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper proposes a new benchmark for evaluating the spatial understanding and reasoning capabilities of MLLMs based on LEGO construction. It includes two task sets: an elementary set with 3 levels of spatial reasoning and 11 VQA tasks, and a planning set that extends to multi-step reasoning under noisy conditions. By evaluating over 20 different models, the results highlight limitation in the spatial understand and reasoning capabilities of current MLLMs. The paper also extends the multiple-choice setting to an image-generation task, revealing the limitations of current generative models in instruction-grounded image generation. Moreover, the high correlation between LEGO-Puzzle and 3DSRBench shows that model performance on LEGO-Puzzle (Height and Adjacency) is indicative of real-word spatial reasoning ability.
+
+### Strengths
+- The paper provides a detailed description of its data curation process, which is a strong point for a benchmark paper. It also includes evaluation prompts and the rubric for human evaluation, both of which enhance transparency.
+- The benchmark itself is comprehensive, covering multiple task types and 2 different task sets, which planning to be a more challenging one. 
+- The evaluation is also comprehensive, encompassing different model families and sizes, as well as both open-source and proprietary models.
+
+### Weaknesses
+- The image-generation evaluation relies on human experts for scoring, which makes the results less reproducible and harder to verify. While using LLM-as-a-judge might introduce biases, a comparison between human and LLM-based evaluations could be conducted to evaluate the consistency between the two.
+- Although the authors show a strong performance correlation on Height and Adjacency tasks between LEGO-Puzzles and 3DSRBench, and I appreciate this analysis, the entire benchmark uses images from a similar visual theme (LEGO construction). Therefore, the generalizability of other task types to real-world scenarios remains somewhat limited.
+- The evaluation mainly uses a zero-shot setting. It would benefit from a few-shot comparison and an analysis of prompt sensitivity, especially since many task types involve multiple images. MLLMs could be highly sensitive to the placement of images within the prompt.
+
+### Questions
+- Based on the examples, it seems that some question types, such as Height and Adjacency, use a single image, while others involve multiple images. This might introduce some confounding factors, it becomes unclear whether performance drops because the model fails to understand spatial relationships or because it struggles to integrate multiple images. For these tasks, should the authors try combining the images into a single composite image to see if performance changes? Alternatively, should the authors analyze how performance varies with the number of images in prompt?
+- Could the authors elaborate on the QA construction process? The description in the main text is rather vague, and Appendix 7.4.1 seems to describe the evaluation prompt, which appears unrelated to QA construction.
+- For the image-generation evaluation, the paper states that 5 human experts were employed and that scores were given on a scale from 0 to 3 (which seems integer-based according to the rubric). Could the authors clarify how results such as 1.75 were obtained in these cases?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces LEGO-Puzzles, a new benchmark designed to evaluate the multi-step spatial reasoning capabilities of MLLMs. The benchmark comprises two main task sets: an "Elementary" set of 11 VQA tasks (1,100 samples) that test skills from basic spatial understanding to multi-step sequential logic , and a "Planning" set (PLAN-k-Step) that requires models to generate assembly plans of varying lengths (k=1 to 8). A comprehensive evaluation of 23 MLLMs reveals critical limitations , showing that even top proprietary models lag human performance by over 20% and that planning accuracy degrades to 0% as sequence length increases. Furthermore, the study demonstrates that MLLMs' reasoning abilities do not transfer to image generation, where performance is near-zero.
+
+### Strengths
+* This paper is clear writing and easy to follow.
+
+* The paper effectively identifies and addresses a significant gap in current MLLM evaluation: multi-step, sequential spatial reasoning. This capability is a clear prerequisite for downstream applications such as embodied models, and mm agentic models, yet it remains largely unexplored by existing benchmarks that focus on static VQA.
+
+* The evaluation is extensive, testing 23 SOTA MLLMs, including both leading proprietary and open-source models. This breadth provides a convincing and broad snapshot of the field's current limitations, showing this is a universal, not model-specific, failure.
+
+### Weaknesses
+* The "Planning" task , while effective, is still fundamentally a discriminative task: models must select and order from a given set of candidate images. This is a significant simplification of true generative planning, which would require the model to generate a plan from scratch. A more robust and revealing benchmark would necessitate a generative paradigm, where the model must produce the multi-step plan from scratch, rather than simply selecting and sorting provided options. Furthermore, the paper could benefit from a discussion on future work moving beyond static datasets entirely.
+
+* The paper's reporting on human performance is confusing. The abstract and Planning set results  state humans "solve all the tasks perfectly" (100%). However, Table 2, which evaluates the "Elementary" set, shows human proficiency at 93.6%, with scores as low as 70% on the 'Height' task. It is unclear why human experts would struggle with basic elementary tasks but achieve perfection on the much more complex multi-step planning tasks. Are there any typos or mistakes?
+
+* The benchmark's emphasis on multi-step, goal-oriented assembly makes it an excellent candidate for evaluating agentic systems, not just standard VQA models. A notable omission in the current evaluation is the absence of baselines from general-purpose VLA models and mm agentic model. This would allow for a crucial discussion on the differing capabilities of static MLLMs versus agentic frameworks in solving complex, sequential spatial reasoning tasks.
+
+### Questions
+* Could you please clarify the discrepancy in human performance? Why did the 30 human experts score relatively low (e.g., 70% on 'Height', 93.6% overall) on the "Lite" Elementary set , while the five experts in the Planning set achieved 100% on all k steps?
+
+* The finding that MLLMs default to 2D projections for 3D tasks like 'Height' is insightful. Do you experiment with any prompting strategies to mitigate this?
+
+* Can you evaluate the difference between multimodal reasoning models and chat models?
+
+* Can this task be structured into an RLVR environment, and provide rewards; and how to make it scalable?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces a novel benchmark, LEGO-Puzzles, focusing on the MLLM multi-step spatial reasoning capabilities. LEGO-Puzzles include two sets of questions: (1) Elementary Set: Multiple choice questions which test MLLM’s different capabilities, such as spatial understanding, and planning to reach the target states, and (2) Planning Set: VQA tasks that assesses whether MLLM can output correct steps to assemble the LEGO architecture. The experiments show that even the most advanced MLLMs perform far below human levels, which highlights MLLMs deficiencies at multiple-step spatial reasoning.
+
+### Strengths
+1. The benchmark uses LEGO environment to build a series of novel and interesting tasks.
+2. The paper includes a comprehensive tests on latest open-sourced and private models.
+3. The benchmark includes both multiple choice questions and QA tasks, which better demonstrate the MLLM capabilities given the model performance quickly decays to 0 as planning steps increasing.
+
+### Weaknesses
+1. The evaluation does not include the results when MLLMs are trained on these tasks. It could be interesting to demonstrate their performance after trained on these tasks, and especially, if the models trained on spatial understanding tasks could improve their performance on single/multiple step planning.
+2. LEGO environment is special and largely different from the realistic environment. Models must correctly understand the spatial information in **virtual** style images, which could pose additional challenges for MLLMs. I appreciate the paper’s effort to measure the correlation coefficients between the proposed benchmark and realistic benchmark and this largely alleviate my concerns, but I would like to highlight this intrinsic limitation of this benchmark.
+3. It would be clearer if the paper includes a comparison between LEGO-PUZZLEs with existing benchmark. The paper already includes a related work discussion in section 7, but in a way that listing the current benchmarks. It does not highlight how LEGO-PUZZLEs solve the previous benchmarks problems, such as CLEVR and 3DSRBench.
+
+### Questions
+Please see the weaknesses above for the three questions about the training results, gap caused by virtual style images, and comparison with existing benchmarks.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces LEGO-Puzzles, a benchmark designed to assess the multi-step spatial reasoning abilities of multimodal large language models (MLLMs) through LEGO-based visual and planning tasks. Evaluating 23 state-of-the-art models, the study finds that even the strongest systems fall significantly short of human performance, especially in long-horizon planning and spatially grounded image generation, revealing fundamental limitations in current MLLMs’ ability to reason about and plan in 3D space.
+
+### Strengths
+- High significance: The paper addresses a crucial yet underexplored aspect of multimodal reasoning: multi-step spatial reasoning, which is fundamental to real-world applications such as robotics and embodied AI. 
+
+- Systematic and hierarchical benchmark design: LEGO-Puzzles is carefully structured, progressing from basic spatial understanding to single-step and multi-step reasoning, and finally to explicit multi-step planning. This hierarchical organization allows for a comprehensive and fine-grained assessment of spatial intelligence in MLLMs.
+
+- Rich and multi-layered evaluation: Beyond multiple-choice VQA tasks, the paper further evaluates image generation outputs, revealing that reasoning abilities do not readily transfer to generative modalities.
+
+### Weaknesses
+- **Major overlap with existing work (PhyBlock [1])**: The main concern is the significant conceptual and methodological similarity to the published paper PhyBlock [1]. Both works share nearly identical motivation (evaluating spatial and physical reasoning through block assembly) and evaluation setups (one-step and multi-step prediction). The paper does not cite or discuss PhyBlock, nor does it clarify how LEGO-Puzzles differs in task formulation, data scale, or evaluation scope. A detailed comparison is necessary to establish novelty.
+
+- **Lack of analysis on underlying model mechanisms**: While the experiments clearly expose large performance gaps among MLLMs, the paper does not investigate why these failures occur. There is no analysis of model internals such as visual representation quality, spatial memory, context length limitations, or reasoning strategies that might explain the degradation in multi-step performance.
+
+- **Limited real-world applicability**: Although the authors show a high correlation with 3DSRBench, LEGO-Puzzles is entirely based on rendered synthetic LEGO scenes. This raises concerns about the domain gap between synthetic and real-world images. The benchmark’s external validity for real-world spatial reasoning remains to be empirically demonstrated.
+
+[1] PhyBlock: A Progressive Benchmark for Physical Understanding and Planning via 3D Block Assembly. NeurIPs 25
+
+### Questions
+Please refer to the Weaknesses part.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

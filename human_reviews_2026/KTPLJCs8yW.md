@@ -1,0 +1,189 @@
+# ComposerFlow: Step-by-Step Compositional Song Generation
+
+- Decision: Reject
+- Scores: 2, 2, 2, 2
+
+## Abstract
+Song generation models seek to produce audio recordings with vocals and instrumental accompaniment from user-provided lyrics and textual descriptions. While *end-to-end* approaches yield compelling results, they demand vast training data and computational resources. In this paper, we demonstrate that a *compositional* approach can make song generation far more data-efficient by decomposing the task into three sequential sub-tasks: melody composition, singing voice synthesis, and accompaniment generation. Although prior work exists for each sub-task, we show that naively chaining off-the-shelf models yields suboptimal outcomes. Instead, these components must be re-engineered with song generation in mind. To this end, we introduce *MIDI-informed* singing accompaniment generation — a novel technique unexplored in prior literature — that conditions accompaniment on MIDI representations of vocal melody, empirically enhancing rhythmic and harmonic consistency between singing and instrumentation. By integrating pre-existing models with our newly trained components (requiring only 6k hours of audio data on a single RTX 3090 GPU), our pipeline achieves perceptual quality on par with leading end-to-end open-source models, while offering advantages in training efficiency, licensed singing voices from professional artists, and editable intermediates. We provide audio demos and will open-source our model at https://composerflow.github.io/web/.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper introduces ComposerFlow, a modular pipeline for song generation that decomposes the process into four specialized stages: lyrics-to-melody, melody harmonization, singing-voice synthesis, and singing accompaniment generation. This approach reduces computational demands, requiring only a single RTX 3090 GPU and 6,000 hours of data for training, while enabling user edits to intermediate outputs like melodies and chords.
+
+### Strengths
+- This paper is original that it argues for a return to a structured, compositional pipeline reminiscent of traditional music production, while the field has converged on end-to-end models that map lyrics directly to audio. The key innovative step is the deliberate disassembly of the problem into four specialized sub-tasks (lyrics-to-melody, harmonization, SVS, SAG).
+- This paper offers a solution to a critical weakness of end-to-end models: the lack of user control. By providing editable intermediate representations (MIDI melodies, chord progressions, separate vocal and backing tracks), it enables a "human-in-the-loop" creative process that is impossible with existing one-shot generators. This aligns much more closely with how music is actually composed and produced.
+
+### Weaknesses
+- This paper's core thesis is that a modular pipeline is superior to end-to-end models due to its editability and resource efficiency. While the resource efficiency is convincingly demonstrated, the ​claimed advantage of editability is not empirically validated.​​
+  - This paper presents editability as a key benefit but provides no experiments or user studies showing that this leads to better outcomes or a more efficient creative process. It remains a theoretical feature. Can users actually achieve a superior final song through iterative edits? This paper doesn't show this.
+  - As far as I listened in the demo page, perceivably, ComposerFlow is still way behind conventional end-to-end music generation models in terms of sound quality and musicality.
+- The exclusion of models like SongBloom (for requiring a reference audio) seems reasonable for a "reference-free" test. However, excluding ​Jam​ for using "phoneme-level timing supervision not available to other systems" is quite vague. Excluding it makes the competitive landscape seem less advanced than it is.
+- The most critical missing baseline is an ​ablated version of ComposerFlow itself. The paper does not show what happens if, for example, the structured controls (chords, rhythm, etc.) are removed from the SAG step, reverting to conditioning only on the raw vocal. While a "raw-vocal baseline" is mentioned in Section 3.3, its results are described qualitatively ("fails to reliably track tempo and key"). There are no quantitative results in Table 4 or 5 for this ablation.
+- The pipeline inherits the constraints of its weakest component. The reliance on ​CSL-L2M for melody generation, which degrades beyond 120 seconds and is trained on a specific song structure (intro-verse-chorus-outro), means ComposerFlow is inherently limited to short, formulaic pop songs. It cannot generate more complex structures (e.g., verse-chorus-verse-bridge-chorus) or full-length compositions, which is a significant restriction. Furthermore, the SAG model's struggle with intros (due to lack of vocal conditioning) highlights a fragility in the pipeline's design.
+
+### Questions
+The paper highlights editability as a key advantage, but this is demonstrated only as a theoretical possibility. Could you provide any quantitative or qualitative evidence that this editability leads to a better or more efficient creative outcome?
+For instance, did you perform any internal tests where you edited a melody or chord progression and measured the time/effort saved versus regenerating an entire song with an end-to-end model?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents a multi-stage pipeline for song generation, which consists of four components: text-to-melody, melody harmonization, singing voice synthesis (SVS), and accompaniment generation. Among these, two modules are directly adopted from existing models, and the other two are fine-tuned based on publicly available systems.
+
+### Strengths
+1. The paper is generally easy to follow.
+2. The overall pipeline is clearly described and logically structured.
+
+### Weaknesses
+1. The idea of a multi-stage pipeline for song generation was explored long before end-to-end text-to-song models. Frameworks combining lyrics-to-melody, SVS, and vocal-to-accompaniment stages have existed for years. Thus, the overall pipeline structure is not novel, and all the adopted models are based on existing methods. Both the novelty and technical contribution are quite limited. 
+2. The paper claims that, compared with end-to-end systems, the proposed multi-stage design is (1) resource-efficient and (2) allows users to revise intermediate results. However, these claims are not convincingly supported. Several critical issues specific to multi-stage systems remain unaddressed, and the results do not demonstrate clear advantages in these aspects.
+  - Regarding resource efficiency: this mainly comes from using many existing pretrained models. However, it is not accurate to claim efficiency without accounting for the training costs of these reused models. Unless the total data and training time across all stages are demonstrably smaller than those required by end-to-end systems—and the quality remains competitive—the claim of efficiency is not well supported.
+  - Regarding generation quality: multi-stage systems face inherent challenges. From a data perspective, they rely on existing weak models to parse songs into multiple components (e.g., structure, melody, chords) for training. Since these intermediate annotations depend on the accuracy of existing models, the resulting data are often noisy or unreliable, which constrains the overall performance. From a generation perspective, the overall performance is bounded by the capability of every component model within the pipeline. In the provided examples, the SVS component struggles with high notes and prosody, leading to suboptimal expressiveness and further affecting accompaniment generation. More importantly, the harmony between vocals and accompaniment is often poor, which can also be heard in the demos. This is a key challenge for multi-stage systems, yet the paper does not discuss or attempt to address it.
+  - Regarding the second claimed advantage—“users can revise intermediate results”—the paper and demos do not provide any evidence or demonstration of this capability. It remains unclear how minor edits to intermediate outputs affect the final results, or whether such edits can preserve previously generated content while modifying only the relevant components. Moreover, several recent end-to-end systems already support controllable or editable inputs (e.g., SongEditor[1]), offering similar or better functionality with higher audio quality.
+
+[1]Yang, Chenyu, et al. "SongEditor: Adapting Zero-Shot Song Generation Language Model as a Multi-Task Editor." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 39. No. 24. 2025.
+
+### Questions
+1. Please explain what specific efforts were made to address multi-stage pipeline challenges, such as stage-level suboptimality and vocal–accompaniment alignment, and how these compare with end-to-end models in terms of performance.
+2. Please demonstrate the “revise intermediate results” capability and provide examples showing its effectiveness and advantages over existing systems.
+3. Please clarify the quality and reliability of the annotated intermediate data used for training.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents ComposerFlow, a modular, step-by-step pipeline for generating songs from lyrics. ComposerFlow decomposes the task into a series of cascaded, specialized components: (1) lyrics-to-melody generation, (2) melody harmonization to create chords, (3) singing voice synthesis, and (4) singing accompaniment generation. The authors argue that this modular design offers greater editability, control, and significantly lower computational and data requirements. The paper evaluates ComposerFlow against several end-to-end baselines, including the commercial system Suno, using both objective and subjective metrics, and reports competitive performance with open-source models, particularly in voice naturalness and lyric alignment.
+
+### Strengths
+1. The core idea of a modular, controllable pipeline is well-motivated and addresses clear weaknesses in current end-to-end models (lack of editability, massive resource requirements, poor lyric alignment). This approach mirrors the traditional music production workflow and provides a practical alternative for researchers and creators without access to massive compute clusters.
+
+2. The paper's claim of training the necessary components on a single consumer-grade GPU with a relatively small dataset is a significant strength. This "eco-friendly" approach makes the research more accessible, reproducible, and stands in stark contrast to the trend of ever-larger models, which is a valuable contribution to the community.
+
+3. The modular design inherently allows users to intervene at intermediate stages (e.g., editing the MIDI melody, changing the chord progression, swapping the singer's voice). This is a crucial feature for creative applications and a major advantage over black-box end-to-end systems.
+
+### Weaknesses
+1. The primary weakness of this work is its lack of significant technical innovation. The paper is essentially an engineering effort that chains together existing, off-the-shelf models. While the way these components are connected and the data preprocessing pipeline (Figure 2) are non-trivial, the core generative models (CSL-L2M, AccoMontage2, FastSpeech, MuseControlLite) are all adopted from prior work. The main "novelty" lies in the application of MuseControlLite for the SAG task with structured controls, but even this is an adaptation of existing techniques. This feels more like a system demonstration paper than a research paper presenting a new fundamental method or discovery.
+
+2. A well-known issue with cascaded pipelines is the problem of cascading errors. An awkward melody from the first stage will lead to poor chords, which in turn will result in a subpar accompaniment. The paper does not address how ComposerFlow mitigates this. Furthermore, by breaking the process into isolated steps, the system loses the ability to reason about the song holistically. For example, the accompaniment model has no direct knowledge of the lyrics' sentiment, only the derived melody and chords. An end-to-end model, in theory, can learn these complex, high-level dependencies between lyrics, melody, harmony, and instrumentation. This work fails to discuss this fundamental trade-off.
+
+3. The evaluation, while extensive, has some notable issues: Comparing a Pipeline to End-to-End Models: It is fundamentally difficult to make a fair comparison between a modular system and a fully end-to-end one. ComposerFlow's superior lyric alignment (Table 4) is almost a given, as it uses a dedicated SVS module that is explicitly designed for this. This isn't a fair "win" but rather a direct consequence of the system's architecture.
+
+4. The subjective results (Table 6) show that while ComposerFlow is competitive among open-source models, it is significantly outperformed by the commercial system Suno across all metrics. Even among open-source models, it does not consistently lead, trailing AceStep in Overall Preference and Musicality. Its main strength is Voice Naturalness, which is again expected due to the dedicated SVS module. Overall, the generated music quality appears to be average at best.
+
+5. The reported inference time of 55.5s (Table 4) is not particularly fast, especially compared to AceStep (13.0s) and DiffRhythm (11.5s). While much faster than autoregressive models like Levo, it doesn't represent a clear advantage in efficiency at inference time.
+
+6. The system is trained on Mandarin pop and evaluated on lyrics generated by ChatGPT. It is unclear how well this pipeline would generalize to other languages, genres (e.g., rap, where rhythm is paramount), or more poetic and structurally complex lyrics. The reliance on licensed data for the SVS, while ethically sound, also limits the vocal diversity of the system.
+
+7. The figure quality is not good.
+
+### Questions
+1. The issue of cascading errors is critical in a pipeline like this. Did you observe instances where a poor output from an early module (e.g., a monotonous melody from CSL-L2M) led to a complete failure in the final output? Are there any mechanisms in place, or that you envision, to handle this, such as a feedback loop or a joint optimization strategy?
+
+2. The SAG module is conditioned on several derived features (melody, chords, rhythm) but not directly on the raw vocals or lyrics. Do you think this limits the expressiveness of the accompaniment? For example, could an end-to-end model generate a more "empathetic" backing track that responds to the semantic meaning of the lyrics, which your system cannot?
+
+3. In the subjective evaluation, what was the feedback from the "music experts"? Did they comment on the musical coherence and structure of the generated songs? The objective SongEval scores (Table 5) for ComposerFlow are decent but not outstanding. Does this align with expert opinion on aspects like harmonic progression and musical tension/release?
+
+4. You mention that the pipeline is a "flexible paradigm rather than a fixed system." Could you elaborate on the challenges of swapping out a component? For example, if you were to replace the CSL-L2M melody generator with a different model that produces melodies in a different style, how much of the downstream pipeline (harmonization, accompaniment) would need to be re-tuned or re-trained to maintain quality?
+
+5. Why was MuseControlLite chosen for the SAG task over other controllable generation models? And could you provide more detail on the decision to unfreeze the self-attention blocks of the Stable-Audio-Open backbone, and what effect this had on generation quality and continuity?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper introduces ComposerFlow, a modular, step-by-step pipeline for song generation that decomposes the process into four stages: (1) lyrics-to-melody generation, (2) melody harmonization, (3) singing voice synthesis (SVS), and (4) singing accompaniment generation (SAG). Unlike large end-to-end systems (e.g., Suno, Levo, DiffRhythm), ComposerFlow is designed to be lightweight and editable, trained entirely on a single RTX 3090 GPU with ~6k hours of data.
+
+### Strengths
+1. Resource Efficiency: Demonstrating that competitive quality can be achieved using only a single RTX 3090 GPU is a strong practical contribution, especially when compared to the massive compute requirements of end-to-end baselines. The “eco-friendly” framing is credible and backed by comparative data.
+
+2. Systematic Evaluation: The inclusion of multiple objective metrics and a human listening study reflects a commendable level of rigor. The evaluation pipeline (with Whisper, CLAP, Audiobox, and SongEval) is comprehensive and reproducible.
+
+### Weaknesses
+1. Limited Technical Novelty: While the pipeline design is conceptually valuable, most components rely on existing models (e.g., CSL-L2M, AccoMontage2, MuseControlLite, FastSpeech). The contribution is primarily in integration and engineering, rather than novel model architectures or learning methods. For a venue like ICLR, this may raise questions about the depth of algorithmic innovation.
+
+2. Weakness in Long-Form Consistency: The paper acknowledges that generated melodies deteriorate beyond 120 seconds, due to limited training length. This limits applicability for full-length songs or professional production contexts. The proposed workaround (audio continuation) only partially mitigates this issue.
+
+3. Over-Reliance on Existing Controls: The pipeline’s success depends heavily on the quality of control signals (chords, rhythm, structure) extracted from pre-trained models like All-In-One and key-CNN. This creates a potential cascading error problem—small upstream mistakes (e.g., in chord detection) can degrade the final accompaniment. This limitation is not empirically analyzed.
+
+### Questions
+The training data used for ComposerFlow is relatively small at 6k hours, which is significantly lower than many of the baselines. However, is this training data sufficiently representative of the target domain, especially considering different musical genres and languages? Do you expect ComposerFlow to generalize well to other music styles or languages (e.g., English pop music or non-Western music)?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+1

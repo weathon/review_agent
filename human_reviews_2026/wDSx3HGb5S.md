@@ -1,0 +1,201 @@
+# UniMedVL: Unifying Medical Multimodal Understanding and Generation through Observation-Knowledge-Analysis
+
+- Decision: Reject
+- Scores: 6, 4, 6, 6
+
+## Abstract
+Clinical diagnosis demands models that can process multimodal medical inputs (images, patient histories, lab results) and generate diverse outputs including both textual reports and visual content (annotations, segmentation masks, and images). Despite this need, existing medical AI systems disrupt this unified process: medical image understanding models interpret images but cannot generate visual outputs, while medical image generation models synthesize images but cannot provide textual explanations.  This leads to gaps in data representation, feature integration, and task-level multimodal capabilities. To this end, we propose a multi-level framework that mirrors clinical diagnosis through the Observation-Knowledge-Analysis (OKA) paradigm. Specifically, at the observation level, we construct UniMed-5M, a dataset comprising over 5.6M samples that reformat diverse unimodal data into multimodal pairs for foundational observation.  At the knowledge level, we propose Progressive Curriculum Learning that systematically introduce medical multimodal knowledge.  At the analysis level, we introduce UniMedVL, the first medical unified multimodal model for the simultaneous analysis of image understanding and generation tasks within a single architecture. UniMedVL achieves superior performance on five medical image understanding benchmarks, while matching specialized models in generation quality across eight medical imaging modalities. Crucially, our unified architecture enables bidirectional knowledge sharing generation tasks enhance visual understanding features, demonstrating that integrating traditionally separate capabilities within a single medical framework unlocks  improvements across diverse clinical scenarios. Code is available at https://anonymous.4open.science/r/Uni-MedVL-65F2/README.md.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces the UniMedVL framework, which aims to achieve unified modeling of medical understanding and generation tasks through the Observation–Knowledge–Analysis (OKA) paradigm. Its core ideas include: 1. Constructing the UniMed-5M dataset, which covers multiple medical imaging modalities; 2. Employing Progressive Curriculum Learning—comprising *Foundation Training*, *Instruction Tuning*, and *Unified Multimodal Training*—to enable deep semantic space fusion across modalities and tasks; 3. Designing the unified model UniMedVL, which utilizes MoT architecture to establish a shared latent space for both image understanding and generation. Experimental results demonstrate that UniMedVL surpasses existing unified models in average accuracy across five medical understanding benchmarks (VQA-RAD, SLAKE, PathVQA, OmniMedVQA, and GMAI-MMBench), and achieves performance on multiple generation tasks that matches or approaches that of task-specific models.
+
+### Strengths
+1. Accurate problem formulation and well-motivated study: The authors clearly identify the fragmentation of current medical MLLMs across tasks and modalities, focusing their goal on building a unified framework for understanding and generation. Experiments effectively validate the synergistic benefits between understanding and generation in medical-grade tasks.
+
+2. The UniMed-5M dataset shows strong potential: Its three-stage quality control process (Coarse Filtering → Medical Alignment → Expert Validation) enhances data usability and cross-modal consistency. Moreover, the dataset integrates multiple modalities and task types; if released, it could greatly support research on unified frameworks for medical MLLMs.
+
+3. Complete training paradigm: Progressive Curriculum Learning enables a smooth transition from semantic understanding to generative capability, and Table 5 together with Figure 4 effectively demonstrate the synergy between this training paradigm and the MoT architecture.
+
+4. Comprehensive experimental setup.
+
+### Weaknesses
+1. Difference from Bagel: UniMedVL largely inherits the architectural design of Bagel, raising the question of whether the model sufficiently accounts for the additional differentiation required by the medical domain—particularly regarding data heterogeneity and domain-specific characteristics that differ from general-domain multimodal models.
+
+2. Limited innovation in the multi-stage training paradigm: Several existing works (e.g., Lingshu, HealthGPT) have already explored the benefits of multi-stage training for medical reasoning. Progressive, task-granular post-training strategies are becoming standard practice, and UniMed-5M does not appear to introduce conceptual innovations beyond engineering refinements.
+
+3. Missing comparison with state-of-the-art medical MLLMs: The main tables lack direct comparisons with leading models such as Lingshu and MedGemma, which would strengthen the empirical credibility of the claims.
+
+4. Failure case analysis: A detailed investigation of failure cases is necessary to identify the boundary conditions or sample types under which the model underperforms or fails.
+
+5. Writing and structure could be improved: The manuscript contains numerous long and compound sentences, making it less readable; a clearer and more concise presentation would improve accessibility.
+
+### Questions
+1. The dataset shows imbalance across modalities (as illustrated in Figure 6). Have the authors experimented with modality-balanced sampling or loss reweighting to mitigate this issue?
+
+2. In the medical report generation task (Appendix Table 10), UniMedVL underperforms compared to Lingshu-7B. Is this due to differences in task optimization objectives? Could multi-task loss rebalancing improve the model’s performance on this task?
+
+3. Do the authors plan to release part of the UniMed-5M dataset or model inference weights to facilitate reproducibility and further research within the community?
+
+4. Please also refer to the weaknesses section for additional points that would benefit from clarification or further discussion.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces UniMedVL, which is a unified model for medical multimodal understanding and generation. Unlike other models that handle these tasks separately, UniMedVL performs both visual understanding and image generation tasks within a single framework. The model is built around an Observation–Knowledge–Analysis - OKA design that actually reflects how clinicians reason. The paper also releases a large-scale dataset UniMed-5M, which reformats diverse medical datasets into unified multimodal pairs across eight imaging modalities. The experiments on benchmarks such as VQA-RAD, SLAKE, and OmniMedVQA show competitive results compared to specialized models.
+
+### Strengths
+- **Clinically relevant motivation**: The proposed Observation–Knowledge–Analysis (OKA) framework reflects the natural workflow of medical diagnosis—observe findings, apply knowledge, and form conclusions.
+- **Large and diverse dataset**: The introduction of UniMed-5M, covering multiple imaging modalities and medical domains, represents a valuable resource for the community.
+- **Clear writing**: The paper is well written and clearly structured. Figures and tables illustrate key concepts, and the experimental findings are communicated in a logical way.
+
+### Weaknesses
+- **Limited theoretical insights**: The paper provides little explanation of why the Observation–Knowledge–Analysis framework leads to better performance. The benefits appear mostly empirical, without any deeper analysis of internal representations or cross-modal information flow.
+- **High model complexity/computational costs**: The dual-encoder architecture combined with a Mixture-of-Transformers (MoT) module increases computational costs, especially compared to unified models which use one shared multimodal transformer (e.g., BLIP3o). Also, the paper does not report training/inference speed or trade-off comparisons to such unified models.
+- **Overlaps with HealthGPT**: The paper shows strong similarities to HealthGPT, which also aims to unify medical understanding and generation within a single model. The novelty compared to HealthGPT—particularly in architecture: MoE vs MoT - is not clearly established.
+
+### Questions
+1. In Table 1, the baseline GMAI-VL (7B) outperforms or performs comparably to the proposed UniMedVL (14B) on visual understanding benchmarks, despite using half as many parameters. Could the authors elaborate on this observation? What factors might explain why the larger unified model does not surpass the smaller baseline in understanding tasks?
+2. The proposed UniMedVL uses MoT design for explicit expert routing for understanding and generation. How does this compare to unified multimodal models like BLIP-3o, which uses one shared multimodal transformer? A brief discussion of these design trade-offs would clarify the novelty and advantages of the MoT approach.
+3. How does the proposed model UniMedVL differ from HealthGPT, which also unifies medical understanding and generation? Could the authors clarify the unique contributions beyond those in the HealthGPT paper?
+4. The MoT design likely increases computational cost and memory usage. Could the authors provide quantitative estimates of the additional training time and inference overhead compared to a single-expert baseline?
+5. Table 10 shows that UniMedVL performs worse on the MIMIC-CXR report generation benchmark compared to some baselines. Could the authors clarify potential reasons for this drop?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper tackles the divide between medical image understanding and generation by introducing the Observation–Knowledge–Analysis (OKA) paradigm aligned with clinical workflows. Observation: UniMed-5M (>5.6M samples) reformats heterogeneous unimodal sources into paired multimodal inputs to support unified learning. Knowledge: Progressive Curriculum Learning builds capability in three stages (foundation pretraining, instruction tuning, unified multimodal training). Analysis: UniMedVL unifies understanding and generation within one architecture using dual visual modules (EViT for encoding, EVAE for generation) and a Mixture-of-Transformer-Experts, trained with a combined objective.
+
+Empirically, UniMedVL reports strong results on five medical image understanding benchmarks and generation quality comparable to specialized models across eight imaging modalities. The authors emphasize that a unified architecture enables bidirectional knowledge sharing, where generative training can enhance visual understanding features. Overall, the work positions unified modeling and curriculum design as a path to narrow the understanding–generation gap in medical AI.
+
+### Strengths
+1. The OKA framing maps clinical reasoning onto model design and training, offering genuine conceptual novelty beyond task-specific pipelines. A comprehensive experimental suite spanning understanding, generation, and interleaved tasks across multiple modalities and datasets, evaluated with diverse metrics, strengthens the empirical case for generality.
+
+2. Large, diverse UniMed-5M (>5.6M samples, nine modalities) enables multimodal learning at scale. Its breadth across modalities and tasks, plus the reformulation of unimodal sources into paired multimodal examples, mitigates data scarcity and supports both understanding and generation pretraining.
+
+3. Coherent training and architecture (Progressive Curriculum Learning; EViT + EVAE + MoT) with evidence of bidirectional knowledge sharing. The staged curriculum builds capability from base pretraining to unified multimodal learning, while the dual visual modules and MoT allow seamless task switching without checkpoint reloads and show transfer where generation benefits understanding.
+
+### Weaknesses
+Despite the aforementioned strengths, each has potential limitations, and in some cases the supporting evidence is less robust than the authors claim.
+
+1.	What “unified” really means
+- I acknowledge the practical need to separate objectives across understanding and generation, but I remain concerned. Despite the unified claim, distinct extractors (EViT for understanding, EVAE for generation) and partitioned MoT experts indicate coordinated specialization rather than a deeply shared joint representation. The integration feels coarse, leaving its “unified” status uncertain, and the dual-track design likely raises inference cost versus single-path baselines, impacting latency and deployment efficiency.
+
+2.	Dataset construction and quality control
+- A substantial portion of UniMed-5M is synthesized via LLM captioning, which introduces risks of hallucination and bias, especially for counterfactuals. Expert review on about 5% may not capture rare or clinically nuanced cases. Templateization and VLLM captioning can standardize style while injecting model or template biases, reducing real-world linguistic diversity.
+
+3.	Limits of the VAE evaluation
+- The EVAE is fixed from a general-purpose, non-medical pretraining. Medical images contain subtle anatomy and pathology that may be underrepresented in generic VAEs. Reconstruction metrics (rFID, PSNR, SSIM) do not directly reflect clinical fidelity for small but important lesions, and specialized medical VAEs outperform in some modalities.
+
+4.	Lack of details in methodological robustness and generalization
+- Progressive Curriculum Learning bundles multiple factors (sampling, learning rates, ViT training schedule) without isolating causal effects. The loss weight $\alpha$=4 appears empirically chosen, with no sensitivity study. These gaps limit confidence in generalization beyond the reported settings.
+
+### Questions
+n/a
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes UniMedVL, a unified framework designed to perform both medical image understanding (e.g., Visual Question Answering, report generation) and medical image generation (e.g., text-to-image synthesis, cross-modal translation) within a single model architecture. The work is structured around a novel Observation-Knowledge-Analysis (OKA) paradigm, which mirrors the clinical diagnostic process:
+
+Observation (Data-level): The authors construct UniMed-5M, a large-scale dataset of over 5.6 million multimodal medical samples, reformatted from various public sources to create uniform input-output pairs.
+
+Knowledge (Feature-level): They introduce Progressive Curriculum Learning, a three-stage training strategy (Foundation Training, Instruction Tuning, Unified Multimodal Training) to systematically build the model's capabilities from basic pattern recognition to sophisticated multimodal reasoning.
+
+Analysis (Task-level): The core contribution is the UniMedVL model, which uses a dual-encoder (ViT for understanding, VAE for generation) and mixture-of-experts transformer architecture to handle diverse tasks without switching checkpoints.
+
+Extensive experiments demonstrate that UniMedVL achieves state-of-the-art or highly competitive performance on five medical image understanding benchmarks while matching specialized models in generation quality across eight imaging modalities. A key finding is the existence of bidirectional knowledge transfer, where joint training on understanding and generation tasks mutually enhances performance in both domains.
+
+### Strengths
+The paper introduces a novel, clinically-inspired OKA framework and is the first to demonstrate a truly unified model for medical multimodal understanding and generation within a single, end-to-end architecture, outperforming models that require task-specific components.
+
+The massive scale and careful construction of the UniMed-5M dataset will be helpfule for the whole community (if publicly accessiable).
+
+This work represents a substantial leap towards integrated clinical AI assistants. By unifying capabilities, it addresses a critical gap in the field. The demonstrated positive synergy between understanding and generation tasks challenges conventional wisdom and opens up new research avenues.
+
+### Weaknesses
+While the expert validation of individual outputs is excellent, a deeper discussion on the model's performance in end-to-end clinical decision-support scenarios is missing. For instance, how does the model's generated image and its explanation directly influence a simulated diagnostic or treatment planning task compared to a human expert or a pipeline of specialized models?
+
+### Questions
+Ablation on VAE Fine-tuning: The paper justifies using a frozen, general-purpose VAE with strong reconstruction metrics. However, was any experimentation done with a lightly fine-tuned medical VAE? A small ablation could clarify if there are diminishing returns or potential risks of domain-specific adaptation that were avoided.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

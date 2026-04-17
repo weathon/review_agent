@@ -1,0 +1,132 @@
+# Enhanced Causal Discovery for Autocorrelated Time Series via Adaptive Momentary Conditional Independence
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 6, 4, 4
+
+## Abstract
+Discovering causal relationships from time series data is essential for understanding complex dynamical systems across a range of domains. However, strong autocorrelation often limits the detection power of existing algorithms and increases the risk of false positives. Moreover, when both lagged and contemporaneous links are considered, existing algorithms are prone to generating false positives in lagged link detection due to indirect causal effects induced by contemporaneous mediators. To address these challenges, the Adaptive Momentary Conditional Independence (aMCI) method is introduced to mitigate the masking effects of autocorrelation and maintain control over false discovery rates. The aMCI adaptively modifies the conditioning set while aggregating conclusions from multiple conditional independence tests. In addition, a multi-phase algorithm is proposed to robustly learn the causal graph by effectively applying the aMCI. The algorithm is designed to be hyperparameter-insensitive, order-independent, and provably consistent under oracle conditions. Extensive evaluations on simulated and benchmark datasets demonstrate that the proposed algorithm substantially improves the accuracy of causal discovery from time series, especially in detecting lagged links.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper aims at two challenges in time-series causal discovery: i) autocorrelation, and ii) contemporaneous effect. The authors first propose aMCI to enhance signal-to-noise ratio and improve detection power without inflating false positives, and then leverages a three-phase ECD-aMCI algorithm. Experiments are conducted on both synthetic and fMRI benchmark data
+
+### Strengths
+S1: The paper is technically rigorous and empirically thorough. The authors prove consistency, order independence, and enhanced accuracy under standard assumptions. And the robust anlysis and runtime analysis is conducted.
+
+S2: The paper is well-written. The motivating example (Section 3.1) clearly illustrates why standard MCI fails and how aMCI helps, using intuitive signal-to-noise reasoning backed by algebraic decomposition.
+
+### Weaknesses
+W1: Incomplete coverage of related work on autocorrelation-aware causal discovery. The paper overlooks several recent methods that explicitly address autocorrelation in time-series causal discovery, such as **CDANS** (Temporal causal discovery from autocorrelated and non-stationary time series data) mentioned in the survey. The absence of a discussion (in Section 1 or 2) or empirical comparison with such methods weakens the contextualization of the proposed contribution. I would like to reconsider the contribution score if this gap can be addressed.
+
+W2: Experimental evaluation lacks real-world validation beyond fMRI. The paper claims relevance to "earth science, neuroscience, and economics" at the very beginning, but no experiments on real-world time series (e.g., climate data, financial markets, ICU patient monitoring). The soundness has only been witnessed in one domain (i.e., fMRI). I would like to reconsider the soundness score if this issue can be solved.
+
+### Questions
+See the weakness above.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses causal discovery in autocorrelated time series by introducing the Adaptive Momentary Conditional Independence method and the Enhanced Causal Discovery via aMCI algorithm.
+
+### Strengths
+The key insight is that strong autocorrelation can mask causal relationships when conditioning on immediate predecessors. The aMCI method adaptively modifies conditioning sets by replacing immediate predecessors with earlier lag variables when they are not confounders. The ECD-aMCI algorithm employs a three-phase approach: initial lagged parent estimation, refinement via aMCI, and complete skeleton discovery. Experiments on simulated and benchmark datasets demonstrate improved detection of lagged links compared to baseline methods.
+
+### Weaknesses
+1: While the method shows consistent improvements, the gains are often modest (5-15% in many cases). For high autocorrelation settings where the method should excel most, the absolute performance remains relatively low.
+
+2: The aMCI method requires multiple conditional independence tests per edge (up to 3 for contemporaneous links), significantly increasing computational cost compared to standard methods, especially for nonlinear settings.
+
+3: The method relies on correctly identifying confounders vs. non-confounders, which requires accurate initial parent set estimation. In practice, this distinction may be unreliable, potentially limiting the method's effectiveness.
+
+4: The paper primarily compares against PCMCI+ variants and one optimization-based method (NTS-NOTEARS). Missing comparisons with other recent time series causal discovery methods and specifically methods designed for handling autocorrelation.
+
+5: While claimed to be hyperparameter-insensitive, the method still requires setting maximum lag τmax and confidence level α. The robustness analysis for τmax shows performance degradation as this parameter increases.
+
+6: The three-phase approach adds complexity, and the adaptive conditioning strategy may be difficult to interpret and debug in practice compared to standard constraint-based methods.
+
+### Questions
+The work makes a reasonable contribution to understanding how to better handle autocorrelation in causal discovery, but the impact is somewhat incremental given the additional complexity introduced.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces Adaptive Momentary Conditional Independence (aMCI), a refinement of constraint-based causal discovery for autocorrelated time series that mitigates the masking of true causal links by strong temporal self-dependence. The core idea is that conditioning on highly autocorrelated recent lags can suppress genuine causal signals; thus, aMCI adaptively substitutes such immediate predecessors with earlier lags to improve detectability. Integrated into the PCMCI+ framework, this yields ECD-aMCI, an algorithm that retains PCMCI+’s structure but modifies the conditioning step to preserve causal signal strength. The authors provide theoretical guarantees for consistency, order independence, and enhanced accuracy, and demonstrate empirical gains over PCMCI+, Bagged-PCMCI+, and NTS-NOTEARS on linear, nonlinear, and fMRI datasets, particularly in high-autocorrelation regimes. While the approach is technically sound, clear, and effective, its algorithmic novelty is limited, as the overall structure, orientation rules, and independence tests remain unchanged from PCMCI+.
+
+### Strengths
+- The recognition that standard conditional independence testing can "over-condition" and suppress causal signals in highly autocorrelated series is a non-trivial and significant contribution. The paper clearly explains this phenomenon and proposes an intuitive solution.
+- The authors provide important theoretical guarantees for their ECD-aMCI algorithm, including consistency, order independence, and a proof of "enhanced accuracy", which formalizes the intuitive benefit of the aMCI method.
+- Across simulations and the fMRI benchmark, ECD-aMCI consistently improves the F1-score for lagged edges, especially under high autocorrelation, while maintaining reasonable computational cost.
+- The paper is very well-motivated. The simple bivariate example in Section 3.1 provides a clear illustration of the exact problem the paper aims to solve.
+
+### Weaknesses
+- The ECD-aMCI algorithm closely follows the PCMCI+ pipeline in both design and implementation. The independence tests, search phases, and orientation rules are entirely retained, and the only substantive modification is the adaptive adjustment of the conditioning set before each conditional independence test. While this modification is intuitively appealing and theoretically supported, it represents a localized heuristic improvement rather than a new causal discovery framework. Consequently, the contribution resides primarily at the implementation level within the PCMCI+ structure rather than at the algorithmic or theoretical level.
+- The evaluation on both stationary and non-stationary datasets is presented in a somewhat inconsistent and incomplete manner. While the authors include additional experiments on non-stationary data in Appendix C.3, these results are not integrated into the main text and are reported briefly, with limited quantitative interpretation. Moreover, the main body of the paper explicitly states that “only stationary models are considered” in the simulated data generation section, which is misleading; it is unclear whether this statement refers to the dataset itself or to the earlier stationarity assumption of the causal model. If it refers to the assumption, it should not appear in the data-generation description; if it refers to the dataset, then the inclusion of non-stationary experiments in the appendix contradicts that claim.
+- The synthetic evaluation is also suboptimal in several respects. The nonlinear dataset generation described in the paper includes nonlinear transformations in equation form but omits realistic temporal characteristics such as trend or seasonality, which are ubiquitous in real-world time series. When visualized, the generated “nonlinear” time series exhibit no discernible non-stationary behavior or long-term structural variation, appearing qualitatively similar to linear autoregressive data. As a result, the nonlinear experiments test only pointwise nonlinearity rather than temporal non-stationarity, limiting the conclusions about robustness under realistic dynamics.
+- The current choice of baselines (PCMCI+, Bagged-PCMCI+, and NTS-NOTEARS) does not sufficiently represent the state of the art in time-series causal discovery. The inclusion of Bagged-PCMCI+ is redundant, as it is simply a resampled ensemble variant of PCMCI+ that does not introduce a distinct methodological perspective. Instead, the evaluation should have incorporated modern approaches that provide complementary algorithmic principles or neural Granger-like approaches. Furthermore, at least one Granger-based causal discovery baseline, such as Neural Granger Causality (Tank et al., 2021 ) (https://ieeexplore.ieee.org/iel7/34/9812931/09376668.pdf ) or SPACETIME (Mameche et al., 2025)(https://ojs.aaai.org/index.php/AAAI/article/download/34136/36291 ) should have been included for completeness. Although Granger causality does not represent true structural causality under intervention semantics, it remains increasingly popular in applied time-series domains (finance, neuroscience, climate modeling) and provides a practical reference for temporal dependency detection. The absence of such baselines narrows the comparative context and underrepresents how ECD-aMCI performs relative to recent state-of-the-art causal discovery methods.
+- The theoretical component of the paper largely extends existing PCMCI+ results to the adaptive setting. The proofs for consistency and order independence closely parallel those of the original framework, while the “enhanced accuracy” theorem formalizes an intuitively expected improvement in test power rather than establishing a new theoretical guarantee. There is no formal quantification of how much adaptive conditioning improves causal recovery beyond qualitative reasoning about signal-to-noise ratios. As a result, the theoretical novelty is incremental, and the contribution remains primarily empirical.
+
+### Questions
+1. Could a scaled-down Bagged-PCMCI+ comparison be included for nonlinear/fMRI data to complete the baseline picture?
+2. How robust is aMCI to non-stationary processes (e.g., seasonality, drift)? 
+3. How does ECD-aMCI compare to nonlinear Granger models (e.g., NCG or RNN-based GC) in detecting lagged vs. contemporaneous dependencies?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

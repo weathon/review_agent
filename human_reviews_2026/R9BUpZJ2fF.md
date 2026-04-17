@@ -1,0 +1,219 @@
+# Lang-Prune: Unlocking Fair and Powerful Pruning for Multilingual Large Language Models
+
+- Decision: Reject
+- Scores: 2, 8, 4, 6
+
+## Abstract
+Multilingual large language models (LLMs) are essential for cross-lingual applications, yet pruning them using mixed-language calibration can induce cross-lingual interference, disproportionately affecting certain languages. We introduce \textbf{\textit{Lang-Prune}}, a drop-in, language-aware extension to structured pruning that computes per-language importance on small calibration sets and aggregates it to protect units critical to any language. Evaluated on \texttt{aya-expanse-8b} across nine languages and multiple sparsity levels, Lang-Prune consistently improves both average and worst-case performance. At 70\% sparsity, it reduces average perplexity from 188.49 (original pruning method) to 70.85, surpassing the monolingual baseline (83.08) while lowering the worst-language error. Interpretability analyses reveal higher retention of language-specific capacity (81\% vs 66\%). Ablations demonstrate robustness across model types (e.g., \texttt{Qwen3-8B}), improved post-training headroom, and strong transfer to out-of-distribution languages. Lang-Prune is compute-efficient and deployment-friendly, requiring only modifications to importance estimation and aggregation while preserving LLM-Pruner’s coupled-structure mechanics.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a simple, low-overhead extension to LLM-Pruner that corrects for the bias in neuron importance estimation across different languages. The method demonstrates consistently superior performance and strong generalization, establishing a more robust approach for pruning multilingual models.
+
+### Strengths
+* The paper effectively identifies a key limitation of the prior work, LLM-Pruner: neuron importance varies significantly across different languages. This leads to biased importance estimation when using a single-language calibration set, resulting in suboptimal pruning and degraded performance.
+
+* The proposed method is a straightforward, plug-and-play extension to LLM-Pruner. It is easy to implement and adds minimal computational overhead.
+
+* The method consistently demonstrates superior performance over both monolingual and multilingual LLM-Pruner variants across benchmarks in nine languages. Furthermore, it shows strong generalization capabilities on languages not seen during calibration.
+
+### Weaknesses
+* W1: The paper's primary contribution is the multilingual importance estimation technique. However, the rest of the methodology is directly inherited from LLM-Pruner, which limits the overall novelty of the work.
+
+* W2: Relatedly, the experiments are confined to LLM-Pruner. This raises the question of whether the proposed importance estimation is a general technique or if its benefits are specific to LLM-Pruner's structured pruning approach. It would be valuable to see its effectiveness when applied to other methods, such as unstructured pruning with Wanda.
+
+* W3: The method for aggregating importance scores is largely heuristic. While the use of the $\max$ operator is intuitive, the paper lacks a theoretical analysis of the potential bias it might introduce. Following the visualization in Figure 1, the method effectively computes the max-envelope of the per-language importance curves. It remains unclear how well this envelope approximates a "true" multilingual importance distribution or how the resulting neuron rankings compare to a hypothetical ground truth.
+
+* W5: The size of the per-language calibration dataset seems to be a critical hyperparameter, as it directly influences the per-language importance estimation and, consequently, the aggregated scores. The paper would be strengthened by an ablation study on the impact of this dataset size.
+
+* W6: The evaluation relies heavily on perplexity. In contrast, prior work often emphasizes few-shot or zero-shot performance on a diverse set of question answering (QA) benchmarks. The inclusion of only HellaSwag for QA evaluation is limited; a more comprehensive assessment on other QA datasets would be more convincing.
+
+* W7: The experimental scale is somewhat limited. Whereas prior works like LLM-Pruner and SparseGPT validate their methods across various model families and sizes, this study is restricted to two models of the same size (8B).
+
+* W8: The description of Figure 1 (Lines 130-132) appears to contradict the visualization. For example, in the "Lang:cs" and "Lang:en" subfigures, the peaks in the mixed-data setting seem to be more pronounced, not less, than in the monolingual case. While the intent is likely to highlight the differing neuron saliency across languages, the current interpretation of the figure is unclear and potentially misleading.
+
+### Questions
+* In Line 173, the function $f$ should be properly defined.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+When pruning large language models the choice of calibration data can affect the downstream performance of the pruned model. In particular, as this paper shows, including multiple languages into a mix of calibration data degrades the model's performance on a specific language when compared against calibrating exclusively on that language. 
+
+Instead of mixing languages in the calibration set, the authors propose to compute importance scores (for the structures considered for pruning) on each dataset separately. Those scores can then be aggregated either by taking the mean over the languages or the maximum as the final score. The pruning decision is then made to prune the structures with smallest aggregated score. 
+
+The method is evaluated on the two 8B parameter LLMs and it is empirically shown that their aggregation strategy (with the max score) strongly outperforms the direct combination of calibration datasets and often even the mono-lingual pruning. This trend is even more pronounced for high sparsity regimes.
+
+### Strengths
+- The paper is well written and provides a clear problem statement in table 1, which is then clearly and efficiently addressed by their proposed algorithm.
+- The method is conceptually very simple and does not add significant overheads compared to direct mixing of datasets, yet it works surprisingly well. I think this provides interesting conceptual insights.
+- The paper provides meaningful ablations, in particular the out-of-distribution analysis on languages not present at all in the calibration data is also insightful and illustrates a further benefit of the model.
+
+### Weaknesses
+I would like to see the following weaknesses addressed during the rebuttal to fully support acceptance. My current positive judgement assumes that these points can be addressed:
+
+1. LangPrune often even outperforms mono-lingual pruning. To me that seems the most surprising insight. However, there is one potential other explanation which is that for their monolingual experiments only 100 sequences are used for calibration, whereas LangPrune uses 9x100=900 sequences. Thus a potential explanation for LangPrune's improvement could simply be the larger calibration size. I would thus kindly as the authors to also produce monolingual runs with 900 calibraion examples for each sequence.
+
+2. I acknowledge that mode compression and pruning are very active research fields, which is probably sufficient to motivate this work. However, I think one should always put numbers in perspective and clearly state whether this method is practically useful yet. Therefore I want to see perplexity numbers on a **dense** smaller model. For example for the Qwen3 experiments we could confront the numbers with dense `Qwen/Qwen3-1.7B` and `Qwen/Qwen3-4B`. 
+I would guess that those dense models are much better (given the similar parameter numbers) than the pruned 8B model. I can promise to not decrease my rating because of that, but I think in order to progress science we need to keep those inevitable baseline in mind. 
+
+3. [less important to my assessment] The post training experiments of Figure 2 a) don't show any meaningful differences between LLM-Pruner and Lang-Prune IMO. They both seem to converge to a similar loss, meaning that the choice of pruned structures does not actually matter much when fine-tuning. Also what exactly is the trained on and evaluated here?
+
+Other weakness (not to be discussed):
+- code not available for review / to test.
+
+### Questions
+- What's the point of including the "Min" aggregation criterion in the paper at all as an ablation? It is conceptually clear that this is nonsense and imo it just distracts when reading the tables.
+- Have you considered applying your method also to other versions of "domain-overfitting"? If you could generalize it and show results beyond multi-lingual that would certainly strengthen the paper.
+
+
+Improvements to the paper (no need to discuss during rebuttal):
+- can you please streamline the style of the results tables?
+- you call the proposed rule sometimes "merge" and "max", I recommend to unify this.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper relates to an LLM pruning method that ensures fairness across languages, i.e. it aims at avoiding excessive degradation of the quality for a particular language.
+
+As a preamble to the method description, the paper presents a study which demonstrates how, in the absence of any remediation, pruning incurs catastrophic deterioration of a model's ability to converse in one or more languages.
+The setup is as follows: consider a multi-language dataset of 900 samples, consisting of 100 samples for each of 9 different languages. 
+(a) prune the model (the authors use aya-expanse-8b, a multi-lingual base model), using the multi-lingual dataset for calibration, and measure perplexity for each language.
+(b) prune the model, but this time, use mono-lingual subsets, and measure perplexity for each language.
+For a "fair" pruning method, i.e. one that does not advantage one language above others, one might expect (a) and (b) to yield the same per-language perplexity measures.
+However the authors find that (b) consistently yields better scores (lower perplexity), which is to be expected, but also notice large relative discrepancies between language, which leads them to posit that the method (LLM Pruner) does not adequately balance quality across languages.
+The author's hypothesis: using a multi-lingual calibration dataset may cause the importance of critical neurons to be overlooked, as importance is averaged over many languages. Thus, a neuron that is uniquely capable of addressing the needs of one language, is more likely to be pruned that a neuron that serves multiple languages.
+
+To remedy this problem, the author propose to calculate importance of neurons for each language separately.
+Similar to LLM-Pruner, importance is calculated for groups of inter-dependent neurons.
+The authors refer to the lang-prune paper for the calculation of the importance metric, however it is not clear how exactly the calculation is done, since Lang-Prune mentions they use the "activation attributable to each group", while the LLM-Pruner paper uses loss gradients.
+Importance metrics are further rescaled with min-max normalization so as to make them comparable between languages.
+A critical difference with LLM-pruner and other techniques lies in the way that multi-lingual importance is defined as the *max* (not the average) of language-specific importance.
+This ensures that a group that is critically important, even for a single language, is less likely to be pruned.
+
+Experimental results are shown for two base LLMs (Qwen3-8B and aya-expanse-8b) and exhibit superior results for Lang-Prune over LLM-Pruner.
+
+The authors also show the results of applying (LoRA-based) post training to the prune model in order to recover the loss incurred by pruning.
+They show the Lang-Prune enables mildly faster recovery, although the difference is not hugely significant.
+
+In the last part of the paper, the authors evaluate the method on out-of-distribution languages, and show superior results against the LLM-Pruner baseline.
+
+### Strengths
+The paper is nicely written.
+
+The proposed method is tested in multiple contexts (2 base language models).
+
+### Weaknesses
+In equation (1), the "activation attributable to $C_j$", denoted as $f_{C_j}(x)$, is never defined. The paper refers to LLM-Pruner, however the LLM-Pruner uses a different heuristic for calculating weight importance: they do a first-order approximation of the loss, using the gradient of the loss with respect to each parameter. It is therefore unclear how $f_{C_j}(x)$ is calculated. Since this is a major part of the method, this would need to be explained very carefully in the final version of the paper.
+
+The advantage of Lang-Prune over LLM-Pruner after post-training is, though not negligible, hardly significant.
+
+The authors should compare their work against other baselines; for example:
+* Multilingual Brain Surgeon (LREC 2024)
+* Pruning Multilingual Large Language Models for Multilingual Inference (EMNLP 2024)
+
+There is little theoretical justification for the proposed method; to compensate for the relative lack of theoretical grounding, we would like to see more experimental studies. For example, we would like the authors to share insights on the language-specific importance of some neurons, with carefully curated samples to show how they trigger differently depending on the language.
+
+### Questions
+In Table 1, you quote perplexity after pruning in the multi-lingual and mono-lingual cases, and calculate a ratio. Would it not be more significant to compute the ratio of the *increase* in complexity over the base (non-pruned) model?
+I think it would be informative to show the perplexity of the base model in that table too (I am aware this is already shown in table 2).
+
+How do you explain that Lang-Prune achieves better *average* perplexity than LLM-Pruner over multiple languages? One might assume that the compromise of using the maximum of per-language importance would, on average, lead to inferior results?
+
+How does language-aware pruning fundamentally differ from task-aware pruning?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors propose Lang-Prune, a language-aware structured pruning framework built on top of LLM-Pruner. Lang-Prune computes per-language importance scores on small calibration sets and max-aggregates them to preserve any structure important for at least one language. It maintains full compatibility with LLM-Pruner coupled-structure mechanism and pruning schedules, introducing only minor changes to the scoring process. Experiment results show Lang-Prune indeed helps efficient and interference-free multi-lingual LLMs.
+
+### Strengths
+The method proposed in the paper is simple yet effective; the paper is easy to read overall.
+
+### Weaknesses
+Experiments in the paper are mostly limited to PPLs. I hope to see more benchmarks related to multilingual reasoning and generation, e.g. translation.
+
+### Questions
+1. Will the method work on larger-scale LLMs, e.g. 70B? (I understand that possibly the experiments could not be done due to hardware constraints.)
+2. Only max/min/mean aggregators are used. What about other measures for aggregation, e.g. weighted aggregation?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

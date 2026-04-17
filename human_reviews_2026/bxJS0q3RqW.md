@@ -1,0 +1,184 @@
+# HF-Font: Few-Shot Font Generation via High-Frequency Style Enhancement and Fusion
+
+- Decision: Reject
+- Scores: 2, 2, 2, 4
+
+## Abstract
+Few-shot font generation aims to create new fonts with a limited number of glyph references. It can be used to greatly reduce the workload of manual font design. However, although existing methods have achieved satisfactory performance, they still struggle to capture delicate glyph details, thus resulting in stroke errors, artifacts, and blurriness. To address these problems, we propose HF-Font, a novel framework that generates fonts with higher structural fidelity. Specifically, inspired by the observation that high-frequency information of character images often contains distinct style patterns (e.g., glyph topology and stroke variation), we develop a novel style-enhanced module to improve the style extraction by incorporating high-frequency features from reference images using a high-pass filter. Then, for guiding the generation process, we design a Style-Content Fusion Module (SCFM), which integrates the style features with a component-wise codebook that encodes content semantics. Moreover, we also introduce a style contrastive loss to better transfer high-frequency features. Extensive experiments show that our HF-Font outperforms the state-of-the-art methods in both qualitative and quantitative evaluations, demonstrating its effectiveness across diverse font styles and characters. Our source code will be released soon.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes a method that creates a new font based on a few given images. To make the model well distinguish background noises, the method introduces a gate mechanism. They also use the high-pass filter to capture the detailed style information and apply it using a style-content fusion module consisting of two grouped residual attention blocks. Finally, a style contrastive loss is used to train the model to further obtain discriminator features. The results show that the proposed HF-Font achieves the state-of-the-art performance for few-shot font generation tasks.
+
+### Strengths
+The paper proposes a sophisticated architecture that increases the performance greatly compared to the previous methods. Using attention blocks to control the style details based on a given content image makes sense. They further decrease the calculation costs by using a grouped residual layer. Also, it is interesting to find the proposed new position bias works better than usual positioning encoding.
+
+### Weaknesses
+The reviewer concerns that this paper is quite similar with the paper “DA-Font: Few-Shot Font Generation via Dual-Attention Hybrid Integration” which is already accepted in ACM MM in April, but they did not cite it nor compare with it. DA-Font already proposed a dual attention module, a content alignment module and the style contrastive loss. Except for them, the novelty and the performance improvement of the paper looks marginal.
+
+### Questions
+- What is the major difference between the proposed paper and DA-Font?
+- The images acquired by the high-pass filter look like just an edge map or a gradient map. Can they be used instead of high-frequency images?
+- What do the background noises mean that are eliminated by the gate layer? The reference images seem to have a simple white background.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes HF-Font, an end-to-end method for generating high-quality fonts from a few reference images. The key idea is to enhance style extraction capability using high-frequency features and to effectively fuse content (glyph semantics) and style representations. The proposed framework integrates multiple modules, such as Style-Enhanced Module, Style-Content Fusion Module, and Contrastive Loss, to achieve both structural integrity and stylistic fidelity. Experiments on a large-scale Chinese font dataset demonstrate that the proposed method outperforms existing approaches both quantitatively and qualitatively.
+
+### Strengths
+This paper's strengths are as follows.
+
+(1) The paper validates the effectiveness of the proposed method through extensive comparisons with many existing approaches.
+
+(2) Ablation studies are conducted for each module to verify its individual contributions.
+
+### Weaknesses
+This paper's weaknesses are as follows.
+
+(1) The concept of feature extraction based on high-frequency components for font or text generation has already been proposed by Dai et al. [1]. The prior work uses high-frequency information from handwritten text images, while this paper merely extends the same idea to printed font generation.
+
+(2) Many of the proposed modules are not novel and resemble components introduced in previous works. For example, the Style-Enhanced Module is very similar to the architecture proposed by Dai et al. [1]. The Glyph Feature Decomposition is nearly identical to the modules used in Yao et al. [2] and Pan et al. [3]. The Content Alignment Module is essentially the same as the Global Style Aggregator in Pan et al. [3]. The Grouped Residual Layer is based on Li et al. [4].
+
+(3) Other modules are only loosely related to the core novelty (the use of high-frequency features) and do not contribute directly to the central idea of the paper.
+
+---
+[1] Gang Dai, et al., “One-DM: One-Shot Diffusion Mimicker for Handwritten Text Generation,” ECCV2024
+[2] Mingshuai Yao et al., “VQ-Font: Few-Shot Font Generation with Structure-Aware Enhancement and Quantization,” AAAI2024
+[3] Wei Pan et al., “Few shot font generation via transferring similarity guided global style and quantization local style,” ICCV2023
+[4] Yuzhen Li et al.,  “GRFormer: Grouped Residual Self-Attention for Lightweight Single Image Super-Resolution,” ACM MM2024
+
+### Questions
+My questions about this paper are as follows.
+
+(1) The paper states, “Given that the reference images usually contain background noise…” — What kind of background noise exists in font images? While handwritten text images may naturally contain background noise as in [1], such artifacts are generally not expected in font images. Please clarify what is meant by “background noise” in this context.
+
+(2) In Figure 2, some modules are pre-trained while others are trainable. Please explicitly indicate which components are learned during the main training phase .For example, the Content Encoder should be a pre-trained module and likely not updated during font generation training.
+
+(3) Regarding Table 1, are the reported values for the compared methods accurate? The previous work IF-Font [2] reports results under the same evaluation metrics and dataset (see Table 2 of the IF-Font paper). However, the values differ significantly. For instance, on the UFUC dataset, IF-Font (1-shot) reports a FID of 6.7695, whereas this paper reports FID of 59.6292 for IF-Font (4-shot). What accounts for this discrepancy?
+
+---
+[1] Gang Dai, et al., “One-DM: One-Shot Diffusion Mimicker for Handwritten Text Generation,” ECCV2024
+[2] Xinping Chen, et al., “IF-Font: Ideographic Description Sequence-Following Font Generation,” NeurIPS2024
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes HF-Font, a few-shot font generation framework that leverages high-frequency information to enhance style feature extraction. The method introduces a style-enhanced module with a high-pass filter, a Style-Content Fusion Module , and a style contrastive loss. Experimental results on Chinese character datasets demonstrate superior performance over several state-of-the-art methods in both quantitative and qualitative evaluations. While the idea of employing high-frequency information is interesting and the model design is relatively comprehensive, the paper suffers from issues in presentation details, experimental rigor, and methodological justification, which ultimately undermine its contribution and reliability.
+
+### Strengths
+The core idea of employing high-frequency features to capture fine-grained style details like stroke topology is innovative and well-motivated. And the supplementary material offers valuable insights into network architectures, codebook visualizations, and additional results.
+
+### Weaknesses
+1. Insufficient Comparison with Recent Works: The latest method used for comparison is from NeurIPS'24. The absence of comparisons with more recent SOTA methods (e.g., from 2025) weakens the claim of superior performance.
+
+2. Following recent works in the field, qualitative evaluation should include the generation of complete sentences to avoid cherry-picking to some extent. This is absent in the current evaluation.
+
+3. Ineffective Exploitation of High-Frequency Information: The visual results do not convincingly demonstrate that high-frequency features are being effectively utilized. Issues such as missing strokes, inconsistent dry brush textures, and inconsistent styles (e.g., Figs 6, 12, 15) persist in the generated characters.
+
+4. Lack of High-Frequency-Specific Quantitative Metrics: The paper's central thesis is that high-frequency information is crucial for capturing style and improving structural fidelity. However, the evaluation relies entirely on generic, holistic image metrics (SSIM, LPIPS, FID) which are not specifically sensitive to high-frequency content.
+
+5. Unprofessional Formulation and Unexplained Notation: 1. The notation in formulas is highly inconsistent, mixing symbols like *, ·, and \times arbitrarily. 2. The term "Overall Objective Loss" is non-standard and awkward. 3. Numerous symbols are defined once and never used again (e.g., A(i) \ P(i)), cluttering the text without improving understanding.
+
+6. Inadequate User Study Design: The user study is critically under-explained. It is unclear if all 20 volunteers evaluated the same set of 100 samples or if the samples were randomized per user. In addition, with only 20 participants, the sample size is too small to draw statistically significant conclusions.
+
+### Questions
+see weakness.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on few-shot font generation, which creates new fonts with a limited number of glyph references. The current models are still hard to capture delicate glyph details, thus resulting in stroke errors, artifacts, and blurriness. Authors develop a novel style-enhanced module to improve the style extraction by incorporating high-frequency features from reference images. Authors also develop a Style-Content Fusion Module (SCFM) to integrate style features with a component-wise codebook for encoding content semantics.
+
+### Strengths
+To handle stroke errors, artifacts, and blurriness in FFG task, the authors develop a novel style-enhanced module to improve the style extraction and a Style-Content Fusion Module (SCFM) to integrate style features. A style contrastive loss is developed to better transfer high-frequency features. The paper is well-written and easy to follow.
+
+### Weaknesses
+1. About the insight. In Fig.1, we can find that there are some texture patterns (in white lines) in high-frequency images. However, I think these patterns may have no contribution to the font style. 
+2. Since the authors claim high-frequency information is important for style features, the authors would be better to provide visualization results to support this claim.
+
+### Questions
+1. As I know, the font generation task aims to generate images with two colors, black and white. How to define the high-frequency in this case?
+2. I think the style information can be separated into two parts: global and local. The high-frequency information maybe only affect the local style details. 
+3. The authors claim "further enlarging the codebook yields marginal gains, with some metrics (e.g., RMSE) even showing slight degradation. This suggests that while a larger codebook could enhance representation, excessive sizes would introduce more redundant information, which might compromise the model’s efficiency". I notice the codebook size is also an important hyper-parameter in other tasks, such as VAE. Do the experimental results have similar trends?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

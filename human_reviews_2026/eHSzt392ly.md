@@ -1,0 +1,139 @@
+# Player-optimal Stable Regret for Bandit Learning in Many-to-one Matching Markets with Substitutability
+
+- Decision: Reject
+- Scores: 4, 4, 6
+
+## Abstract
+Bandit learning in matching markets has gained increasing attention, where one side of participants (players) learns unknown preferences through repeated interactions with the other side (arms). While prior studies mainly address one-to-one settings, many real-world applications — such as online advertising and negotiation between suppliers and demanders — naturally involve many-to-one matchings. Under the widely adopted substitutability condition, which guarantees the existence of stable matchings, learning becomes more challenging: players struggle to discover opportunities to be accepted by desirable arms due to the complex, set-dependent nature of arm preferences. Existing studies in this setting provide regret guarantees only for the player-pessimal stable matching, where the player side receives the least favorable outcome among all stable matchings. In this work, we propose a new algorithm: RIFLE, that addresses these limitations via a randomized initialization to uncover indexable preferences and an index-based phase of identifying explorable arms with decentralized conflict-free exploring, tailored for substitutable many-to-one environments. We theoretically prove that RIFLE converges to the player-optimal stable matching with a cumulative regret bound of 
+$O(\max\{N, K\} \log T / \Delta^2)$, where $N$ is the number of players and $K$ is the number of arms. This result makes two key contributions. First, our approach is more general: it operates under the most general preference — substitutable preference conditions without pre-setting arm index. Second, we derive a player-optimal stable regret bound that is currently the best-known for both one-to-one and many-to-one matching markets.
+Empirical evaluations demonstrate that our approach significantly outperforms existing baselines in both matching quality and convergence speed.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper studies the many-to-one matching markets under bandit framework, focusing on substitutability assumption. It assumes that the players (the one side) have unknown preferences while arms (the many side) have known preferences. The paper aims to find the player-optimal stable matching, and proposes an algorithm that consists of three phases: initialization, indentifying explorable arms, and explore-then-commit. The logarithmic cumulative regret is established.
+
+### Strengths
+1. The paper provides extensive comparison with existing literature. 
+
+2. The theoretical claim looks solid, and simulated experiments are conducted to complement the theory.
+
+### Weaknesses
+1. The algorithmic presentation needs improvement. What is the key difference of substitutability compared to responsiveness that makes the problem more difficult? Can you give an example with substitutability such that AETDA (Kong & Li 2024) failed to identify the player-optimal stable matching? What is the key novelty of the proposed algorithm that solved the problem?
+
+2. The technical contribution is rather limited. Compared to Kong 2024, the only contribution of this work is that the paper studies the player-optimal stable regret with substitutability and there is a $1/N$ improvement. The algorithm also looks similar to theirs, all utilizng the UCB structure to eliminate arms.
+
+### Questions
+1. Please see the weakness part. The paper presentation might benefit from examples, especially to readers that are not familiar with the line of work. 
+
+2. I suggest the authors to name the algorithm.
+
+3. For the experiments, have you considered implementing algorithms when there only exists a unique matching especially when your baseline algorithm is evaluated on player-pessimal stable regret? 
+
+4. What is the lower regret bound of the problem?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies the problem of bandit learning in many-to-one matching markets under the general substitutability condition. While previous works have mostly focused on one-to-one settings or many-to-one settings with responsive preferences, this work addresses the more challenging scenario where arms (e.g., resources or positions) have substitutable preferences over sets of players. The authors propose a novel algorithm that combines randomized initialization and a decentralized, conflict-free exploration mechanism, enabling players to efficiently identify explorable arms and ultimately converge to the player-optimal stable matching. Theoretical analysis shows that the proposed method achieves a regret bound of $O(\max{K,N}\log T/\Delta^2)$, which matches or improves upon the best known results in both one-to-one and many-to-one settings. Empirical results further demonstrate the superiority of the proposed approach over existing baselines in terms of both matching quality and convergence speed.
+
+### Strengths
+1. The paper addresses an important and challenging problem of bandit learning in many-to-one matching markets with substitutable preferences, representing a significant generalization over prior works that mainly consider responsive preferences or one-to-one settings.
+
+2. The regret analysis is rigorous, and the theoretical results are strong, establishing the first player-optimal stable regret bound under substitutable preferences.
+
+3. The paper is generally well-written, with clear and detailed explanations of the problem formulation, algorithmic design, and theoretical analysis. The related work section is comprehensive and provides a good context for the contributions.
+
+### Weaknesses
+1. The main innovation lies in the initialization phase (using a musical chairs approach) and the exploration strategy for identifying active arms. However, these techniques may not be particularly surprising or fundamentally novel.
+
+2. While the paper claims to be fully decentralized with no predetermined indices for players or arms, it assumes that the matching outcome is globally observed by all players. This assumption may not be realistic in practical decentralized systems and could limit the applicability of the approach.
+
+3. The experimental evaluation is mainly limited to comparison with the ODA algorithm. Including more baselines, such as algorithms designed for responsive preferences, would provide a more comprehensive assessment of the proposed method’s advantages and limitations.
+
+### Questions
+1. Will players share an identical index?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper considers a matching problem with the following characteristics.
+
+- It is a many-to-one matching, where each players (the left side) select arms (right side).
+- Players $i$'s preference for arm $j$ is $\mu_{i,j}$, which is unobserved.
+- Arm $j$'s preferences over arms are $Ch_j(S)$ over sets of players $S$, satisfying substitution, rather than the stricter responsiveness notions.
+
+The algorithm they present has three phases. The first is the indexing phase, where every player obtains an index number as soon as they are uniquely accepted by an arm. The second performs some type of arm indexing. However, it is not clear from the text why those steps are performed. Are they necessary, or do they simply make the main algorithm (Alg. 3) simpler to analyse? It overall appears unnecessarily complex to me. Perhaps there is a better solution.
+
+That said, given that this scenario is a slight generalisation, the regret bounds are welcome, if not particularly groundbreaking. The proof of Phase 3 seems correct, but I could not really follow Phase 1 or 2's reasoning.
+
+### Strengths
+- Slight generalisation of existing work
+- Player-optimal rather than pessimal bounds given
+
+### Weaknesses
+- It is unclear why this algorithm structure is chosen. It is not motivated at all, and phases 1 and 2 are not well explained.
+- The proposal setting is a bit unusual, in that it is neither centralised mathcing, nor independent, but players sequentially pull arms in some instances.
+
+### Questions
+Better explain phase 1 and 2.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2

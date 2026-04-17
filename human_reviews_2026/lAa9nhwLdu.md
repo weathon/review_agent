@@ -1,0 +1,128 @@
+# Stable Forgetting: Bounded Parameter-Efficient Unlearning in LLMs
+
+- Decision: Reject
+- Scores: 6, 4, 4
+
+## Abstract
+Machine unlearning in large language models (LLMs) is essential for privacy and safety; however, existing approaches remain unstable and unreliable. A widely used strategy, the gradient difference method, applies gradient descent on retained data while performing gradient ascent on forget data, the data whose influence should be removed. However, when combined with cross-entropy loss, this procedure causes unbounded growth of weights and gradients, leading to training instability and degrading both forgetting and retention. We provide a theoretical framework that explains this failure, explicitly showing how ascent on the forget set destabilizes optimization in the feedforward MLP layers of LLMs. Guided by this insight, we propose Bounded Parameter-Efficient Unlearning, a parameter-efficient approach that stabilizes LoRA-based fine-tuning by applying bounded functions to MLP adapters. This simple modification controls the weight dynamics during ascent, enabling the gradient difference method to converge reliably. Across the TOFU, TDEC, and MUSE benchmarks, and across architectures and scales from 125M to 8B parameters, our method achieves substantial improvements in forgetting while preserving retention, establishing a novel theoretically grounded and practically scalable framework for unlearning in LLMs
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper tackles the instability problem in machine unlearning for large language models when using the gradient difference method with cross-entropy loss. The authors provide a theoretical analysis showing that gradient ascent on the forget set causes unbounded growth of weights and gradients in MLP feedforward layers, which explains why existing LoRA-based approaches fail. Their proposed solution is elegantly simple: apply bounded functions (specifically sine or tanh) to the low-rank adapters in feedforward layers. This modification stabilizes training and enables reliable unlearning. The method is evaluated across three benchmarks (TOFU, TDEC, MUSE) spanning multiple architectures (GPT-Neo, Phi, LLaMA) and scales (125M-8B parameters), demonstrating substantial improvements—up to three orders of magnitude in forget quality—while maintaining model utility.
+
+### Strengths
+Originality: The theoretical analysis of gradient instability in unlearning is novel and provides the first rigorous explanation for why standard approaches fail. The connection between boundedness and stability is insightful, and applying sine functions to LoRA adapters is a creative solution.
+
+Quality: The experimental evaluation is thorough, covering three major benchmarks with multiple baselines across different architectures and scales. The mathematical proofs appear sound.
+
+Clarity: The paper is well-structured with clear motivation, intuitive explanations of technical concepts, and informative visualizations. The progression from problem identification to theoretical analysis to practical solution is logical and easy to follow.
+
+### Weaknesses
+1. Theory-Practice Gap: The theoretical analysis (Theorem 3.1, Lemma 3.1) focuses on pure gradient ascent, but the proposed method uses gradient difference—simultaneous gradient descent on retain data and gradient ascent on forget data (Eq. 2). While Figure 2 empirically shows that weights still grow excessively under gradient difference, the theory doesn't explain why the descent step doesn't counterbalance the ascent-driven instability. This gap weakens the theoretical justification for the proposed solution.
+2. Baseline Reproducibility Concerns: Many baseline results in Table 1 and Table 2 are taken from prior papers (Cha et al. 2025, Wang et al. 2024, Maini et al. 2024) rather than being reproduced in identical experimental setups. This raises questions about fair comparison—were hyperparameters, architectures, training procedures, and evaluation protocols matched exactly? Without direct reproduction, it's difficult to assess whether improvements stem from the method itself or from subtle implementation differences.
+3. Incomplete Architectural Analysis: The paper applies bounded functions only to MLP feedforward layers, claiming attention layers are inherently stable. However, this design choice is justified only through brief empirical observation without rigorous analysis. Why do attention layers not exhibit similar gradient explosion? Is this due to architectural properties (residual connections, layer norm) or optimization dynamics? A deeper investigation would strengthen the method's theoretical foundation and clarify its scope of applicability.
+
+### Questions
+1. Extending Theory to Gradient Difference: Your theorems analyze pure gradient ascent, but the method uses both ascent and descent (Eq. 2). Can you provide theoretical or empirical analysis showing how the descent term on retained data interacts with the ascent-driven weight growth? Does the descent term merely slow down divergence without preventing it, or is there a more complex interaction? Even an informal argument would help bridge this theory-practice gap.
+2. Fair Baseline Comparison: For results in Table 1 and Table 2 taken from other papers, can you confirm that experimental conditions were matched (same hardware, hyperparameters, random seeds, evaluation metrics)? Better yet, could you reproduce several key baselines (e.g., GD+LoRA, LoKU) in your experimental setup to ensure direct comparability? This would substantially strengthen the empirical claims.
+3. Bounded Function vs. Alternative Stabilization Methods: You identify bounded parameterization as the solution, but have you explored alternative stabilization approaches such as gradient clipping, explicit weight regularization (L2 penalty on AB^T), or adaptive learning rates for forget vs. retain data? Understanding whether boundedness is uniquely effective or if other regularization mechanisms work equally well would clarify the method's core insight and potentially lead to simpler alternatives.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes "Stable Forgetting," a parameter-efficient unlearning method that addresses the training instability of the gradient difference approach when combined with cross-entropy loss in large language models. The authors theoretically show that gradient ascent on a forget set causes unbounded growth of weights and gradients in MLP feedforward layers, leading to optimization instability. They propose applying bounded nonlinear functions (e.g., tanh or sine) to LoRA adapters in these layers to constrain weight dynamics. The method demonstrates improved forgetting while preserving retention across TOFU, TDEC, and MUSE benchmarks.
+
+### Strengths
+- Identifies the training instability issue when combining the gradient difference method with cross-entropy loss, and for the first time theoretically attributes it to the unbounded growth of weights and gradients in MLP feedforward layers, providing a new perspective for understanding model dynamics during unlearning.
+- The design of introducing bounded functions based on LoRA adapters does not require model architecture reconstruction, and can constrain parameter updates through lightweight modifications, balancing parameter efficiency and engineering feasibility, which is suitable for rapid deployment in resource-constrained scenarios.
+- Validated across multiple models and parameter scales on three mainstream unlearning benchmarks, covering typical scenarios such as entity unlearning and copyrighted content unlearning.
+
+### Weaknesses
+- The paper claims that bounded functions are needed to solve training instability, but fails to verify the effectiveness of conventional optimization methods in the field. Simple strategies like adjusting learning rate and introducing weight decay have been proven in existing studies to suppress excessive parameter growth, yet the paper does not use them as baselines for comparison. This makes the conclusion that "bounded functions must be adopted" less persuasive, as a small learning rate may achieve similar stability effects in practical tests, weakening the innovation of the method.
+- Ablation experiments are insufficient, failing to answer core questions such as the scientificity of bounded function selection, the sufficiency of only constraining MLP layers, and hyperparameter sensitivity. Additionally, experiments are limited to small and medium-sized models below 8B, lacking verification on mainstream large-scale models, resulting in gaps in generalization verification.
+- The method is essentially a conventional combination of regularization and LoRA, failing to break through the limitations of existing unlearning frameworks. LoRA itself already has a certain degree of parameter constraint capability, and the improvement from introducing bounded functions is minor, with no significant progress in solving the core pain points of unlearning.
+
+### Questions
+- The paper's central claim is that "the forget loss employs cross-entropy, fine-tuning becomes unstable." However, in practice, many researchers have found that simply using an small learning rate or early stop on the forget set can effectively mitigate gradient explosion while preserving the interpretability of the cross-entropy objective. Did the authors experiment with such strategies? If so, could they provide a comparison in the rebuttal against baselines?
+- While the main results focus on models up to 8B, the paper mentions preliminary experiments on LLaMA-3.1-70B. However, optimization dynamics in very large models may differ qualitatively—due to stronger implicit regularization, smoother loss landscapes, or more stable activation statistics, gradient explosion might be inherently less severe. Could the authors provide training curves (analogous to Fig. 2) for the 70B model, showing the evolution of weight and gradient norms during unlearning? If standard GD+LoRA is already stable at this scale, the benefit of bounded parameterization may be limited to smaller models.
+- Finally, I want to know if you have considered the robustness of your "bounded LoRA method" in continual unlearning scenarios. Your paper focuses on single-round unlearning, but in practice, models may need to forget multiple batches of data sequentially. Can you supplement multi-round unlearning experiments and report how model performance degrades over rounds?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces Bounded Parameter-Efficient Unlearning, a method that stabilizes unlearning in large language models (LLMs) by applying bounded activation functions to LoRA adapters in MLP layers. It addresses the instability of gradient-ascent-based forgetting when using cross-entropy loss. The authors provide a theoretical analysis showing that unbounded weight growth in MLP layers causes instability, and propose a simple yet effective solution using bounded functions like sine or tanh. The method is evaluated on TOFU, TDEC, and MUSE benchmarks across models from 125M to 8B parameters, showing significant improvements in forgetting quality while retaining model utility.
+
+### Strengths
+1. The core insight—that gradient ascent in MLP layers leads to unbounded weight growth and instability—is novel and well-motivated. The use of bounded activations in LoRA adapters for unlearning is a creative and simple solution that has not been explored in prior work.
+2. The theoretical analysis is sound and well-supported by empirical validation. The paper demonstrates a clear understanding of optimization dynamics in unlearning and provides both ablations and sensitivity analyses to support its claims.
+
+### Weaknesses
+- While the method is shown to be robust across many settings, there is little discussion of when it might fail. For example, does the method degrade when the retain and forget sets are highly similar? What happens under sequential unlearning requests?
+- The baselines compared (e.g., GD+LoRA, IHL+FILA) are relevant but not exhaustive. Recent methods like preference-based unlearning or representation-based editing are mentioned but not empirically compared. Including these would strengthen the claim of state-of-the-art performance.
+- The sine activation introduces a frequency parameter ω, and while a sensitivity analysis is provided, there is little guidance on how to choose this parameter in practice. Is there a principled way to set it based on data or model properties?
+
+### Questions
+- Why not use other bounded activations like sigmoid or hard tanh? Was sine chosen purely empirically, or is there a theoretical reason?
+- How does the method behave when the forget and retain distributions are very similar? This is a known challenge in unlearning.
+- Does the instability issue also affect attention layers when using gradient ascent? If so, why were they not addressed in the method?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

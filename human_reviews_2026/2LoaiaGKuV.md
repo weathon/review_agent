@@ -1,0 +1,243 @@
+# ViTSP: A Vision Language Models Guided Framework for Solving Large-Scale Traveling Salesman Problems
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4, 6, 2
+
+## Abstract
+Solving the Traveling Salesman Problem (TSP) is NP-hard yet fundamental for a wide range of real-world applications. Classical exact methods face challenges in scaling, and heuristic methods often require domain-specific parameter calibration. While learning-based approaches have shown promise, they suffer from poor generalization and limited scalability due to fixed training data. This work proposes ViTSP, a novel framework that leverages pre-trained vision language models (VLMs) to visually guide the solution process for large-scale TSPs. The VLMs function to identify promising small-scale subproblems from a visualized TSP instance, which are then efficiently optimized using an off-the-shelf solver to improve the global solution. ViTSP bypasses the dedicated model training at the user end while maintaining effectiveness across diverse instances. Experiments on real-world TSP instances ranging from 1k to 88k nodes demonstrate that ViTSP consistently achieves solutions with average optimality gaps of 0.24\%, outperforming existing learning-based methods. Under the same runtime budget, it surpasses the best-performing heuristic solver, LKH-3, by reducing its gaps by 3.57\% to 100\%, particularly on very-large-scale instances with more than 10k nodes. Our framework offers a new perspective in hybridizing pre-trained generative models and operations research solvers in solving combinatorial optimization problems. The framework holds potential for integration into more complex real-world logistics systems.  The code is available at https://github.itap.purdue.edu/uSMART/ViTSP_ICLR2026.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors propose a divide-and-conquer approach for large-scale TSP: a VLM selects regions to optimize on a visualization of the current tour, and those regions are then handed to a traditional solver.
+
+### Strengths
+Introducing LMs into combinatorial optimization is an interesting idea, and the writing is clear.
+
+### Weaknesses
+1. Limited novelty
+In neural TSP solvers, divide-and-conquer is already a common paradigm. The use of a VLM here is not particularly fancy; it mainly selects axis-aligned rectangles and relies on sparse optimization rewards, amounting to a straightforward integration of a VLM into a standard divide-and-conquer framework.
+
+2. Experimental results and setup lack persuasiveness
+The method is built on traditional solvers but does not compare against improved neural solvers such as NeuroLKH. The current results only show that the combination of divide-and-conquer framework and efficient solvers (LKH, Concorde) outperforms constructive neural solvers, weak local reform (neuro)solvers, and traditional solvers; they do not demonstrate the added value of introducing a complex VLM.
+The benchmarks are mainly several TSPLIB instances, without tests on the commonly used ([0,1]×[0,1]) randomly generated Euclidean datasets. According to the NeuroLKH report, LKH and NeuroLKH can achieve sub–one-per-thousand gaps on such datasets. It would be useful to see how the proposed method performs under the same setting.
+The authors are encouraged to discuss whether the method can be applied to more complex, more constrained tasks and to provide attempts. Although focusing on large-scale TSP already represents substantial effort, more comprehensive discussion and trials would be valuable.
+
+Overall, my initial suggestion is borderline reject.
+
+### Questions
+Please see weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper tackles the classical TSP with a hybrid approach combining an exact solver (Concorde) with a Vision Language Model. The workflow proceeds iteratively between the solver and the VLM, with the VLM identifying sub problems based on a visualization of the problem + current solution, and the solver improving the current solution. Results show improvements on the TSPLIB benchmark.
+
+### Strengths
+I think that the paper's idea is original and novel. I am not aware of such an approach combining VLMs and exact solvers for this problem before. I think that the fact that a simple visualization of the current TSP solution being fed to a VLM gives us some meaningful results is pretty interesting and creative, if true!
+
+I think the results presented here seem very promising and significant, as the scale of TSPLIB problems solved by this method is claimed to be unprescedented. 
+
+However, I would like to note to the AC that I am not very confident about my review and understanding of the current landscape of this field. I will be reading other reviews carefully during the rebuttal period to identify potential gaps in my assessment.
+
+### Weaknesses
+I think that presentation of the results can be improved. The paper requires a lot of flipping between the main and appendix. The authors may try to make the main section more self contained when revising the paper.
+
+I also think that, practically, the real cost of a VLM-based approach will likely far exceed Concorde/other solvers at the moment. The authors noted simply "In ViTSP, the VLMs were accessed on demand online. Their usage did not rely on local GPU resources but was confined by the I/O rate." -- but perhaps a more nuanced discussion/justification/cost estimation would be helpful. There is a cost to each API call to an OpenAI-hosted model. Beyond that, there is a cost to running these models themselves.
+
+### Questions
+1. What is the advantage of ViTSP over Concorde? You claimed that exact solvers like Concorde are become intractable for very large problem sizes -- can you show / have you already shown any problem where Concorde is intractable and ViTSP can do the job?
+
+2. Is it possible to further ablate the VLM component? For instance, how important is the visual prompt vs. the textual prompt?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a vision-guided solution framework ViTSP for Traveling Salesman Problem, leveraging pre-trained VLMs to act as selector of improvement region and exact solvers to settle down the subproblem. The authors also conduct experiments on some real-world instances in TSPLIB to show the performance on large-scale scenario.
+
+### Strengths
+1 This paper introduce VLM to directly determine the box region to be revised instead of time-consuming training, which is an interesting attempt compared to traditional learning-based paradigm.
+
+2 The proposed method outperforms the baselines on most of large-scale non-uniform real-world instances (N>1000).
+
+3 Figure 1 presents clear and nice visualization to understand the pipline.
+
+### Weaknesses
+1 The experiment is not sufficient for merely certain large-scale instances in TSPLIB. I suggest that the authors need to demonstrate its effectiveness on other random uniform and non-uniform datasets, datasets in INViT.
+
+2 ViTSP is essentially an improved approach. So how does its iterative improvement efficiency compare to other neural improvement methods?
+
+3 Dealing with TSP in a visual way is not a new 
+thing. In the past, there were a series of methods that used two-dimensional scatter plots as input. I suggest the author review relevant visual methods and elaborate on the advantages of VLM compared to them.
+
+4 The way to leverage VLM in this paper is invoking API, which is a simple way to use a large model. But is it possible to design a reasonable way to fine tune the model based on TSP tasks, making the combination of VLM and tasks more collaborative?
+
+5 The problem discussed in this paper is merely TSP, which is narrow. Can the VLM-based method adapt to solving other routing tasks?
+
+6 What is the initialization method used in this paper? From the title of Figure 4 in Appendix, it appears to be LKH3. Is the parameter values (especially the number of runs) of LKH-3 in initialization default? What's more, the quality of iteration and final solution highly depend on initialization. How about the performance of VLM-based improvement integrated with other solution initialization methods, e.g. random initialization or insertion initialization? I suggest the author provide more details about de initialization and comparative experiments with other initialization methods.
+
+7 Does the solution time include the initial solution generation time? I suggest the author provide more details about the solution time, including initial solution generation, VLM inference, and exact solving of subproblems.
+
+8 Does the input 2D image in ViTSP need scale, quality, and formatting requirements? When the instance scale is huge, scatter plots and circumnavigation maps appear crowded and convergent visually, which leads to a serious lack of fine-grained information. Applying the same scaling to instances of different sizes does not seem to lead to good visual perception of VLM. How was this paper handled?
+
+9 The leverage of VLM avoids the cost of intensive training. However, I would like to know if it would cause an increase in inference time compared to end-to-end methods.
+
+10 It seems that ViTSP is iteratively improved instance by instance. Can it be executed in parallel in batches?
+
+### Questions
+Please see weaknesses. The idea is very interesting and  I will adjust the paper’s score accordingly in my rebuttal to reflect the strengths identified.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposes ViTSP, a hybrid optimization framework that leverages pre-trained Vision-Language Models (VLMs) to identify promising spatial subregions in large-scale Traveling Salesman Problem (TSP) instances. These subproblems are then optimized by Concorde, forming an asynchronous pipeline with LKH-3 used for initialization. The approach avoids model training, claims strong scalability, and achieves competitive optimality gaps on 33 TSPLIB instances up to 85k nodes, outperforming LKH-3 under equal runtime budgets in many cases and achieving up to 0.19% average optimality gap.
+
+### Strengths
+The framework is well-designed and modular (visual selection, subproblem reconstruction, exact solver, asynchronous orchestration).
+
+Extensive experiments and detailed comparisons on large-scale real benchmarks (TSPLIB, N ≥ 1000) demonstrate practical effectiveness.
+
+No need for training/fine-tuning; low deployment barrier (uses existing VLM APIs + classical solvers), aligning well with real-world engineering needs.
+
+### Weaknesses
+Insufficient quantitative analysis on VLM output stability, repeatability, and prompt sensitivity.
+
+Fairness of runtime alignment and whether real online VLM latency is fully included needs clearer justification.
+
+Lacks theoretical analysis (convergence/performance guarantees) and interpretability evidence (why VLM can select “beneficial” regions).
+
+### Questions
+Please provide the full prompt text, the average number of boxes returned per call, and statistics on invalid VLM outputs 
+
+For result stability, report mean ± std (or confidence intervals) over 5–10 independent runs per instance to ensure results are not accidental.
+
+Clarify runtime measurement: does the VLM API waiting/latency count toward total runtime? 
+
+Regarding baselines: how are LKH-3 (multiple runs) parameters set? How are time limits aligned for Concorde, DeepACO, etc.? Please provide a per-instance configuration table (in appendix or supplementary).
+
+
+If considering offline/self-hosted VLMs (or fine-tuned models), what is the scalability and cost trade-off? Have the authors tried lightweight fine-tuning or RL signal-guided selection enhancement?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 5
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a vision-language-based framework that utilizes VLMs to identify subareas capable of reconstructing trajectories. The use of vision-language models is novel, and the evaluation on large-scale real-world datasets demonstrates the model’s strong generalization ability. However, some experimental limitations hinder a comprehensive assessment of the model’s performance.
+
+### Strengths
+The incorporation of vision-language models is innovative, and experiments conducted on large-scale TSPLIB instances demonstrate the model’s strong generalization capability.
+
+### Weaknesses
+1.The main concern lies in the solution initialization process. The model uses LKH for initialization, which introduces bias in evaluating its standalone effectiveness. To more fairly demonstrate the model’s capability, the authors should consider using random or greedy initialization instead. Comparing a method initialized by LKH against other heuristics or neural solvers is inherently unfair. Moreover, since the proposed framework is initialized by LKH yet fails to consistently outperform LKH under comparable runtime conditions, its claimed effectiveness remains questionable.
+
+2.Although the paper emphasizes scalability, it only evaluates 33 instances, which is insufficient to support the claim of large-scale generalization. The authors are encouraged to include TSPLIB instances with more than 500 nodes to better align with the paper’s stated focus on large-scale problems and to provide stronger empirical evidence.
+
+3.Additional baselines should be incorporated for a more comprehensive comparison. Specifically, large-scale solvers such as RBG[1] and SIT[2] are relevant benchmarks. Furthermore, NeuroLKH[3], a neural variant based on LKH, should be included as it provides a closer reference point for hybrid approaches similar in spirit to the proposed method.
+
+4.The abstract mentions that the proposed method reduces the optimality gap by 12% to 100%, but this claim is only briefly mentioned in the main text without sufficient explanation. Can the author further explain it?
+
+[1] Hierarchically solving large-scale routing problems in logistic systems via reinforcement learning.
+[2] Boosting Neural Combinatorial Optimization for Large-Scale Vehicle Routing Problems.
+[3] Neurolkh: Combining deep learning model with lin-kernighan-helsgaun heuristic for solving the traveling salesman problem.
+
+### Questions
+See details in Weaknesses.
+
+### Soundness
+1
+
+### Presentation
+3
+
+### Contribution
+1

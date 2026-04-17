@@ -1,0 +1,169 @@
+# White-Box Prompt Transformers: Variationally Grounded Prompt–Attention Coupling for Unified Image Restoration
+
+- Decision: Reject
+- Scores: 2, 4, 4
+
+## Abstract
+Can soft prompts in vision Transformers be made explainable?
+Prompt-based models have achieved remarkable success in image restoration, yet they remain largely opaque: the underlying Transformer operations and the mechanism by which prompts modulate attention are poorly understood. This work revisits guided image restoration, where an auxiliary modality \(A\) assists in restoring a target modality \(B\). We interpret \(A\) as a prompt and formulate a tailored structure-tensor total variation (STV) model, whose gradient suggests a white-box correspondence to prompt--attention interactions. This provides a principled bridge between prompts and attention. In scenarios where \(A\) is unavailable, we abstract its role into learnable soft prompts, enabling end-to-end training within standard Transformer pipelines. By unrolling the gradient flow of the STV variational problem, we derive the White-Box Prompt Transformer (WBPT), a cascaded architecture that embeds interpretability directly into attention operations. Extensive experiments on multiple benchmarks demonstrate that WBPT achieves state-of-the-art restoration performance while offering interpretable, controllable, and robust prompt--attention dynamics.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes White-Box Prompt Transformers (WBPT), a variationally grounded framework that aims to provide interpretability for prompt-based image restoration. The authors reinterpret the interaction between prompts and attention through a structure-tensor total variation (STV) formulation, whose gradient is unrolled into a cascaded Transformer architecture. This design yields a theoretically motivated attention mechanism, where each layer corresponds to an optimization step. Experiments on standard benchmarks such as BSD68, Rain100L, and SOTS demonstrate competitive results compared to existing prompt-based models. Overall, the work presents an interesting theoretical perspective, but primarily reframes existing architectures from a new interpretability viewpoint.
+
+### Strengths
+1. The paper is clearly written and well-structured, with detailed mathematical formulations and organized experimental sections.
+
+2. The proposed framework provides an interesting theoretical reinterpretation of prompt-based Transformers from a variational perspective.
+
+3. The experiments cover multiple standard benchmarks and include visualizations and ablation studies, showing careful empirical evaluation.
+
+### Weaknesses
+### Main Concerns:
+1. There are no parameters, FLOPs, or runtime discussions regarding the efficiency issue.
+
+2. As an image restoration solution, more visual results should be included, at least, should be included in the supplementary materials.
+
+3. From the experimental perspective, the validation is too limited, only in the Three-Degradation setting, while in recent years, there are already more benchmarks proposed in this topic, for example, 5 degradation, real-world evaluation, mixed degradation, etc, while these are missing, which limits its soundness of the proposed solution. Also, I believe from some recent research papers below, the authors can find more evaluation settings:
+
+[1] Junjun Jiang, Zengyuan Zuo, Gang Wu, Kui Jiang, and Xianming Liu. A survey on all-in-one image restoration: Taxonomy, evaluation, and future trends. TPAMI, 2025. 
+
+[2] Xiaole Tang, Xiang Gu, Xiaoyi He, Xin Hu, and Jian Sun. Degradation-aware residual-conditioned optimal transport for unified image restoration. TPAMI, 2025. 
+
+[3] Eduard Zamfir, Zongwei Wu, Nancy Mehta, Yuedong Tan, Danda Pani Paudel, Yulun Zhang, and Radu Timofte. Complexity experts are task-discriminative learners for any image restoration. CVPR, 2025.
+
+[4] Yuning Cui, Syed Waqas Zamir, Salman Khan, Alois Knoll, Mubarak Shah, and Fahad Shahbaz Khan. AdaIR: Adaptive all-in-one image restoration via frequency mining and modulation. ICLR, 2025.
+
+4. The implementation details are quite unclear, for example, how to get $x_{0}$ from the Input? Directly via the proposed White-box Prompt Transformer block or via a convolutional operation? 
+
+5. In Fig.1, the proposed method shows the **window partition**, so which base transformer block is adopted? The Swin Transformer style or the Restormer? This is totally not clear but extremely important, since the Restormer-style (Also the PromptIR adopted this) transformer did NOT include any window partition. I think this should also be clearly explained since this is not very clear in the current version. 
+
+6. The claimed “white-box” interpretability mainly relies on symbolic reformulation of existing attention operations, without providing concrete analytical or causal evidence.
+
+7. The performance improvement over baselines (e.g., PromptIR) is marginal and often within statistical variation, questioning the practical impact of the proposed framework.
+
+8. The variational derivation connecting STV gradients to attention is largely heuristic, lacking rigorous justification or ablation to verify the theoretical correspondence.
+
+9. Despite extensive formulas, the actual architectural novelty is limited—the model structure and training pipeline remain almost identical to previous prompt-based Transformers.
+
+10. The efficiency and scalability of the unrolled gradient-flow design are not discussed, leaving uncertainty about its real advantage in deployment.
+
+
+### Minor Concerns:
+1. The GPU type/usage, the training time, and inference time are expected to be included.
+
+2. Alg 1, Alg 2, and Alg 3 are too wide, which exceeds the overall width of the page requirements
+
+### Questions
+1. Could the authors provide a more comprehensive efficiency analysis, including parameter count, FLOPs, and inference/runtime comparison with PromptIR and other recent baselines? This would help verify whether the proposed “white-box” formulation offers any real computational advantage.
+
+2. The base Transformer design (Fig. 1) is unclear — does the model adopt a Swin-like window partitioning scheme or the Restormer-style global attention? Since this architectural choice critically affects both performance and interpretability, clarification and justification are needed.
+
+3. The variational derivation linking STV gradients to attention appears largely heuristic. Could the authors offer empirical or theoretical evidence (e.g., ablation or controlled experiments) demonstrating that this correspondence meaningfully explains the prompt–attention mechanism rather than serving as an analogy?
+
+4. The experimental validation is relatively narrow (only three degradations). Are there any plans or preliminary results for more diverse benchmarks, such as five-degradation, real-world, or mixed-degradation settings, as commonly evaluated in recent all-in-one restoration works?
+
+5. Since the claimed interpretability is one of the main contributions, can the authors provide quantitative or visual analyses (e.g., saliency or correlation metrics) to substantiate that the proposed framework genuinely enhances interpretability or controllability compared to black-box PromptIR?
+
+Please also refer to the **Weaknesses** for more concerns.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents the White-Box Prompt Transformer (WBPT), a framework that introduces a variational perspective to prompt-based transformers for unified image restoration. The authors derive a structure-tensor total variation (STV) loss whose gradient directly shapes the architectural design of the proposed white-box attention mechanism. This results in a direct mathematical link between prompts and attention, aiming to enhance interpretability and controllability. Extensive evaluations on multi-task image restoration show that WBPT attains competitive results while maintaining interpretability.
+
+### Strengths
+1. The theoretical connection between variational STV energy and prompt-driven attention is well motivated and clearly articulated.
+
+### Weaknesses
+1. My main concern is that the distinctions between white-box and black-box models needs clearer empirical justification. In experimental results, the performance margin between WBPT and the top black-box baselines (PromptIR, Restormer) is small. The interpretability and controllability of WBPT, while conceptually valuable, may have limited practical benefits in some real-world scenarios.
+2. Some mathematical approximations require further justification, such as the approximation steps in (4).
+3. The evaluation lacks some very recent related works, especially those on diffusion-based restoration and other interpretable prompt mechanisms.
+4. The paper lacks an analysis of computational efficiency, including comparisons of parameter count, and inference speed between the proposed WBPT and baseline methods.
+
+### Questions
+1. In the t-SNE analysis (Sec. 3.4), could the authors clarify how the white-box modeling contributes to better separation in the embedding space?
+2. Minor issue: In Table 1, the note “Results are reported as PSNR/SSIM.” is repeated twice.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper reframes prompt‑based all‑in‑one image restoration through a variational lens: it defines an STV energy, derives an approximate gradient, instantiates Single‑/Multi‑Prompted Structure Attention, and unrolls the explicit‑Euler gradient flow into a K‑stage Transformer where each stage couples MPSA with a learnable data‑consistency term. However, in all‑in‑one evaluation, WBPT does not perform so well considering that many recent works can do much better. But the white‑box idea is interesting.
+
+### Strengths
+1. The paper closes the loop from STV energy to gradient approximation, and then attention operator to unrolled optimizer, so that every attention term has a clear energetic origin.
+2. Final‑layer attention focuses on boundaries/structures rather than degradation textures; t‑SNE shows clearer task clusters than PromptIR; prompt‑parameter noise yields much smaller metric drops than PromptIR.
+3. The cost of modification and computation is low. Default K=10 steps; prompts are injected at the 6th block per step; single‑insertion matches multi‑insertion with lower cost.
+
+### Weaknesses
+1. WBPT uses a black‑box pyramid aggregator, which softens the fully white‑box narrative; a white‑box pyramid sketch would help.
+2. The Eq. (3) gradient‑to‑attention mapping involves approximations; the manuscript does not quantify when/where the mapping deviates or fails.
+3. Compared methods are limited, even some task-specific method like MPRNet are used for comparison.
+
+### Questions
+1. For Eq. (3), when does the gradient‑to‑attention approximation deviate most? Please add attention‑vs‑gradient discrepancy maps and a brief error analysis.
+2. Could you sketch a differentiable white‑box pyramid (e.g., variational down/up operators with STV‑consistent cross‑scale regularization) to replace the current black‑box aggregator in WBPT, and show a small‑scale comparison?
+3. Beyond “6th block once per step,” can you chart the trade‑off for multi‑insertion, number of prompts N, and projector rank vs accuracy/overhead?
+4. More recent works can be added for comparison such as Perceive-IR (TIP’25) and DFPIR (CVPR’25).
+5. t‑SNE currently covers single degradations; can you include rain+haze / noise+blur mixed protocols?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

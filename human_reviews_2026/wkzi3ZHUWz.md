@@ -1,0 +1,141 @@
+# Discrepancy-aware Score Learningfor Diffusion Training
+
+- Decision: Reject
+- Scores: 2, 8, 8
+
+## Abstract
+Diffusion models excel in stable training and distribution coverage, achieving remarkable results in various generative tasks. However, especially in high-resolution or structurally complex settings, their reliance on denoising score matching (DSM) leads to overly smoothed textures and limited perceptual detail. This limitation arises from DSM's propensity to reduce average reconstruction error rather than addressing challenging perceptual features in the data distribution. We propose Discrepancy-aware Score Learning (DSL), a novel adversarial training framework that incorporates a margin-based energy regularizer to score matching in order to address this challenge. In the noise space, DSL introduces an energy-based discriminator that adaptively highlights samples with high generation discrepancies. Our approach retains the denoising formulation while guiding the generator to prioritize difficult cases. We theoretically connect DSL to Wasserstein gradient flows, interpreting it as functional gradient descent regularized by the discriminator's energy surface. Moreover, we demonstrate that DSL is compatible with the underlying probabilistic model by establishing an equilibrium consistent with the true score function. Compared to baseline diffusion models and recent adversarial approaches, DSL significantly improves sample fidelity, perceptual sharpness, and semantic alignment, according to extensive experiments conducted across text-to-image generation, conditional synthesis, super-resolution, and 2D-to-3D reconstruction.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes Diffusion Score Learning (DSL), a new training framework for diffusion models. The method augments the standard Denoising Score Matching (DSM) objective by introducing a discriminator ($D_\phi$). The core idea is to provide a more "robust" supervisory signal using a hinge-based loss function:$L_\phi = |\epsilon_\phi - \epsilon|^2 + \lambda \max(0, m - |\epsilon_\phi - \epsilon_G|^2)$The authors claim this design emphasizes hard samples, reduces the variance of the supervision target, and enhances overall training stability.
+
+### Strengths
+Clear Motivation: The paper is well-motivated, addressing the critical and widely-recognized issues of high target variance and training instability in standard diffusion model training.
+
+Framework Simplicity: The proposed framework is simple and presents a natural, clean integration of GAN-based adversarial learning with the score-matching objective.
+
+### Weaknesses
+Fundamental Contradiction in "Hard-Sample Emphasis" Claim: The paper's central claim of 'hard-sample emphasis' appears to be in direct contradiction with its own mathematical formulation. The hinge term, $\lambda \max(0, m - |\epsilon_\phi - \epsilon_G|^2)$, only provides a non-zero gradient when the squared error $|\epsilon_\phi - \epsilon_G|^2$ is less than the margin $m$. For "hard samples," which are presumably those with a large error (i.e., $> m$), the gradient from this term is exactly zero. This mechanism seems to explicitly ignore hard samples and focus only on 'easy' samples (those already within the margin), which is the opposite of the stated motivation.
+
+Unverified Variance Reduction Hypothesis: The paper posits that the discriminator provides a more stable, lower-variance supervisory signal (e.g., $\epsilon_G$) than the original noise target $\epsilon$. This is a core hypothesis, yet it is not empirically validated. The paper lacks a essential quantitative analysis comparing the variance of the discriminator's output (Var($\epsilon_G$)) with the variance of the ground-truth noise (Var($\epsilon$)).
+
+Lack of Ablation and Stability Analysis: The paper fails to investigate the impact of its key hyperparameters, namely the margin $m$ and the weighting $\lambda$, on the model's convergence and stability. It is unclear how sensitive the training is to these parameters, how they should be set, or what failure modes (e.g., oscillations, divergence) might arise.
+
+Limited Novelty: The proposed loss function bears a strong resemblance to the margin-based loss used in EBGAN. The paper does not clearly articulate the novel theoretical contributions or insights that differentiate DSL from this well-established prior work.
+
+Questionable Scalability: The reliance on a discriminator-based architecture, which is notoriously difficult to stabilize (e.g., mode collapse, training dynamics), raises significant concerns about the method's scalability. Its viability for larger datasets and higher-resolution image generation tasks remains unproven and questionable.
+
+### Questions
+Given that the hinge term provides zero gradient for samples with an error $|\epsilon_\phi - \epsilon_G|^2 > m$, could the authors please clarify their claim of "hard-sample emphasis"? It appears to mechanically do the opposite.
+
+Does the hinge term introduce a systematic bias by pushing the optimization target away from the true noise $\epsilon$? Is there a risk of the model's output distribution drifting if this margin-based objective is not carefully balanced?
+
+Can the authors provide a quantitative analysis (e.g., plotting the variance over time) to support the claim that the discriminator's output $\epsilon_G$ actually has a lower variance than the original noise target $\epsilon$?
+
+What is the impact of the margin $m$ and $\lambda$ on training stability and final performance? How were these values chosen, and did the authors observe any convergence issues?
+
+Could the authors elaborate on the substantial theoretical or empirical differences between DSL and the margin-based loss in EBGAN, beyond the application to diffusion models?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes Discrepancy-aware Score Learning (DSL), a novel adversarial training framework for diffusion models that integrates an energy-based discriminator with a margin-based hinge loss in the noise space. DSL aims to address the over-smoothing issue in denoising score matching by adaptively reweighting gradients to focus on challenging samples. The authors provide a theoretical interpretation of DSL as functional gradient descent and demonstrate its effectiveness across multiple generative tasks, including text-to-image generation, conditional synthesis, super-resolution, and 2D-to-3D reconstruction.
+
+### Strengths
+The work introduces a novel and generalizable framework that enhances diffusion training without architectural changes. It offers both theoretical insights and practical improvements, demonstrating consistent gains in fidelity, perceptual quality, and semantic alignment across multiple domains.
+
+### Weaknesses
+The theoretical section, while rigorous, may be challenging for readers less familiar with functional gradient flows. The method’s performance is sensitive to the adversarial weight λ, though the authors provide a sensitivity analysis. More comparisons with recent adversarial diffusion methods (e.g., ADD, Structure-guided Adv. Training) could further strengthen the claims.
+
+### Questions
+- How does DSL scale with larger models or datasets beyond LAION-5B?
+- Could the margin \( m \) be learned adaptively rather than set via mean error?
+- Have the authors considered applying DSL to other modalities (e.g., audio, video) as suggested in the conclusion?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This work introduces an new method for training diffusion models - Discrepancy-aware Score Learning (DSL) - via modified score matching objective. The key idea is to introduce an additional denoising network - discriminator - and supervise it with an EBGAN-like loss, while training the generator (denoiser) by minimizing discrepancy with the discriminator. Authors provide a formal connection of the proposed method to Wassestein gradient flows - and use it to provide convergence guarantees (in equilibrium sense). Experimental evaluation is conducted on multiple generation tasks and suggests that proposed objective performs favorably compared to basic score matching loss. 
+
+.
+
+### Strengths
++ Paper is clearly written and is easy to follow. 
++ Method seems to be well-motivated and authors also provide interesting formal interpretation of the proposed approach in the context of variational inference. 
++ Large-scale aside (2 models instead of 1), the method seems to be simple to implement, and according to authors is not sensitive to hyperparameters (e.g. margin).
++ Quantitative and qualitative results seem convincing - the improvements are consistent across multiple different tasks.
+
+### Weaknesses
+Method limitations:
+- It seems that the method requires keeping another copy of a large diffusion model . Given the general trend towards large number of parameters, this makes proposed method significantly less practical.
+
+Evaluation:
+- It would be great to understand how the proposed method performs compared to more recent training paradigms (e.g. flow matching) - which tend to produce improved sample quality over score matching. This should help contextualize the performance with respect to SOTA. 
+- It is unclear if comparison to the models trained same number of iterations is fully fair - as for the proposed method - one de-facto has two models, and needs to update both of them at every iteration. It is OK but being explicit about this is probably going to help the readers. 
+- Ablation study on architecture / naive adversarial loss is not provided.
+
+### Questions
+- Could authors confirm whether the evaluation is conducted by re-training the model from scratch or by fine-tuning off-the-shelf weights? 
+- Would it be possible to provide some numbers on the memory requirements and consequences to speed of training with additional discriminator in terms of wall clock?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

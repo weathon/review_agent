@@ -1,0 +1,132 @@
+# DLGNet: Hyperedge Classification via a Directed Line Graph for Chemical Reactions
+
+- Decision: Reject
+- Scores: 4, 8, 2
+
+## Abstract
+Graphs and hypergraphs provide powerful abstractions for modeling interactions among a set of entities of interest and have been attracting a growing interest in the literature thanks to many successful applications in several fields, including chemistry. In the paper, we address the reaction classification task by introducing the Directed Line Graph (DLG) transformation for directed hypergraphs. Building on this representation, we propose the Directed Line Graph Network (DLGNet), the first spectral-based Graph Neural Network (GNN) designed to perform convolutions directly on the DLG. At the core of DLGNet lies a novel complex-valued Hermitian matrix, the Directed Line Graph Laplacian ($\mathbb{\vec{L}}_N$), which effectively encodes directional interactions within the hypergraph’s structure through the DLG representation. Experimental results on three real-world chemical reaction datasets demonstrate that DLGNet consistently outperforms all baseline competitors.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a graph neural network (GNN) for classifying chemical reactions. The method models reactions as directed hypergraphs and then transforms them into a directed line graph where each vertex represents an entire reaction. A complex-valued Laplacian matrix captures the reaction's directionality, enabling a convolution-like operator for the resulting GNN. Experiments demonstrate superior performance and confirm that encoding this directionality is key to the model's success.
+
+### Strengths
+1. The paper provides mathematical proofs for the key properties of the proposed Laplacian, i.e., that it is Hermitian and positive semidefinite. This rigour ensures that the method is not an ad-hoc heuristic but a well-defined operator.
+2. By isolating the effect of directionality ("DLGNet w/o dir" in Table 2), the paper provides conclusive evidence for its central claim. The blation study confirms that encoding direction is not just helpful but critical for success on this task.
+
+### Weaknesses
+1. The experiments do not provide evidence that a (hyper)graph-based representation is inherently superior to a simpler, non-structural approach for this specific task. Modern architectures like transformers have shown great success on set-based data. The paper can be strengthened by including a comparison against a strong baseline that does not rely on an explicit graph structure. For example, a Deep Sets model or a Transformer encoder that treats the reactants and products as two distinct sets of molecular fingerprints. Note that the AllDeepSets and AllSetTransformer models use message-passing-style aggregators typical of graph neural networks [1].
+2. All tasks are reaction-type classification. There’s no evidence the operator helps on other directed-hypergraph problems on non-chemical domains, e.g., citation co-author network with authors as nodes and citation links between author collaborations (papers) as directed hyperedges.
+
+[1] You are AllSet: A Multiset Function Framework for Hypergraph Neural Networks, ICLR 2022.
+
+### Questions
+1. Would an expanded ablation on architectural hyperparameters (number of convolutional layers, channel widths, classifier depth) clarify sensitivity and stability?
+2. For the merged Dataset-2, what exact deduplication and leakage checks were performed across train/validation/test?
+3. In addition to the standardised feature-transfer operator, can baselines be reported with their strongest native hyperedge readouts (e.g., attention-based or learned set pooling) to ensure fair comparison?
+4. Beyond reaction-type classification, can the operator be demonstrated on an additional directed-hypergraph task (e.g., hyperedge link prediction) and/or a non-chemical dataset to establish broader applicability?
+5. The aggregation of molecular features into reaction features is a critical step. The current method uses a weighted summation. Could the authors elaborate on the rationale for choosing summation over other aggregation functions like mean or max pooling? A brief justification or an ablation study on this design choice would be insightful.
+6. Appendix G valuably distinguishes the proposed Laplacian from the Magnetic Laplacian, noting that the DLG Laplacian avoids 'sign-pattern inconsistency.' Could the authors expand on how this theoretical advantage translates into practical benefits, such as improved model stability, expressivity, or performance, specifically for the task of chemical reaction classification?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+2
+
+### Summary
+This paper focuses on predicting chemical reactions and introduces a novel method that encodes reaction graphs into a Directed Line Graph (DLG). In this data structure, the triplet set in the raw graph is transformed into a new vertex set. The authors provide theorems for the Signless Directed Line-Graph and the Directed Line Graph Laplacian of the DLG. Additionally, authors building a spectral-based Graph Neural Network to capture features. Experimental results on three real-world chemical reaction datasets demonstrate that DLGNet consistently outperforms all baseline competitors.
+
+### Strengths
+1. The idea of transformation from standard graph to a hypergraph is interesting and rational for reaction prediction.
+2. The  theorems for the Signless Directed Line-Graph and the Directed Line Graph Laplacian of the DLG appears to be comprehensive.
+
+### Weaknesses
+1. Please remind that the anonymous repository has expired.
+2. In the experiments, can the classes that DLGNet easily confuses reveal potential reaction patterns, such as similar regions representing the dominant structures in reactions, reflecting the main areas where bonds are formed and broken?
+3. I think an important contribution of this paper is using the Laplacian matrix as prior knowledge for the adjacency matrix in GCN. One thing I'm curious about is whether the Laplacian matrix, after being extracted, can be transformed into the adjacency matrix of the original reaction graph, or integrated as a signal into the original adjacency matrix. For example, $ B * L * B^{-1}$. This is because I feel that DLG compresses too much information, which may affect the upper limit of the neural network's performance.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes DLGNet as a novel approach to solving the reaction classification task. The key idea is to represent a set of chemical reactions as a hypergraph H, then convert it into a directed line graph (DLG), where each vertex corresponds to a hyperedge in H, and edges are drawn between vertices if their corresponding hyperedges share at least one node in H. DLGNet processes this directed line graph using a spectral GNN. Experimental results show that DLGNet outperforms various baseline methods designed for hypergraph processing across three reaction classification datasets.
+
+### Strengths
+- The paper clearly presents the often-confusing concepts of hypergraphs and their transformation into line graphs.
+- It proposes an extension of the hypergraph incidence matrix from binary {1, 0} values to ternary {1, –i, 0}, and introduces a corresponding Laplacian for the line graph, providing a theoretical foundation for the relationship between the hypergraph and its line graph.
+- Using the Laplacian defined above, the authors design a spectral GNN (i.e. DLGNet) and demonstrate its empirical superiority over other hypergraph-based methods on the reaction classification task.
+
+### Weaknesses
+- If the goal is reaction classification, the selection of baseline methods seems unfair. The paper only compares against hypergraph-based approaches, many of which show very low F1 scores, making the proposed method appear more effective than it might actually be. Reaction classification can also be addressed using traditional chemoinformatics methods and various GNN- or Transformer-based approaches. At the very least, the method should be compared against typical baselines such as a classic ReactionFP [1] and something like [2]-[4]. Without such comparisons, it's hard to assess the real value of the proposed approach.
+- There are multiple ways to convert a hypergraph into a graph, not just the line graph approach, but also methods like clique expansion. As shown in cited Zhou et al., NIPS 2006 “Learning with Hypergraphs,” it's also possible to define an adjacency matrix directly from the hypergraph's incidence matrix. This would also be consistent with hypergraph Laplacian theory, and it’s not entirely clear how or why the proposed method is better compared to any potential alternatives.
+- I think it would be helpful to include a more concrete explanation of how the hypergraph-based methods being compared differ from the proposed approach. Rather than reducing a hypergraph to a regular graph, it's possible to define message passing directly on the hypergraph and perform prediction by applying global pooling over each hyperedge. In fact, this may allow for more flexible network designs (for example, by incorporating graph transformer layers). However, the paper lacks a clear discussion of how the proposed method compares to or improves upon such approaches, and what specific advantages it offers.
+
+[1] ReactionFP https://doi.org/10.1021/ci5006614  
+[2] Mapping the space of chemical reactions using attention-based neural networks. (Nat Mach Intell, 2021)  https://doi.org/10.1038/s42256-020-00284-w  
+[3] Chemical-Reaction-Aware Molecule Representation Learning (ICLR 2022) https://openreview.net/forum?id=6sh3pIzKS-   
+[4] Rxn Hypergraph: a Hypergraph Attention Model for Chemical Reaction Representation https://arxiv.org/abs/2201.01196
+
+### Questions
+- It’s unclear whether the primary goal of the paper is to advance ML methods for hypergraphs, to improve reaction classification performance, or both. However, the manuscript frames the work around the reaction classification task and evaluates it solely in that context. If that’s the case, why were the comparisons limited to hypergraph-based methods? Why not include standard approaches commonly used for reaction classification?
+- Assuming the transformation into a line graph is a key component, the ternary {1, –i, 0} incidence matrix introduced in Eq. (7) is a very interesting idea. Is his incidence matrix itself the novel contribution of the paper? Or is this idea already exists, and the novelty lies instead in how it’s used to analyze the relationship between hypergraphs and directed line graphs, or in the design of the corresponding Laplacian and spectral GNN? Clarifying this would help position the paper’s contribution more clearly.
+- In the end, it's not entirely clear why reducing a hypergraph to a line graph and applying specialized spectral message passing would offer practical advantages over directly designing message passing on the hypergraph itself. Could you provide more clarification on the pros and cons of this line graph reduction approach, especially in comparison to more typical hypergraph-based methods used in your comparisons?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1

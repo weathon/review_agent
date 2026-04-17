@@ -1,0 +1,138 @@
+# Deepfake Detection through Color-Based Spatial-Temporal Feature Mapping with Biometric Information
+
+- Decision: Reject
+- Scores: 2, 2, 4
+
+## Abstract
+The detection of deepfakes continues to grapple with challenges arising from the rapid evolution of generative models and the intricate characteristics of real-world data. Current detection frameworks frequently exhibit overfitting to particular artifacts, which constrains their effectiveness against novel manipulation techniques. While many models demonstrate high accuracy on standardized benchmark datasets, their performance often deteriorates when confronted with authentic deepfake instances. This study investigated the integration of biometric data, explicitly addressing the limitations of deepfake generation in mirroring the subtle biometric variations present in human faces. By segmenting facial regions into mesh representations, we analyzed the correlation between RGB features and biometric signals, particularly focusing on heart rate data. This approach enabled the development of Color-Based Spatial-Temporal (CST) feature maps, which provide a more nuanced depiction of the interactions between visual attributes and biometric inputs. The goal of this study was to propose a novel feature map and evaluate its performance. We assessed the effectiveness of these biosignal feature maps in conjunction with established detection models on the FaceForensics++ (c23 and c40 compression levels) and Celeb-DF datasets. The incorporation of these feature maps resulted in remarkable outcomes, achieving nearly 99% accuracy (ACC) and an area under the curve (AUC) nearing 1. Importantly, our method demonstrates strong effectiveness in detecting low-quality deepfakes images with high compression level. Transitioning to a transfer learning framework, while retaining the biosignal feature maps, yielded further enhancements in performance metrics. These findings underscore the considerable value of integrating biometric information to bolster deepfake detection capabilities, often surpassing the results of prior research while remaining anchored in fundamental learning principles. The model exhibited consistent performance across diverse cross-testing scenarios, highlighting its robustness and adaptability.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper proposes a color Spatial-Temporal (CST) map for deepfake detection. Instead of classifying individual frames, the method
+converts a short face video into a single image that encodes how per-patch RGB values change over time. A CNN (mainly Xception) is trained on these CST images for real/fake classification. The paper reports in-dataset and cross-manipulation results on FF++ (c23) and cross-dataset performance on Celeb-DF (v1). A transfer-learning variant initializes a frame-based model from the CST-trained network.
+
+### Strengths
+The paper’s main strength is its use of physiology-linked temporal color rhythms, which are expected to provide generalizable cues than frame-level artefacts. It packages these dynamics into a compact CST image, making training and inference fast with standard CNNs.
+
+### Weaknesses
+(1) The novelty of the paper is limited. The core idea, using heartbeat/physiology-like color changes over time to spot fake, has been
+done before in rPPG-style detectors. Studies like FakeCatcher (Ciftci et al., 2019), DeepRhythm (Qi et al., ACM MM 2020) already explored such concepts earlier.
+
+(2) The study evaluates only on FF++ (c23) and Celeb-DF v1, both relatively established/older benchmarks; there is no evidence on more recent or harder settings (e.g., DFDC, heavy compression, diffusion fakes), means the strong generalization narrative is under-supported.
+
+(3) The approach appears architecture-dependent: CST helps CNNs but hurts ViT (Table 3), and cross-dataset results on CDFv1 do not beat the best baseline (SPSL) (Table 5). This weakens claims of broad applicability.
+
+(4) The experimental validation skipped basic sanity checks, like trying different grid sizes, different clip lengths, various lighting conditions, strong video compression, or hiding parts of the face. So, it is hard to decipher the robustness of the proposed approach under real-world artefacts, leaving doubts whether the model is truly using heartbeat-like signals or just leaning on easy, dataset-specific quirks. 
+
+(5) The conclusion mentions analyzing heart rate data, but the method only builds CST from RGB and never extracts rPPG. Please either add an explicit analysis showing how CST tracks heart rate, or the claim should be “color dynamics correlated with physiology”.
+
+### Questions
+(1) Is the train-validation-test split strictly video and identity-disjoint? How is per-video vs per-frame sampling handled?
+
+(2) It would be great to have results on broader datasets (CDF-v2, WildDeepfake, FF++ c40/raw) and under different constraints like lighting flicker, heavy compression/noise, skin-tone & makeup.
+
+(3) Do the authors explicitly extract heart rate (or similar)? If not, provide spectral evidence or rephrase the claim.
+
+(4) It is not clear why ViT underperform, and is the proposed approach sensitive to the base architecture? Any experiments with light temporal models, 3D CNNs, or hybrid CNN on CST?
+
+(5) Please address the concerns mentioned in the weakness section as well.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper introduces a deepfake detection approach that integrates biometric information such as heart rate signals extracted from facial color variations, into a new feature representation called CST feature map.
+
+### Strengths
+1. The paper is well-written
+2. The performance of intra-data set FF++ is impressive
+
+### Weaknesses
+1. The paper doesn't properly do cross-dataset evaluation. The results on CDFv2, DFDC, DFDCP, KoDF, DF-Platter. The current results shown doesn't indicate that the model is generalizable and will work across a variety of datasets. 
+2. The authors don't compare their performance of several recent methods. 
+CVPR 24: https://openaccess.thecvf.com/content/CVPR2024/papers/Nguyen_LAA-Net_Localized_Artifact_Attention_Network_for_Quality-Agnostic_and_Generalizable_Deepfake_CVPR_2024_paper.pdf
+ECCV 24: https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/06913.pdf
+NeurIPS24: https://openreview.net/pdf?id=otZPBS0un6
+AAAI 25: https://arxiv.org/pdf/2501.04376
+
+3. It is not clear to as to how CST feature maps can capture physiological features and heart rate. Can you justify ?
+
+### Questions
+I have mentioned the questions in the weakness section.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This study enhances deepfake detection by integrating biometric signals, especially heart rate, with facial RGB features to create Color-Based Spatial-Temporal (CST) feature maps. Tested on the FaceForensics++ and Celeb-DF datasets, the approach achieved nearly 99% accuracy and demonstrated strong robustness, outperforming traditional models and showing superior adaptability through transfer learning.
+
+### Strengths
+1. The paper presents an innovative Color-Based Spatial-Temporal (CST) feature map combining RGB and biometric signals to capture subtle physiological inconsistencies.
+2. Results demonstrate near-perfect accuracy and AUC across datasets, with consistent cross-domain robustness and clear interpretability through visual analyses.
+
+### Weaknesses
+The paper does not evaluate the proposed method on the latest deepfake generation systems such as Sora or Veo, which limits its validation against state-of-the-art video synthesis techniques and raises questions about its real-world robustness.
+
+### Questions
+1. Could the authors explain why the method was not evaluated on deepfakes generated by diffusion-based models (e.g., Stable Diffusion, Sora, Veo)? Since these systems now dominate realistic video synthesis, such experiments are crucial for demonstrating generalization to current-generation forgeries.
+
+2. The CST feature map is said to encode biometric information such as heart rate, but the paper does not show explicit quantitative or visual evidence of this relationship. Could the authors clarify how these RGB-based temporal features were verified to correspond to genuine physiological signals rather than generic color information?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

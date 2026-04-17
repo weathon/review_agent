@@ -1,0 +1,143 @@
+# The Expressive Power of k-Harmonic Distances for Message Passing Neural Networks
+
+- Decision: Reject
+- Scores: 6, 4, 2
+
+## Abstract
+Positional encodings from spectral graph theory---such as spectral distances like effective resistance---have been shown to enhance the performance of graph neural networks (GNNs). However, the theoretical expressive power of these spectral features is not entirely understood. While certain spectral features are known to increase expressive power, it is unclear if different spectral features are equally powerful. Moreover, while it is established that spectral distance measures can enhance the expressivity of transformer-based architectures, their implications for message passing neural networks (MPNNs) are relatively underexplored. In this work, we focus on one such family of spectral features: the $k$-harmonic distances. We establish upper and lower bounds on the expressivity of MPNNs augmented with $k$-harmonic distances and show that a finite set of $k$-harmonics collectively subsume all spectral features. We also show that not all $k$ are equally expressive, and some are better than others in certain situations. To corroborate this theory, we present several empirical results demonstrating $k$-harmonic distance's expressive power. We show its potential for computational efficiency over transformers in some cases Further, we experiment with making $k$ a learnable parameter and find that different datasets have different optimal values of $k$.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper studies k-harmonic distances as positional encodings for MPNNs to enhance expressiveness. The authors introduce the sparse $\psi$-WL test framework and establish theoretical bounds showing that k-harmonic distances increase MPNN expressivity beyond 1-WL but not beyond 3-WL.  Experiments on BREC, ZINC, and ogbg-molhiv validate basic claims but reveal that $k \in \\{1,2\\}$ appear sufficient in practice, with higher k values causing performance degradation.
+
+### Strengths
+1. Strong theoretical framework: The sparse $\psi$-WL test provides a clean formalism for analyzing MPNNs with edge features. This extends prior WL-based expressivity analysis in a principled way and could be useful beyond k-harmonic distances.
+
+2. Novel theoretical insights: Theorems 6.2-6.4 are nolve. The result that almost all k values are equivalent and that 2n values suffice to capture all spectral distances provides new understanding of the spectral distance landscape. These contributions advance the theoretical understanding of spectral positional encodings.
+
+3. Rigorous mathematical treatment: The proofs appear technically sound. The connection to eigenspace structure  and the use of polynomial root bounds are elegant. The paper carefully distinguishes between different notions of expressivity.
+
+### Weaknesses
+1. The paper's main theoretical contribution is about general k values, yet experiments consistently show only $k \in \\{1,2\\}$ work well. Table 5 shows k=3,4 are worse than baseline on molhiv. The authors acknowledge "numerical instability" but provide no solution. 
+
+2. Theorem 6.1 with the main result showing different k values have different power, only applies to a specific pair of tree graphs. The counterexample in Theorem B.1 immediately shows this doesn't generalize.
+
+### Questions
+1. What about MPNN with just k=1 and k=2 concatenated (not 1 to 4)? Does this work better than either alone?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper explores theoretical properties of positional encodings in GNNs based on spectral quantities. Specifically, the paper focuses on k-harmonic distances, which generalize effective resistance and biharmonic resistance. The paper studies the separation power of networks enhanced with such positional encodings in terms of WL tests.
+
+### Strengths
+1. Since positional encoding often significantly improves GNN performance, analyzing the theoretical properties of this method is important. 
+2. The theoretical analysis seems to be sound, though I did not read proofs in detail. 
+3. The writing style is clear.
+
+### Weaknesses
+1. The experimental results are not convincing and do not seem to corroborate or support the theoretical findings.
+
+In general, the claims in this paper are a bit confusing. The experiments on BREC and Theorem 6.2 illustrate that all values of k roughly give the same separation power. On the other hand, the paper emphasizes that keeping k a free parameter is important, that different problems prefer different values of k, and that combining different values of k is important. Table 2 also has indecisive results. Table 3 does not even try to set $k>2$. 
+
+The author should clarify better what their message is in regards to the choice of k. 
+
+----
+
+2. The proofs of the hierarchy of strength of WL tests are based on finding a specific pair of graphs that can be distinguished by one test but not by the other. While there is no error in this approach, it is not very insightful. A more insightful investigation of different WL tests would structurally characterize all graphs (or a large set of graphs) that cannot be distinguished by one test but can by the other. Consider the following point of view: suppose you find an example of a  pair of graphs that can be distinguished by test1 but not by test2, and you show that test1 is at least as strong as test2. A prior, it is possible that this is the only example of such a pair that exists. In such a case, up to this single pair, both tests are equivalent. Hence, in my opinion, a better characterization of the capabilities of WL tests would consist of finding large families of graphs that one test can separate and the other cannot. This shortcoming is of course present in many papers about GNN expressivity via graph isomorphism tests.
+
+As an example of a good characterization, 1-WL cannot separate graphs that have the same tree homomorphism numbers. More generally, k-WL tests are characterized by homomorphism numbers of motifs with treewidth at most k. I find such characterizations of isomorphism tests much more revealing.
+
+----
+
+3. Theorem 6.1 is quite a weak result. It proves that there is a pair of graphs that can be distinguished quickly by biharmonic WL but only slowly by resistance WL. However, this does not prove that biharmonic WL is faster than resistance WL. A priori, it is possible that there is another pair of graphs that can be distinguished quickly by resistance WL but only slowly by biharmonic WL. Hence, it is not clear what the significance of Theorem 6.1 is. Note that the experiments do not support  any k=1,2 being better than the other. Hence, why isn't there a corresponding theorem showing that there is also a pair of graphs that can be separated quickly by resistance WL but only slowly by biharmonic WL? What is the message behind the asymmetry in Theorem 6.1?
+
+----
+
+4. Line 073: It is not true that computing the full eigendecomposition of L is less efficient than computing the pseudo inverse of L. In practice, both can be estimated in $O(n^3)$ operations. Note that, for example, each iteration of the QR algorithm for the full eigendecomposition takes $O(n^3)$, and in most practical settings the algorithm converges with a few iterations. If you only want to compute the leading eigenvectors, then the complexity is even faster.
+
+### Questions
+See Weaknesses
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper investigates $k$-harmonic distances as positional encodings for message passing graph neural networks (MPNNs), which are used as edge features (i.e., relative positional encodings). The theoretical contribution focuses on analyzing the expressivity of $k$-harmonic distances for varying $k$. To this end, the authors introduce a modification of the 1-WL test that incorporates edge features (sec. 4), and show that augmenting MPNNs with $k$-harmonic distance features makes them strictly more expressive than 1-WL but bounded by 3-WL (sec. 5). The main theoretical contributions are in sec. 6, where the authors show that $k=2$ (i.e., sparse biharmonic WL) can distinguish some graphs in much less iterations than when setting $k=1$ (i.e., sparse resistance WL). They also argue (in Thm. 6.2) that if two graphs can be distinguished by one choice of $k$, this holds for most others as well, and taking all $k \in \{1, \dots, 2n\}$ suffices to be just as expressive as taking all possible $k$. These findings are then corroborated empirically: using BREC to gauge expressivity, and evaluating on real-world datasets (ZINC and ogbg-molhiv) to show that the optimal $k$ depends on the dataset. The authors also experiment with learning $k$, which reveals that different datasets favor different $k$ values in practice.
+
+### Strengths
+- The theoretical insights are clear, and I like the quantitative nature of Thm. 6.1 (i.e., taking the number of WL iterations into account). The practical limit (for including multiple values of $k$) from Thm. 6.3 is also an interesting result.
+- The proofs are well-written and easy to follow; generally from my impression, the paper’s mathematical rigor is high.
+- The experimental evaluation is relatively diverse. The authors validate theoretical claims on the BREC synthetic benchmark and demonstrate the method on real-world tasks (ZINC and ogbg-molhiv), showing how different choices of $k$ perform on different types of graphs. This blend of synthetic and real data experiments strengthens the paper’s conclusions. Also, introducing a learnable $k$ in the model provides good insight that there is no one optimal choice.
+
+### Weaknesses
+- The motivation of looking at MPNNs with dense relative positional encodings is not entirely clear to me. If one has to invert the Laplacian and compute the $k$-harmonic distance (i.e. an $n \times n$ *dense* matrix, this preprocessing step would dominate the runtime for large graphs. In this case, one might ask whether using a graph transformer with global message passing and the same relative PEs would yield a more expressive architecture in practice. As such, this seems like a natural baseline that could be discussed more explicitly. I only found such a comparison in Table 3, but I think this should also be compared against in the other experiments. Directly adjacent to this, there is no discussion of computational overhead or scalability of the method.
+- The empirical improvements from $k$-harmonic features are modest and dataset-dependent. On BREC, results for different $k$ values are nearly identical (even with learnable $k$), which aligns with Thm. 6.2. Yet, this leaves open exactly when practitioners should expect $k > 1$ to offer any advantages.
+- The scope of the expressivity results feels somewhat limited to me. The proof of the nonequivalence of sparse resistance and biharmonic WL (Thm. 6.2) relies on constructing a single counterexample and yields little intuition about *quantitative* differences in expressivity or about structures that the PEs could capture/distinguish. While this might not be easily achievable, an ideal result would be a full characterization of the models’ *homomorphism expressivities*, as, e.g., in [1]. Also, the results do not compare MPNN expressivity with $k$-harmonic PEs to the one of graph transformers with the same relative PEs.
+
+[1] Jingchu Gai, Yiheng Du, Bohang Zhang, Haggai Maron, Liwei Wang. *Homomorphism Expressivity of Spectral Invariant Graph Neural Networks.* ICLR 2025.
+
+### Questions
+- Could you clarify how you compute the $k$-harmonic distance matrix in practice and how this scales?
+- Why restrict to local message passing if the $k$-harmonic matrix is dense, and how would global aggregation change the expressivity?
+- Can you make any statement or hypothesis about in *which* settings $k=1$ or $k=2$ / $k > 2$ would work best?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

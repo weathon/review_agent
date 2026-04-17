@@ -1,0 +1,223 @@
+# A Quotient Homology Theory of Representation in Neural Networks
+
+- Decision: Reject
+- Scores: 6, 4, 4, 6
+
+## Abstract
+Previous research has proven that the set of maps implemented by neural networks with a ReLU activation function is identical to the set of piecewise linear continuous maps. Furthermore, such networks induce a hyperplane arrangement splitting the input domain of the network into convex polyhedra $G_J$ over which a network $\Phi$ operates in an affine manner. 
+
+In this work, we leverage these properties to define an equivalence class $\sim_\Phi$ on top of an input dataset, which can be split into two sets related to the local rank of $\Phi_J$ on $G_J$ and the intersections $\cap \text{Im}\Phi_{J_i}$. We refer to the latter as the *overlap decomposition* $O_{\Phi}$ and prove that if the intersections between each polyhedron and an input manifold are convex, the homology groups of neural representations are isomorphic to quotient homology groups $H_k(\Phi(\mathcal{M})) \simeq H_k(\mathcal{M}/O_\Phi)$. This lets us intrinsically calculate the Betti numbers of neural representations without the choice of an external metric. We develop methods to numerically compute the overlap decomposition through linear programming and a union-find algorithm.
+
+Using this framework, we perform several experiments on toy datasets showing that, compared to standard persistent homology, our overlap homology-based computation of Betti numbers tracks purely topological rather than geometric features. Finally, we study the evolution of the overlap decomposition during training on several classification problems while varying network width and depth and discuss some shortcomings of our method.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes a method for calculating the homology of neural representations of data manifolds arising in deep ReLU networks. To this end, it proves that, given a convexity assumption, the homology groups of these representations are isomorphic to the homology groups of the quotient of the data manifold modulo the “overlap polytopal decomposition” induced by the network.
+
+### Strengths
+- The problem discussed in the paper is relevant due to the importance of understanding the (topology of) neural representations.  
+
+- The literature review is remarkably thorough. All the relevant works from the TDA literature are cited and discussed carefully. 
+
+- The results in Section 4.2 are particularly intriguing, since it challenges a widespread belief around the change in topology of the data manifold across hidden representations.
+
+### Weaknesses
+As a main weakness, I find that the practical relevance of the paper might be rather limited, due to its computational burden. As the authors admit, computing the homology via the quotient (modulo the overlap decomposition) is extremely expensive, since it requires computing the polytopes defined by the ReLU network. Even though some techniques are proposed to mitigate the computational cost – e.g., in lines 250-255. Still, the method is so expensive that the authors were not able to fully replicate the results by Naitzat et al. (2020), as discussed in Section 4.2. 
+
+Overall, despite the computational burden, I am leaning towards accepting the paper due to its quality, but I am not strongly convinced. 
+
+Minor:
+
+- Typo: in lines 157-158, I believe a conjunction is missing to connect the two sentences of the period. 
+
+- Typo: in line 161, I believe that $H_k([-\pi, \pi]^2 / \mathcal{O}_\Phi)$ should be removed. 
+
+- Typo: on the right-hand side of Equation 5, I believe the superscript $l$ is missing from all the occurrences of $\Phi$.  
+
+- Lines 205-2013 talk about H-decompositions, and mention a matrix $A_2$ (Eq. 6). However, these have never appeared before. I understand that they are defined in the appendix (Sec. A.1), but they should be introduced in the main body. 
+
+- Typo: on line 320, “Betti” should be capitalized, since it is a proper noun.
+
+- Line 438: the formatting of the exponential breaks the line spacing significantly.
+
+### Questions
+I do not have specific questions. I would still be grateful if the authors expanded on how expensive is the computation of $H_k(\mathcal{M} / \mathcal{O}_\Phi)$, even just by concrete examples of wall-clock time required, with respect to dataset and network size.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+Deep neural networks are hard to understand theoretically. One such way to study them in a more principled manner is using Topological Data Analysis (TDA). Specifically for deep learning, it has been used to study training trajectories and weights. It's typically based on a concept known as Persident Homology. Despite its promise, it is known to have some issues (e.g., sensitivity to outliers, and contamination from geometric features). 
+
+This paper proposes an alternative to the methods based on persistent homology. In particular, it focuses on ReLU NNs, and how do they change the topology of data. Crucially, the method doesn't use distances. ReLU NNs split the input space into many convex regions (polyhedra); when many of these regions map to the same output, the network is "gluing" inputs. The paper defines the set of these gluings as the overlap decomposition.  The authors propose detecting these overlaps with linear programming, and show empirical results on toy data, where the methods seem to avoid geometric artifacts (as opposed to persistent homology methods). They suggest that the "topological simplification" happens more gradually than what prior work suggested.
+
+### Strengths
+- Creative proposal, moving beyond persistent homology.
+- Empirical results accompanying the theoretical ones. Examples where persistence may report loops due to geometry, while the quotient view does not. 
+- Interestingly, uses piecewise-linear / polyhedral view of ReLU nets to define overlaps.  
+- Training dynamics findings: Suggests slower topological collapse across layers than earlier results, this could be relevant in practice.
+- Generally well-written.
+
+### Weaknesses
+- Strong assumptions: Convexity is a strong assumption, will it work for natural data?
+- Scalability: I also formulated it as a question below, because I'm not certain, but the method does not seem to be particularly scalable (LP method, pairwise).
+- Only toy data. It wouldn't particularly worry me if not for the strong assumptions.
+
+- 5.2 TOPOLOGICAL VERSUS GEOMETRIC TRANSFORMATIONS" is very interesting. Still, I'm not convinced why in practice reason geometric contamination would be an issue
+
+
+"An intuitive illustration of this theorem can be seen in panel A of Figure 1. One might object
+that this convexity condition does not usually obtain. However, we note that given the highly
+overparameterized nature of neural networks and the increasing number of polyhedra within a given
+volume (Hanin and Rolnick (2019)) this condition usually obtains. It also turned out to be empirically
+true in the simulations performed in this paper and the additional convexity analysis found in Figure 6
+of the Appendix. Furthermore, if we are working with a convex input manifold, this condition always
+obtains. As seen in Beshkov and Einevoll (2024) and in our simulations the cases in which this
+condition will likely not be satisfied is if one is working with highly non-convex, high-dimensional
+input domains and insufficiently wide networks." this paragraph is quite crucial and not very easy to follow
+
+Note:The paper offloads a significant amount of content to the Appendix. There are crucial details there about proofs; I haven't had the cycles to take a deep look at the appendices. 
+
+Misc.:
+- “Betti numbres” -> “numbers” 
+- “botton right” -> “bottom right”
+
+### Questions
+Does this method scale? What are the crucial elements to scale it?
+
+What would be the main challenges for extending this method to non-ReLU NNs?
+
+FIgure 3, despite the caption, is quite hard to follow. Is there any alternative result visualization that would be easier to follow? Or could you provide a more intuitive explanation?
+
+
+"the cases in which this
+condition will likely not be satisfied is if one is working with highly non-convex, high-dimensional
+input domains " what would be some examples of domains with these properties? Isn't this how some real-world data would present?
+
+Misc.:
+- “Betti numbres” -> “numbers” 
+- “botton right” -> “bottom right”
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes an alternative homology theory, quotient homology, to study representation spaces of neural networks over the existing standard homology theory (persistence) for computational settings, which has recently become popular, especially in machine learning.  Quotient homology has some desirable properties, such as improved robustness.  Aspects of the resulting measure, termed overlap decomposition, are studied for trained versus untrained networks with some discernible patterns.
+
+### Strengths
+- A good attempt was made to make some quite intricate and theoretical concepts accessible.
+
+### Weaknesses
+- At times the language is rather awkward, e.g., line 276: "One might object that this convexity condition does not usually obtain." and further on in the same paragraph.  Also, the tone and presentation varies from quite formal to almost conversational, which is quite distracting.  I would consider the writing to be a major and quite serious weakness.
+- Possibly an artifact of the awkward writing, but aside from mathematical interest, the intuition for studying such mathematical quantities and what it means for the learning process is quite unclear.  Although the mathematics is indeed interesting, and some elegant concepts are adapted (and hence my higher contribution score), the implication of the results and these concepts are not clearly interpretable to a machine learning audience such as ICLR (and hence my lower soundness score).
+
+### Questions
+- Why is "informal" specified after Theorem 3.1?  What does this mean?
+- Can something be said about the differences in computational expense of persistent homology (known to be very expensive) and the proposed quotient homology approach?  Especially in the case of high dimensional input regions, when persistent homology can be very computationally intensive?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces a novel theoretical framework connecting ReLU neural networks with quotient homology theory. Building on the fact that ReLU networks correspond to continuous piecewise-linear maps, the authors define an equivalence relation on the input manifold based on regions where the network is non-injective. They propose the overlap decomposition capturing intersections between affine regions, and prove that the homology of neural representations is isomorphic to the quotient homology.
+They develop a computational method to identify overlaps and experimentally demonstrate the framework on toy datasets. Their method is shown to isolate topological features while removing geometric artifacts. The paper further analyzes how the overlap decomposition evolves during network training and how it correlates with expressivity and non-injectivity.
+
+### Strengths
+The paper is original in proposing quotient homology as a new framework for analyzing neural representations and supports this with rigorous definitions and theorems that connect non-injectivity to topological change. It offers clear conceptual distinctions between geometric and topological effects, reinforced by insightful visualizations that make these differences intuitive. Overall, the approach has strong potential to influence future work on expressivity and manifold transformations in deep networks.
+
+### Weaknesses
+1. The paper’s main theorem depends on the assumption that each intersection $M\cap G_{j}$ is convex, but this condition is unlikely to hold for realistic, high-dimensional, and non-convex input domains. The authors provide only low-dimensional toy examples to justify the assumption, leaving unclear how broadly the theoretical result applies in practice.
+2. The theory identifies two distinct mechanisms of topological change—rank decomposition and overlap decomposition—but the experiments only analyze the overlap component. As a result, the empirical section does not isolate how much of the observed homology is attributable to rank drops versus overlaps. There are no controlled settings where one source is varied while the other is held fixed, nor measurements of how often rank changes occur in practice. This makes it difficult to assess the relative importance of each mechanism or to validate the full theoretical decomposition experimentally.
+3. Grammar errors:
+Line 070: which except for a few works -> which, except for a few works
+Line 255-256: choosing a different δ’s -> choosing different δ’s
+Line 297-298: a MSE loss -> an MSE loss
+Line 306-308: both persistent homology as well as quotient homology -> both persistent homology and quotient homology
+Line 341: botton right -> bottom right
+Line 348-349: Betti numbres -> Betti numbers
+Line 377: the number of overlap regions are -> the number of overlap regions is
+
+### Questions
+1. The convexity assumption plays a central role in both the overlap-detection algorithm and the isomorphism theorem, but it seems stronger than necessary from a topological standpoint. In particular, The convexity condition in the central theorem (Theorem 3.2) can be relaxed to contractibility as in Theorem B.5. Can the convexity requirement $M\cap G_{J}$ be relaxed, e.g., to contractibility or another weaker “cell-like” condition, and if not, could the authors clarify precisely where convexity is essential in the proof and why weaker assumptions would fail?
+2. The theoretical framework distinguishes between rank-induced and overlap-induced topological changes, but the experiments focus only on overlaps. Could the authors provide ablations or analyses that isolate the role of rank decomposition—e.g., settings where rank varies while overlaps are minimal—and clarify how often rank drops occur in practice and how much they contribute to the resulting homology? Or if it is not possible, could the authors provide appropriate reasons?
+3. How does the computational complexity of the overlap decomposition scale with dimension and layer count?
+4. Is there a relationship between overlap counts and expressivity measures like linear region counts or VC dimension?
+5. How sensitive is the quotient homology computation to small perturbations in weights or inputs? Do the authors have any insights on this?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

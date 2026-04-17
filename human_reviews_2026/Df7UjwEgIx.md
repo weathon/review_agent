@@ -1,0 +1,175 @@
+# SpaCE-10: A Comprehensive Benchmark for Multimodal Large Language Models in Compositional Spatial Intelligence
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 8, 8
+
+## Abstract
+Multimodal Large Language Models (MLLMs) have achieved remarkable progress in various multimodal tasks. To pursue higher intelligence in space, MLLMs require integrating multiple atomic spatial capabilities to handle complex and dynamic tasks. However, existing benchmarks struggle to comprehensively evaluate the spatial intelligence of common MLLMs from the atomic level to the compositional level. To fill this gap, we present SpaCE-10, a comprehensive benchmark for compositional spatial evaluations. In SpaCE-10, we define 10 atomic spatial capabilities, which are combined to form 8 compositional capabilities. Based on these definitions, we propose a novel hierarchical annotation pipeline to generate high-quality and diverse question-answer (QA) pairs. With over 150+ hours of human expert effort, we obtain over 5k QA pairs for 811 real indoor scenes in SpaCE-10, which covers various evaluation settings like point cloud input and multi-choice QA. We conduct an extensive evaluation of common MLLMs on SpaCE-10 and find that even the most advanced MLLM still lags behind humans by large margins. Through our careful study, we also draw several significant findings that benefit the MLLM community. For example, we reveal that the shortcoming of counting capability greatly limits the compositional spatial capabilities of existing MLLMs. We will release the code and benchmark soon.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper propose a benchmard dataset(Space-10) to evaluate MLLM's spatial understanding. It contain 5K QA for 811 real indoor scenes. The authors define 10 spatial capabilities focusing on different aspect of sptial understanding like counting, localization etc. For dataset constuction, the authors utilize multi-stage of manual and automated approaches to refine the quality. The benchmark is then used to evaluate various open and close source MLLM.
+
+### Strengths
+1. The author conducted extensive experiments on different MLLM on the proposed dataset.
+2. The paper is well written and easy to follow. Figures look nice.
+3. Evaluating on models compositional spatial capabilities is interesting and can help to understand the MLLM's capabilities.
+
+### Weaknesses
+1. The use of abbreviation and classes number is a bit complicated and hard to read.
+2. The proposed division into ten classes is not entirely convincing, and describing them as atomic seems somewhat overstated. For instance, Classes C1, C7, and C8 all exhibit 100% coverage and are included across all eight compositional capabilities, effectively making them equivalent to the overall average. This raises the question of whether defining them as separate classes provides any meaningful distinction. Similarly, Classes C3 and C10 consistently co-occur, they are either both present or both absent within the same tasks, suggesting that none of the classes are truly independent. Given this strong interdependence, referring to them as atomic does not seem appropriate.
+
+### Questions
+Please see the weakness above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper presents SpaCE-10, a comprehensive benchmark for evaluating compositional spatial intelligence in multimodal large language models. It defines 10 atomic spatial capabilities and systematically combines them into 8 compositional QA types, built from 811 real indoor scenes with 5k+ question–answer pairs across both 2D image and 3D point-cloud settings.
+
+### Strengths
+1. The paper clearly explains ten basic spatial skills and combines them into eight question types. This setup makes it easier to see which abilities the models are good or bad at, instead of only looking at overall accuracy.
+2. The data collection process is well organized, mixing automated generation with human checking to keep questions accurate and varied. The experiments on about 50 models give useful insights.
+
+### Weaknesses
+1. Overall, the benchmark is limited to indoor scenes, which narrows its scope. Real-world spatial intelligence also involves outdoor and embodied settings, for example, navigation and perception in autonomous driving or robotics. 
+2. Fixing inputs to 8 images may limit multi-view reasoning. What is the performance when the number of views grows?
+3. MCQ-only setup: This misses tasks that need precise outputs (e.g., 3D grounding with (x,y,z) coordinates, path planning). What is the current status of MLLM performance on these tasks?
+4. Intuitively, reasoning directly in 3D should work better, but in this benchmark the 3D LLMs perform worse than the 2D LLMs. Would denser point clouds help? 1,024 points seem too sparse and may not capture the whole scene. Also, would it be possible to use the same 8 images with a feed-forward reconstructor (e.g., VGGT) to build a point cloud, then feed that into the 3D MLLM?
+
+### Questions
+See weakness
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper propose SpaCE-10 to address the limitation of existing benchmark in comprehensively assessing the ability of MLLMs to integrate multiple basic (the atomic level) spatial reasoning skills into complex, compositional tasks (the compositional level). The proposed benchmark defines a structured hierarchy, including 10 atomic spatial capabilities which are combined into 8 compositional capabilities. The authors design a hierarchical annotation pipeline to generate QA pairs, together with assistance from human experts.
+Experiments across models from 1B to 200+B provide in-depth analysis, with special focus on single abilities compared with their combination. These results reveal significant shortage of MLLMs in integrated spatial intelligence.
+
+### Strengths
+- Significance: 
+  1. The addressed compositional spatial reasoning ability is indeed important, challenging and useful in real world tasks.
+  2. The identified performance gap between MLLMs and humans on SpaCE-10 highlights the immediate and practical value of this benchmark in directing future model development.  
+
+- Originality: The paper offers an original and highly structured framework that 1. clearly defines 10 atomic level and 8 compositional level spatial capabilities, and 2. provides novel insights for researchers to precisely diagnose model deficiencies in 2D and 3D spatial reasoning.
+
+- Quality: 
+  1. The conducted extensive evaluation of more than 50 MLLMs with diverse scales and structures validates the benchmark's utility. These results reveal common trends other than determining shortages for specific models. 
+  2. This work includes both data generation, quality verification, in-depth analysis and case studies, almost covering aspect required by a benchmark.
+
+- Clarity: 
+  1. This paper is well motivated and demonstrated. 
+  2. The clear organization of spatial reasoning into atomic and compositional levels provides an intuitive and logical structure for evaluating intelligence in space.
+
+### Weaknesses
+1. This paper only covers indoor scenes, especially the housing scenes. While there are lots of different scenes worth investigating, such as indoor inductrial scene (in a factory), and also outdoor scenes. These could further expand the coverage and generality of the scope of this benchmark.
+2. Could also provide detialed insights for future research (further discuss the cause and potential improvements for your findings), or indicate example practical tasks for potential applications.
+
+### Questions
+1. Please provide a detailed breakdown of the SpaCE-10 benchmark. Specifically, what is the total number of QA pairs, the number of distinct images used, and the precise distribution of samples across the 10 atomic and 8 compositional capabilities?
+2. Please to the points in Weaknesses section.
+3. This is not a question, just to clarify that I want to assign a rate of 9 (but only allowed to choose between 8 and 10). The reason for not assigning the highest score is stated in Weaknesses#1. I suppose this work could be further strengthened if covering more practical scenes. Overall this is a good work.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper introduces SpaCE-10, a large-scale benchmark designed to evaluate the compositional spatial intelligence (CSI) of multimodal large language models (MLLMs). The authors argue that existing benchmarks fail to disentangle and systematically assess spatial capabilities in MLLMs. SpaCE-10 defines 10 atomic spatial capabilities (e.g., object recognition, counting, spatial relationship, multi-view fusion) and combines them into 8 compositional QA tasks covering both perception and reasoning.
+The benchmark is built upon 811 real indoor 3D scenes collected from four public datasets, producing over 5,000 high-quality question-answer pairs through a hierarchical semi-automated annotation pipeline involving both GPT-4o and human experts.
+The authors evaluate ~50 open- and closed-source MLLMs, including GPT-5, LLaVA-OneVision, Qwen2.5-VL, and InternVL3.5. Results show that even the best models perform far below human level (≈53% vs. 91%), with major deficiencies in counting, reverse reasoning, and multi-capability composition. The authors release the dataset and code to promote further research in spatial reasoning for MLLMs.
+
+### Strengths
+- The paper convincingly identifies the lack of a unified benchmark for compositional spatial intelligence, distinguishing SpaCE-10 from prior 2D/3D QA datasets.
+- The hierarchical annotation pipeline (combining automated generation and human validation) is well thought-out, ensuring both scalability and quality.
+- By defining 10 atomic spatial capabilities and mapping them to 8 compositional QA types, the benchmark enables fine-grained capability diagnosis rather than raw accuracy comparison.
+- The inclusion of nearly 50 MLLMs, spanning 2D and 3D models from 1B to 241B parameters, provides an impressive empirical scope and meaningful comparative insights.
+
+### Weaknesses
+- Although human validation is used, the quality and potential bias of GPT-generated QAs could influence benchmark reliability; the paper could analyze this more rigorously.
+- SpaCE-10 focuses on indoor 3D environments; its applicability to outdoor or dynamic (temporal) spatial reasoning remains unexplored.
+- While overall accuracy drops are discussed, the paper could provide deeper qualitative examples showing failure modes and reasoning errors.
+
+### Questions
+- How does SpaCE-10 ensure that the compositional QA pairs do not contain linguistic or visual shortcuts that allow models to guess without full reasoning?
+- Could the benchmark be extended to temporal or embodied spatial reasoning, e.g., predicting next-step navigation or multi-step manipulation tasks?
+- Given that GPT-4o is used in both generation and evaluation, how is data leakage or model bias avoided?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

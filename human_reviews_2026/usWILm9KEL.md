@@ -1,0 +1,143 @@
+# Tokenizing Loops of Antibodies
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 4, 2
+
+## Abstract
+The complementarity-determining regions (CDRs) of antibodies are loop structures that are key to their interactions with antigens and are of high importance to the design of novel biologics. Existing approaches for characterizing the diversity of CDRs have limited coverage and cannot be readily incorporated into protein foundation models. Here we introduce ImmunoGlobulin LOOp Tokenizer, Igloo, a multimodal antibody loop tokenizer that encodes backbone dihedral angles and sequence. Igloo is trained using a contrastive learning objective to map loops with similar backbone dihedral angles closer together in latent space. Igloo can efficiently retrieve the closest matching loop structures from a structural antibody database, outperforming existing methods on identifying similar H3 loops by 6.1%. Igloo assigns tokens to all loops, addressing the limited coverage issue of canonical clusters, while retaining the ability to recover canonical loop conformations. To demonstrate the versatility of Igloo tokens, we show that they can be incorporated into protein language models with IglooLM and IglooALM. On predicting binding affinity of heavy chain variants, IglooLM outperforms the base protein language model on 8 out of 10 antibody-antigen targets. Additionally, it is on par with existing state-of-the-art sequence-based and multimodal protein language models, performing comparably to models with $7\times$ more parameters. IglooALM samples antibody loops which are diverse in sequence and more consistent in structure than state-of-the-art antibody inverse folding models. We show that Igloo can rapidly and scalably prioritize functional antibody variants from large mutagenesis libraries, achieving a $1.9\times$ enrichment of experimentally validated HER2 binders in a zero-shot setting. Igloo demonstrates the benefit of introducing multimodal tokens for antibody loops for encoding their diverse landscape, improving protein foundation models, and for antibody CDR design.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposes a new multimodal antibody loop tokenizer that encodes backbone dihedral angles and sequence.  The tokenizer mainly uses a contrative learning objective to enhance discrimination ability for loop similiarity. The exprimental results showcase the methods achieve SOTA preformance.
+
+### Strengths
+- The presentation is good and the paper is reay to read and understand.
+- The CDRs is important and conducting the research on the CDRs is meaningful.
+- The motivation to consider the structure and sequence simutaneously sounds reasonable and makes sence.
+- The experimental resutls suggest the model is good.
+
+### Weaknesses
+- Although the paper is easy to read, the nolvety of this method is limited. It doesn't introdue any insignful training technique and model archtecture design. It seems to accumuate some tricks (mask seq, contrastive learning, codebook) to achieve the good performance on the loop representation. Therefore, for the methods itself, it cannot be said bring a significant contribution for the community.
+- The experimental resutls suggest the proposed methods can be significantly consistantly outperforms the baseline.
+
+minor: - line 58 write the full name of the abbreviation MD.
+-  Eq (3) $\ell_{AA}$ needs description.
+
+### Questions
+what if the model learns 6 loopers instead of 4 loopers for CDRs.
+For 4.4, can the diffab and dyMEAN be the baselines?
+
+[1] End-to-End Full-Atom Antibody Design
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces IGLOO, a novel multimodal tokenizer designed for the CDRs of antibodies. The key contribution is the use of a higher-level tokenization of an entire CDR loop, rather than residue-level tokenization in common protein language models. IGLOO is trained to create continuous and discrete (via a codebook) representation of the CDR loop. The training incorporates three objectives: multimodal masking for reconstruction, codebook learning for discrete tokenization, and a contrastive learning objective based on dihedral angle distance, which aims to map structurally similar loops close in the latent space. The authors demonstrate the utility of these learned tokens across three tasks in antibody engineering: (1) retrieving structurally similar loops from large databases, (2) binding affinity predictions by incorporating the loop tokens, and (3) enabling controllable sampling of diverse yet structurally consistent antibody loops for design.
+
+### Strengths
+1. The idea of tokenizing at the level of CDR loops is suitable for CDR level tasks. The contrastive learning objective based on dihedral angle distance is novel for CDR representation learning, as it captures the chirality and geometry of protein backbones more effectively than standard RMSD. 
+
+2. The extensive experiments have been done on three related tasks.
+
+3. The paper is well-written and organized. The method is clearly explained.
+
+### Weaknesses
+1. The author used a structure prediction tool to fold the antibody sequences from OAS. Currently, the accuracy of a folding model on the CDR H3 is usually > 2 Å. Is it okay to use such data for training? Thus, the use of the precision for RMSD < 1 Å may be questionable. What is the quality of the VQVAE reconstruction?
+
+2. The improvement of the performance of binding affinity prediction is marginal.
+
+3. The experiment on the antibody structure clustering is not compared to other methods. 
+
+4. In the contrastive loss, I guess that it may be possible that CDRs with different lengths have similar structures and functions.
+
+### Questions
+See Weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes a multimodal algorithm that encodes antibody loop regions by integrating both amino acid sequences and backbone dihedral angles to generate unified token representations. IGLOO uses a transformer-based architecture built on ESM-2, trained through three self-supervised objectives: multimodal masking with reconstruction of sequence and angle features, contrastive learning based on dihedral angle distance to cluster structurally similar loops closer in latent space, and codebook learning for transforming continuous embeddings into discrete tokens that capture canonical conformations. These learned tokens are applied to two structure-aware antibody language models, IGLOOLM and IGLOOALM, enabling improved retrieval of similar loop structures, higher performance in binding affinity prediction, and controllable generation of structurally consistent antibody loops, thereby advancing multimodal foundation modeling for rational antibody design.
+
+### Strengths
+1 IGLOO introduces a novel multimodal tokenization framework that jointly encodes antibody loop sequences and backbone dihedral angles, enabling unified structural–functional representation beyond traditional canonical clustering methods.
+
+2 By embedding IGLOO tokens into antibody language models (IGLOOLM and IGLOOALM), the approach provides structure-aware contextual understanding, improving affinity prediction and controllable loop generation.
+
+### Weaknesses
+1 Although this work makes multiple algorithm innovations, the results seem to be limited compared to its baselines. This makes me have doubts about the usability of this work.
+
+2 IGLOO represents structures only through backbone dihedral angles, omitting side-chain conformations, hydrogen-bond networks, and atomic-level interactions. While this simplifies computation, it may fail to capture fine-grained spatial details that affect loop conformation and binding affinity. Please explain why you didn’t incorporate all-atom geometric features or graph-based structural encoders to better model spatial constraints, and add relative baselines.
+
+3 The model defines positive and negative loop pairs using fixed dihedral distance thresholds (D < 0.1 and D > 0.47). These hard boundaries could lead to poor representation of loops with intermediate similarity. Similarly, please explain why you didn’t consider a more continuous similarity weighting or soft contrastive loss.
+
+4 IGLOO is trained mainly on SAbDab and Ibex-predicted antibodies, which reflect known scaffolds and conformations. Its generalizability to noncanonical or novel antibody frameworks remains untested. Broader training with non-antibody loop structures or cross-species datasets could improve robustness and transfer capability.
+
+5 The paper compares IGLOO to large protein language models like ESM-2 (3B) and multimodal models such as ProstT5 and SaProt, but these baselines differ significantly in scale and objectives, making direct efficiency comparisons less clear. Future studies could include normalized metrics (e.g., per-parameter efficiency) or scaling analyses at similar model sizes.
+
+6 Benchmark tasks focus on structure retrieval and affinity prediction but lack direct comparisons on design-oriented tasks against models such as ProteinMPNN or AbMPNN. Evaluating loop-generation quality or binding-site prediction would more fully demonstrate IGLOO’s design advantages.
+
+7 Current metrics—RMSD and dihedral distance (D)—capture geometric similarity but not functional performance, such as binding energy or antigen-interaction context. Incorporating binding free energy (ΔΔG) and interface contact consistency metrics could assess biological relevance more effectively.
+
+### Questions
+Same as weakness.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

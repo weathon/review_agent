@@ -1,0 +1,197 @@
+# Grounded in Reality: Learning and Deploying Proactive LLM from Offline Logs
+
+- Decision: Reject
+- Scores: 4, 4, 4, 6
+
+## Abstract
+Large Language Models (LLMs) excel as passive responders, but teaching them to be proactive, goal-oriented partners—a critical capability in high-stakes domains—remains a major challenge. 
+Current paradigms either myopically optimize single-turn attributes or rely on brittle, high-cost user simulators, creating a persistent ``reality gap''.
+To bridge this gap, we introduce \texttt{Learn-to-Ask}, a general, simulator-free framework for learning and deploying proactive dialogue agents \textit{directly from offline expert data}, bypassing the need to model complex user dynamics.
+Our key insight is to reframe the offline policy learning problem by leveraging the \textbf{observed future} of each expert trajectory. 
+This allows us to infer a dense, turn-by-turn reward signal grounded in the expert's revealed strategy, decomposing the intractable long-horizon problem into a series of supervised learning tasks, and training a policy to output a structured \texttt{(action, state\_assessment)} tuple, governing both \textbf{what to ask} and, crucially, \textbf{when to stop}. 
+To ensure reward fidelity, our Automated Grader Calibration pipeline systematically purges noise from the LLM-based reward model with minimal human supervision.
+Empirically, we demonstrate the efficacy of \texttt{Learn-to-Ask} in a real-world medical dataset, using LLMs of varying sizes up to 32B. Our approach culminates in the successful deployment of LLMs into a live, large-scale online AI service. In rigorous in-house evaluations, our model was launched and achieved performance even superior to human experts, proving our framework's ability to translate offline data into tangible, real-world impact. We hope this work provides a practical and economically viable blueprint for transforming passive LLMs into proactive, goal-oriented LLM applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents Learn-to-Ask, a simulator-free framework for training LLMs to be proactive, goal-oriented dialogue agents directly from offline expert conversation logs. The key innovation is leveraging the "observed future" of expert trajectories to infer dense, turn-by-turn reward signals through a hindsight-based approach, decomposing the intractable long-horizon RL problem into tractable supervised learning tasks. The framework includes: (1) ground truth extraction using LLMs to identify target information sets from future dialogue, (2) automated prompt calibration with minimal human supervision, (3) hierarchical reward structure (micro-reward for question quality, macro-reward for stopping decision), and (4) policy optimization via GRPO. The authors validate their approach on RealMedConv medical dialogue dataset and demonstrate successful deployment in a large-scale commercial medical AI service, achieving performance exceeding human experts.
+
+### Strengths
+1. Novel problem framing: Reformulating long-horizon dialogue RL as sequence of supervised tasks via hindsight is elegant and bypasses simulator requirement
+
+2. Comprehensive validation: Rare combination of (a) controlled offline experiments, (b) ablations, (c) real-world A/B testing, and (d) super-human performance demonstration
+
+### Weaknesses
+1. Limited domain evaluation:
+
+   a. Only medical dialogue tested; claims of "general framework" not empirically validated
+
+   b. Would benefit from experiments on legal consultation, technical support, or other goal-oriented domains
+
+   c. Different domains may have different information graph structures
+
+2. Dependency on expert data quality:
+
+    a. Framework assumes expert trajectories are near-optimal
+    
+    b. No analysis of robustness to suboptimal or inconsistent expert behavior
+
+    c. How does performance degrade with noisy/imperfect expert data?
+
+### Questions
+1. Domain generalization: Have you tested Learn-to-Ask on non-medical domains? What challenges arise in adapting to domains with different information structures?
+
+2. Expert quality sensitivity: How does performance vary with expert data quality? Can you provide ablations with synthetic "noisy expert" trajectories?
+
+3. Strategy diversity: When experts have fundamentally conflicting strategies (not just different orderings), how does the framework handle this? Does it learn a mixture?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This submission introduces the “Learn-to-Ask” framework, which aims to enable LLMs to initiate meaningful, goal-driven exchanges, instead of just passively responding to user prompts. This is motivated by settings like healthcare, where an agent must know which questions to ask and when to stop asking questions. 
+
+The authors address this problem by learning from offline expert conversation logs. While the problem can be modeled as learning in an MDP with unknown transitions and rewards, the authors instead reformulate the problem into a sequence of single-step supervised learning tasks. In particular, they use an LLM to analyze each step in the conversation to determine (1) the target information set that the expert went onto collect and (2) the expert’s implicit stopping decision. 
+
+They then assign rewards to each step in the conversation via their hindsight-driven reward model that scores each conversation turn using two types of rewards: micro-rewards measure how effectively a generated question targets the expert’s next desired piece of information, while macro-rewards measure whether the model correctly decides to continue or stop. The authors use an automated process to tweak the prompts they use for data extraction, reward grading, and policy sampling. Finally, they apply the GRPO algorithm to fine-tune LLMs using these reward signals
+
+The authors evaluate their approach on the RealMedConv dataset, which contains real pharmacist-patient conversations. They find that their framework yields better results when compared to baselines like prompting, supervised fine-tuning, and DPO. Finally, they deploy their framework in a real-world medical AI system with thousands of daily users. In an A/B test conducted over several weeks, they find that their approach resulted in a 1.87x increase in dialog-to-purchase conversation rate compared to historical data from a parallel human-based service.
+
+### Strengths
+The problem being studied is well-motivated and significant (albeit not very original), as proactive LLMs are important tools in domains like healthcare. The authors’ approach performs well empirically on their healthcare testbed. The application to a real-world, large-scale medical AI system is also interesting.
+
+### Weaknesses
+The main weakness is in the novelty of the authors’ approach. The basic idea (transform the problem into a sequence of single-turn interactions, assign rewards to each, and fine-tune based on those rewards) is fairly boilerplate. There is also some amount of manual reward assignment, which may require changing in order to hold up in other domains beyond healthcare. In aggregate, this paper feels more like a nice engineering application of largely existing techniques, as opposed to a fundamentally new technique for designing proactive LLMs.
+
+### Questions
+What are the formal definitions of information completeness rate and good question rate?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces Learn-to-Ask, a simulator-free framework for learning proactive, goal-oriented dialogue policies directly from offline expert logs. The approach reframes offline policy learning as a hindsight-based reward inference problem, leveraging the observed future of expert conversations to derive dense and grounded turn-level reward signals, thereby transforming a challenging long-horizon reinforcement learning problem into a sequence of supervised learning tasks. In addition, an automated calibration pipeline is proposed to refine LLM-based graders, reducing noise and improving reward consistency. The authors further report that the method has been successfully deployed in a real-world commercial dialogue system, demonstrating promising practical effectiveness and stability.
+
+### Strengths
+1. Designed a simulator-free offline training framework, which helps narrow the gap between simulated environments and real-world scenarios.
+2. Introduced an elegant and well-grounded reward design that leverages the “future segments” of expert dialogue trajectories to infer dense rewards, effectively transforming sparse dialogue feedback into continuous supervision signals and reducing reliance on manual annotations.
+3. Demonstrated superior empirical performance compared to baseline methods
+
+### Weaknesses
+1. The paper exhibits a somewhat marketing-oriented presentation style, introducing a number of new terms and concepts that are not strictly necessary. This makes the exposition less focused, and the core innovations and logical thread of the paper are not presented in a sufficiently clear or linear manner.
+2. The claimed “framework innovation” primarily represents a system-level integration and engineering realization of existing methods in offline reinforcement learning and reward relabeling, rather than a contribution with substantial theoretical or algorithmic novelty.
+3. The experimental evaluation is limited in scope, as the proposed framework is trained and tested only on a medical dialogue dataset. Its generalization and robustness remain uncertain, and there is currently no evidence that the approach would perform effectively in other domains such as customer service, education, or technical support.
+4. Although the paper emphasizes “commercial deployment” and “real-world impact,” it provides insufficient experimental details and quantitative evidence, such as user feedback, performance improvement margins, or comparisons with existing production systems. This weakens the credibility of its deployment-related claims.
+
+### Questions
+1. How well does the proposed framework generalize to other domains or tasks beyond the medical dialogue setting?
+2. Could the authors provide more concrete evidence or quantitative analysis of the model’ improvement in real-world deployment?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Learn-to-Ask (LTA), simulator-free framework for learning and deploying proactive dialogue agents directly from offline expert data. 
+
+The topic is user alignment, and the goal is to enable LLMs to ask right questions at the right time. Instead of leveraging single-turn preference data or user simulators, this work uses the observed future of each expert trajectory to frame the offline policy learning objective, and recasts user alignment as a densely-rewarded supervised learning problem, with micro-goals as the information the expert later acquired, and macro-goals as the timing to stop.
+
+An Automated Grader Calibration pipeline is proposed to ensure reward fidelity, and GRPO is leveraged for policy optimization. Empirical performance on the RealMedConv dataset demonstrates the superiority of the proposed method over several baselines and human experts.
+
+### Strengths
+This paper seeks to conduct ``reward-mining'' from unsupervised offline logs, which is an important and cutting-edge topic. The intuition of reward design regarding when to stop is pretty straightforward, and the one regarding the observed future is correlated with topics in unsupervised RL like experienced-based learning or minimizing surprise. Overall I appreciate the topic, and find the methodology design interesting.
+
+The in-house benchmark construction and validation on real-world scenarios have also solidified the work.
+
+### Weaknesses
+I do find some weaknesses and questions and wish the authors could address:
+
+- Why the reward is designed in a multiplicative way? According to Table 1, a simple summation of the two rewards is used an ablation setting. It seems that the performance of the reward summation is comparable or even better (under the 32B setting) than that of the multiplicative reward. Therefore I'm especially curious about the motivation of the multiplicative reward design.
+
+- According to the ablated results in Table 1, removing the micro-reward (R_a*) leads to more severe performance drop. Is this equivalent to setting β as 0? What will it be when sweeping β? By the way, which β is used in the main experiments (Eq. (5))? I don't think I found the configuration of β in the paper. 
+
+- Also following the previous question: How is R_s* removed from Eq. (5)? According to Appendix F.5, it means setting R(a_t, s_t) to be β R_a(a_t; I_t*) + regularization. This is not a natural reduction of the proposed multiplicative reward design, and makes me wonder what if we sweep β over different settings in the R_s* + β R_a* reward. 
+
+- I am also curious about the comparison of the proposed method against more supervised learning settings. (1) What if the number of epochs is doubled into 8 (or increased for even more times) in SFT? I am wondering if the SFT has been conducted thoroughly enough. (2) What if we adopt a continual-pretraining-like approach, by enforcing loss computation over not only the response, but also the query part in the data in SFT? Intuitively, this is another one approach that directly integrates each period of hindsight into the learning objective. It would be great if the authors compare with this and demonstrate the strength of the propose method.
+
+I will consider raising my score if my questions are addressed properly.
+
+### Questions
+See the above Weaknesses section
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

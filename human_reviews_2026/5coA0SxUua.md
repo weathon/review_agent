@@ -1,0 +1,276 @@
+# Safe Reinforcement Learning with ADRC Lagrangian Method
+
+- Decision: Reject
+- Scores: 2, 6, 2, 2, 4
+
+## Abstract
+Safe reinforcement learning (Safe RL) seeks to maximize rewards while satisfying safety constraints, typically addressed through Lagrangian-based methods. However, existing approaches, including PID and classical Lagrangian methods, suffer from oscillations and frequent safety violations due to parameter sensitivity and inherent phase lag. To address these limitations, we propose ADRC-Lagrangian methods that leverage Active Disturbance Rejection Control (ADRC) for enhanced robustness and reduced oscillations. Our unified framework encompasses classical and PID Lagrangian methods as special cases while significantly improving safety performance. Extensive experiments demonstrate that our approach reduces safety violations by up to 74\%, constraint violation magnitudes by 89\%, and average costs by 67\%, establishing superior effectiveness for Safe RL in complex environments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper introduces an effective method to optimize the Lagrangian multiplier update process in safe RL, reducing oscillation during training.
+
+### Strengths
+Safe RL is an important research topic.
+
+### Weaknesses
+1. Safe RL is a critical research topic with significant contributions in the literature [1-7]. However, the paper lacks a comprehensive review of related work in this area.
+
+2. The paper claims to be "the first to introduce ADRC into Safe RL, dynamically adjusting the Lagrange multiplier to improve constraint satisfaction and training stability." However, this idea is not entirely novel, as it relates to the concept of residual action policies previously proposed in safe RL literature [3-7].
+
+3. Theorem 4.2 relies on a strong assumption that ($w_0 > w^*_0$). Given the complexity of real-world systems, it is unclear how this assumption can be guaranteed to hold in practice.
+
+4. The theoretical contribution lacks novelty, as it relies primarily on the well-established Fourier transform for its mathematical derivations.
+
+5. The theoretical contributions are grounded primarily in control theory and may have limited relevance to the machine learning community.
+
+6. The paper compares the proposed method against standard RL algorithms such as DDPG and PPO. However, comparisons with state-of-the-art safe RL approaches [1-7], which are most needed but absent, are critical for establishing the method's effectiveness. Furthermore, likely, the proposed approach may not outperform existing safe RL methods, given its lack of explicit reward encoding for safety conditions.
+
+7. The paper's focus on control-theoretic methods suggests it may be more suitable for control-focused conferences rather than machine learning venues.
+
+
+References:
+
+[1] Phan, D. T., Grosu, R., Jansen, N., Paoletti, N., Smolka, S. A., & Stoller, S. D. (2020). Neural Simplex architecture. In NASA Formal Methods: 12th International Symposium, Moffett Field, CA, USA, May 11–15, 2020, Proceedings 12 (pp. 97-114). Springer International Publishing.
+
+[2] Cai, Yihao, Yanbing Mao, Lui Sha, Hongpeng Cao, and Marco Caccamo. "Runtime Learning Machine." ACM Transactions on Cyber-Physical Systems (2025).
+
+[3] Hongpeng Cao, Yanbing Mao, Lui Sha, and Marco Caccamo. Physics-regulated deep reinforcement learning: Invariant embeddings. In The Twelfth International Conference on Learning Representations, 2024.
+
+[4] Krishan Rana, Vibhavari Dasagi, Jesse Haviland, Ben Talbot, Michael Milford, and Niko
+Sünderhauf. Bayesian controller fusion: Leveraging control priors in deep reinforcement
+learning for robotics. The International Journal of Robotics Research, 42(3):123–146, 2023.
+
+[5] Tongxin Li, Ruixiao Yang, Guannan Qu, Yiheng Lin, Steven Low, and Adam Wierman. Equipping black-box policies with model-based advice for stable nonlinear control. arXiv:2206.01341. 
+
+[6] Richard Cheng, Abhinav Verma, Gabor Orosz, Swarat Chaudhuri, Yisong Yue, and Joel Burdick. Control regularization for reduced variance reinforcement learning. In International Conference on Machine Learning, pages 1141–1150, 2019. 
+
+[7] Tobias Johannink, Shikhar Bahl, Ashvin Nair, Jianlan Luo, Avinash Kumar, Matthias Loskyll, Juan Aparicio Ojea, Eugen Solowjow, and Sergey Levine. Residual reinforcement learning for robot control. In 2019 International Conference on Robotics and Automation, pages 6023–6029, 2019.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents a novel adaptive control–based framework designed to enhance robustness and reduce oscillations in Lagrangian-based methods for safe reinforcement learning (RL). The proposed approach unifies the classical Lagrangian and PID-based methods within a single framework. Furthermore, the authors conduct a frequency-domain analysis to theoretically demonstrate improved convergence speed and more stable constraint satisfaction. Overall, the framework is elegant and provides clear theoretical and practical insights into stabilizing safe RL algorithms.
+
+### Strengths
+1. The paper presents a conceptually elegant and technically sound integration of Active Disturbance Rejection Control (ADRC) into the Lagrangian framework for Safe RL. This connection between adaptive control theory and reinforcement learning is novel and well motivated.  
+2. The theoretical analysis is rigorous and insightful. The authors not only show that classical and PID Lagrangian methods are strict special cases of the proposed approach, but also provide frequency-domain analysis and formal stability guarantees, including bounded estimation error and phase-lag reduction.  
+3. The proposed method is practical and well grounded, with clear formulations for the observer-based multiplier updates and principled lower bounds for parameter tuning, addressing the parameter sensitivity issue of prior methods.  
+4. The experimental results are comprehensive, covering multiple benchmark environments and Safe RL algorithms (PPO, TRPO, TD3, DDPG). The results consistently demonstrate substantial improvements in safety performance and training stability, with significant reductions in violation rate and magnitude.  
+5. The paper is clearly written and well structured, effectively bridging control theory and Safe RL. The combination of theoretical rigor and empirical validation makes the contribution both elegant and impactful.
+
+### Weaknesses
+1.  **Lack of clarity on observer parameter estimation (p.7, Eq. 21):**  
+   The online estimation of environment sensitivities \( L_1 \) and \( L_2 \) using finite differences (Eq. 21, p.7) is an interesting idea but lacks justification on numerical stability and sensitivity to noise. It remains unclear whether this estimation is robust or whether additional filtering is required, especially in stochastic environments.  
+
+2. **Minor presentation issues:**  
+   Some figures (e.g., Fig. 1 on p.7) could benefit from clearer axis labels and captions specifying task details (RacecarPush, CarButton, etc.). Additionally, the notations \(x_1, x_2, r, \lambda_t\) are numerous and sometimes hard to trace without a summary table.
+
+### Questions
+1. **About generalization of ADRC (Sec. 4.3, p.5):**  
+   The proposed Extended State Observer (ESO) assumes continuous-time differentiable cost signals. In practical Safe RL, cost estimates are often noisy and sampled at discrete steps. How robust is the ESO to such discretization and noise? Have the authors observed instability in discrete implementations?  
+
+2. **On theoretical-to-empirical alignment (Sec. 4.4–5.2, p.6–p.8):**  
+   The theoretical analysis predicts smaller phase lag and disturbance estimation error compared with PID Lagrangian (Theorem 4.2). Could the authors provide empirical evidence, such as Bode plots or measured frequency response, to quantitatively confirm these effects?  
+
+3. **Parameter adaptation (Eq. 20–21, p.6–p.7):**  
+   The lower bound of \( \omega_o \) (Eq. 20) depends on the estimated constants \( L_1, L_2, L_3 \). How sensitive is the method to inaccurate estimation of these constants, and does the adaptive update ever violate the stability condition in practice?  
+
+4. **Implementation details (Appendix D):**  
+   Algorithm 1 briefly outlines the ADRC update process, but it remains unclear how often the ESO and the reference trajectory are updated relative to policy gradients. Are they updated per episode, per step, or asynchronously?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces the ADRC-Lagrangian method, a novel approach to stabilizing the dual variable update in Lagrangian-based Safe RL. The authors correctly identify that existing methods, which can be viewed as integral (I) or Proportional-Integral-Derivative (PID) controllers, suffer from oscillations and sensitivity due to the non-stationary nature of the policy and noisy cost estimates. The proposed solution adapts the Active Disturbance Rejection Control (ADRC) framework from control theory. This involves: 1) modeling the constraint violation dynamics as a closed-loop system subject to a lumped disturbance, 2) using a reduced-order Extended State Observer (ESO) to estimate this disturbance in real-time, and 3) compensating for the disturbance in the Lagrange multiplier update. Furthermore, a smooth, critically-damped reference trajectory is introduced to manage the transient phase of constraint satisfaction. The authors claim a unified framework, a theoretical lower bound for observer gain, and superior empirical performance in reducing safety violations and costs across various Safe RL benchmarks.
+
+### Strengths
+The application of Active Disturbance Rejection Control (ADRC) to the dual variable update in Safe RL is a novel and creative idea. While the core ADRC mechanism is established in control theory, its specific adaptation to the stochastic, non-stationary environment of RL, particularly the interpretation of policy non-stationarity and estimation noise as a "lumped disturbance," is original within the Safe RL literature. This provides a fresh perspective on the stability issues of Lagrangian methods. The paper is generally well-written and structured. The connection between classical Lagrangian methods (I-control) and PID Lagrangian methods is clearly established, setting the stage for the ADRC generalization. The theoretical analysis, including the derivation of the lower bound for the observer gain ($\omega_o^*$) and the frequency-domain analysis showing reduced phase lag, provides a solid, principled foundation for the method. The empirical results are strong, showing significant improvements over baselines in safety metrics.
+
+### Weaknesses
+1. While the application to Safe RL is novel, the core technical contribution is the direct application of a standard ADRC framework (specifically, a reduced-order ESO and a transient process) to the dual update. The theoretical results, such as the lower bound on $\omega_o^*$ and the frequency-domain analysis, appear to be direct adaptations or re-derivations of existing results from the control literature (e.g., Han, 1998; Zhong et al., 2020a). The paper would be significantly strengthened by highlighting a novel theoretical challenge unique to the RL setting that required a non-trivial modification or extension of the classical ADRC theory.
+
+2. The paper introduces two main components: the Extended State Observer (ESO) for disturbance rejection and the Transient Process (TP) for smooth reference tracking. The current experimental section only compares the full ADRC-Lagrangian method against baselines. A critical weakness is the lack of an ablation study to disentangle the contribution of these two components.
+
+• Is the improvement primarily due to the ESO's disturbance rejection, or the smooth reference tracking of the TP?
+
+• A crucial experiment is needed: PID-Lagrangian with the Transient Process (PID-TP) vs. ADRC-Lagrangian without the Transient Process (ADRC-NoTP). Without this, it is impossible to determine if the complexity of the ESO is truly necessary over a simpler, well-tuned PID with a smooth reference.
+
+3. The paper proposes to approximate the unknown environment sensitivities ($L_1, L_2$) online using finite differences (Eqn. 21) to compute the lower bound $\omega_o^*$. This is a significant practical claim, but it is not sufficiently validated.
+
+• The estimation of $L_1$ and $L_2$ from noisy, high-variance RL signals (cumulative cost and its derivative) via finite differences is highly susceptible to noise and could introduce its own instability.
+
+• The paper does not provide details on how these online estimates behave, how they are smoothed, or how robust the final $\omega_o^*$ selection is to this estimation noise. This adaptive tuning mechanism is a major part of the claimed robustness, yet it is the least scrutinized in the main text.
+
+
+
+4. The primary baselines are classical Lagrangian and PID-Lagrangian (CPPOLag and CPPOPID). While these are the most relevant for the control-theoretic comparison, the paper would be stronger by comparing against more recent, state-of-the-art Safe RL algorithms that also aim to stabilize training
+
+### Questions
+1. Ablation of Components: Please provide an ablation study to isolate the contribution of the two main components: the Extended State Observer (ESO) and the Transient Process (TP). 
+
+2. Robustness of Online Parameter Estimation: The online estimation of $L_1$ and $L_2$ using finite differences (Eqn. 21) is concerning due to the inherent noise in RL cost signals. Can the authors provide:
+
+• A plot showing the evolution of the estimated $L_1$ and $L_2$ over training time for a representative task, and how $\omega_o^*$ changes?
+• Details on any smoothing or filtering applied to the cost signals ($x_1, x_2$) before computing the finite differences. How sensitive is the final performance to the choice of this smoothing?
+
+
+
+3. Novelty in Control Theory: Given that the ADRC framework is well-established, what is the specific theoretical novelty of the ADRC-Lagrangian method that goes beyond a direct application of existing control theory results? Does the non-stationary nature of the policy $\pi_\theta$ (which changes the underlying system dynamics $f(\cdot)$) necessitate a new stability analysis or observer design that is unique to the RL context?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper tackles phase-lag–induced oscillations and frequent safety violations in safe RL by replacing PID/classical Lagrangian updates with another control method—Active Disturbance Rejection Control (ADRC). The ADRC formulation subsumes prior methods as special cases and shows some empirical gains across benchmarks.
+
+### Strengths
+- This paper proposes a new Lagrangian multiplier update method to enhance robustness and reduce oscillations, which is an important problem in safe RL.
+- Overall, the paper is clearly written and easy to follow.
+
+### Weaknesses
+- Limited novelty. The core idea is a direct port of textbook control tricks—critical-damping reference shaping and ESO/DOB—into the multiplier update; this reads as a PID→ADRC replacement rather than a new RL principle.
+- The closed-loop abstraction in Eq. (11) reduces the policy–environment–multiplier dynamics to a low-order continuous-time ODE with a lumped disturbance, without a rigorous derivation or identification from discrete-time, stochastic, function-approximate RL. As a result, it is unclear when the assumptions hold or whether the ensuing frequency-domain analysis is truly predictive.
+- The experimental improvement appears marginal. On the Racecar task (RacecarPush), ADRC’s cost curves still show large oscillations with amplitudes and variance bands comparable to PID/Lag, so the claimed damping effect is unclear. On the Car tasks (CarCircle/Button), ADRC attains slightly lower cost but the reward drops noticeably below the baselines—especially in CarButton—indicating a safety–performance trade-off that is not quantified.
+
+### Questions
+In addition to the above mentioned weaknesses:
+- Could ADRC be replaced by other control algorithms?
+- Can the method improve safety metrics without sacrificing reward?
+- Additional experiments are needed to substantiate the claims.
+- How were the PID controller gains (Kp, Ki, Kd) chosen? Were they systematically tuned and screened (e.g., grid/random search)?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The study introduces a new framework for safe reinforcement learning (Safe RL) by integrating Active Disturbance Rejection Control (ADRC) into the classical Lagrangian method for constrained optimization. The authors address oscillation issues by treating dynamic nonstationarity and stochasticity in cost returns as disturbances and using an Extended State Observer (ESO) to estimate and reject them. Extensive experiments across multiple environments show significant improvements while maintaining reward performance.
+
+### Strengths
+1. The paper elegantly merges adaptive control theory (ADRC) with Safe RL, bringing a new perspective and a mathematically principled improvement to the stability problem in Lagrangian-based methods.
+
+
+2. Demonstrates better performance across multiple algorithms (PPO, TRPO, TD3, DDPG) on some tasks.
+
+### Weaknesses
+1. The reliable and immediate access to accurate cumulative cost signals, which may not hold in partially observable or delayed-reward environments.
+
+
+2. The added ESO dynamics introduce additional computation and implementation overhead compared to simple PID updates.
+
+
+
+3. Lack of Broader Comparison with Non-Lagrangian Safe RL Paradigms. Specifically, while CUP and IPO are mentioned, the empirical comparison focuses mainly on Lagrangian methods. Compared with Non-Lagrangian Safe RL algorithms would strengthen the claim of universality. 
+
+4. Moreover, the performance is not better than the baselines in Figure 1, such as in the CarCircle and Carbutton tasks.
+
+### Questions
+1. How does ADRC-Lagrangian perform under non-stationary or delayed constraint signals, such as safety feedback available only after several steps?
+
+
+2. How sensitive is the performance to errors in estimating L_1 and L_2 (Eq. 21)? Are there failure cases if the online approximation is inaccurate?
+
+
+3. Does the adaptive observer introduce noticeable latency or computational cost during training?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

@@ -1,0 +1,190 @@
+# Phase-Preserving Analytical Features from Solid Harmonic Wavelet Bispectrum Simplify Decision Boundaries
+
+- Decision: Reject
+- Scores: 6, 4, 2, 2
+
+## Abstract
+We introduce the Solid Harmonic Wavelet Bispectrum, an operator for 2D images that computes third-order correlations over angular frequency components of solid harmonic wavelet responses. By using angular rather than spatial frequencies, our bispectrum achieves lower dimensionality than traditional 2D scattering-based bispectra, avoiding comparisons across two spatial dimensions while still preserving rich frequency information. Extending these bispectra to first- and second-order scattering coefficients produces low-dimensional multi-scale features that capture detailed image structure. To illustrate the quality of the representations, we use k-nearest neighbors, which highlights that our features encode meaningful similarity structure even without a learned parametric classifier. Results on texture, medical, and galaxy images demonstrate that these features show improved separability and similarity structure compared to existing geometric and deep learning-based representations.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces a Solid Harmonic Wavelet Bispectrum as an alternative to scattering transforms based on the same family of wavelets (which have been shown to be effective for e.g., quantum chemistry) as an unsupervised, deep, nonlinear feature extractor. They show that the their method is superior to scattering and competitive with fully learned baselines (that require tons of parameters) on several real-world data sets arising from texture synthesis, medical imaging, and astronomuy
+
+### Strengths
+The paper is well written and motivated by existing work in applied harmonic analysis and signal processing as related to deep learning. 
+
+The paper offers a novel principled alternative to existing scattering methods and show that this improves performance on real-world data while maintaining the elegance and simplicity of scattering networks. 
+
+The advantages of the proposed method are solid and clearly explained
+
+### Weaknesses
+Note: The weaknesses list is long while the strengths list is short. This should not be misinterpreted. Most of these weaknesses are fairly unimportant and all are less important than the strengths.
+
+The authors claim that scattering networks are restricted to two layers because of information destroyed by the modulus operator. However, the reason that scattering networks can be kept "shallow" is the concentration of energy results obtained in "Group invariant scattering, Mallat 2012" are related works. The modulus operator is intended to introduce invariance in the context of analytic wavelets. However, it may readily be replaced with any activation function in many context, e.g., He and Hirn (see Questions). 
+
+Trispectrum is mentioned but not defined.
+
+It is hard to tell which results are best in the tables. Some bolding/underlining of top methods would help.
+
+Tables lack standard deviations which makes it hard to tell how "real" the differences in performance are. Especially since most models are fairly close most of the time.
+
+The authors use different back-ends for each data set. This is okay since the backend can be thought of as a tuneable hyperparaemeter in the scattering context. But a more detailed comparison in the appendix, showing how each variation performs in each case would be helpful. Alternatively, a principled approach to back-end selection would also be good.
+
+Broken equation reference in Appendix A.3.
+
+The appendices should be more clearly highlighted in the main text. Particularly A.3 which establishes important theoretical properties
+
+### Questions
+How would this method compare against the one introduced in [1]? The methods seems somewhat reminiscent of this one in that it modifies scattering to use ReLU and the considers covariances between first-order scattering moments for further expressivity and is shown to be effective for textures.
+
+Why is there only one \ell in (15) rather than \ell_1 and \ell_2? (Similar for related equations)
+
+In the experiments, how would the results be if the classifier were taken to be a multilayer perceptron?Alternatively, how would simpler classifiers for Lasso fair? My first question is motivated by recent works on the geometric scattering transform which mostly prefer scattering+MLP and the second is based on interpretability, particularly in the medical imaging case.
+
+Beyond the covariance established in A.3 are there other theoretical properties that can be established for this method analogous to e.g., concentration of measure or diffeomorphism stability results obtained in various scattering papers?
+
+[1] He and Hirn, Texture Synthesis via projection onto multiscale multilayer statistics https://arxiv.org/pdf/2105.10825
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This article introduces solid harmonic wavelet bispectrum to define low-dimensional multi-scale features to capture detailed image structure. It is based on computing third-order correlations over angular frequency components of solid harmonic wavelet responses. Application to the k-nearest neighbor classifier to show the quality of the representations without the need to learn a parametric classifier. Results on texture, medical and galaxy images show improved performance compared to existing geometric and deep learning-based representations.
+
+### Strengths
+-	The idea of developing wavelet bispectrum to define low-dimensional multi-scale features is very interesting. 
+-	The obtained results are very promising in small training data regime. 
+-	The article is mostly well written.
+
+### Weaknesses
+- There is a lack of comparison with the state-of-the art. There is a more recent wavelet spectra representation, which shares a similar idea to capture high-order and phase correlations. 
+- The key section 3.4 is not so clear.
+- The numerical evaluation is not conclusive due to the lack of error bars.
+
+### Questions
+- Is it possible to compare with the representations from “Scattering spectra models for physics , 2024” to enhance the numerical results ?
+- In Section 3.4, what is the SHWSB1 and SHWSB2 in eq 20 and eq 19? Is eq 7 = eq 16, i.e. SHWB = SHWSB? It is not so clear what are their main differences. 
+- Can you add error bars to Table 2, and table 3?
+- It would be more indicative to add the dimensionality of each representation reported in the tables. 
+- Typo: do you use ||^p or ()^p in eq. 11?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes the so-called Solid Harmonic Wavelet Bispectrum (SHWB) operator, which aims to generate roto-translation invariant features, and further adopts the scattering transform architecture, resulting the so-called Solid Harmonic Wavelet Scattering Bispectrum (SHWSB). The SHWB operator is designed to capture higher-order, phase-preserving interactions between solid harmonic wavelet responses across angular frequencies, which are expected to represent essential features for the classification task.
+
+### Strengths
+The paper reasonably argues the importance of higher-order, phase-preserving interactions between solid harmonic wavelet responses across angular frequencies for phase-sensitive images. The main idea of the development was well articulated.
+
+### Weaknesses
+The paper certainly addressed an interesting question in capturing phase-preserving features of images which promotes roto-translation invariant features for the classification task. However, it seems that the authors are not aware of similar works in the literature, e.g.,
+
+1) Rodriguez, et al., Rotation Invariant CNN Using Scattering Transform for Image Classification, IEEE-ICIP 2019
+2) Saydjari, et al., Equivariant Wavelets: Fast Rotation and Translation Invariant Wavelet Scattering Transforms, IEEE-TPAMI 2023
+
+Necessary alignment and comparisons with existing SOTA in the classic literature of Scattering Transforms are significantly missing.
+
+Furthermore, the writing quality of the paper has still room for improvement.
+
+### Questions
+Serious references and comparisons to the SOTA in the classic literature of Scattering Transforms are necessary for the possible acceptance of the work.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+This paper introduces an operator for 2D images to capture group invariance, multi-scale analysis, and higher-order statistics. These features are evaluated on a few different tasks: texture classification (kth-tips), classification & regression for medical data (medmnist), and regression on astrophysics galaxy merger data. Performance is on par with or outperforms some learning-based and non-deep-learning based baselines.
+
+### Strengths
+- new operators are a fundamental part of development in machine learning
+- limited data settings are of practical relevance to many tasks
+
+### Weaknesses
+- there is a discussion of computation efficiency provided, but no concrete experimental comparisons or analysis (e.g., time, memory, etc.) to indicate that the proposed operator is more efficient than alternatives (particularly deep learning-based ones that seem to perform very slightly better on Tab. 2)
+- I'm not sure why the selection of baselines changes pretty dramatically depending on the task. At least for methods like ResNet, etc it should be pretty straightforward to employ them for all the tasks presented, particularly since ResNet18 seems to perform the best (very slightly) when compared to in Tab. 2. 
+- it would be helpful to have bolding on the tables to indicate best performance
+
+### Questions
+Please note that I am definitely not an expert in this area and certainly willing to change my rating in light of clarifications provided by the authors or other reviewers. 
+My main questions are regarding the evaluation section, as I'm finding it difficult to see the evidence backing up the usefulness of the proposed operator:
+- if it's significantly more efficient than alternatives (especially deep learning based ones that may involve more compute), in which way is it more efficient? can this be quantified and compared?
+- what motivates the choice of baselines for each task? I would appreciate some discussion here (especially since vision transformers are generally state of the art vs resnets, though I could see they perform worse on quite small datasets). I'm also confused as to why the selection of baselines is so different across the proposed tasks (e.g., why ResNet for Tab. 2 and just a general "CNN" for Tab. 3? what does "CNN" refer to in Tab. 3 when this could refer to quite a lot of architectures?)
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

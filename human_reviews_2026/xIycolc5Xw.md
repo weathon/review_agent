@@ -1,0 +1,186 @@
+# Instance-Dependent Fixed-Budget Pure Exploration in Reinforcement Learning
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 6, 8
+
+## Abstract
+We study the problem of fixed budget pure exploration in reinforcement learning.
+The goal is to identify a near-optimal policy, given a fixed budget on the number of interactions with the environment.
+Unlike the standard PAC setting, we do not require the target error level $\epsilon$ and failure rate $\delta$ as input.
+We propose novel algorithms and provide, to the best of our knowledge, the first instance-dependent $\epsilon$-uniform guarantee, meaning that the probability that $\epsilon$-correctness is ensured can be obtained simultaneously for all $\epsilon$ above a budget-dependent threshold. It characterizes the budget requirements in terms of the problem-specific hardness of exploration.
+As a core component of our analysis, we derive a $\epsilon$-uniform guarantee for the multiple bandit problem—solving multiple multi-armed bandit instances simultaneously—which may be of independent interest. 
+To enable our analysis, we also develop tools for reward-free exploration under the fixed-budget setting, which we believe will be useful for future work.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper introduces the fixed-budget pure-exploration setting for episodic MDPs, where the learner must identify a near-optimal policy using a pre-specified interaction budget without knowing $\delta$ or $\epsilon$ in advance. It proposes BREA (Backward Reachability Estimation and Action-elimination), the first algorithm with fully instance-dependent guarantees in this setting. The authors prove that BREA returns an -optimal policy with probability that decays exponentially in the budget and provides tight, instance-dependent sample-complexity bounds, subsuming multi-armed bandit results.
+
+### Strengths
+The problem the paper studies is important and the authors present the first algorithm to enjoy instance dependent bounds for such a setting. Being able to design algorithms that do not require knowledge of the confidence parameter $\delta$ or the optimality parameter $\epsilon$  to run the algorithms are more akin to how these algorithms would be used in practice. Furthermore, the author present novel analysis that extends the analysis for the popular SAR algorithm which may be of independent interest to communities who rely on such algorithms to solve problems of interest.
+
+### Weaknesses
+The main weakness of this papers lies in the fact that the paper considers RL without function approximation and it the computationally feasibility of the proposed algorithm. Specifically whether such ideas would scale to more complicated function approximation schemes or only hold when using the simpler tabular models considered in this work.
+
+### Questions
+1. While gap dependent bounds are characterization of the hardness of an MDP, there are many MDPs (such as mountain car/cartpole/atari) where the gaps are quite small but we can still get fast rates since we can also characterize the hardness of an MDP by looking at the optimal value function like in [1,2]. Could you also comment on whether we could get bounds that depend on the optimal value function?
+
+2. What are the difficulties in extending these results to setting with function approximation such as linear MDPs [3] or linear mixture MDPs [4].
+
+
+[1] Zanette, Andrea, and Emma Brunskill. "Tighter problem-dependent regret bounds in reinforcement learning without domain knowledge using value function bounds." International Conference on Machine Learning. PMLR, 2019.
+
+[2] Ayoub, Alex, et al. "Switching the loss reduces the cost in batch reinforcement learning." Forty-first International Conference on Machine Learning. 2024.
+
+[3] Jin, Chi, et al. "Provably efficient reinforcement learning with linear function approximation." Mathematics of Operations Research 48.3 (2023): 1496-1521.
+
+[4] Ayoub, Alex, et al. "Model-based reinforcement learning with value-targeted regression." International Conference on Machine Learning. PMLR, 2020.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes a novel algorithm called BREA for reward-free exploration of Markov decision processes in the fixed-budget setting. Concretely, the authors show that the probability of the proposed algorithm of failing to achieve epsilon-accuracy is inversely proportional to the suboptimality gaps and epsilon.
+
+### Strengths
+To the best of my knowledge, the fixed-budget analysis of the proposed exploration algorithm is novel and correct, though I did not carefully check the proofs.
+
+### Weaknesses
+My main concern about the paper is conceptual. Fixed-budget algorithms usually prove a result on the accuracy or regret at the end of learning, and the authors also do this. However, the authors also prove results on sample complexity, which seems backwards when the budget is fixed beforehand. To compute a budget based on the sample complexity, one would need prior knowledge of several problem-specific parameters, which goes against the contribution of needing only B as input. Several theorems state as a *result* that the total budget is at most B, which seems like a tautology.
+
+Several theoretical results are difficult to interpret since they include parameters hidden inside functions. It would be useful to include a qualitative comparison with the sample complexity of algorithms in the fixed-confidence setting.
+
+Though a minor point, I do not agree with some of the claimed benefits of the fixed-budget setting. Concretely, the fixed-confidence setting has a clearly defined stopping rule and the aim is to guarantee PAC-compliance of the returned policy, while analyzing the precise sample complexity. Hence the algorithm cannot use as many samples as possible (the number of samples is bounded by the sample complexity), and the quality of the returned policy is guaranteed by the PAC-condition.
+
+### Questions
+In the expression for \epsilon_B on page 4, what is c(B)?
+
+The idea of rewarding specific state-action pairs is similar to active coverage (Al Majrani et al., COLT 2023), did you explore this connection?
+
+In Remark 4 the sample complexity \tau depends on C_L2E(B/(2SH)), which in turn depends on B. Should not \tau be independent of B?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper studies the problem of fixed-budget pure exploration in finite-horizon episodic Markov Decision Processes (MDPs). The objective is to identify a near-optimal policy given a predetermined, fixed budget of interactions, which contrasts with the more common fixed-confidence (PAC) setting where the error level $\epsilon$ and failure rate $\delta$ are provided as inputs.
+
+The authors propose a new algorithm, BREA, which operates by working backward from the final step $H$. The algorithm integrates two main components: A fixed-budget reward-free exploration mechanism and an action elimination phase. The authors establish an instance-dependent, $\epsilon$-uniform guarantee for this fixed-budget setting in MDPs. This guarantee upper bounds the probability of returning a $>\epsilon$ suboptimal policy for all $\epsilon$ above a budget-dependent threshold. As byproducts, the paper also provides $\epsilon$-uniform guarantees for fixed-budget reward-free exploration and for the SAR multiple-bandit algorithm.
+
+### Strengths
+1. The paper addresses the fixed-budget pure exploration problem in MDPs, a practical setting that has received little attention in RL theory.
+2. The introduction provides a clear argument for the merits of the fixed-budget setting over the standard fixed-confidence setting.
+3. The paper introduces the $\epsilon$-uniform guarantee, a new analytical approach for this problem. The new analysis for the SAR algorithm and the fixed-budget reward-free exploration mechanism are also solid contributions.
+4. The BREA algorithm's design, which separates reachability estimation from action elimination, is logical and well-explained.
+
+### Weaknesses
+1. The most significant weakness is the $H^5$ factor in the sample complexity of the main result in Theorem 3.3. This is substantially worse than the $H^4$ dependence often seen in related PAC RL literature. The authors acknowledge this, but it remains a major limitation of the paper's primary result.
+2. The paper introduces a variant algorithm in Section 3.4 that achieves a more comparable sample complexity to prior work (like MOCA). However, this theorem is stated informally, and the algorithm details are deferred to the appendix. This makes the paper's strongest result less clear and accessible.
+3. The paper is highly technical, which makes it challenging to parse. Key components and definitions being in the appendix add to this difficulty.
+
+### Questions
+1.  Could the authors elaborate on the $H^5$ dependence in Theorem 3.3? The paper attributes this to the algorithm's lack of foresight in distributing the budget across steps $h$. Is this $H^5$ term an artifact of the BREA algorithm's two-phase design, or do you believe it is a fundamental lower bound for any fixed-budget algorithm in this setting?
+2.  The variant algorithm in Section 3.4 seems to be the one that yields a sample complexity in Remark 6 most comparable to the MOCA algorithm. Why is this presented as a "variant" rather than the main result? If a user does have a target accuracy $\epsilon$ in mind, should they use this variant over Algorithm 3?
+3.  The $\epsilon$-uniform guarantee for the SAR algorithm (Theorem 3.2) is presented as a contribution of independent interest. How does the resulting bound compare to existing non-$\epsilon$-uniform fixed-budget guarantees for the multiple-bandit problem?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper studies fixed-budget pure exploration in reinforcement learning, where the goal is to identify a near-optimal policy using a limited number of environment interactions. The authors propose a new algorithm that achieves ε-uniform guarantee given budget B (clearly ε=ε(B)).  They also analyze the SAR algorithm in multi-bandit problems.
+
+### Strengths
+From practical perspective, budget is more meaningful and easier to set than epsilon. As a result, the authors study 'the right problem.' 
+The assumptions made are reasonable and aligned with similar works. 
+
+I did not check the proofs, but the statements are clear and show 'what is promised.'
+
+### Weaknesses
+Some notation is weak, i.e., has loose ends. 
+
+The usual weakness for such a paper is the cliche: there are no experiments. I don't take this against the authors. I think no experiments is fine. 
+
+The MAB part comes across as an unnecessary material.
+
+### Questions
+Definition of W_h(s) in line 139: there is dangling a. I assume it is meant \pi(s) instead of a. 
+What is S in 148? Has it been defined earlier? I wasn't able to find it. 
+In line 186, why does epsilon_h(s) satisfy the conditions in Proposition 1?
+In Theorem 3.1, who to interpret B>=c(B)? Does it mean: there exists \hat{B} such that for every B>=\hat{B}, ...
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

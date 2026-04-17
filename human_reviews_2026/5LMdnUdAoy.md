@@ -1,0 +1,177 @@
+# Difficult Examples Hurt Unsupervised Contrastive Learning: A Theoretical Perspective
+
+- Decision: Accept (Oral)
+- Scores: 6, 6, 6
+
+## Abstract
+Unsupervised contrastive learning has shown significant performance improvements in recent years, often approaching or even rivaling supervised learning in various tasks. However, its learning mechanism is fundamentally different from supervised learning. Previous works have shown that difficult examples (well-recognized in supervised learning as examples around the decision boundary),  which are essential in supervised learning, contribute minimally in unsupervised settings. In this paper, perhaps surprisingly, we find that the direct removal of difficult examples, although reduces the sample size, can boost the downstream classification performance of contrastive learning. To uncover the reasons behind this, we develop a theoretical framework modeling the similarity between different pairs of samples. Guided by this framework, we conduct a thorough theoretical analysis revealing that the presence of difficult examples negatively affects the generalization of contrastive learning. Furthermore, we demonstrate that the removal of these examples, and techniques such as margin tuning and temperature scaling can enhance its generalization bounds, thereby improving performance.
+Empirically, we propose a simple and efficient mechanism for selecting difficult examples and validate the effectiveness of the aforementioned methods, which substantiates the reliability of our proposed theoretical framework.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper builds upon the theoretical framework for spectral contrastive learning on population data by HaoChen et al. (2021) by defining a similarity graph. The authors utilize properties of the aforementioned framework to demonstrate in theory that difficult examples (samples near a class decision boundary in a supervised setting) hurt the generalization performance of unsupervised contrastive learning. The authors validate their theoretical work by proposing and validating the performance of mechanisms for detecting and dealing with difficult examples.
+
+### Strengths
+The mathematical framework utilized is a simplified (neural collapsed) version of a proven one used in HaoChen et al., 2021. The mathematical derivations in this framework are sound. The theoretical results here can be important for choices of contrastive learning samples.
+
+### Weaknesses
+The experimental section is only partially sound, with a limited number of experiments and hyperparameter tuning.
+
+The presentation needs to be significantly improved. There are typographical errors throughout the paper. Figures 1, 2, 4 contain text that is too small to read. Certain ideas are not explained clearly enough.
+
+The theoretical framework of this paper is based heavily on (HaoChen et al., 2021), which argues extensively about the similarities and differences between the empirical and augmented sets. None of this discussion is reflected here.
+
+
+The results of experimentation in Section 5 are only averaged out of 3 runs. This makes most results (almost all that are not on TinyImagenet) close enough to be within margin of error. This is exacerbated by the fact that, as shown in Appendix A.3-A.4, only limited hyperparameter tuning is done. Moreover, TinyImagenet is the only dataset that uses a ResNet-50 model instead of ResNet-18 - a natural question arises: could the performance increase be related to the complexity of the model?
+
+### Questions
+What exactly does the mixing process itself look like in the mixing image experiment (Section 2)?
+
+Section 3.2 Figure 3(d) shows the adjacency matrix defined as a 4x4 matrix for 4 samples, but the example makes no mention of whether these are empirical or augmented samples. 
+
+Discussion in the appendix indicates that the work follows that of HaoChen et al. (2021), where the adjacency matrix is defined as NxN for N total augmented samples. Does this model of difficult examples make no distinction between samples of the same class and samples augmented from the same empirical sample?
+
+Typo in section 5.1? According to equation 12, posHigh is supposed to be greater than posLow, but Figures 4(a) and 4(b) denote otherwise.
+
+Plot the bounds in Theorems 3.1 and 3.2 for values of $\beta, \gamma$, and $\alpha$ for a clear comparison. 
+
+Unless I am mistaken, some old and some recent papers show that hard-negative sampling improves performance in contrastive learning - do the theoretical claims in the paper challenge this observation? 
+
+It will be good to see the results on purely synthetic data - say a mixture of Gaussians where each mixture is a class. Can the authors produce a table for this case?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper analyzes when and why "difficult" examples can hurt contrastive representation learning. It models pairwise similarities with a block structure using within-class, easy cross-class, and difficult cross-class.
+Within a spectral view of CL, the authors derive linear probe error bounds showing that adding difficult examples worsens the bound. Conversely, removing them or correcting pairwise affinities via pair-specific margin tuning or temperature scaling improves it.  
+Empirically, targeted adjustments on the selected pairs yield consistent gains across CIFAR-10/100, STL-10, and Tiny-ImageNet.
+
+### Strengths
+1. The paper theoretically explains the counterintuitive phenomenon that adding "hard" examples can hurt contrastive learning. The spectral framework is a natural fit and the analysis is clean. The block model exposes the role of $\gamma-\beta$ on linear-probe error. 
+1. The authors propose practical interventions of margin and temperature adjustments motivated by the theory, with improved theoretical error bound. Consistent empirical improvements are observed when applying the interventions. Furthermore, combining selection with targeted adjustments produces the largest gains across datasets.
+
+### Weaknesses
+1. The theory assumes $0 \leq \beta < \gamma < \alpha < 1$, yet cosine similarity lies in $[-1,1]$. Are similarities shifted or computed from a PSD kernel where values are guaranteed to be nonnegative? If not, can the theorems be relaxed to allow $\beta,\gamma<0$?
+1. A brief discussion of the tightness of the presented bounds would be helpful in understanding the significance of the bound. Context on any known lower bounds or contrasting constructions, or even a heuristic level argument would help.
+1. Since the improvements are modest except for Tiny-ImageNet, it would be helpful to see the variation across multiple runs. I am also curious if the proposed adjustments can work for other modalities such as text.
+
+**Minor comments**
+1. Please provide a precise recipe for the $\gamma$-Mixed CIFAR-10 dataset.
+1. Assumptions should appear prominently in the main body with a brief discussion of plausibility, as they are central to the theoretical results.
+1. Section 5.1 needs a clearer explanation.
+1. The writing can be improved. Some examples are as follows:
+  - In Section 4.2 (Margin Tuning), the method can be briefly introduced with a math expression.
+  - Similarly, in Section 4.3, temperature scaling can be briefly introduced with a math expression.
+  - In Corollary 4.1, should the $\alpha$ appearing in the numerator be $\delta$?
+  - Figure 3 is not helpful in understanding the role of $\alpha$, $\beta$, and $\gamma$.
+  - In the definition of $w_{x,x'}$ in line 142, $\mathbb{E}\tilde x \sim \bar{\mathcal{P}}$ should be $\mathbb{E}_{\tilde x \sim \bar{\mathcal{P}}}$, where $\bar{\mathcal{P}}$ seems undefined.
+  - The spectral contrastive loss defined in Eq. (1) has an argument $\mathbf{x}$, which seems unnecessary.
+  - In line 288, there is a missing space between "pairs." and "Here".
+  - In line 101: possibly "preciously" is a typo for "precisely".
+  - In lines 1530 and 1540, theorem numbers are missing in the titles of each theorem. Also a typo: "erorr" should be "error".
+  - Theorem B.7 defines $\mathcal{E}{w.d.}$, whereas the inequality has $\mathcal{E}{w.o.}$.
+  - Line 1537: "folowing" $\rightarrow$ "following".
+  - Line 163: "decision difficult" $\rightarrow$ "decision boundary".
+  - Line 331: "an combined method" $\rightarrow$ "a combined method".
+  - Title of Section 5.4: "DIFFICLUT" $\rightarrow$ "DIFFICULT".
+  - Lines 743 and 748: "Eq. equation 12" $\rightarrow$ "Eq. 12".
+
+### Questions
+1. Can the theory be relaxed to allow negative $\beta$ and $\gamma$?
+1. Is it possible to show the lower bound for the $\mathcal{E}_{w.d}$?
+1. Tiny-ImageNet shows much larger gains under the targeted edits than CIFAR-10/100 and STL-10 (Table 2 and 3). I am curious on what derives this difference.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+Paper proves difficult examples (near decision boundaries) harm unsupervised contrastive learning, contrary to supervised learning. Develops similarity graph framework with α, β, γ parameters modeling sample pair relationships. Derives generalization bounds showing difficult examples worsen performance. Proposes three mitigation strategies—sample removal, margin tuning, temperature scaling—validated theoretically and empirically on CIFAR-10/100, STL-10, TinyImagenet.
+
+### Strengths
+- **Novel counterintuitive finding**: Removing 8-20% of training data improves performance consistently across 4 datasets
+
+- **Rigorous theoretical framework**: Clean similarity graph model (Theorems 3.1-3.2) proves difficult examples increase error bound from 4δ/(1-λ) to 4δ/(1-λ') where λ' > λ
+
+- **Provided solutions with theory**: Margin tuning (Theorem 4.3), temperature scaling (Theorem 4.5), removal (Corollary 4.1) all improve bounds; experiments confirm (Table 4: Combined method +1.6% CIFAR-10, +4.9% CIFAR-100)
+
+- **Comprehensive extensions**: MoCo (Table 5), long-tail (Table 6), relaxed assumptions (Appendix B.3), ImageNet-1K (Table 8)
+
+### Weaknesses
+- **Circular difficult example definition**: Section 5.1 selects "currently confusing" examples via cosine similarity during training, not "intrinsically difficult" ones. Figure 4c shows ratio evolves to 90%+ suggesting selection is training-dependent
+
+- **Scalability concerns**: ImageNet-1K gains only 1.36% (Table 8) vs 2-15% on smaller datasets. Only 400 epochs vs standard 800+. No computational cost analysis in Algorithm 1
+
+- **Hyperparameter theory disconnect**: Theorems 4.3/4.5 derive exact margins (Eq. 7) and temperatures (Eq. 10) but experiments use simplified σ, ρ without justification. Dataset-dependent tuning required (Appendix A.3)
+
+- **Theorem 3.2 condition unclear**: Requires nd ≤ k ≤ nd + r + 1 but k (feature dim) is architecture choice, not dataset property. Restrictiveness in practice unexplained
+
+### Questions
+1. **Hyperparameters**: Why use simplified σ, ρ instead of theoretically optimal values from Eq. 7, 10? What performance is lost?
+
+2. **Hard negatives**: How do your methods compare against Robinson et al. 2020 and Kalantidis et al. 2020? Appendix A.1 claims distinction but no empirical comparison
+
+3. **Scalability**: Why do ImageNet gains (1.36%) diminish vs CIFAR (2-15%)? Is this fundamental or due to 400 vs 800 epochs? What is computational overhead?
+
+4. **Selection stability**: Figure 4c shows selection evolves during training. Are you removing "intrinsically difficult" or just "not-yet-learned" examples? Would different selection mechanisms yield same results?
+
+5. **Theorem 3.2 condition**: When does nd ≤ k ≤ nd + r + 1 restrict practical applicability? What happens outside this range?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

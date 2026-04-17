@@ -1,0 +1,172 @@
+# Adaptive MLP Pruning for Large Vision Transformers
+
+- Decision: Reject
+- Scores: 4, 6, 2, 4
+
+## Abstract
+Large vision transformers present impressive scalability, as their performance can be well improved with increased model capacity. Nevertheless, their cumbersome parameters results in exorbitant computational and memory demands. By analyzing prevalent transformer structures, we find that multilayer perceptron (MLP) modules constitute the largest share of the model's parameters. 
+In this paper, we propose an Adaptive MLP Pruning (AMP) method to substantially reduce the parameters of large vision transformers without obvious performance degradation. First, we adopt Taylor based method to evaluate neuron importance of MLP. However, the importance computation using one-hot cross entropy loss ignores the potential predictions on other categories, thus degrading the quality of the evaluated importance scores. To address this issue, we introduce label-free information entropy criterion to fully model the predictions of the original model for more accurate importance evaluation. Second, we rank the hidden neurons of MLP by the above importance scores and apply binary search algorithm to adaptively prune the ranked neurons according to the redundancy of different MLP modules, thereby avoiding the predefined compression ratio. 
+Experimental results on several state-of-the-art large vision transformers, including CLIP and DINOv2, demonstrate that our method achieves roughly 40% parameter and FLOPs reduction in a near lossless manner. Moreover, when the models are not finetuned after pruning, our method outperforms other pruning methods by significantly large margin. The source code and trained weights will be publicly available.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper proposes an Adaptive MLP Pruning (AMP) method to compress large vision transformers (ViTs) by reducing the number of neurons in their MLP modules, which are identified as the largest component of these models. The method introduces two key contributions. First, it proposes a novel label-free information entropy criterion for evaluating neuron importance. This criterion is based on the Taylor expansion of the model's output entropy, calculated from inter-instance similarity within a mini-batch. This approach avoids the limitations of traditional cross-entropy-based importance scores, which only consider the prediction for the ground-truth class, and it allows the method to be applied to models where the loss function or classification head is not public (e.g., DINOv2). Second, the paper introduces an adaptive pruning strategy that uses a binary search algorithm to determine the optimal number of neurons to prune for each MLP module individually. This avoids using a predefined, global compression ratio and allows the method to remove more redundant neurons from less important layers. Finally, knowledge distillation is used to recover the performance of the pruned model. The authors demonstrate through extensive experiments on large models like OpenCLIP, EVA-CLIP, and DINOv2 that AMP can reduce parameters and FLOPs by roughly 40% with near-lossless performance on zero-shot classification, retrieval, and kNN evaluation tasks.
+
+### Strengths
+- The use of a binary search to adaptively determine the pruning ratio for each layer is a major improvement over methods that rely on a fixed, global sparsity target. This allows the model to preserve capacity in more critical layers while aggressively pruning more redundant ones. The stark performance difference shown in Table 6 between AMP and uniform Taylor pruning (53.8% vs 7.3% average accuracy) convincingly demonstrates the effectiveness of this adaptive approach.
+- The paper is backed by extensive experiments on a variety of modern, large-scale vision transformers (from 1B to 8B parameters). The evaluation is thorough, covering zero-shot classification, zero-shot retrieval, and kNN benchmarks. The results are impressive, consistently showing a ~40% reduction in parameters and FLOPs while recovering performance to be on par with, or even slightly better than, the original dense models after knowledge distillation.
+
+### Weaknesses
+- The proposed pruning method itself introduces a non-trivial computational cost. For each MLP module, the method performs a binary search for a fixed number of steps (t_max=6). In each step, it requires running forward passes on a dataset (D_prune of 50k images) to compute the information entropy. For very deep models with many MLP blocks, this iterative search process could be time-consuming. The paper does not analyze or report this search cost.
+- The results show that performance drops dramatically after pruning and before distillation (e.g., from 73.0% to 53.8% for OpenCLIP-g in Table 1 and 3). The near-lossless results are entirely enabled by the subsequent, and costly, knowledge distillation step (10 epochs). While using KD for recovery is a common and valid practice, it's important to frame the contribution accurately: the method finds a good student architecture that can be effectively trained via KD, rather than being a "near-lossless" pruning method in itself.
+- The method exclusively targets MLP modules. While the paper provides a strong justification that these modules contain the majority of parameters, it completely ignores other components like the multi-head self-attention (MHSA) blocks. A more holistic pruning approach that also considers attention heads or other parameters could potentially lead to better trade-offs between accuracy and efficiency. The authors acknowledge this as future work, but it remains a limitation of the current method.
+
+### Questions
+- Could you provide more details on the computational cost of the adaptive pruning search itself? Specifically, how much time does it take to determine the pruning ratios for a model like EVA-CLIP-E, and how does this cost compare to the 10-epoch knowledge distillation phase?
+- The method introduces two key hyperparameters: the temperature τ for the similarity calculation and the entropy threshold ΔE for the binary search. Table 8 in the appendix shows that these values are set differently for each model. Could you elaborate on the process used to select these hyperparameters? How sensitive is the final pruned model's performance to their settings?
+- The performance of the pruned models without distillation, while superior to other methods, is still quite low. Have you considered whether the excellent importance scores from your method could also benefit a simpler recovery process, such as standard fine-tuning on a labeled dataset (when available), instead of knowledge distillation? It would be interesting to see if a better pruning strategy leads to a better "warm-start" for fine-tuning as well.
+- In the information entropy calculation (Eq. 5), you use the [CLS] token representation (z^cls) from the last transformer block. Have you experimented with using other representations, such as the average of all patch tokens, and did you observe any significant difference in the quality of the resulting importance scores?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces an adaptive MLP pruning approach for large vision transformers that replaces cross-entropy with information entropy to measure neuron importance. The method operates without labels or access to model-specific loss functions or heads. It uses a binary search procedure to determine pruning levels based on entropy changes. Experiments on several large models show significant parameter and FLOP reductions with limited accuracy degradation.
+
+### Strengths
+1. The experimental evaluation is extensive, spanning several large-scale vision transformers and diverse tasks, demonstrating consistent compression and performance trends.
+
+2. The ablation studies are well organized and effectively disentangle the roles of the entropy criterion, pruning strategy, and threshold parameters.
+
+3. The presentation is clear overall, with a logical flow and visual aids that make the method and procedure easy to follow.
+
+4. The proposed approach is label-free and independent of model-specific heads or training losses, using an adaptive binary search to determine pruning ratios without manual tuning.
+
+5. The pruning applies to neurons as units and achieve real-world speedup.
+
+### Weaknesses
+1. The evaluation is dominated by CLIP-style models, with only one experiment on DINOv2, leaving limited evidence of generalization beyond contrastive vision frameworks.
+
+2. The work lacks experiments on standard supervised classification models, which makes it unclear how the method performs under typical vision transformer training settings.
+
+3. The evaluation is confined to vision tasks, while recent pruning research increasingly focuses on large language models, limiting the relevance to broader transformer compression trends.
+
+Part of the review is revised with LLM assistance.
+
+### Questions
+Please see weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposed MLP pruning in vision transformer models based on an information entropy criterion. Specifically, to evaluate the neuron importance in MLP layers, this paper proposed to (1) calculate the pairs similarity of the output features of a batch of images, (2) define the output feature entropy based on the similarity of the query image to rest of images, (3) sum the entropy values up across the entire batch. Then the paper applied binary search to determine how many neuron to remove from each layer based on thresholding the information entropy difference before and after pruning. This method was applied to compress CLIP based vision transformer model and results on both classification and retrieval task are reported.
+
+### Strengths
+This paper is clearly written and well organized.
+
+### Weaknesses
+I have concerns in the following perspectives:
+- The proposed criterion is essentially measuring the sample wise feature similarity among a batch of images. Larger entropy will mean more diverse output images. The reviewer is not sure why using feature similarity is a good criterion. How would pruning affect this information entropy value? Will it go up or down? Based on the formula $\epsilon_t - \epsilon_0 < \delta \epsilon$, it seems to indicate that the information entropy value will go up, meaning that removing neurons from MLP will make the model generate more diverse images? This seems contradict with classic neural network expressivity definition.
+- Follow up question about the pruning criterion. The proposed criterion is label free, but there are other label free criterion that can be also applied in the Tylor pruning framework. For example, we can measure the model output feature reconstruction error like MSE before and after pruning and pick neurons with least impact to this reconstruction error as the criterion. The paper did not provide convincing comparison with this criterion in the ablation study.
+- In the binary search algorithm, the paper actually adopted local pruning, i.e., rank and prune neurons within each layer, rather than global pruning. And the pruning process is conducted layer-by-layer. Although the ablation study showed that binary search is better than uniform pruning, but there is not comparison to global pruning which is supposed find more optimal pruning ratios among layers compared to layer-by-layer local pruning. For example, in layer-by-layer pruning, pruning first few layers can have higher tolerance since the rest of the layers are still intact. This means it is likely the final architecture becomes like a funnel shape. Can authors provide a visualization about the per-layer pruning rations after binary search?
+- This paper only evaluated on the CLIP type vision transformers. The reviewer cannot understand why the authors only chose contrastive image-text based vision transformer models, rather than other types of vision foundation models such as DINO series, and even some of the well know VITs. I would recommend the authors extend the experiments to other vision transformer models, and include other vision tasks such as detection, segmentation, etc. The results so far cannot showcase the generality of the model.
+
+### Questions
+please refer to the weakness section.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper shows a method to prune parameters of hidden layers in VLMs to reduce the memory consumption of the model and the computation of inference. The author proposed to use label agnostic neuron scoring during taylor ranking, instead of label-specific information obtained from standard taylor method to more accurately capture the neuron importance. Then a binary search is performed on the taylor importance to determine the pruned neuron. The authors provided results on a few CLIP based models, as well as conducted extensive ablation discussion.
+
+### Strengths
+The paper well written, the presentation of the idea is clear.
+
+### Weaknesses
+The novelty seems limited, where the core idea is to replace standard cross entropy-based gradient used in taylor-based importance score with information entropy which is label-agnostic, and the rest of it which is binary search become quite obvious. The method proposed therefore seems simple and straightforward, which then requires comprehensive experiments to justify the generalizability of it. However, the experiment discussions are not very comprehensive.
+
+### Questions
+1. Regarding the information entropy-based criterion which seems unsupervised (require no label information), compared to supervised criteria, i wonder whether there are some cases will mislead the pruning method, e.g. encouraging a pruned structure that is overconfident on wrong prediction.
+2. Comparisons with other pruning methods are limited. Baseline methods selected for comparions in Table 3 are not enough and slightly outdated. 
+3. The method is only evaluated on the CLIP-based models with up to 4.59B. I wonder how it will perform on more mainstream models like Llava, Phi-V, Qwen-VL, etc. The two models used for lateral comparisons are also smaller variants in their respective model series. Whether the performance improvements are consistent on those larger models remains.
+4. The evaluation would be more comprehensive if there are some hardware speedup and memory reduction benchmarks to support this method.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

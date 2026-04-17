@@ -1,0 +1,177 @@
+# Fostering Video Reasoning via Next-Event Prediction
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4, 4
+
+## Abstract
+Next-token prediction serves as the foundational learning task that enables reasoning in LLMs. But what should the learning task be when aiming to equip MLLMs with temporal reasoning capabilities over video inputs? Existing tasks such as video captioning primarily promote modality alignment, while video question answering typically relies on annotations from humans or much stronger MLLMs. To address this gap, we propose next-event prediction (NEP), a learning task that harnesses future video segments as a rich, self-supervised signal to foster temporal reasoning. We segment each video into past and future frames: the MLLM takes the past frames as input and predicts events in the future, thereby encouraging the model to reason temporally in order to complete the task. To study this learning task, we curate V1-33K, a dataset comprising 33,000 automatically extracted videos spanning diverse real-world scenarios. Using the same videos, we further explore a range of video instruction-tuning tasks data to provide controlled comparisons and isolate the effect of NEP. To evaluate progress, we introduce FutureBench to assess coherence in predicting unseen future events. Experiments validate that NEP offers a scalable and effective training task for fostering temporal reasoning in MLLMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes "next-event prediction" (NEP), a self-supervised learning task designed to teach multimodal models temporal reasoning from video. NEP trains models to predict future events by observing past video frames. To support this, the authors introduce the V1-33K dataset and the FutureBench benchmark for evaluation. Experiments show that NEP is a scalable and effective method for fostering temporal reasoning in MLLMs.
+
+### Strengths
+The intuition of the paper is straightforward and promising, to train a model that predicts future events to improve their performance on temporal benchmarks, rather than just doing QA or captioning, which are either too finegrained or too general in the temporal sense, does not help the model learn to predict based on observation. The authors conducted very extensive experiments, such as different kinds of training strategies (SFT, distillation, RL), and introduced FutureBench, one of the first benchmarks that incorporates multi-hop extra/intrapolation QAs for temporal reasoning.
+
+### Weaknesses
+1. The most important point I want clarification on is the soundness of the pipeline for curating training data. As the authors have even mentioned themselves, it is difficult to predict the future solely based on the past events, simply because there are a lot of factors not represented in the video frames. In Figure 1, the authors' example of basketball perfectly describes this difficulty. Yet, in line 215 and the *future prediction verification prompt* in the appendix, the authors only stated that they would "allow some variation of difficulty" or "allow for minor discrepancies and avoid overly strict judgments". These instructions and descriptions are not only vague but also brings questions to the soundness of the data curation pipeline. In this case, wouldn't the "players may reduce tempo", "coach calls for timeout", "players attack even more aggressively" and many more events in the basketball example all be equally reasonable? In this case, how can one assure, since there is only one ground truth, that the "minor discrepancies" allowed for can even encompass this wide range of events possible?
+
+2. GRPO performance only reported on FB but not other temporal benchmarks. I'm asking for this especially because FB is in-domain, which explains the huge performance gains, but the model suffered a 2-point loss on general benchmark performance.
+
+3. Outside of the evaluated temporal benchmarks, if time permits, the authors should also try out Vinoground [1]'s video score that contains multiple segments in one video, and Tomato [2], which are also temporal benchmarks.
+
+4. It would be better if the authors can include some data analysis on FutureBench, such as the distributions for video length, how many are 1-hop, how many are 2-hop, etc.
+
+[1] Zhang et al, 2024, Vinoground: Scrutinizing LMMs over Dense Temporal Reasoning with Short Videos
+
+[2] Shangguan et al, 2025, TOMATO: Assessing Visual Temporal Reasoning Capabilities in Multimodal Foundation Models
+
+### Questions
+See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Next-Event Prediction (NEP), a self-supervised training task designed to enhance temporal reasoning in multimodal large language models (MLLMs) for video understanding. NEP trains a model to generate captions for future video segments based on past frames. To support this task, the authors convert multiple existing video datasets into NEP format, forming a new training dataset named V1-33K. They also propose FutureBench, a benchmark for evaluating multi-hop temporal reasoning through the extrapolation and interpolation of future events. Experiments on seven video understanding benchmarks show that NEP consistently outperforms conventional training tasks, such as video question answering and captioning, on temporal reasoning, while preserving strong general video understanding capabilities. In addition, the authors compare several training strategies—supervised fine-tuning (SFT), critique fine-tuning (CFT), distillation (Distill), mixed tuning (Mix), and GRPO-based reinforcement learning—and provide practical insights into their relative effectiveness in different scenarios.
+
+### Strengths
+- The core idea of NEP is sound and innovative. It effectively enhances both visual perception and temporal reasoning through a self-supervised learning paradigm, which also provides a clear advantage in scalability.
+- Results demonstrate that NEP yields notable improvements on temporal reasoning benchmarks, outperforming standard video QA and captioning.
+- The comparisons against existing training tasks are well-designed and carefully controlled.
+- The investigation of multiple training strategies provides practical insights into how NEP can be effectively applied under different scenarios.
+- The paper is generally well-structured and easy to follow.
+
+### Weaknesses
+- Despite NEP’s theoretical scalability, the reported results show that downstream performance saturates with only 5k training samples. This suggests that the current dataset lacks sufficient diversity or scale to fully reveal the benefits of data scaling for NEP, thereby limiting its contribution to the community.
+- As the authors acknowledge, predicting future events from a past video segment is inherently ambiguous, and the automatically constructed NEP dataset may therefore contain samples that are either trivial or excessively difficult. Although a caption analysis step is introduced to improve data quality, the paper does not provide empirical evidence demonstrating the effectiveness of this step.
+- The paper does not provide sufficient evidence supporting the quality of FutureBench samples. The low accuracy of o4-mini alone is not enough to justify data quality. Including a human performance baseline or showcasing representative examples would better substantiate the benchmark’s validity.
+
+### Questions
+Please refer to the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper proposes Next-Event Prediction (NEP) as a new self-supervised learning task to enhance temporal reasoning in multimodal large language models (MLLMs). Experimental results across multiple temporal reasoning benchmarks demonstrate that NEP improves reasoning capabilities without sacrificing general video understanding performance.
+
+### Strengths
+- Originality: It introduces a distinct and underexplored formulation, NEP, bridging video understanding and autoregressive reasoning.
+
+- Quality: Demonstrates consistent improvement across multiple reasoning tasks (Table 1–3).
+
+- Clarity: The paper provides with well-structured writing and clear motivation.
+
+- Significance: The paper shows potential to influence future temporal reasoning research and dataset design, contingent on improved empirical robustness.
+
+### Weaknesses
+- No qualitative visualization of predicted events or linguistic coherence.
+- No error analysis or failure case study contrasting NEP and baseline models.
+- No ablation on architecture or training objectives to isolate contribution of NEP loss components.
+
+### Questions
+- Can authors provide with qualitative examples of NEP predictions vs. ground truth to illustrate temporal understanding?
+- Can authors conduct ablation studies on each NEP component?
+- Can authors discuss computational cost and scalability trade-offs of NEP relative to captioning or QA fine-tuning?
+- What are the typical failure modes of the NEP model when predicting future events? How does the model’s performance degrade when event boundaries are noisy or poorly segmented? Could the authors provide a qualitative analysis or visualization of failed predictions to clarify these limitations?
+- How does NEP handle scenarios with multiple plausible futures?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes next event prediction, a learning task to foster temporal reasoning. It drives the model to integrate visual perception from the visual encoder with commonsense knowledge in the LLM.
+The authors create V1-33K to facilitate tuning. And also they introduce FutureBench to evaluate logical coherence and causal consistency in predicting unseen future events.
+The results trained with NEP show competitive performance.
+
+### Strengths
+1. The motivation of the paper is clear and the paper is well written.
+2. Different tuning strategies have been explored and results are reported on several existing benchmarks and the proposed benchmark.
+3. It shows improvement on temporal reasoning tasks when training with NEP.
+
+### Weaknesses
+1. The generated future captions may reflect language priors (“after running, people usually jump”) rather than visual inference, so the causal reasoning claim remains unsubstantiated to me. It would be great if there is analysis shows whether NEP-trained models actually attend to temporal cues or just leverage textual priors.
+2. The authors highlighted "SFT remains a simple yet efficient approach for training on NEP". But from Table 2, SFT didn't seem to be the best strategy?
+3. The evaluation table seems not including other previous approaches, like VIdeoLlama, LongVA, LLaVA-VIdeo, InternVL, etc.
+
+### Questions
+1. How do you ensure that QAs in FutureBench needs reasoning from video frames? Do you have a baseline that training with only previous texts and future texts?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

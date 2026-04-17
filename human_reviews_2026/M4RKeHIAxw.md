@@ -1,0 +1,129 @@
+# CoDA: Agentic Systems for Collaborative Data Visualization
+
+- Decision: Accept (Poster)
+- Scores: 8, 8, 6
+
+## Abstract
+Deep research has revolutionized data analysis, yet data scientists still devote substantial time to manually crafting visualizations, highlighting the need for robust automation from natural language queries. However, current systems struggle with complex datasets containing multiple files and iterative refinement. Existing approaches, including simple single- or multi-agent systems, often oversimplify
+the task, focusing on initial query parsing while failing to robustly manage data complexity, code errors, or final visualization quality. In this paper, we reframe this challenge as a collaborative multi-agent problem. We introduce CoDA, a multi-agent system that employs specialized LLM agents for metadata analysis, task planning, code generation, and self-reflection. We formalize this pipeline, demonstrating how metadata-focused analysis bypasses token limits and quality-driven refinement ensures robustness. Extensive evaluations show CoDA achieves substantial gains in the overall score, outperforming competitive baselines by up to 41.5%. This work demonstrates that the future of visualization automation lies not in isolated code generation but in integrated, collaborative agentic workflows.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper presents CoDA (Code Data Acquisition), an agentic system for automating the collection, filtering, and augmentation of code datasets. CoDA integrates agents for discovery, filtering, and enhancement (e.g., annotations, test cases, cross-language code), enabling task-specific, high-quality data construction. Experiments show that datasets built with CoDA improve performance on tasks like code summarization and bug fixing, highlighting its value as a scalable framework for dynamic code data acquisition.
+
+### Strengths
+The paper shows strong originality by proposing the first systematic agentic framework for code data acquisition, moving beyond static scraping of repositories to a dynamic, multi-agent pipeline.
+
+In terms of quality, the framework is well-structured, covering discovery, filtering, augmentation, and evaluation with clear design choices such as iterative feedback loops and cross-language code generation.
+
+The work has good clarity, with the overall workflow, agent roles, and experimental settings described in a logical and understandable way, making the contribution easy to follow.
+
+Its significance is high: CoDA demonstrates measurable improvements on downstream tasks like code summarization and bug fixing, providing a scalable and adaptable approach to building higher-quality datasets for code LLMs.
+
+### Weaknesses
+1. The system includes multiple components (discovery, filtering, augmentation, evaluation), but there is no ablation study to quantify the contribution of each. Such analysis would clarify which parts of CoDA are most critical.
+2. I suggest using this framework to synthesize data and apply SFT or RL (Reinforcement Learning) to improve the performance of open-source models.
+
+### Questions
+1. You frame CODA as "collaborative," yet the workflow appears to be a sequential pipeline with a feedback loop. Are there more dynamic, non-sequential interactions, such as negotiation or conflict resolution between agents, that justify the "collaborative" paradigm over a "pipeline" model?
+2. How does CODA handle queries with high-level semantic ambiguity (e.g., "show the impact of marketing")? If the Query Analyzer makes a conceptually flawed plan from such a query, can downstream agents detect this fundamental misinterpretation of intent, or is their feedback limited to the execution of the flawed plan?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes CoDA, a highly comprehensive multi-agent system for data visualization. Through extensive experiments across various benchmarks, the authors demonstrate the superiority of the proposed system and the effectiveness of its individual modules.
+
+### Strengths
+- A **well-designed multi-agent system** for data visualization is implemented, capable of **self-iterative optimization** through multiple rounds of refinement, achieving strong performance across benchmarks.
+
+- Extensive validation experiments are conducted, including comparisons with multiple existing agent systems and **ablation studies** to verify the effectiveness of individual modules. The paper also evaluates **efficiency and computational cost**, which is a valuable contribution for multi-agent system research.
+
+- In the input stage, the authors propose **pattern recognition for metadata** instead of directly processing raw data, effectively reducing computational overhead from model calls.
+
+### Weaknesses
+- The **accuracy of the visual evaluation module** within the multi-agent system lacks validation. Comparative experiments with human evaluations and repeated evaluations for stability could strengthen the claims.
+
+- The paper lacks **independent evaluation metrics for visualization aesthetics**. It is unclear whether the iterative process in the multi-agent system leads to noticeable improvements in visual quality.
+
+### Questions
+Please refer to the weakness
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the limitations of existing natural language-to-visualization (NL2Vis) systems in handling complex datasets (e.g., multi-file, large-scale) and iterative refinement. It proposes CoDA (Collaborative Data-visualization Agents), a multi-agent framework that decomposes visualization tasks into specialized modules: Query Analysis, Data Processing, VizMapping, Search, Design Exploration, Code Generation, Debugging, and Visual Evaluation. CoDA leverages metadata-centric preprocessing to bypass LLM token limits, iterative reflection for quality refinement, and modular agent collaboration to handle diverse expertise (linguistics, statistics, design). Key contributions include: (1) a collaborative multi-agent paradigm reframing visualization as a distributed problem-solving task; (2) specialized agents and structured workflows that robustly handle complex data and iterative edits; (3) extensive evaluations showing CoDA outperforms baselines (MatplotAgent, VisPath, CoML4VIS) by up to 41.5% on benchmarks like MatplotBench and Qwen Code Interpreter; and (4) validation of core components (self-evolution, global TODO list, Search Agent) via ablation studies.
+
+### Strengths
+1. CoDA introduces originality through a task-specific multi-agent decomposition tailored to visualization workflows. Unlike prior single-agent (MatplotAgent) or simplistic multi-agent (VisPath) systems that focus on initial query parsing, CoDA’s specialization (e.g., metadata-focused Data Processor, image-based Visual Evaluator) and iterative reflection loops address unmet needs in handling multi-file data and post-generation refinement. 
+2. The work demonstrates high quality through rigorous experimentation: (1) diverse benchmarks (MatplotBench, Qwen Code Interpreter, DA-Code) covering mid-to-high complexity tasks and real-world software engineering scenarios; (2) clear metrics (Execution Pass Rate, Visualization Success Rate, Overall Score) that capture both code reliability and visualization fidelity.
+3. CoDA’s significance lies in its practical and foundational impacts: (1) it reduces the “unseen tax” of manual data preparation/visualization for analysts, aligning with real-world needs in data science and business intelligence; (2) it establishes a scalable, extensible multi-agent template for NL2Vis that can integrate new tools/models (e.g., scientific plotting); (3) it addresses critical gaps in prior work (token limits, multi-source data, iterative refinement) that hindered adoption of NL2Vis systems.
+
+### Weaknesses
+1. CoDA’s multi-agent collaboration incurs non-trivial overhead: it uses 32,095 input tokens and 14.8 LLM calls per query (Table 5), far exceeding simpler baselines like CoML4VIS (2,350 tokens, 1 call). The paper acknowledges this but provides limited analysis of latency in real-world use cases (e.g., interactive dashboards, real-time data exploration). For example, the authors do not report end-to-end response times, making it unclear if CoDA’s performance gains justify the computational cost for time-sensitive applications.
+2. While CoDA outperforms baselines on DA-Code (a real-world SWE benchmark), the comparison is only against DA-Agent. Recent multi-agent NL2Vis systems like NVAgent  or PlotGen also target complex scenarios but are not included. 
+3. The paper tests CoDA with gemini-2.5-pro, gemini-2.5-flash, and claude-4-sonnet, but provides little insight into performance with weaker or domain-specific LLMs (e.g., qwencoder, starcoder, opencoder). For example, it is unclear if CoDA’s metadata preprocessing or example retrieval can compensate for LLMs with poor code generation capabilities—a critical consideration for adoption in resource-constrained environments.
+4. The paper highlights successful cases but provides little analysis of when CoDA fails. For example: What types of queries (e.g., highly ambiguous, domain-specific) or data characteristics (e.g., unstructured metadata, missing schema information) lead to poor performance?
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

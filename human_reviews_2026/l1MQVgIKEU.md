@@ -1,0 +1,184 @@
+# CoAct-1: Computer-using Multi-agent System with Coding Actions
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 8, 6
+
+## Abstract
+Autonomous agents that operate computers via Graphical User Interfaces (GUIs) often struggle with efficiency and reliability on complex, long-horizon tasks. While augmenting these agents with planners can improve task decomposition, they remain constrained by the inherent limitations of performing all actions through GUI manipulation, leading to brittleness and inefficiency. In this work, we introduce a more robust and flexible paradigm: enabling agents to use coding as an enhanced action. We present CoAct-1, a novel multi-agent system that synergistically combines GUI-based control with direct programmatic execution. CoAct-1 features an Orchestrator that dynamically delegates subtasks to either a conventional GUI Operator or a specialized Programmer agent, which can write and execute Python or Bash scripts. This hybrid approach allows the agent to bypass inefficient GUI action sequences for tasks like file management and data processing, while still utilizing visual interaction when necessary. We evaluate our system on the challenging OSWorld and WindowsAgentArena benchmark, where CoAct-1 achieves a new state-of-the-art success rate of 60.8% on OSWorld and 52.5% on WindowsAgentArena, significantly outperforming prior methods. Furthermore, our approach dramatically improves efficiency, reducing the average number of steps required to complete a task to just 10.15 on OSWorld, compared to 15 for leading GUI agents. Our results demonstrate that integrating coding as a core action provides a more powerful, efficient, and scalable path toward generalized computer automation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents CoAct-1, a multi-agent system that combines GUI operations with programmatic execution for autonomous computer control tasks. The system comprises three specialized agents: an Orchestrator (for task decomposition and delegation), a Programmer (for writing and executing Python/Bash scripts), and a GUI Operator (for vision-based interface interactions). On the OSWorld and WindowsAgentArena benchmarks, CoAct-1 achieves success rates of 60.8% and 52.5% respectively, significantly outperforming existing methods while reducing average steps from 15 to 10.15.
+
+### Strengths
+- The paper addresses an important and practical problem regarding the brittleness and inefficiency of pure GUI-based agents on complex, long-horizon tasks. Introducing coding as an augmented action space for computer-using agents is an innovative and promising research direction that offers a new paradigm for general computer automation.
+
+- The multi-agent architecture is well-designed, with the Orchestrator dynamically delegating subtasks to either the Programmer or GUI Operator, effectively combining efficient programmatic execution for backend operations (file management, data processing) with GUI interaction for frontend tasks. The hierarchical memory design (isolated working memory vs. long-term planning memory) effectively prevents context pollution.
+
+- Comprehensive evaluation on two challenging real-world computer operation benchmarks demonstrates significant performance improvements (4.78% over the best baseline on OSWorld, 22.7% on WindowsAgentArena). The efficiency analysis is thorough, clearly showing the advantages of code actions over GUI action sequences, particularly in Calc, VS Code, and multi-application tasks.
+
+### Weaknesses
+- Imprecise Action Space Definition: The paper defines the action space as A = A_GUI ∪ A_Code, but these two action types have fundamentally different granularities and abstraction levels. A single Python script may be equivalent to hundreds of GUI actions; this simple set union representation obscures the actual complexity and asymmetry.
+
+- Evaluation is limited to two benchmarks, both on Linux/Windows desktop environments. Validation on web applications, mobile platforms, or other operating systems is missing. As to the baseline,  add comparison with Cradle[1] for evaluation.
+
+- Comparisons with baselines are not entirely fair: CoAct-1 uses the latest o3 model while some baselines use 7B open-source models. Comparisons with equivalent-scale models should be provided.
+
+[1] Tan, Weihao, Wentao Zhang, Xinrun Xu, Haochong Xia, Ziluo Ding, Boyu Li, Bohan Zhou et al. "Cradle: Empowering foundation agents towards general computer control." arXiv preprint arXiv:2403.03186 (2024).
+
+### Questions
+- When the Programmer's code produces errors or unexpected results, how does the system recover? Is there a rollback mechanism? Can the Orchestrator detect Programmer failures and replan?
+
+- What are the API costs？
+
+- Can CoAct-1 generalize to web automation (e.g., Selenium) or mobile application control? What modifications are needed?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents CoAct-1, a multi-agent framework to tackle long-horizon computer-use tasks. By combining an orchestrator, a GUI agent, and a programming agent, this work achieves state-of-the-art results on OSWorld and WindowsAgentArena.
+
+### Strengths
+1. Good engineering results and practical value. This work achieved SOTA (at the time of ICLR submission) on two OS use benchmarks, covering both Linux and Windows environments.
+
+2. Clear methodology and good writing. Ablation studies are well-designed and insightful. Full prompts, model versions, and detailed implementation notes are provided, demonstrating a high level of transparency.
+
+### Weaknesses
+1. Limited research contribution. The paper reads more like a well-written technical report. The approach primarily combines existing and widely-used components (coding, visual, a multi-agent orchestrator) without proposing fundamental methodological advances. It has limited differentiation from general tool-use agents.
+
+2. The OSWorld task distribution is skewed towards Office tasks, specifically, LibreOffice Calc and LibreOffice Writer, where programming agents could greatly outperform pure visual agents. It is unclear if this approach would be particularly beneficial to other daily tasks, and if so, why.
+
+3. Lack of experiments on different models. This work primarily uses OpenAI CUA 40 as the GUI operator and has only explored o3 and o4-mini as the orchestrator and programmer.
+
+### Questions
+1. CoAct-1 doesn't perform particularly well with a very limited step budget (15 steps), while this work has expressed that the use of a coding agent saves steps. How would you explain this contradiction?
+
+2. In Figure 1, why does the Programmer agent return a screenshot as a summary?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper introduces of CoAct-1, a multi-agent system that combines both a programmer agent and GUI agent. The system contains the following module:
+
+An Orchestrator, which serves as a high-level planner to orchestrate tasks.
+A GUI Operator, a standard VLM agent that performs visual actions like moving mouse, and using keyboard.
+A Programmer, a specialized agent that can write and execute Python or Bash scripts to perform backend operations like file management or data processing.
+
+The main idea is that the Orchestrator can dynamically delegate a subtask to the most efficient agent, leveraging the advantage of both GUI agent and programming agent.
+The authors evaluate CoAct-1 on the OSWorld and WindowsAgentArena benchmarks. They show the state of the art performance and a improved efficiency.
+
+1. CoAct-1 achieves a new SOTA success rate of 60.8% on OSWorld and 52.5% on WindowsAgentArena, significantly outperforming prior GUI-only methods.
+
+2. The hybrid approach reduces the average number of steps required for a successful task on OSWorld to 10.15, compared to ~15 steps for leading GUI-only agents.
+
+### Strengths
+The paper is well written. The idea of a hybrid computer use agent is novel. The experiment is solid and covers different OS platforms. The overall presentation is good. The authors are also able to demonstrate the success rate increase and steps reduced from this CoAct-1 clearly over the current SoTA agents in the OSWorld benchmark and the WindowsAgentArena benchmark. The authors provide a detailed example of a user task and provide the detailed prompt of each module, which is useful for the reader to enhance understanding. This work meets the quality requirements for this conference.
+
+### Weaknesses
+Overall this is solid work and I don't have any specific questions or concerns.
+
+### Questions
+see above
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+CoAct-1 proposes a hybrid approach for autonomous computer agents that leverages both GUI manipulation and programmatic scripting to execute tasks more efficiently and robustly. The system introduces three specialized agents—Orchestrator, Programmer, and GUI Operator—to dynamically switch between GUI actions and Python/Bash scripting based on task requirements. The approach is evaluated on benchmarks like OSWorld and WindowsAgentArena, demonstrating significant performance improvements in success rates and task completion efficiency over traditional GUI-only systems.
+
+### Strengths
+Hybrid Approach: The combination of GUI manipulation and coding as an action creates a powerful, adaptable agent system. The Orchestrator’s dynamic task delegation helps maximize the efficiency of both visual interactions and direct system manipulation.
+
+State-of-the-Art Performance: CoAct-1 sets new benchmarks for both OSWorld (60.8% success rate) and WindowsAgentArena (52.5% success rate), outperforming existing methods like Agent S2.5 and GTA-1 by significant margins. The system excels in tasks requiring complex file management, data processing, and cross-application workflows.
+
+Flexibility: By incorporating both GUI and code-based actions, CoAct-1 can handle a broad range of tasks with varying complexities, from simple GUI interactions to complex backend system operations. This flexibility is especially beneficial for applications requiring precise or multi-round task execution.
+
+### Weaknesses
+Complexity: The reliance on three distinct agents (Orchestrator, Programmer, and GUI Operator) introduces significant system complexity. While the multi-agent framework allows for high flexibility, it also makes the system harder to manage and debug, especially in real-world applications where the agents may not always coordinate perfectly.
+
+Additionally, I believe that a more in-depth discussion about the differences between this work and other hybrid frameworks would be beneficial.
+
+### Questions
+How does CoAct-1 handle tasks that require multiple rounds of interaction with both the GUI and programmatic code? Is there a risk of inefficient back-and-forth between agents?
+
+What improvements are planned for enhancing the system’s robustness in handling ambiguous or complex user instructions, especially in non-structured environments?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

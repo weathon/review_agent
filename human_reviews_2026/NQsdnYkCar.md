@@ -1,0 +1,206 @@
+# Arbitrary-Order Block SignSGD for Memory-Efficient LLM Fine-Tuning
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 8, 4
+
+## Abstract
+We propose \textbf{ABSignSGD}, a block‑coordinate variant of sign-based descent with flexible block selection that enables memory‑ and runtime‑efficient full‑parameter fine‑tuning of large language models. We present a unified convergence analysis under mild conditions, covering both the base method and a \textit{majority‑vote} extension for distributed training. The latter improves communication efficiency by aggregating only gradient signs rather than averaging full gradients. Experiments on \textcolor{blue}{Qwen3‑8B, Llama3-8B, and Qwen3-32B}, spanning mathematical reasoning and general instruction‑following tasks, show that ABSignSGD converges faster per iteration and delivers superior downstream performance while reducing both runtime and memory usage compared to existing methods. Ablation studies further indicate that the memoryless sign-based update naturally complements block‑wise updates, explaining the method’s strong empirical performance.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces ABSignSGD, which bridges sign-based optimization and block-coordinate training through an arbitrary-order block update rule and a distributed 1-bit majority-vote aggregation scheme.
+The method achieves strong empirical and theoretical performance, offering substantial memory, runtime, and communication efficiency while maintaining competitive accuracy.
+Comprehensive ablations and analyses confirm its practical effectiveness for resource-constrained LLM fine-tuning.
+
+### Strengths
+1. The paper bridges sign-based optimization with block-coordinate methods, introducing an arbitrary-order update rule and 1-bit majority-vote communication that collectively advance memory- and communication-efficient training.
+
+2. Its technical quality is supported by a theoretical convergence analysis, extensive empirical validation on LLMs, and comprehensive ablation and memory analyses that substantiate the design choices.
+
+3. The work offers a simple yet effective solution for large-model fine-tuning under tight hardware constraints.
+
+### Weaknesses
+1. The method’s reliance on *sign-only updates* discards gradient magnitude information, which may limit precision and hinder convergence in magnitude-sensitive or pretraining scenarios.
+2. The approach is primarily evaluated in fine-tuning settings on 8B-scale models, leaving its scalability and effectiveness for full pretraining or larger architectures less explored.
+3. The convergence analysis assumes a fixed sign-agreement probability and bounded block-update interval, conditions that may not strictly hold in high-noise or asynchronous environments.
+4. While the arbitrary-order rule is conceptually appealing, its implementation details (e.g., latency estimation, update scheduling) could benefit from deeper empirical or theoretical justification.
+
+### Questions
+Q1. In ABSignSGD, each iteration updates only one active block using the sign of its gradient. Could you clarify whether this *sign-only* update may lead to misalignment between active and inactive blocks across layers during training? How do you ensure stability when different blocks are updated at different frequencies?
+
+Q2. How is a *block* defined in your implementation? Does one block correspond exactly to a Transformer layer, or can it be a smaller unit (e.g., Q, K, V projection matrices) or a larger group of layers? How did you determine the optimal block size (N) in practice? Within a selected block/layer, are all submodules (attention projections, output projection, and feed-forward networks) updated uniformly with the same sign-based rule, or do you apply differentiated treatment among them?
+
+
+Q3. The paper introduces an “arbitrary-order” block selection strategy with a bounded update interval assumption. Could you elaborate on how the *event-driven* depth-biased rule is implemented in practice? Specifically:
+  * How are the latency parameters ( \tau_i ) estimated for different layers?
+   * What determines the update readiness timestamp (T_i)?
+   * How does this scheduling compare empirically to random or cyclic updates in terms of convergence stability?
+
+Q4. This paper mention that deeper layers are updated more frequently. Could you provide more detail on the precise mathematical rule or heuristic that governs this frequency difference? For example, is it proportional to the inverse of the estimated backward latency or some adaptive function? Since deeper layers are updated more often than shallow ones, does this induce any gradient misalignment or optimization imbalance between early and late layers? Have you observed any degradation in generalization or representation consistency due to this update asymmetry?
+
+Q5. ABSignSGD is designed as a *stateless* and block-switching optimizer. In contrast, widely used adaptive optimizers such as Adam and AdamW maintain two exponential moving averages (the first and second moments), which require continuous accumulation of gradient history for each parameter. Given that block switching interrupts this continuity, is ABSignSGD fundamentally limited to *SGD-like* (stateless) optimizers?
+Have you explored—or do you foresee the feasibility of—extending your approach to *stateful* variants that preserve per-parameter moment information while still supporting arbitrary-order block updates?
+
+
+Q6: The current paper investigates ABSignSGD primarily in the fine-tuning setting, where model parameters start from pretrained weights and the optimization trajectory remains relatively close to the original model. In contrast, pretraining begins from random initialization and requires learning the full parameter distribution from scratch.
+Given that ABSignSGD discards gradient magnitude information—updating parameters solely based on gradient signs (±1 per coordinate)—do you expect this sign-only update rule to maintain sufficient precision for large-scale pretraining?
+In particular, could the absence of gradient magnitude information hinder convergence when the optimization landscape requires large, magnitude-sensitive adjustments early in training? Have you considered or tested any hybrid variants (e.g., partial sign scaling or adaptive step-size modulation) to mitigate this potential limitation?
+
+Q7: The paper establishes an (O(1\sqrt{K})) convergence rate under mild assumptions using the alignment norm. Could you clarify how sensitive this convergence behavior is to the *sign-agreement probability* (ρ > 0.5) in large-scale, high-noise training regimes?
+In particular, do you observe any empirical breakdown when ρ approaches 0.5 (e.g., with small batch sizes or unstable gradients), and how does ABSignSGD behave in comparison to standard SignSGD or BAdam under such conditions?
+
+Q8: For ABSignSGD-MV, you mention a 960× reduction in communication cost compared to standard DDP by transmitting only gradient signs.
+Could you elaborate on:
+
+* Whether the MV aggregation is performed per-block or across the full model?
+* How sensitive convergence is to the number of participating agents ?
+* Whether partial synchronization (e.g., delayed or stale majority votes) degrades convergence stability in multi-node environments?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper studies the memory-efficient optimization methods for LLM training. Related works have adopted block-coordinate descent to reduce the memory cost of gradients and optimizer states of the popular optimizers. This paper proposes an algorithm ABSignSGD which introduces SignSGD into the block-coordinate descent to further reduce the memory cost since the signal consumes only 1 bit for one coordinate. 
+
+ABSignSGD also adopts a flexible rule of block selection: each block is selected in at most B iterations. The theoretical analysis shows that if the Success Probability Bound is satisfied, ABSignSGD achieves the $O(1/\sqrt{K})$ convergence rate in the form of alignment norm. The experiments of fine-tuning LLMs show that ABSignSGD consumes the least memory and runtime among the baselines. It also converges faster and performs better in downstream tasks than other memory-efficient algorithms. The ablation studies indicate the reason why SignSGD is better than SGD and Adam when coupled with BCD.
+
+The main contribution of this paper is that it goes a step further based on BCD and BADAM by adopting SignSGD as the optimizer in the Block-Coordinate update. The experiment results verify that this is a significant solution for memory-efficient training.
+
+### Strengths
+SignSGD has been mainly studied in distributed learning or federated learning to reduce the communication cost. On the other hand, recent studies about using Block-Coordinate gradient to reduce the memory cost mainly adopt SGD or Adam as the optimizer. Thus, the originality of this work is good. The authors provide the theoretical analysis for the proposed algorithm and conduct detailed ablation studies to explain why SignSGD performs well in BCD. I think this work is of high quality and significance. Finally, most content of this work is clear and easy to follow.
+
+### Weaknesses
+This work proposes an extra extension of ABSignSGD, i.e. its distributed version. However, there is no further analysis, including both convergence analysis and experiments for it in the following contents (only a robustness analysis in the supplementary material). The meaning of proposing such an algorithm is not clear.
+
+### Questions
+This work proposes a “depth-biased” update rule in the experiments, but this part is somewhat confusing. Specifically, ABSignSGD selects the block with the minimal timestamp to update. However, it also says that “This event-driven rule mimics asynchronous execution, where each block becomes eligible for update once its gradient is available”. This seems somewhat contradictory since the former statement indicates that ABSignSGD updates the blocks in a serial way, why it mimics asynchronous execution. In addition, how is the gradient-computation latency obtained?
+
+### Soundness
+4
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The authors propose an algorithm for memory-efficient finetuning of LLMs by combining SignSGD and block-coordinate descent. It has good empirical performance compared to many state-of-art finetuning methods, and the authors also provide convergence proofs for their algorithm.
+
+### Strengths
+- The algorithm is simple and effective. It combines SignSGD with block-coordinate descent to produce a memory efficient algorithm for finetuning LLMs. It is about 10% more memory efficient than competing methods and also converges faster. It also achieves good generalization performance on many finetuning benchmarks. 
+
+- In addition to the base algorithm, the authors also suggest a distributed version that employs majority voting to reduce the communication cost. 
+
+- The authors provide convergence proofs of their algorithms, based on previous works from Safaryan & Richtarik 2021.
+
+### Weaknesses
+- Although the authors propose the communication efficient version of their algorithm using majority voting, I don't see any empirical evaluations on that in the paper.
+
+### Questions
+- What is the rank of LoRA used in the experiments? How are they selected? 
+
+- What are the block size used in the experiments? Are they as small as individual Q,K,V weight matrices or groups of them? 
+
+- Where are the results for the block-update rule ablation study at the end of Section 4? I just see the discussion but no tables or figures for that.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper combines several elements (SignSGD, block-coordinate updates, majority vote) for improving the efficiency of fine tuning LLMs along various dimensions. I suspect the paper is mainly of interest to academic researchers studying optimizer design, compression, or distributed training efficiency. I suspect that few LLM training groups are likely to use sign-based methods in production due to the likely need for substantially more hyperparameter tuning even in cases where they can achieve comparable results to FP-based methods, undoing any efficiency gains.
+
+- The paper consider the fine-tuning step of LLMs.
+- Proposes ABSignSGD, combining blockwise updates, 1-bit sign gradients, and arbitrary (depth-biased) scheduling.
+- Extends to ABSignSGD-MV for distributed training via 1-bit majority-vote aggregation.
+- Provides standard convergence guarantees under sign-agreement assumptions.
+- Shows empirical gains in VRAM, runtime, and fine-tuning accuracy vs. LoRA, GaLore, Apollo, and BAdam.
+- Lacks validation at larger scales where the claimed advantages would truly matter.
+
+### Strengths
+- Clear exposition and empirical reproducibility: Algorithms, tables, and ablations are well presented.
+- Consistent, modest memory/runtime improvements relative to known baselines at 8B scale.
+- Simple implementation concept—no optimizer states, potentially useful for educational or constrained hardware studies.
+
+### Weaknesses
+- Limited practical relevance: SignSGD and its derivatives are rarely, if ever, used in large-scale LLM tuning, and this is an incremental improvement over SignSGD, making widespread adoption unlikely.
+- Limited scope: this paper only addresses fine tuning, a step that takes up only a small part of the compute budget of an LLM.
+- Scale mismatch: Experiments are confined to 8B models, but memory and communication constraints dominate only at tens or hundreds of billions of parameters. Small differences on 8B model performance may make the difference between a competitive and uncompetitive large model.
+- Questionable net compute advantage: These kinds of methods introduce their own set of hyperparameters, which also require tuning. The paper does not show that the advantages remain when that tuning is taken into account. That is, I may need to conduct quite a few runs of the method in the paper in order to be fairly confident that I have a network that performs as well as straightforward tuning with one of the other methods would have yielded.
+- In practice, this would likely be used as just another fine tuning candidate, and people would use its output only if it happens to yield better accuracy; in effect, a method intended for generating for improving compute performance would end up being just another ad hoc fine tuning variant.
+
+### Questions
+- Can you respond about the concerns about hyperparameter tuning and the overall process efficiency?
+- Why did you not try to fine-tune larger LLMs? It seems to me this paper would be much stronger if you could directly demonstrate that the method allows some fine tuning of large models on limited hardware that are impossible to fine tune using any of the other methods.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

@@ -1,0 +1,185 @@
+# CorrSteer: Generation-Time LLM Steering via Correlated Sparse Autoencoder Features
+
+- Decision: Reject
+- Scores: 4, 4, 2, 4
+
+## Abstract
+Sparse Autoencoders (SAEs) can extract interpretable features from large language models (LLMs) without supervision. However, existing SAE-based steering methods rely on contrastive activation differences or require large activation storage. To address these limitations, we propose CorrSteer, which extends SAE-based steering by directly leveraging generation-time activations. Our method selects features by correlating sample correctness with SAE activations from generated tokens, extracting task-relevant features while reducing spurious correlations. Steering coefficients are obtained from positive-sample activations, automating the entire pipeline. Our method shows improved task performance on QA, bias mitigation, jailbreaking prevention, and reasoning benchmarks on Gemma-2 2B and LLaMA-3.1 8B, notably achieving a +3.3\% improvement in MMLU performance with 4000 samples and a +27.2\% improvement in HarmBench with only 108 samples. Selected features demonstrate semantically meaningful patterns aligned with each task's requirements, revealing the underlying capabilities that drive performance. Our work establishes correlation-based selection as an effective and scalable approach for automated SAE steering across language model applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes Sparse Auto-Encoder (SAE) driven LLM steering during the inference (token generation). The paper argues that task specific steering can be effective if we weight the steering vector based on the linear correlation between SAE features and model outputs across all samples. The paper shows that the proposed approach improves accuracy on a number of benchmarks.
+
+### Strengths
++ The paper introduces a simple yet effective method based on SAEs that helps to improve model accuracy on a number of tasks.
++ The paper benchmarks proposed method against a number of baselines and quantifies not only the accuracy on specific tasks but also its unwanted side effects.
+
+### Weaknesses
++ The approach sounds interesting but the paper lacks end-to-end description of the algorithm. 
+Algorithm listing 1 describes the calculation of the coefficients for a given feature i but the end to end algorithm of how and when are these features added is lacking. The authors describe it in the manuscript but the flow of the entire algorithm is unclear. 
++ Equation 2 relies only on the SAE features and not on r_i correlation coefficients. What is the exact relationship between the r_i and c_i ? 
++ The introductory figure 1 is also somewhat confusing. For example it is unclear how to interpret the normal distribution of the features for prompt 1 and 2. It is unclear why we have 'steering coefficient' subtitle for the intended response and 'positively correlated' subtitle for the unintended prompt response. Overall, it would be good to explain the whole figure and the end-to-end process more clearly.
+
+### Questions
++ Are the steering coefficients computed on the same dataset as the evaluation on table 5 ?
++ A clarification question regarding this statement:
+`
+We apply steering exclusively at token positions where the corresponding features were extracted, rather than uniformly across all tokens (Soo et al., 2025) or restricted to the final token`
+
+ When we say that `we apply steering exclusively at token positions where the corresponding features were extracted,` what does it mean `where the corresponding features are extracted` ? Does extraction mean generation here ? During the inference process we don’t know what token will be generated but we have top candidates. 
+
++ To which exact positions is c_i*W_dec[:,i] steering vector  being added  ?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces CorrSteer, a method for steering LLMs through correlation-based selection of interpretable features from SAEs. CorrSteer addresses limitations of prior SAE-based steering approaches by leveraging generation-time activations to identify task-relevant features and determine steering coefficients, eliminating the need for contrastive datasets or large activation storage. The authors demonstrate CorrSteer's effectiveness across a range of benchmarks, including question answering, bias mitigation, and safety, while also providing insights into the semantic coherence of the selected features.
+
+### Strengths
+1. The authors provide a thorough analysis of the method's performance, including side effect quantification and ablation studies.
+2. The method is evaluated on tasks from many different domains and question formats.
+
+### Weaknesses
+1. According to Table 2, the improvement of SER over FT in the MMLU-Pro and GSM8k tasks appears limited. Additionally, the claim that CorrSteer-P is the most balanced strategy might be somewhat overstated. It would be helpful to include more discussion on how and why different selection strategies influence SER performance.
+
+2. Regarding transferability, I am concerned that the correlation-based method might be hard to balance between selecting features relevant to the specific task and those reflecting the underlying skill of the domain. For instance, as mentioned in Lines 452–456, the strong transfer performance in MMLU might be due to the method capturing general reasoning ability. Could it be that domain-specific features are relatively fewer in this case, leading to a higher proportion of general ability features being selected when applying the threshold? Similarly, the BBQ results show a high coefficient for “L24/16355 definitions and mathematical notation in text (coeff: 39.910)” for Gemma, which may possibly indicate overlap in the domain in the dataset rather than reasoning skills. A more detailed discussion on how to balance general versus skill-specific feature selection would strengthen the analysis.
+
+3. The results and discussion section could be further improved by expanding the discussion and providing deeper insights into these observations.
+
+### Questions
+1. I would like to clarify what is meant in Lines 449–450: “These results suggest that task-specific semantic features contribute more to accuracy than general recognition features.” I would appreciate a more detailed discussion on this point.
+
+2. I wonder whether different tasks might also influence the choice of strategy, given that the concept spaces could vary and the distribution of features across models may differ accordingly.
+
+3. I noticed that the scales of the coefficients and correlation scores for Gemma and Llama differ considerably. Could you please elaborate on the possible reasons for this discrepancy?
+
+4. It might be better to move some key figures and tables to the main text. For example, Tables 5 and 8 are frequently referenced but are currently placed in the appendix, while Figure 4 and Table 2 present similar results and are often discussed together. Including these in the main section could make the presentation clearer.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper presents CorrSteer, a family of methods for selecting features from a dictionary to steer towards some positive outcome. These features have coefficients that are precomputed using positive instances of training data. Then the features are used to steer the model with these coefficients. The different variants have different procedures for selecting which features are being steered for. The method is clearly explained and the paper is well written. However, I am concerned about the baseline evaluation results.
+
+The claim that we shouldn't have to consider difference in means steering as a direct competitor with CorrSteer:
+
+"Head-to-head comparison with CAA (Rimsky et al., 2024), DSG (Muhamed et al., 2025), or SPARE (Zhao et al., 2025) is not directly applicable since these methods require contrastive datasets rather than generation-time features"
+
+Seems only somewhat true. Corrsteer requires precomputing **coefficients** for the features that are steered with using positive instances of data. While this isn't a contrastive dataset, it definitely requires going through a dataset to compute information used to steer. And CAA also requires going through a dataset to compute a steer. I think that comparing CAA using a positive dataset and some other neutral dataset, e.g., the pile or wikipedia, would be a perfectly fair comparison with this method, i.e., adapting contrastive methods to a positive only regime. That being said, the contrastive datasets for these tasks are quite east to compute, so the positive dataset only regime might be better highlighted on a task where negative data is harder to get.
+
+I also am concerned about using the coefficients for the CorrSteer to steer the CAA and other baselines. You should do a separate steering coefficient calculation for each of the other baseline methods that is separate from what you did for CorrSteer. Baseline methods should generally have entirely different parameter tuning procedures. 
+
+Finally, I would also like to see the SER results in table for the other baseline methods from table 1, as they continue to be relevant comparison points. 
+
+As long as this method requires iterating through a dataset to compute the coefficients, I think it needs to be compared against the standard baselines for steering that iterate through similar datasets. On all datasets your method is within margin of error of the SPARE method in performance, and other baselines also reach the performance. Generally, it feels to me like the benefit of this method would all come down to the fact that it uses only positive instances, but if that is the case the paper should have identified experimental settings where positive instances are inherently cheaper to acquire and negative instances can't be substituted with neutral text. Then, the experimental results would show a delta between this method and existing methods.
+
+I'm open to being convinced otherwise by rebuttal, other reviewers, or further experimental results and raising my score.
+
+Missing citations:  https://arxiv.org/pdf/2310.06824, https://arxiv.org/abs/2308.10248, https://arxiv.org/abs/2205.05124
+
+### Strengths
+see summary
+
+### Weaknesses
+see summary
+
+### Questions
+see summary
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces a method for selecting SAE features which are useful for steering by ranking their correlations with labels on some dataset, also with built-in computation of the steering coefficient. There are three ablations for selecting the features and two ablations on how the coefficient is computed. Results-wise, this approach matches performance with full finetuning on several tasks and some of the selected features seem broadly related to the task at hand. Overall the approach is a simple combination of existing ideas in the literature with some interesting results.
+
+### Strengths
+- The evaluations are comprehensive, covering a few models and several tasks. The analysis presented in the paper (particularly the appendices) does a good job of conveying the results and helping the reader understand the value of the method.
+
+### Weaknesses
+- My understanding is that the method is not framed as a PEFT but rather a steering vector technique. This makes sense since the method seems to lag behind finetuning performance by a bit in many cases. However, the datasets studied are all standard PEFT benchmarks and not more concept-specific benchmarks for comparing steering vectors, e.g. [AxBench](https://arxiv.org/abs/2501.17148).
+- The baselines compared against and the datasets benchmarked on are not adequate for a paper about steering vectors and SAEs. Some methods that need to be compared against are [SAE-TS](https://arxiv.org/abs/2411.02193) which uses SAEs to learn good steering vectors, simple baselines like linear probes, and perhaps more recent approaches like [RePS](https://arxiv.org/abs/2505.20809).
+- There are three variants of the method presented in each table. I worry that this encourages overfitting by essentially allowing max @ 3 scoring on the leaderboard; just by chance, one of the variants slightly outperforms the other but the relative ordering of the variants performance-wise is not clear. Generally, scores seem within the standard of deviation shown; due to all this I'm not at all convinced that this technique is actually better, in a statistically significant sense, than the baselines.
+- In general I think this paper would be better if it focused on this approach as being an interpretability technique rather than a genuine performance-booster for model finetuning (since the latter is not convincing). The appendices showing which features are highly-correlated with different tasks was more interesting and novel than much of the main text. It would be interesting to compare benchmarks and models by which features they use.
+
+### Questions
+- Why is algorithm 1 so prominent in the main text? It seems more suitable for the appendix (when discussing system optimisations/implementation etc.) since online computation of correlation is hardly a novel contribution, or even a primary one in this work, unless I am mistaken.
+- Why Pearson correlation over other classification metrics (e.g. AUROC)? The labels are discrete for each of the tasks right? I may have misunderstood why $y_i$ represents in the explanation here.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

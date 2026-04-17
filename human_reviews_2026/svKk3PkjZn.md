@@ -1,0 +1,165 @@
+# iLLaVA: An Image is Worth Fewer Than 1/3 Input Tokens in Large Multimodal Models
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 4, 4
+
+## Abstract
+Recent methods have made notable progress in accelerating Large Vision-Language Models (LVLMs) by exploiting the inherent redundancy in visual inputs. Most existing approaches, however, focus narrowly on reducing image tokens before or within the Large Language Model (LLM) stage to lower computational cost. This overlooks other major bottlenecks, particularly the image encoder, which itself requires substantial computation. As a result, these methods fall short of achieving true end-to-end acceleration. Importantly, the image encoder is the primary contributor of input tokens to the LLM. Thus, reducing visual redundancy at the encoder stage not only speeds up the encoder itself but also significantly lightens the workload for the subsequent LLM. Motivated by this, we investigate how to jointly optimize the image encoder and the LLM along with other LVLM components for comprehensive acceleration. To mitigate the risk of performance degradation from token reduction, we propose a novel token merging strategy that recycles useful information from otherwise discarded tokens. Our approach, iLLaVA, delivers consistent improvements across both image and video understanding tasks, achieving up to a 2$\times$ throughput boost and a 4$\times$ reduction in prefilling time. Notably, iLLaVA enables a larger model (e.g., InternVL-2.5 26B) to surpass a smaller counterpart (e.g., InternVL-2.5 8B) in both accuracy and efficiency. Extensive comparisons with state-of-the-art token pruning and merging techniques demonstrate the clear superiority of our method. Finally, we provide detailed visualizations for the merging steps of iLLaVA , offering deeper insights into how different LVLM components contribute to efficient computation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This work proposes iLLaVA, a method that accelerates VLMs with token reduction. Different from most prioir work that focues on reducing in only LLMs, this work considers both the image encocer and the LM. Moreover, a merging strategy is further introduced to include potentially useful information. The proposed approach is evaluated on a variety of tasks and models, and the results illustrate the its effectiveness: it can obtain over 95% of the performance over various token reduction ratios and perform better than other methods.
+
+### Strengths
+- The direction of accelerating VLMs is important for the real-world deployment.
+- The idea of joint optimization of both image encoder and LLM is intuitive.
+- The results illustrate the effectiveness of the proposed approach.
+
+### Weaknesses
+- Using the attention score as an indicator of token importance is not quite a novel idea; in addition to applying the reduction to both vision encoder and LM, the methodological differences to previous work should be further illustrated.
+- There seems to be a lack of detailed analyses on why the proposed method works well? It will be better to provide more detailed analyses to explain the better performance compared to other methods.
+- It seems not quite straight-forward for me to understand the token merging process. There should be more detailed illustration for this process.
+
+### Questions
+(* Please refer to the weakness part.)
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes iLLaVA to address a key limitation of existing LVLM acceleration methods: most only reduce image tokens in the LLM stage, overlooking the image encoder—a critical bottleneck accounting for 99% of inference time (45% in video tasks)—and failing to achieve end-to-end acceleration. To tackle this, iLLaVA enables comprehensive acceleration through two core innovations: two-stage token merging (inserting modules at critical positions in both the image encoder and LLM to jointly optimize the two computationally intensive components) and a novel token merging strategy that recycles useful information from discarded tokens, compatible with Flash-Attention with negligible extra computation. Experiments demonstrate iLLaVA retains over 95% performance while reducing 66.7%-88.9% of image tokens, outperforms SOTA methods, supports multiple LVLM architectures, and delivers significant improvements in memory usage, inference speed, and throughput.
+
+### Strengths
+- Simple training-free approach. The paper adopts a training-free token merging method for ViT and LLM. Compared with merely merging or pruning tokens on MLLMs, the proposed method achieves better performance, lower memory overhead, and higher throughput.
+- Extensive experiments. The paper conducts extensive experiments on two benchmark suites to verify the effectiveness of the proposed method across 9 image tasks and 8 video tasks. Under fair comparison settings, the proposed method achieves better performance than four existing methods.
+- High generalization. It proves adaptable to four MLLMs, demonstrating its strong generalization capability.
+
+### Weaknesses
+- Lack of novelty. The paper adopts the existing token merging method and extends its application from LLM to ViT.
+- Simplified visualization in Figure 2. Figure 1 presents the attention scores in ViT for a single object against a simple, plain background. This straightforward case fails to convince readers. What would the attention map look like when the image scene is complex?
+- Limited experimental benchmarks. The paper only conducts experiments on general QA benchmarks. How does it perform on benchmarks focusing on capturing key objects in dense information? For instance, text-centric benchmarks (TextVQA, ChartVQA, DocVQA, InfoVQA, OCRBench) and high-resolution image benchmarks (V*, etc.)?
+- Typos: Figure 3(b) contains a typo: "QWen2.5-VL 7B" should be formatted as "Qwen2.5-VL".
+
+### Questions
+- Flexibility of insertion position. The token merging module can be inserted into any layer of ViT and LLM. Do different VLMs require distinct insertion positions of the token merging module to achieve optimal performance? Additionally, are there differences in the optimal insertion positions across various VLMs?
+- In Table 4, reducing tokens in both the encoder and LLM achieves better accuracy than only reducing tokens in LLM. Why does reducing more tokens in ViT further improve performance? Moreover, the paper lacks an ablation study focusing on applying the token merging module solely in ViT.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposed a two-stage method for reducing visual tokens in VLMs. In particular, it tries to reduce tokens both at visual encoder stage and LLM decoding stage. In each stage, a token merging module is inserted in between the self-attention layer and FFN every N blocks. Within the token merging module, tokens that received highest attention scores are deemed to be important and kept, and the rest of tokens are merged into clusters called recycled tokens. Both important and recycled tokens are sent to the next layer for processing. Each token merging module reduces the overall number of tokens by a fixed amount, and the overall model can reduce the visual tokens to the target budget. Experiments on a set of image and video understanding benchmarks with several popular VLMs show that the proposed method outperforms several baselines, both in terms of the performance retention and efficiency.
+
+### Strengths
+Unlike many previous works in the area that focus on single image task only. This paper presented comprehensive experiments on multi-image and video benchmarks and shows stronger performance compared to several baselines. 
+
+The experiments with four different VLMs show the effectiveness of the iLLaVA. 
+
+The results on memory usage, prefilling time and thoughput provide interesting insights on the impact of visual token pruning from different angles, which is often neglected in previous works.
+
+### Weaknesses
+My main concern is on the novelty of this work. The paper claims the two-stage pruning method and token merging as novel contributions. However this idea has been done by previous works. For example, VScan (Zhang et al. 2025) adopt very similar idea to prune tokens at both visual encoder stage and llm decoder stage. Furthermore, VScan also proposed to merge pruned tokens instead of discarding them. The only difference might be the specific layer index where the token pruning/merging happens. 
+
+Zhang, Ce, Kaixin Ma, Tianqing Fang, Wenhao Yu, Hongming Zhang, Zhisong Zhang, Yaqi Xie, Katia P. Sycara, Haitao Mi and Dong Yu. “VScan: Rethinking Visual Token Reduction for Efficient Large Vision-Language Models.” ArXiv abs/2505.22654 (2025): n. pag.
+
+### Questions
+Can authors discuss how the proposed method differs from existing two-stage visual token pruning methods, and showcase the advantage of iLLaVA in experiments?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes iLLaVA, achieves a balance between efficiency and accuracy by jointly merging tokens at both the image encoder and LLM ends and introducing "recycled tokens" to aggregate the information of discarded tokens. Despite a 88.9% reduction in visual tokens, it still maintains 95.2% performance, enabling the 26B model to comprehensively outperform the 8B model in terms of speed and efficiency. It offers 2× throughput, 4× first-token latency and 1.59× memory savings, and is suitable for a wide range of LVLMS
+
+### Strengths
+- The method extends token reduction from LLM to image encoders, achieving dual acceleration and significantly reducing overall computational and memory overhead.
+
+- It aggregates discarded information with "recycled tokens", maintaining an accuracy of over 95% even at extremely high compression rates, balancing speed and performance.
+
+### Weaknesses
+- Can this method be adapted to flash attention? And, can it be adapted to vllm and sglang inference frameworks? It seems the adaption on mainstream frameworks somehow has difficulties.
+
+- The performance drops significantly for tasks that require fine spatial information, such as DocVQA and ChartQA. Small targets or dense text are prone to losing key details due to token merging.
+
+- The reduction ratio of tokens and the insertion layer positions need to be manually optimized, lacking an adaptive mechanism. When changing models or tasks, it may be necessary to re-search for the optimal configuration, resulting in high migration costs.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

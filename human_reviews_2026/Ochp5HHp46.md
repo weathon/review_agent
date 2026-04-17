@@ -1,0 +1,227 @@
+# Random Spiking Neural Networks are Stable and Spectrally Simple
+
+- Decision: Accept (Poster)
+- Scores: 6, 8, 4, 4, 6
+
+## Abstract
+Spiking neural networks (SNNs) are a promising paradigm for energy-efficient computation, yet their theoretical foundations—especially regarding stability and robustness—remain limited compared to artificial neural networks. In this work, we study discrete-time leaky integrate-and-fire (LIF) SNNs through the lens of Boolean function analysis. We focus on noise sensitivity and stability in classification tasks, quantifying how input perturbations affect outputs. Our main result shows that wide LIF-SNN classifiers are stable on average, a property explained by the concentration of their Fourier spectrum on low-frequency components. Motivated by this, we introduce the notion of *spectral simplicity*, which formalizes simplicity in terms of Fourier spectrum concentration and connects our analysis to the *simplicity bias* observed in deep networks. Within this framework, we show that random LIF-SNNs are biased toward simple functions. Experiments on trained networks confirm that these stability properties persist in practice. Together, these results provide new insights into the stability and robustness properties of SNNs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper builds on previous theoretical work and investigates the stability of random Leaky integrate-and-fire spiking neural network classifiers. The question is, how is the output of the network sensitive to the changes in input and when the changes in the input change the classification. While the majority of the work is theoretical, a minor part consists of numerical experiments that test the validity of theoretically computed bounds on training hyperparameters. It is found that random spiking networks are stable, in the sense that small changes to the inputs do not change the classification outcomes.
+
+### Strengths
+While the paper builds on previous results, it also brings original contribution to previous works. The paper is logically constructed, motivates well the interest of the topic and brings significant results on the stability of SNN classifiers. The paper is rigorous and brings a valid theoretical advancement to the understanding of spring neural networks. Rigour and clarity are, among others, achieved through defining and explaining all quantities used in equations.
+
+### Weaknesses
+A sizeable portion of the paper presents previous results. This is in itself not a problem, as it serves the purpose of presenting a complete theory and because new results would be hard to put into context otherwise. However, on several occasions it remains to some degree unclear what is a previous result  and what is a new contribution. Authors could be more specific about this as they unfold their results. 
+Moreover, some results remain unclear and could be better explained. In some places, the presentation would profit from clarification, better intuitive explanations and on further comments of obtained results.  More commentary and intuitive explanation could be provided along the Results part of the paper to allow to the reader to better understand and appreciate the significance of the results. Finally, the paper does not have a significant limitation section, which would be important to have.
+
+Minor:
+The y-axis of Figures 1 and 2 is "ENS" and the y-axis of Figure 3 is "noise sensitivity".
+x-axis of Figures 1 and 2 report the number of features, but in the text they are referred to as the "input dimensions".  It is advisable to unify the axis notation.
+
+### Questions
+1) [line 162] Authors give a definition of what they call a recurrent network, but to me it seems that they define a multilayer feedforward spiking network - a network where each neuron in layer $l$ receives spiking output from neurons in the previous layer $l-1$. In what sense is this a recurrent network?
+
+2) Proof sketch : step 3 reads somehow unclear, can the authors explain better what is done in the last step?
+
+3) Why does Figure 2 not show the bounds?
+
+4) Figure 3 shows the sensitivity as a function of \nu. Why is that?
+
+5) The dependance of the result on log n in Theorem 1 is not clear to me. Can authors explain?
+
+6) Authors perform their analysis on random spiking networks. Would results apply to spiking networks with structured connectivity (e.g. Koren and Panzeri, NeurIPS 2022; Urdu et al., ICANN 2025)? If not, what is fundamentally different in structured vs random networks that would prevent such generalisation of your results to structured networks? If authors find the question relevant, I suggest discussing it in the revision.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper studies stability of discrete-time leaky integrate-and-fire (LIF) spiking neural networks (SNNs) through Boolean function analysis. It proves that wide, randomly initialized LIF-SNN classifiers are noise-stable on average: small random input bit flips are unlikely to change the predicted class. From this, the authors introduce spectral simplicity—a notion saying most Fourier–Walsh mass concentrates on low degrees—and show random LIF-SNNs are biased toward such “simple” functions. Experiments on single neurons, deep networks, and trained models (MNIST/CIFAR-10) suggest (i) both IF and “signed” IF variants are noise-stable, (ii) depth increases sensitivity but less than the theory’s worst-case bounds, and (iii) training further reduces sensitivity.
+
+### Strengths
+Stability/robustness theory for spiking models is far less developed than for ANNs; bringing Boolean analysis + Fourier tools here is novel and interesting.
+
+Spectral simplicity offers a principled bridge from stability to a simplicity notion compatible with SNNs and complements prior simplicity-bias results in ANNs. 
+
+The signed LIF formulation and spike-count readout are standard enough to be meaningful while still analyzable; proofs acknowledge the reset-by-subtraction complication. Also, if random LIF-SNNs are spectrally simple, that has consequences for generalization priors and for neuromorphic design choices (thresholds, depth, latency).
+
+### Weaknesses
+The strongest theory is for random weights and static encodings; dynamic inputs are acknowledged but technically harder (partial sums leave the hypercube). This narrows practical reach (e.g., event streams).
+
+The corollary infers low-degree concentration from ENS bounds, but there’s no empirical Fourier probe of trained models to confirm the spectrum actually concentrates as predicted.
+
+### Questions
+Can parts of the analysis (Theorem 1/2) be ported to the classical Heaviside LIF (without sign) to close the theory–practice gap you highlight empirically? Which steps fail, and can they be patched (e.g., via comparison lemmas)?
+
+Your proofs suggest stability worsens with L and T, yet experiments look kinder. Can you isolate which proof steps (union bounds, reset dependencies) are driving pessimism and provide refined bounds (e.g., martingale or coupling arguments) that track empirical trends?
+
+How sensitive are your results to input distributions? Could the corollary be re-stated under a product measure with bounded correlations, or for common dataset distributions after whitening? You mention generalization is “straightforward”—can you sketch it?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on noise sensitivity and quantifies the bound on the stability of SNNs. A notion of spectral simplicity is introduced, motivated by this bound. Several experiments are conducted to verify the proposed method.
+
+### Strengths
+1. The abstract is clear and well written.
+2. The results shown in Figure 3 are interesting.
+
+### Weaknesses
+1. Experiments are very simplified and the scope is limited
+2. The format of the paper can be further improved. Section 1.2 (Notion) in the Introduction section may not be appropriate, and it may be better to put it in Section 2. The bolded "Future directions" in the Conclusion section is confusing. Is it a section/subsection title? Why is a term bolded and put there? Suggesting to revise it to make the format coherent in the paper.
+3. The conclusion does not summarize the results from numerical experiments. It will be beneficial to add them here to cover all key contents of the paper.
+
+### Questions
+1. Figure 3. onMNIST should be "on MNIST"
+2. Could you further explain what the conclusion is for the expected noise sensitivity data shown in Figure 1? Does this Figure just show sIF and IF neuron has similar noise sensitivity? How are the contents related to the summary of Section 5 on line 375 to line 377?
+3. "Notice that training reduces the model’s sensitivity,
+but less strongly compared to MNIST. This aligns with the fact that both the training and test errors
+are larger for CIFAR-10 (which achieves 84.38% training accuracy).
+What are the training and test errors described here?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper analyzes the stability of randomly initialized spiking neural networks (SNNs) with sign integrate-and-fire (sIF) neurons, providing stability boundaries for both individual sIF neurons and multilayer sIF networks. Theoretical analysis proves the stability of random SNNs. This paper also performs spectral analysis, demonstrating that randomly initialized SNNs tend to exhibit simple spectral structures with low-frequency components.
+
+### Strengths
+1. This paper investigates the stability of SNNs from the perspective of Boolean function analysis, offering a novel viewpoint for SNN stability research.
+2. This paper presents a detailed theoretical analysis and derivation, demonstrating a solid technical foundation.
+
+### Weaknesses
+1. This paper assumes that the leakage parameter (membrane time constant) of LIF neurons $\beta=1$, thereby reducing LIF neurons to IF neurons. Compared to simple IF neurons, LIF neurons are more commonly used and exhibit more complex neuronal dynamics. This paper does not provide further analysis to demonstrate how $\beta$ affects the stability bounds.
+2. This paper employs sign leaky integrate-and-fire (sLIF) neurons. This neural model extends Boolean functions to the discrete-time domain. The sLIF neuron produces values of -1/1, which differs significantly from the typical LIF neuron that fires 0/1 spikes. This paper does not provide stability bounds for the typical LIF model, which holds greater significance for SNN stability research.
+
+### Questions
+1. Please provide the stability bounds for a general $\beta$.
+2. Please provide the stability bounds for the typical LIF model.
+3. This paper employs Xavier initialization with variance set to 1/n. However, this initialization method is not specifically designed for SNNs and is unsuitable for activation values with non-zero means. I wonder how alternative initialization methods, such as Kaiming initialization or initialization methods specifically designed for SNNs like [1], would affect the stability bounds.
+
+[1] Ding, Jianhao, et al. "Assisting Training of Deep Spiking Neural Networks With Parameter Initialization." *IEEE Transactions on Neural Networks and Learning Systems* (2025).
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper investigates the theoretical stability properties of discrete-time Leaky Integrate-and-Fire (LIF) Spiking Neural Networks (SNNs). The authors employ Boolean function analysis to quantify noise sensitivity and connect it to a new notion of spectral simplicity, showing that wide, randomly initialized SNN classifiers are on average stable and biased toward low-frequency (simple) functions. They provide analytical bounds for both single-neuron and multi-layer cases (Theorems 1–2), establish a formal relationship between stability and Fourier spectrum concentration (Corollary 1), and validate the theoretical insights through small-scale simulations on MNIST and CIFAR-10.
+
+### Strengths
+Applying Boolean function tools to spiking dynamics is original and mathematically elegant. It connects neuromorphic computation with the mature literature on noise sensitivity and Fourier analysis. The paper is clear, with rigorous definitions (noise sensitivity, spectral concentration) and clean proofs for Theorems 1–2
+
+### Weaknesses
+1. The paper shows minimal experiments and primarily confirm qualitative trends. The paper would benefit from convincing demonstration of the claimed real world persistence of spectral simplicity in trained SNNs. 
+
+2. The experiments measure noise sensitivity directly but there are no empirical validation of spectral concentration using Fourier spectrum.
+to verify spectral concentration empirically. 
+
+3. Can we also claim that spectral stability will imply parameter stability? For example, may be authors could try injecting Gaussian noise into weights or thresholds and measure output sensitivity with the model. 
+
+4. It would be nice to add evaluation for the output with randomly dropping 5 % of spikes or shortening the readout horizon TTT. C
+
+### Questions
+1. Could the author add any real world event benchmark like DVS-CIFAR10, SHD or larger networks to strengthen the empirical section. 
+
+2. Could authors add an example showing the power spectrum to substantiate the “spectrally simple” claim? 
+
+3. Would be nice to compute for tiny inputs, the cumulative spectral energy vs degree to visually confirm low-frequency dominance.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

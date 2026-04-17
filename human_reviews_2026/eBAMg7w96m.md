@@ -1,0 +1,215 @@
+# Understanding the Emergence of Seemingly Useless Features in Next-Token Predictors
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6, 4
+
+## Abstract
+Trained Transformers have been shown to compute abstract features that appear redundant for predicting the immediate next token. We identify which components of the gradient signal from the next-token prediction objective give rise to this phenomenon, and we propose a method to estimate the influence of those components on the emergence of specific features. After validating our approach on toy tasks, we use it to interpret the origins of the world model in OthelloGPT and syntactic features in a small language model.  Finally, we apply our framework to a pretrained LLM, showing that features with extremely high or low influence on future tokens tend to be related to formal reasoning domains such as code. Overall, our work takes a step toward understanding hidden features of Transformers through the lens of their development during training.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper studies why transformers trained on next token prediction (NTP) learn features that are not useful for predicting the immediate next token, such as abstract world models or complex syntactic structures. The authors propose that the standard "teleological" view (what features do in a final model) is insufficient. Instead, they adopt a "developmental" perspective, analyzing how features emerge from the gradient signal during training.
+
+The paper's main contribution is a decomposition of the NTP gradient into three distinct components, based on the information flow relative to a specific hidden state at position $i$:
+- direct learning, that is the standard gradient signal from the loss at position $i+1$. This component pushes toward features directly useful for predicting the next token.
+- pre-caching, that we can see when the gradient signal from future losses (at positions $j > i+1$) flows back through attention to the state at position $i$. And this allows the model to learn to "pre-cache" information at position $i$ that will be needed for future predictions.
+- circuit sharing: That is the gradient signal from losses at any position $j$ that updates the model's shared parameters ($\theta$) without passing through the specific state at position $i$. Because parameters are shared across all positions, a feature learned for a direct task at position $j$ can appear at position $i$ even if it's useless there.
+
+The authors then introduce "myopic training" (to block pre-caching) and "m-untied training" (to block circuit sharing) to show that these mechanisms are necessary for learning NTP-useless features in toy tasks. And they propose a new method to quantify the "integrated influence" of each of the three gradient components on the development of a specific feature over the entire training process.
+
+### Strengths
+- The decomposition of the gradient signal into direct, pre-cached, and shared components is a powerful new way to think about feature emergence. It provides a principled answer to the fundamental question of why NTP models learn more than just $t+1$ prediction. 
+- The integrated influence attribution method (section 3.4) is computationally expensive, but it provides a concrete, quantitative tool for tracing the origin of a given feature back to its specific gradient source, moving beyond static, post-hoc analysis.
+
+### Weaknesses
+- The entire analysis pipeline (from probing to influence attribution (Def 3.2) to the $Q(w)$ proxy) depends on features being linearly represented in the residual stream. It's highly probable that many complex, abstract, or "useless" features are not linearly decodable, especially in middle layers. The paper's methodology doesn't take into account the emergence of such non-linear features.
+- The paper's core premise relies on a binary split between NTP-useful and NTP-useless features. While for Othello this line is clear (does a square affect the next move?), with language it's way murkier. Is a Part-of-Speech tag NTP-useless? It might not be necessary for 90% of predictions, but it might be helpful for 10% (for example when the next token could be "jumped" or "jump").
+- The the "integrated influence" method has a huge computational cost. It requires a full retraining of the model (or more, depending on the implementation) to analyze the development of features. This is acknowledged by the authors and is why they resort to a proxy for the LLM experiments.
+- While the gradient paths for pre-caching and circuit sharing are defined as disjoint, their effects on parameter updates $\theta$ are deeply related. A pre-cache signal from a future loss at $j$ also contributes to the gradient on $\theta$, just as a shared-circuit signal from $j$ does. The attribution method for separating these influences (section 3.4, adapting Adam) is complex, and its robustness is not fully explored.
+- The attribution method explains the origin of a known feature (defined by a probe direction $w$). It does not, by itself, discover features. The experiments rely on features found either via linear probes on ground-truth labels (toy tasks, Othello) or an unsupervised method (SAEs on Gemma). This creates a "chicken-and-egg" problem: to understand how a feature develops, you must already have a way to find it in the final model.
+- The paper's entire analysis of the pre-trained LLM (Section 5) hinges on the $Q(w)$ metric being a faithful proxy for the developmental gradient influences. This link, established in proposition 5.1, is theoretically shaky. The proof provided in the appendix conflates a local, static analysis with a global, developmental history. It justifies the proxy by performing a first-order approximation (a Taylor expansion) around the final, trained model $\theta^*$, measuring the static causal effect of a feature after training is complete. It then equates this local, static measurement to the integrated influence (like, $I_{\text{pre-cached}}$) over the entire training run. This assumes, without evidence, that the gradient dynamics at the end of training are representative of the cumulative signals that created the feature from scratch, which is a very strong and unlikely leap.
+
+### Questions
+Your integrated influence method provides an interesting way to analyze the origin of a pre-defined feature (for example, from a probe or SAE). Could this developmental framework be inverted?
+I mean, could you use the gradient components themselves during training as a discovery mechanism?
+
+For example, could you monitor the training dynamics and look for directions in parameter space (or activation space) that consistently receive a high magnitude of "pre-cached" or "shared" gradient, but a low "direct" gradient? This might allow you to discover novel, abstract, or NTP-useless features as they form, rather than being limited to finding them post-hoc in the final model.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper is focused on the analysis of the gradient signal arising from the next token prediction task, which is ubiquitous in large language models and Transformers. This gradient, as already reported in the literature, does not only influence the features associated to the tokens which immediately precedes the last token, but spreads also to other tokens. The authors split the gradient signal in three components, direct (eq 1), pre-cashed (eq 2) and shared (eq 3), and they perform ablation and intervention experiments aimed at identifying the relative importance of these components in different transformers.  The analysis is performed on toy models, small transformers,  are also  on a large language model.
+
+### Strengths
+The analysis pipeline is well described, clear and neat, and might be potentially useful to other researchers. The ablation and interventional experiments are also well chosen and  well described. 
+Proposition 5.1 is interesting and also possibly useful to develop analysis pipelines. 
+The results on Gemma 2, and in particular fig 7, is interesting, as it provides evidence for a mechanism triggering directionality in LLMs.
+
+### Weaknesses
+It is not always clear what are the take-home messages. 
+The results in Fig3 show a performance  performance gap between NTP-useful and NTP-useless feature which has always the same sign, and gross monotonically with token index and layer index. This result seems pretty trivial.  
+In the analysis of TinyStory it is found that ablating precatching is detrimental for the training loss. This is also not surprising. A moderately unexpected result in that section is that syntax survives ablation.
+
+### Questions
+Why the residual stream of token i in an intermediate  layer k  (r_i^k) should have a special role in predicting the next token in the output layer (L+1). I understand that this must be the case for the penultimate layer, namely for r_i^L, but in the previous layers the token index is largely irrelevant, since the positional encoding is mixed and shuffled by the attention mechanism. Doesn't this make the decomposition arbitrary?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors propose studying the features developed during Next-Token prediction that are not immediately useful for the explicit next token prediction task. They do so by focusing on the residual stream and decomposing it in terms of the information signal: anticipatory(pre-cache), direct, and shared. The authors carefully decompose the loss into the three components, so that they may define feature mismatch and consider how this accumulates along a training trajectory. To ablate pre-caching, they borrow from Wu et al. the concept of myopic training. To ablate circuit sharing, they pick a layer, and use different, non-shared weights up to the layer (inclusive) and after the layer (exclusive). To estimate if the models (transformer-based) represent features linearly, they train position-specific linear probes to regress from the residual stream to the feature values. By ablating in the two ways described above, they find that on toy examples and GPT-2, features that do not immediately aid the next token prediction task do not emerge. Studying OthelloGPT, they confirm the large signal value for the direct component, congruent with an inductive bias to distinguish boards with similar valid next move sets; however, the indirect components persist, suggesting that NTP-useless features are still learnt. By ablating pre-caching, they also find that syntax performance does not degrade, while generation does. Shifting to large language models, the authors formulate an intervention study where they add a vector value to the residual stream and use it to estimate the direct vs pre-cached influence on a specific token. By looking at extreme values, they find that most SAE features relate to programming languages or formal properties of the input text; by considering a log-normal fit, the authors validate the hypothesis that pre-caching is required when emulating formal parsing.
+
+### Strengths
+- Studies the utility of emergent features that allow predictions beyond the next token in next token prediction pre-training
+- Additional confirmation of hypothesis or previous literature results (Wu et al.'s pre-caching speculation/breadcrumbs hypothesis, OthelloGPT and board-state encoding)
+
+### Weaknesses
+- The premise of the study feels partially undefined: the assumption that transformers trained on NTP will converge to greedy decoding feels unintuitive/by fiat (this can be mitigated with a citation if appropriate when the problem space is defined in the Introduction)
+- Very minor: the use of "rose" makes the information difficult to read (on a screen and borderline invisible on an eInk display)
+
+### Questions
+- Q1: A core assumption of this work seems to be (in my understanding) that an LM trained using NTP will focus on the greedy decode task, i.e. only the next token. This feels counterintuitive. Why is the greedy decode expected to be favoured against something closer to Viterbi? Is there an argument from expected algorithm complexity, and that we expect the neural net to favour lower complexity algorithms that approximate a correct hypothesis from the set of "valid" hypothesises, here sequence decoding algorithms?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes a theoretical framework that decomposes training gradients in next-token prediction into direct learning, pre-caching, and circuit sharing. The approach explains how models acquire features that do not contribute to immediate prediction. The framework is evaluated on toy tasks, OthelloGPT, TinyStories, and Gemma 2, showing consistent qualitative trends.
+
+### Strengths
+- **Originality.** The three-way gradient decomposition is novel and well formalized. It offers a developmental view of feature emergence that complements prior interpretability work.  
+- **Quality.** The theoretical analysis is rigorous and the experiments are well designed. Ablations on toy tasks and real models support the framework.  
+- **Structure and coherence.** The presentation follows a logical order from theory to empirical evidence. Figures and proofs are consistent with the stated claims.  
+- **Significance.** The analysis connects mechanistic interpretability and training dynamics, offering tools that could inform future studies.
+
+### Weaknesses
+- **Lack of empirical validation of \(Q(w)\).** Proposition 5.1 defines \(Q(w)\) as an influence proxy, but it is not validated against true influence ratios despite available data.  
+- **Modified optimizer.** The use of a non-standard Adam variant with separate moments for each gradient component could alter convergence. A control experiment with standard Adam is needed.  
+- **Correlation without causation.** The Gemma 2 analysis links high \(Q(w)\) to formal reasoning features but does not test causal impact on model behavior.  
+- **Limited statistical rigor.** Results are mainly qualitative plots without variance or confidence intervals. Basic statistical reporting would strengthen conclusions.  
+- **Accessibility.** The notation and level of abstraction make the paper difficult to follow for readers outside specialized training-dynamics research. More intuition or schematic explanations would improve clarity.  
+- **First-order assumption.** The framework relies on a linearized gradient view (small-step assumption), which may not capture non-linear effects in real LLM training.  
+- **Metric choice.** Definition 3.2 uses L2 distance for feature mismatch without justification. Other similarity measures could yield different insights.
+
+### Questions
+- **Feature filtering.** The paper excludes 1,819 of 16,384 Gemma 2 SAE features before analysis. What criteria were used, and could this exclusion bias the results?  
+- **Feature mismatch metric.** Why was L2 distance selected for Definition 3.2? Has cosine similarity or another metric been tested?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper studies the formation of "useless" next-token prediction features (NTP-useless) in Transformers. The authors decompose the loss gradient signal according to its relationship with the residual stream activations. The gradient signal is divided into direct (containing information from the next-token prediction), pre-cached (containing information from future tokens), and shared components (gradient updates to parameters reused across positions that do not depend on the current residual stream activation). They then propose a measure of the approximated influence of each of these signals on the emergence of a feature in the final model. To validate this, they train ablated models under two modified regimes: myopic training (blocking pre-caching gradients) and m-untied training (preventing feature sharing across positions). In toy tasks (Majority voting and Conditioned Majority) they observe that ablated two-layer Transformers fail to learn the NTP-useless required to solve the task. In OthelloGPT, board states are found to emerge indirectly through pre-caching and circuit sharing. In small GPT2-like language models trained on TinyStories, pre-caching improves overall language modeling performance, while syntactic features are learned primarily through direct gradients. Finally, in Gemma 2, features with stronger apparent pre-caching influence tend to be associated with formal or code-like structures.
+
+### Strengths
+- The paper introduces a novel decomposition of gradient signal into direct, pre-cached and shared components. This framework extends [Wu et al., 2024](https://arxiv.org/pdf/2404.00859)'s work by studying the emergence of features as a function of the different gradient signals.
+- The authors offer a valuable methodological advance for interpreting training dynamics.
+- The framework is used in four diverse settings: toy algorithmic tasks, OthelloGPT, TinyStories, and Gemma 2 2B, and is used to extract novel insights into how different sources of gradient signal shape feature emergence.
+
+### Weaknesses
+- The influence estimation framework requires retraining the models with the same random seed and data order, which is infeasible for large-scale models. This limits the method’s practical applicability.
+- The role of "pre-cached" features in text generation models (section 4.3) is unclear. No statistical significant results showed. Absolute levels of influence are not informative.
+- In the pre-cached features analysis on Gemma 2 (section 5.1), the authors claim that SAE features with high pre-cache influence are related to "programming or formal structure of the input text". However, these type of features are also found on the opposite end (low pre-cache influence, Figure 6). Overall, this finding is based on qualitative examples, with no statistical validation.
+- Claimed support for the breadcrumbs hypothesis of [Wu et al., 2024](https://arxiv.org/pdf/2404.00859) (look-ahead behavior in LLMs arises not from explicit planning but from the overlap between the features required to predict tokens at different positions) is based on a single correlational experiment.
+
+### Questions
+- Does steering with the high $Q(w)$ SAE features have an influence in the generated output?
+- Where does $y$ come from in the _influence_ definition (Definition 3.3).
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

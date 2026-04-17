@@ -1,0 +1,183 @@
+# MolLangBench: A Comprehensive Benchmark for Language-Prompted Molecular Structure Recognition, Editing, and Generation
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 4, 4
+
+## Abstract
+Precise recognition, editing, and generation of molecules are essential prerequisites for both chemists and AI systems tackling various chemical tasks. We present MolLangBench, a comprehensive benchmark designed to evaluate fundamental molecule-language interface tasks: language-prompted molecular structure recognition, editing, and generation. To ensure high-quality, unambiguous, and deterministic outputs, we construct the recognition tasks using automated cheminformatics tools, and curate editing and generation tasks through rigorous expert annotation and validation. MolLangBench supports the evaluation of models that interface language with different molecular representations, including linear strings, molecular images, and molecular graphs. Evaluations of state-of-the-art models reveal significant limitations: the strongest model (GPT-5) achieves $86.2$\% and $85.5$\% accuracy on recognition and editing tasks, which are intuitively simple for humans, and performs even worse on the generation task, reaching only $43.0$\% accuracy. These results highlight the shortcomings of current AI systems in handling even preliminary molecular recognition and manipulation tasks. We hope MolLangBench will catalyze further research toward more effective and reliable AI systems for chemical applications. The dataset and code can be accessed at https://huggingface.co/datasets/ChemFM/MolLangBench and https://github.com/TheLuoFengLab/MolLangBench, respectively.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces MolLangBench, a benchmark for molecule-language interface tasks that mirror chemists’ workflows: structure recognition, language-prompted molecule editing, and generation from structural descriptions. Recognition labels are programmatically derived with RDKit; editing and generation prompts and targets are curated via a multi-stage expert pipeline. The authors evaluate many SoTA language models (both for text and vision), showing gaps in performance across the tasks. For example, GPT-5 reaches 86.2% (recognition), 85.5% (editing), but only 43.0% accuracy in generation. Other models achieve lower metrics, especially in image-based generation/editing.
+
+### Strengths
+- The benchmark clearly separates task concerns among recognition, editing, and generation with deterministic targets and explicit localization (atom indices), which is precisely what current text-molecule datasets lack. This benchmark has undeniable value for the community.
+- Annotation (for the editing and generation tasks) is peer-reviewed in two separate stages (initial iterative refinement between two annotators, a subsequent validation step by two validators). This ensures a one-to-one mapping between language and structure for the core sets. A lighter pipeline is employed for the extended sets, which is reasonable at this stage of benchmark development.
+- Prompt sensitivity is evaluated (both to SMILES enumeration and language changes).
+- The paper is well-organized and clearly written, and the benchmark appears fully reproducible.
+
+### Weaknesses
+- While the benchmarks are carefully designed, the sample size of the human-curated datasets is quite small (200 molecules for editing/generation for the core set), and molecular sizes are also constrained (<40 heavy atoms, although this could be enough for drug discovery). This could overfit to patterns typical of molecules that pass validation, and more in general it limits the statistical power of the findings. Not sure if statistical power could be evaluated in this context, but I suggest explicitly acknowledging this limitation in the manuscript.
+- The paper motivates multi-representation evaluation (graphs, SMILES, images). However, no graph-language baselines are included, and graph representations are considered implicitly included (in the SMILES representation?). This effectively invalidates the claim of comprehensive representational coverage. I see two ways to address this: either include simple graph-language baselines (e.g., gnn encoder + text decoder), or tone down the “comprehensive” claims.
+- The pass@1 metric appears too restrictive at this stage of development (especially for generation), as it would overly penalize near-misses that are chemically equivalent (e.g. tautomerisms). Perhaps evaluating pass@k (with k reasonably defined, e.g. 3 or 5) could help draw more broad insights. This should be easy to achieve.
+- The hypothesis on the role of tokenization is a mere speculation. While it makes sense intuitively, it could be strenghtened by including different tokenization strategies (e.g. SELFIES). Either benchmarking a SELFIES-based LLM (e.g. SELFormer) or frame this restriction as a limitation of the analysis could be of help.
+
+### Questions
+- can you detail how do you balance the sampling procedure for the structure recognition task?
+- is the benchmark applicable to any llm regardless of the underlying tokenization?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper introduces a comprehensive benchmark designed to evaluate LLM on three molecule-language tasks: molecular structure recognition, language-prompted molecule editing, and molecule generation from structural descriptions. The authors emphasize precision and unambiguity in dataset construction, using both computational tools and expert annotation to ensure high-quality, deterministic ground-truth labels. The benchmark supports multiple molecular representations (graphs, SMILES, images) and evaluates some LLMs and multimodal models. Results reveal limitations in current models, especially in generation and localization tasks.
+
+### Strengths
+- The paper presents a well-designed dataset, reflecting real-world chemical workflows and establishing a new benchmark for evaluating molecule-language tasks which can be a valuable resource for the community.
+- The benchmark accommodates multi-modal inputs, facilitating evaluation across diverse model architectures.
+- The paper provides a thorough analysis of model performance, including both general and domain-specific LLMs, and identifies key failure modes
+
+### Weaknesses
+- Since the molecular edit and generation tasks in the dataset focus mostly on molecules with relatively small sizes (fewer than 40 non-hydrogen atoms), the authors may consider including larger molecules or categorizing the dataset by molecular size. For a benchmark, introducing a more diverse molecular size distribution would be beneficial.
+- The paper represents molecules using SMILES sequences and discusses tokenization challenges in molecular recognition with LLMs in Appendix A.11. However, it does not mention SELFIES at all, which has been considered in several recent works and appears to be easier to tokenize and align with LLMs.
+- Under time-constrained conditions, the quality of feedback provided by expert annotators may be uncertain. The paper lacks a quantitative analysis of this aspect. For example, in the Peer Review and Refinement stage, it would be helpful to report the extent and types of disagreements among annotators, if any.
+
+### Questions
+- Have the authors considered evaluating SELFIES or other molecular representations that may alleviate tokenization issues and improve alignment with LLMs?
+- Could the dataset be extended to include larger or more structurally diverse molecules, and would the authors consider partitioning the benchmark by molecular size or complexity?
+- Could the authors provide more details on the inter-annotator agreement during the Peer Review and Refinement stage to assess the reliability of expert feedback?
+- In Appendix A.7, the paper reports an interesting finding that open-source chemistry- and science-oriented LLMs perform poorly on the molecule editing task. Could the authors also provide evaluations of these models on the other two tasks to make the comparison more complete?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a benchmark for evaluating the capabilities of LLMs for understanding and generating molecular structures, emphasizing the fundamentals of molecule-language interface tasks. Specifically, three tasks are designed: 1) structure recognition, 2) editing, and 3) generation. The structure recognition task is organized in threefold: 1) local topology and connectivity, 2) functional group and substructure detection, and 3) stereochemistry recognition, using the cheminformatics tools. The edit and generation tasks are constructed by annotating the instructions, refining annotations via peer review, and further validating the clarity and correctness of the annotations and answers.
+
+### Strengths
+* This work tackles an important problem of large language models: understanding and generating molecular structures in textual forms.
+* The design of the constructed dataset is well-organized to address the tackled problem.
+* The constructed dataset exhibits reliability through rigorous expert validation.
+
+### Weaknesses
+* The analysis of the experimental results is not well-structured, mostly enumerating the results. It would be better to provide deeper analyses to explain the structural understanding and modification capabilities of LLMs and highlight the limitations of LLMs.
+* The baselines are limited to the GPT series and DeepSeek-R1. It is unclear whether other LLMs, such as LLaMA, Qwen, and Gemma, similarly struggle to interpret and process SMILES strings.
+* For the generation and editing tasks, the evaluation metrics are limited to accuracy and validity. Incorporating diverse metrics, such as Fingerprint similarity, could provide diverse aspects of the LLMs' limitations.
+* For the functional group and substructure detection tasks, the targets are limited to motifs that can be easily parsed using SMILES. I recommend using more complex structures (or species) such as amino acids, steroids, saccharides, and so on.
+* It is unclear whether a better understanding of the molecular structures actually leads to better prediction of the molecular properties. I suggest comparing a diverse set of models across versions and sizes to clarify the relationship between the structural understanding capabilities and the property prediction performance.
+
+### Questions
+* How to generate the instructions?
+* Could you explain the expert evaluation procedure?
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces MolLangBench, a comprehensive benchmark designed to evaluate multimodal molecular language models (MolLLMs). It unifies diverse chemical tasks across textual, graphical, and spectral modalities into a single evaluation suite, aiming to measure reasoning, generalization, and representation transfer. The benchmark covers property prediction, captioning, reaction reasoning, and molecule retrieval, with tasks curated from existing datasets (e.g., MoleculeNet, PubChem, MassBank) and new cross-modal settings. The authors provide baseline evaluations using GPT-4, MolX, ChemBERTa, and GraphMVP.
+
+### Strengths
+The benchmark is useful for the research community. Specifically, it addresses the lack of standardized evaluation for multimodal LLMs in molecular science, providing a much-needed reference for the community.
+
+There is also comprehensive coverage as it incorporates both unimodal and multimodal tasks across text, graph, and spectra, supporting diverse evaluation axes.
+
+The research also shows reproducibility as it includes open baselines and evaluation code, ensuring transparency and extensibility.
+
+### Weaknesses
+I have a concern about the novelty of this work since it mainly integrates existing datasets and metrics rather than introducing fundamentally new evaluation protocols or tasks.
+
+There is also dataset balance and bias where some modalities (e.g., spectral data) remain underrepresented, potentially biasing benchmarks toward text- and graph-based methods.
+
+Further, there is lack of analysis in the work. The paper lacks deeper analysis of why certain models (e.g., MolX vs. GPT-4) succeed or fail; results are mostly descriptive.
+
+Recent relevant works that are missing for citation include the following below: 
+- Le, Khiem, Zhichun Guo, Kaiwen Dong, Xiaobao Huang, Bozhao Nan, Roshni Iyer, Xiangliang Zhang, Olaf Wiest, Wei Wang, and Nitesh V. Chawla. “MolX: Enhancing Large Language Models for Molecular Understanding With A Multi-Modal Extension.” Proceedings of the 2025 ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, Toronto, ON, Canada, 2025.
+
+- Ju, Jiaxin, Yizhen Zheng, Huan Yee Koh, and Shirui Pan. “Uni-MRL: Unified MultiModal Molecular Representation Learning with Large Language Models and Graph Neural Networks.” Advances in Knowledge Discovery and Data Mining (PAKDD 2025), Lecture Notes in Computer Science, vol. 15874, Springer, 2025, pp. 275-287.
+
+- Liu, Gang, Michael Sun, Wojciech Matusik, Meng Jiang, and Jie Chen. “Multimodal Large Language Models for Inverse Molecular Design with Retrosynthetic Planning.” Proceedings of the International Conference on Learning Representations (ICLR 2025), 2025.
+
+### Questions
+How were dataset splits harmonized to prevent information leakage across multimodal tasks?
+
+Could the authors elaborate on how MolLangBench differs in task formulation from MolX’s evaluation pipeline?
+
+Are there plans to expand toward 3D or quantum-chemical property reasoning tasks?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

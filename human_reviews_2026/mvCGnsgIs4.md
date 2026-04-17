@@ -1,0 +1,189 @@
+# One Reflection at a Time: Provable Compression and Denoising of Orthogonal Matrices
+
+- Decision: Reject
+- Scores: 6, 2, 6, 8
+
+## Abstract
+Orthogonal matrices have become central to modern machine learning for several reasons, including gradient norm preservation, allowing invertible transformations, and supporting efficient parameterization. While any orthogonal matrix can be written as a product of Householder reflections, existing constructive methods do not address approximation, denoising, or reflector minimality under noise and computational constraints. We propose a simple greedy eigenspace-based algorithm that approximates or recovers an orthogonal matrix $\mathbf{V}$ using a product of Householder reflections. Our method (i) preserves orthogonality at every approximation level $K$, (ii) yields provable per-iteration error bounds, (iii) terminates exactly with a minimality certificate, and (iv) has denoising guarantees under additive random noise (Ginibre/GOE). Empirically, our approach outperforms previous methods across reconstruction error metrics. Experimental ablations on expRNN and ViT show controllable accuracy-compute trade-offs when replacing learned weights with $K$-Householder products, with storage and matvec costs reduced from $\mathcal{O}(n^2)$ to $\mathcal{O}(Kn)$. Our results position greedy Householder products as a theoretically grounded tool for projection, compression, and denoising of orthogonal matrices in learning systems.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper presents a greedy, eigenspace-based algorithm for approximating or recovering arbitrary orthogonal matrices using a minimal number of Householder reflections. The approach is theoretically grounded, with provable accuracy guarantees, robust to noise, and broadly applicable. By recursively projecting the input onto eigenspaces induced by Householder reflections, it delivers verifiable approximation bounds and a consistent, interpretable decomposition. The framework is especially relevant for applications that require structured orthogonality, such as orthogonal parameterizations in RNNs and Transformers.
+
+### Strengths
+* The proposed greedy eigenspace–based algorithm approximates or recovers arbitrary orthogonal matrices using the minimal number of Householder reflections.
+
+* The method denoises structured orthogonal matrices under noise, leveraging the same greedy eigenspace framework.
+
+* The approach is versatile, with demonstrated applicability to dictionary learning, model initialization, and neural network compression.
+
+### Weaknesses
+I acknowledge that I am not fully familiar with prior algorithms or works related to Householder-based orthogonal matrix approximation, and therefore cannot conclusively determine whether the comparisons in this paper are sufficiently comprehensive or representative of the state of the art. My comments below are thus partial and intended for reference only:
+
+* The theoretical assumptions appear relatively strong — the noise analysis relies on GOE/Ginibre models, while the noise structures in practical deep networks (e.g., non-Gaussian or structured noise) are usually more complex. It would be valuable to discuss whether the theoretical results in Section 4 can be extended to non-Gaussian noise settings.
+
+* The paper does not clearly analyze the improvement or difference between Algorithm 2 and Algorithm 1. From the expression $V_{k+1} = H_k \hat{V}^\top V = H_k V_k$, it seems that the two algorithms follow essentially the same update rule, except for the stopping criterion. If this understanding is incorrect, the authors should explicitly clarify the distinction between the two algorithms.
+
+* In Lemma 4, Theorem 3, and Theorem 4, the results are said to hold with high probability (w.h.p.), but the corresponding probability level is not specified. Providing explicit probability bounds or constants would make the theoretical claims more concrete.
+
+* The appendix compares the proposed method with SVD, QR, and Hm-DLA in terms of reconstruction error, but does not include a comparison of computational time among the three. Including runtime results would strengthen the empirical evaluation.
+
+### Questions
+* Does $\hat H$ denote the denoised estimate of the perturbed matrix $V$ introduced in Lemma 4? The paper uses $V$, $\hat V$, and $\hat H$ without clear, explicit definitions, which is confusing.
+
+* The main text presents numerical results only for Algorithm 1, yet the description suggests Algorithm 2 is also a primary contribution. I recommend moving (at least a representative subset of) Algorithm 2’s numerical comparisons from the appendix into the main paper to substantiate its impact.
+
+* Please state the exact value(s) of the stopping threshold $\epsilon$ used in the experiments (e.g., for Figures 1 and 3), and briefly justify the choice.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The goal of the paper is to approximate a $n \times n$ real orthogonal matrix $V$ by a product of householder reflections. A householder reflection is a matrix of the form $I - uu^T$ for a unit vector $u$. The main guarantee is an algorithm which outputs a product $V'$ of $m$ (assuming it is even) householder matrices and satisfies $\|V - V' \|_F^2$ $\le  O( n - Tr(V) - m +\sum_i \lambda_i  )$, where the sum is only over the smallest $m$ eigenvalues of $(V + V^T)/2$. The algorithm works by iteratively finding a top singular vector of $V$ minus the partial product found so far and adding that as the next $u$ in the new householder reflection.
+
+### Strengths
+The problem of approximating orthogonal matrices by householder reflections is a cute numerical analysis problem and empirically the algorithm seems to perform well on synthetic matrices. The proposed algorithm is also quite simple to implement.
+
+### Weaknesses
+It was not clear to me if the error guarantees of the main theorem (Theorem 2) are very meaningful. In the regime where we think of $m$ as small, it seems like the $n$ value in the error term could dominate, which would be not be so nice since one can easily get an error $\sqrt{n}$ approximation by approximating an orthogonal matrix trivially by the all zeros matrix. There also seems to be a slight issue in the statement of the theorem since the algorithm has an $\epsilon$ parameter but it is not present in the theorem statement. 
+
+I am also not sure if this specific type of approximation is well justified in practice. The authors argue that existing method such as SVD 'lack structure' but don't address why householder reflections are a 'good structure' to have in practice. Sure, geometrically they are nice but a low rank approximation is also quite easy to store/fast to compute on in practice. It is also not so clear to my why there is a strong need to approximate orthogonal matrices. I understand some layers in some neural network architectures are orthogonal matrices, but a vast majority of weight layers are not. Since their method only works for orthogonal matrices and uses a very niche form of approximation (product of householder reflections), this feels like a niche result where I cannot identify a community that would be very excited about it. 
+
+I am also not convinced by their experimental results which are conducted on very synthetic matrices, exactly tailored to their theorem statement. While this can be nice as a proof of concept result, it does not convince the reader that this task is 'widely applicable' as stated in the intro. Given that this problem itself is not so theoretically interesting version of matrix approximation, it is disappointing that the experiments are very lacking in their scope. In terms of baselines, I don't think just comparing to prior work using only household reflections is enough. This is because the central thesis of the paper is that we must have fast approximations to orthogonal matrices, so they why not consider other approximation methods as well? For example, SVD or other much faster low rank approximation algorithms based on sampling or sketching. These are not discussed in the paper. 
+
+Ultimately, I think this paper would be a better fit in a numerical analysis / linear algebra journal or conference.
+
+### Questions
+Can the authors comment on the tightness of the error bounds? How does it compare with the SVD bound? How should the reader think about what the right 'scale' of the error term? I.e., why is the error bound given in Theorem 2 the natural bound? Having any sort of lower bound on the error term (i.e. any approximating using $m$ householder reflections must incur some error) would help.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper extends the constructive decomposition of [Uhlig01] for noisy orthogonal matrices. The generalized idea is similar to that of [Uhlig01], where, by the so-called CDS theorem, any $n\times n$ orthogonal matrix $V$ can be factorized exactly into $n-m$ Householder reflections, where $m=dim(ker(V-I_{n}))$. Concretely, we have $H_{n-m}\dots H_{1}V=I$ where $H_{k}$ are Householder reflection, and therefore $V=H_1\cdots H_{n-m}$. The key innovation of the paper is to provide a different scheme for selecting the Householder vector when doing this decomposition. In [Uhlig01], the Householder vector $u$ is constructed by first randomly selecting a unit vector $x$ satisfying $Ux\neq x$, then set $u=Ux-x$, where $U=H_{k}\dots H_{1}V$ is the symmetrized partial decomposition of $V$. In this paper, the author sets $u$ to be the eigenvector of symmetrized $U$ with the minimal eigenvalue. The author shows that this choice is also good for denoising, i.e., $H_1\cdots H_{n-m}$ is a good approximation of $V'$ when $V=V'+N$ where $V'$ is orthogonal and $N$ is a real Ginibre matrix. The author also provides a projection-quality bound, which appears to be novel. Empirically, the method outperforms [Uhlig01] in approximation error for both noiseless and noisy targets, and compares favorably to Hm‑DLA for orthogonal dictionary learning.
+
+### Strengths
+The paper proposed a novel algorithm for denoising approximation of orthogonal matrices, and provided a comprehensive theoretical analysis of the error bound. The experiments were also well structured and comprehensive. The writing was easy to follow for the most part. The pseudocode of Alg. 1/2 is concise and easy to implement.
+
+### Weaknesses
+The biggest weakness to me is that the author failed to convey the importance of the task of denoising an orthogonal matrix. Besides ViT QKV, when do we have a near orthogonal matrix with the nice noise distribution as tested in the paper? If we parameterize something with an orthogonal matrix, then there is no noise and the method from [Uhlig01] suffices. If we start with some random square matrix, then there is no guarantee that the matrix can be written in the form of orthogonal + i.i.d. Gaussian as assumed in the paper.
+
+On experiment:
+- The paper emphasizes reconstruction error and accuracy retention (e.g., expRNN Copy Task, seqMNIST, ViT), but does not provide benchmarking on inference/training speedups or peak memory of their methods.
+
+Also, the writing is sometimes too terse to be clear. For example:
+- In Prior Work that introduces the method of [Uhlig01], the definition of $x$ is not explained.
+- In Theorem 4, the definition of $\Delta$ and $\theta$ was not explained.
+
+### Questions
+- In the simulation, it seems that the bound is always below the ground truth error. I get that the bound is probabilistic, but it cannot be that the bound is violated all the time?
+- The stopping rule for algo 1 is pretty clear. But for algo 2, how does it link to the theory (e.g. theorem 4)? It is not very clear to me.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces a greedy eigenspace-based algorithm for decomposing orthogonal matrices into simpler building blocks, called Householder reflections. At each step, the algorithm identifies the most important direction in the matrix by finding a specific pattern in its symmetric part, then uses this to create the next reflection component. The method ensures the approximation stays orthogonal at every level K, provides mathematical guarantees on approximation quality (Theorem 2), and automatically identifies when exact reconstruction is achieved (Theorem 1). For cleaning noisy matrices, when random noise decreases appropriately with matrix size, the method achieves proven error reduction with high probability (Theorems 3-4). Testing shows the approach works well in practice: synthetic examples confirm the theoretical predictions, comparisons demonstrate over 80% error reduction versus previous methods by Uhlig and Hm-DLA, and applications to recurrent neural networks and vision transformers show effective compression with controllable accuracy trade-offs, reducing storage needs from quadratic to linear scaling.
+
+### Strengths
+- **Originality:** The work provides the first greedy projection algorithm onto $\mathcal{H}_K$ with per-iteration error bounds and orthogonality preservation at each truncation. Theorem 1's minimality certificate connects eigenspace dimension with algorithmic termination. The denoising theory (Theorems 3-4) provides a rigorous high-dimensional analysis of the Householder-based factorization under random-matrix noise. The eigenspace-based approach offers fresh geometric insight compared to column-space methods like QR. 
+
+- **Quality:** The technical details are rigorous, with complete proofs in Appendices B-C and careful treatment of odd/even iteration distinctions (Lemmas 2-3). Experimental design is comprehensive, spanning multiple matrix distributions (Gaussian, Bernoulli, sparse, chi-squared), explicit bound-vs-empirical comparisons (Figures 1-2), and diverse architecture ablations (expRNN, ViT). 
+
+- **Clarity:** The paper progresses logically from motivation through theory to applications. Algorithm 1 is straightforward, requiring only eigenvalue decomposition per iteration. Mathematical exposition balances rigor with accessibility, with complete proofs. 
+
+- **Significance:** The work addresses a critical gap at the intersection of numerical linear algebra and modern ML. By providing principled orthogonal matrix compression with provable error control and \(O(Kn)\) storage/computation, it enables practical deployment in resource-constrained settings.
+
+### Weaknesses
+- **Restrictive isotropic noise assumption limits denoising applicability:** The denoising theory (Theorems 3-4) assumes noise matrices from Ginibre or GOE ensembles with i.i.d. or symmetric i.i.d. entries, which is unrealistic for many practical scenarios. Real-world noise often exhibits structure, row correlations, or low-rank perturbations, which violates the isotropic assumption. Section D.4.4 introduces anisotropic noise (column scaling factors 0.5-2) and shows the method "works" in Figure 11, but explicitly states "we cannot provide theoretical guarantees here." This leaves critical questions unanswered: At what level of anisotropy does the method fail? Although the proposed technique has its merits, elaborating on the noisy reconstruction would improve the paper.
+
+- **Fragmented complexity analysis:** Computational costs are scattered across Sections 3.1, A.3, D.1, E.1 without unified guidance. Key questions remain: (i) How many Lanczos iterations are needed versus spectral gap $\lambda_2 - \lambda_1$? (ii) What are wall-clock times for decomposition versus inference savings in neural experiments? Table 3 shows losses but no timing. A single table comparing FLOPs, memory, time, and accuracy for $K$ across all settings would clarify when the method is cost-effective. 
+
+- **Limited baseline comparisons:** Comparisons against Uhlig (Figure 3) and Hm-DLA (Figure 7) establish superiority, but gradient-based optimization directly minimizing $\vert\vert V - H_1 \cdots H_K\vert\vert_F^2$ over $Kn$ Householder parameters are absent. Adding this would clarify whether greedy approximation achieves competitive quality with the "global" optimum or sacrifices accuracy for speed. 
+
+- **Presentation:** The equations are not numbered in the manuscript, which makes it hard to refer to them. Is the LHS of both equations on Page 7 (Section 4,2), line 329 and line 336, the same?
+
+### Questions
+**1. Extending denoising theory to structured noise:** Can the authors extend Theorems 3-4 to handle anisotropic or structured noise? An empirical characterization of the failure mode by plotting denoising error versus the anisotropy ratio (range of column scaling factors) to identify when performance degrades would improve the paper. 
+
+**2. Spectral gap and Lanczos convergence:** For experimental matrices, report: (a) gap distributions, (b) actual Lanczos iterations to reach $10^{-8}$ tolerance at each $k$, (c) whether iteration counts grow or the gap widens via deflation. Do trained orthogonal matrices exhibit structured spectra, making Lanczos particularly fast/slow? Does $O(n^2)$ hold in practice? 
+
+**3. Orthogonality in NN compression:** Tables 6-7 demonstrate catastrophic failure when compressing all ViT blocks (14% accuracy), yet the authors provide no quantitative analysis of why. Can the authors report the $\vert\vert V^\top V - I\vert\vert_F$ for all attention matrices before compression?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

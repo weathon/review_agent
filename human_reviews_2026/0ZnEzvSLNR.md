@@ -1,0 +1,194 @@
+# Self-Resource Allocation in Multi-Agent LLM Systems
+
+- Decision: Reject
+- Scores: 2, 6, 2, 6
+
+## Abstract
+With the development of LLMs as agents, there is a growing interest in connecting agents into multi-agent systems to solve tasks concurrently, focusing on their role in task assignment and coordination. This paper explores how LLMs can allocate computational tasks among agent networks, considering factors such as cost, efficiency, and performance. We address key questions, including the effectiveness of LLMs as orchestrators and planners, comparing their effectiveness in task assignment and coordination. Our experiments show that LLMs can achieve high validity and accuracy in resource allocation tasks. We find that the planner method outperforms the orchestrator method in handling concurrent actions, resulting in improved efficiency and better utilization of agents. Furthermore, we show that providing explicit information about worker capabilities improves the allocation strategies of planners, particularly when dealing with suboptimal workers.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This work tackles a key question for multi-agent AI systems: what's the best way to coordinate a team of LLM agents? The authors pit two strategies against each other in a simulated kitchen environment: a centralized 'Orchestrator' that dictates every agent's exact move, and a semi-decentralized 'Planner' that provides a high-level strategy, leaving individual agents to work out the details. The experiments reveal a crucial trade-off: while the Planner approach is far more cost-efficient (more tasks completed per dollar), the micro-managing Orchestrator consistently achieves higher absolute performance, completing more tasks overall. The paper argues for the Planner's efficiency, but its own data suggests this comes at the cost of peak performance.
+
+### Strengths
+1. As LLMs evolve into autonomous agents, exploring self-resource allocation is pertinent. The work builds on foundational ideas (for example Minsky's Society of Mind) and could inspire further studies on the applications.
+
+2. The distinction between Individual, Orchestrator, and Planner methods in Experiment 2 provides a novel lens for analyzing centralized vs. decentralized coordination in LLM systems. The use of CuisineWorld as a dynamic benchmark is appropriate, and the efficiency metric (orders completed per dollar) offers a practical way to quantify cost-performance trade-offs, potentially influencing real-world deployments where computational costs are a barrier.
+
+3. The findings on Planner efficiency and capability awareness may inform scalable multi-agent designs.
+
+### Weaknesses
+1. The experiment sets up a "strawman" comparison by evaluating out-of-the-box ability of LLM against the Hungarian Algorithm, a polynomial-time optimal solver for assignment problems. It is well-known that LLMs, especially without COT, perform poorly on strict combinatorial optimization tasks. The results "Figure 4 showing <20% accuracy even for GPT-4o" lead to misleading conclusions, suggesting the need for "more efficient alternatives" without truly assessing LLMs as orchestrators. A more meaningful setup would evaluate LLMs' ability to use tools like the Hungarian Algorithm for planning, rather than replacing it as a solver. Thus, Experiment 1 fails to support the paper's core claims.
+
+2. The authors claim the Planner method "outperforms" the Orchestrator in handling concurrent actions, emphasizing improved efficiency. However, this conflates efficiency (orders per cost) with absolute performance (total orders completed). Table 2 data reveals the opposite: Orchestrators (Claude-3.7 with 98 orders for 6 agents) often achieve higher absolute performance than Planners (Claude-3.7 + Llama-70B with 77 orders). The Planner's efficiency gains come at the expense of task completion, representing a performance-cost trade-off rather than outright superiority. The abstract and conclusions misleadingly equate "higher efficiency" with "better," ignoring this trade-off and potentially misguiding readers.
+
+3. The comparison between "On-the-fly Allocation" (where the planner must dynamically infer worker capabilities) and "Informed Allocation" (explicit capability hints) is poorly defined. The paper does not explain the inference mechanism—e.g., whether the planner observes failures, uses feedback loops, or has any basis for dynamic learning. Without such details, the finding that Informed Allocation performs better is obvious and unsurprising. The experiment offers no valuable insights into how LLMs could online-learn or infer agent capabilities, limiting its contribution.
+
+### Questions
+S: The paper is riddled with structural errors, such as duplicate "Problem Definition" sections on page 3 (labeled as both Section 3 and 4) with overlapping content. 
+
+Figure captions are erroneous (e.g., Figures 4 and 5 share identical captions, despite Figure 5 focusing on error analysis). Figure 9's layout is chaotic, misusing Figures 6–8 as subheadings, which hinders readability. 
+
+The Ablation Study (Table 3) is incomprehensible, with unexplained values like "+0.06" or "+2.43," rendering it valueless to readers. These issues reflect poor attention to detail and undermine the paper's credibility.
+
+Q: How were paraphrased prompts generated, and why does the Planner show higher variability?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper studies how multi-agent systems built upon LLMs can perform task and resource allocation autonomously. The authors compare three coordination strategies across multiple settings: (1) static assignment problems (benchmarked against the Hungarian algorithm), (2) concurrent multi-agent tasks in a simulated CuisineWorld environment, and (3) capability-aware allocation scenarios with both informed and on-the-fly capability estimation. The results show that larger LLMs generally yield higher assignment accuracy but at greater cost; the Planner setup outperforms the Orchestrator under concurrent execution by reducing idle actions; and explicitly encoding worker capabilities significantly improves overall efficiency, especially for weaker agents.
+
+### Strengths
+- The paper systematically studies three coordination paradigms across multiple domains, providing a multi-dimensional evaluation of LLM-based resource allocation.
+
+- By explicitly encoding worker capabilities, the paper introduces a practical and generalizable way to improve multi-agent collaboration.
+
+- The study systematically analyzes how the Planner adapts task distribution based on agents’ abilities, demonstrating that explicit capability information significantly improves overall system performance, especially when some agents are suboptimal.
+
+- By directly comparing the Orchestrator and Planner strategies under concurrent action settings, the authors uncover clear efficiency advantages of the Planner.
+
+### Weaknesses
+- In the CuisineWorld concurrent-action experiments, comparisons are limited to Orchestrator and Planner paradigms. Including algorithmic or learning-based baselines (e.g., heuristic schedulers, RL-based task allocation, or rule-based controllers) would contextualize the performance improvements more convincingly.
+
+- The reported cost metric does not clarify whether it includes token usage, API latency, or parallelization overhead. Presenting token-level statistics and latency–cost trade-offs would make the resource-efficiency analysis more interpretable.
+
+- Although the authors analyze invalid assignments, the paper does not propose or evaluate mitigation methods. Adding a constraint-checking post-processor or structured prompt templates could reduce these failures and strengthen robustness.
+
+- The paper does not report the number of trials, random seeds, or variance estimates. Confidence intervals or standard deviations should accompany results such as Completed Orders and Cost to support claims of performance differences.
+
+- The accuracy of the assignment evaluation depends on GPT-4o acting as an automatic judge. This introduces potential bias, as both generation and evaluation rely on similar model families.
+
+### Questions
+- Both Section 3 and Section 4 share the same title, Problem Definition, which is likely a formatting or organizational oversight. Could you clarify whether these sections describe distinct problems? This duplication currently makes the paper structure confusing.
+
+- What is the behavior of the Planner when the provided capability information is inaccurate or inconsistent? A robustness test under noisy capability descriptions would strengthen the claim that explicit ability modeling consistently improves allocation quality.
+
+- How many assignment matrices were evaluated per model, and what was the distribution of task/agent counts? Are there scaling trends with matrix size?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper explores the ability of LLMs to allocate tasks and resources in multi-agent systems, comparing three coordination strategies: Individual, Orchestrator, and Planner. The authors evaluate these approaches in three settings: (1) a static assignment problem with explicit costs; (2) a dynamic cooking environment (CuisineWorld) with delayed rewards; and (3) a capability-aware setting with heterogeneous agents. The key findings include: (i) LLMs can solve assignment problems, with accuracy improving with model size—at significant computational cost; (ii) the Planner paradigm achieves higher efficiency and better agent utilization than the Orchestrator in concurrent tasks; and (iii) while LLMs struggle to infer agent capabilities on the fly, their allocation quality improves markedly when provided explicit capability information, highlighting their sensitivity to worker heterogeneity.
+
+### Strengths
+1.	The topic addressed in the paper is important: enabling LLM-based agents to perform self-resource allocation in multi-agent systems, which is critical for advancing the field of autonomous agents.
+2.	The findings are intuitive and practically relevant, for example, the planner approach outperforms the orchestrator, and that explicitly providing information about worker capabilities improves allocation strategies.
+
+### Weaknesses
+1.	Insufficient analysis: While the experiments provide empirical evidence, the paper falls short in explaining the underlying reasons behind the observed results. Merely presenting factual outcomes without deeper interpretation limits the contribution.
+2.	Experimental setup limitations: It would be better to include tests with state-of-the-art models such as GPT-5, Claude-4.5 Sonnet, or Qwen3. And the evaluation relies solely on toy environments (e.g., CuisineWorld). Demonstrating applicability in real-world scenarios will be more exciting.
+3.	There are some typos in the paper:
+a)	There are incorrect citation formats, I highly encourage the author go through the paper for a double check. 
+
+b)	Sectioin 3 and 4 with duplicated tiltle
+
+### Questions
+see weakness
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper investigates self-resource allocation in multi-agent LLM systems, formalizing a budget-aware objective and comparing three organizational regimes—Individual (decentralized), Orchestrator (centralized, fine-grained action emission), and Planner (centralized high-level planning with low-cost decentralized executors). The authors evaluate (i) static assignment, where LLMs attempt to reproduce Hungarian-optimal matchings; (ii) concurrent scheduling in a simulated task environment, measuring throughput-per-dollar and idle-action rates; and (iii) capability-aware allocation, contrasting on-the-fly skill inference with explicit ability hints. Across settings, the Planner consistently yields the best cost-efficiency and fewer no-ops, while exposing coarse worker capability profiles further boosts performance in heterogeneous pools; by contrast, direct LLM orchestration remains error-prone on constrained matching (e.g., miscounted costs, constraint violations). Overall, the work contributes a reproducible evaluation protocol and practical guidance: concentrate expensive reasoning in compact planning steps, delegate execution to cheaper models, and surface lightweight ability profiles to the planner under budget constraints.
+
+### Strengths
+- By casting self-resource allocation as a cost-aware comparison of Individual / Orchestrator / Planner regimes, the paper adds a fresh systems lens beyond prior role-playing multi-agent frameworks.
+- The methodology pairs static assignment with a cooperative CuisineWorld/Overcooked-style concurrent benchmark, yielding both groundable checks and ecologically valid coordination stress-tests.
+- The three regimes are distinguished crisply, and the Planner is explained via a ReAct-like separation of reasoning and action, complemented by interpretable metrics (throughput-per-dollar, idle/no-op).
+- The results translate into actionable guidance for real systems—concentrate expensive reasoning in compact planning and delegate execution to cheaper agents.
+
+### Weaknesses
+- The experiments are currently restricted to a single benchmark, CuisineWorld, which does not guarantee that the observed behaviors generalize to other domains such as web-based agents tasks. 
+
+- Several key tables and figures present point estimates without reporting variance, confidence intervals, or statistical significance across multiple runs. Without such analysis, it remains unclear whether the reported efficiency gains are consistent, reproducible, or simply artifacts of stochastic sampling and prompt variability.
+
+- The replanning mechanism—including trigger frequency, cost thresholds, and congestion conditions—is not systematically ablated or visualized, leaving open when and why replanning contributes most to performance improvements. 
+
+- The evaluation stops at six agents and moderate task density, offering limited insight into how the proposed Planner and Orchestrator architectures scale under larger or more heavily coupled systems.
+
+### Questions
+- Could the authors rerun the Planner–Orchestrator comparison under a fixed budget or total token constraint to isolate architecture effects from pricing differences?
+
+- If the Orchestrator adopted a hierarchical two-level scheme (strong model planning, cheap model executing), would its efficiency approach that of the Planner?
+
+- Code, prompts, and data be fully open-sourced?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,198 @@
+# Enhancing Offline-to-Online Reinforcement Learning by Adaptive Experience Aligned Diffusion Sampling
+
+- Decision: Reject
+- Scores: 4, 6, 2, 4
+
+## Abstract
+Pretraining models on diverse prior data and fine-tuning them on domain-specific tasks is an efficient training paradigm to obtain promising performance on scenarios with limited data or interaction. In the context of reinforcement learning (RL), such a paradigm is named offline-to-online (O2O) RL, where the pretrained agent needs to revise and improve the offline pretrained policy based on its own experience in the online environment. Although prior works in the literature have proven the efficiency of fine-tuning the offline-pretrained agent without offline data, they often require additional designs to overcome the unstable online fine-tuning induced by the discrepancy between the offline and online data. Moreover, existing works demonstrate that introducing offline data when training an online agent from scratch is sample-efficient. Therefore, reusing the knowledge from the offline data properly should be favorable to O2O RL. 
+In this paper, we introduce Adaptive Data Aligned Diffusion \textbf{S}ampling (AD2S), attempting to accelerate the O2O RL fine-tuning from a perspective of data generation. Our method comprises three key components: distance-based experience alignment, curiosity-driven data prioritization, and data regeneration with amplified guidance. AD2S is a plug-in approach and can be combined with existing methods in the offline-to-online RL setting. By implementing AD2S to off-the-shelf methods, Cal-QL, empirical results indicate improvement in commonly studied datasets.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces Adaptive Data Aligned Diffusion Sampling (AD2S), a novel method for enhancing offline-to-online reinforcement learning. The core idea is to use a diffusion model to generate synthetic data that accelerates the fine-tuning of an agent pre-trained on an offline dataset. AD2S is designed to be a plug-in approach that can be combined with existing offline-to-online RL algorithms. The paper demonstrates its effectiveness by integrating it with Cal-QL, a state-of-the-art method in this domain.
+
+### Strengths
+The paper’s primary strength is its direct and intelligent approach to solving the fundamental challenge of offline-to-online (O2O) fine-tuning. The authors correctly identify the tension between the conservative nature of offline-trained agents and the need for efficient online exploration. Instead of naively replaying offline data, the method provides a sophisticated mechanism to generate targeted, "near on-policy" synthetic data. This is a more reasonable and effective strategy for bridging the significant distribution gap between the offline and online settings. The three-stage pipeline (alignment, prioritization, and regeneration) is a logical way to ensure the generated data is actively steered towards high-reward and high-novelty regions.
+
+### Weaknesses
+1. While the proposed pipeline is effective, its overall contribution feels more incremental than foundational. The paper essentially combines several well-established techniques from different areas of reinforcement learning into a single framework. Since the use of diffusion models for data generation in O2O scenarios, curiosity-driven learning, and importance weighting are all well-developed domains, this paper comes across as a strong piece of engineering work but lacks significant technical originality.
+2. The AD2S pipeline is a complex system, which raises my practical concerns about its usability and efficiency.
+3. I hope the authors can add some real-world validation or extend the O2O to domains like large language models.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes AD2S (Adaptive Data-Aligned Diffusion Sampling) to improve offline-to-online reinforcement learning by generating high-quality, task-aligned synthetic data. AD2S adaptively aligns offline data with online samples, prioritizes informative experiences via curiosity, and uses a guided diffusion model to regenerate data in promising regions. Experiments show consistent performance gains over existing baselines.
+
+### Strengths
+1. Originality:
+Combines data alignment, curiosity-based prioritization, and guided diffusion sampling into a unified framework for offline-to-online RL.
+
+2. Quality:
+Methodologically sound with coherent design addressing distribution shift and exploration. Experiments on diverse D4RL tasks show consistent and meaningful gains over baselines.
+
+3. Clarity:
+Well-organized and clearly written.
+
+4. Significance:
+Provides a practical, general, and plug-in approach that improves sample efficiency and stability in O2O RL, with strong potential for broader real-world impact.
+
+### Weaknesses
+1. Lack of theoretical grounding:
+The method is intuitively motivated but lacks formal theoretical analysis of its effect on sample efficiency.
+
+
+2. Dependence on model quality:
+Performance may degrade with imperfect dynamics or diffusion models; robustness analysis is missing.
+
+3. Computational cost:
+Diffusion sampling introduces extra overhead, but runtime comparisons with lighter baselines are not provided.
+
+### Questions
+1. How sensitive is performance to imperfect diffusion models?
+
+2. What is the computational overhead compared to simpler baselines?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces AD2S (Adaptive Data Aligned Diffusion Sampling), a plug-and-play data generation framework for offline-to-online reinforcement learning (O2O RL). A2DS aligns near on-policy transitions via density ratios, prioritizes high-curiosity/high-reward samples, and regenerates synthetic data using a diffusion model with amplified guidance. Evaluated on D4RL MuJoCo and Maze2D benchmarks, AD2S consistently improves upon strong baselines like Cal-QL, especially on low-quality datasets.
+
+### Strengths
+- This paper proposes AD2S, a hybrid-driven data generation method combining advantage and curiosity signals to improve policy performance in offline-to-online RL.
+- AD2S demonstrates strong performance on MuJoCo tasks, achieving state-of-the-art results across most tasks.
+- The ablation studies are comprehensive, effectively validating the contribution of each module and the choice of hyperparameters.
+
+### Weaknesses
+- The writing of this paper needs improvement. Key notations and formal definitions are missing (e.g., $\mathcal{D}^\text{re}$, $\mathcal{D}^\text{aligned}$, and the detailed loss function in Equation 7), making it difficult to follow the method section until after reading the framework summary. This hinders understanding of AD2S’s algorithmic flow and implementation details.
+- The proposed statistical relative advantage $A(s, a) = (r - r_\text{mean}) / r_\text{std}$ does not reflect true advantage, as $r_\text{mean}$ and $r_\text{std}$ are constants, resulting in a policy-agnostic normalized reward rather than a policy-dependent advantage. In sparse-reward settings (e.g., AntMaze), this estimator may collapse to near-zero for most transitions, rendering advantage weighting ineffective.
+- The evaluation is limited to MuJoCo tasks. Performance on sparse-reward or pixel-based domains remains unverified.
+- The paper lacks an analysis of additional computational costs introduced by each component of the algorithm.
+- The authors should also evaluate sample efficiency (e.g., online training return curves) and whether performance drops occur during the offline-to-online transition. These critical metrics are missing from the experiments.
+
+### Questions
+- How does AD2S perform in sparse-reward environments (e.g., AntMaze), where the relative advantage estimator may collapse?
+- Can the framework be extended to pixel-based or visual RL, where reward estimation and density ratio modeling are significantly more challenging?
+- What is the computational cost per online step when using AD2S? 
+- How does AD2S perform in terms of sample efficiency? Can it mitigate performance drops when policies switch from offline to online settings?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes Adaptive Data Aligned Diffusion Sampling (AD2S), a diffusion-based data augmentation method for offline-to-online (O2O) RL. The proposed method aims to accelerate online fine-tuning by generating synthetic transitions that are both high-rewarding and near on-policy. To achieve this, they design a three-step process: (1) distance-based experience alignment using a density ratio to select transitions that are close to on-policy distribution, (2) curiosity-driven data prioritization to identify novel and informative transitions, and (3) diffusion-based regeneration of synthetic data with amplified condition guidance to push the synthetic data toward high-rewarding regions. Experimental results, implemented on top of Cal-QL, show that the proposed method improves the sample efficiency of online fine-tuning.
+
+### Strengths
+S1. (Adaptive data reuse)
+The proposed alignment process identifies near on-policy and high-rewarding transitions by combining density-ratio estimation with standardized advantage weighting. This alignment mechanism is conceptually sound for stabilizing Q-learning during online fine-tuning.
+
+S2. (Validation of synthetic data quality)
+By employing curiosity-based prioritization and amplified guidance in the diffusion process, the proposed processes can synthesize data in under-explored, high-reward regions. Visual analyses using t-SNE embeddings and oracle rewards (Figure 4) indicate that the proposed method generates data closer to high-reward, high-novelty regions compared to the baselines, also synthesizing data that is distinct from both the offline dataset and online replay buffer
+
+S3. (plug-in compatibility)
+The proposed method can serve as a plug-in generator that augments existing O2O RL frameworks without modifying the backbone algorithm. Experimental results (Tables 1, 6) show that the method consistently improves performance across existing O2O RL baselines.
+
+### Weaknesses
+W1. (Evaluation on limited domains)
+Although results are reported on MuJoCo and Maze2D, several challenging sparse or semi-sparse reward MDPs (e.g., antmaze-umaze-v2, pen-human-v1, door-human-v1, and OGBench[1]) are not reported. Evaluations on these MDPs would more convincingly establish the generality of the proposed method. In addition, providing learning-curve plots would help characterize the behavior of the agent and reveal sample-efficiency trends during online fine-tuning.
+
+W2. (Ambiguous effectiveness of the advantage estimator)
+The proposed method replaces learned $Q-V$ advantages with a standardized reward during fine-tuning to improve stability. This standardized reward (eq. 8) is defined by a single-step reward and may not correlate with long-horizon performance in sparse or semi-sparse MDPs. For example, in binary-reward MDPs such as Antmaze, most transitions receive zero reward; it is unclear whether the standardized reward signal can reliably prioritize transitions that lead to goal-reaching behaviors. Broader analyses on sparse reward MDPs are needed to validate this advantage estimation design choice and to quantify its impact on the quality of synthesized data.
+
+W3. (Missing algorithmic details)
+While the three-step process is clearly presented at a high level, several operational specifics are insufficiently described. In particular, the roles and usage of $P_{DR}$ and $P_{Curi}$ in Table 4 are not fully specified.
+
+
+**Minor**
+
+- typo at line 124: $\nabla_x\log p(x;\sigma k)$ -> $\nabla_x\log p(x;\sigma(k))$
+
+- ambiguous notation at line 258: $\mu(0<\mu...)$
+
+[1] Park, Seohong, et al. "Ogbench: Benchmarking offline goal-conditioned rl." arXiv preprint arXiv:2410.20092 (2024).
+
+### Questions
+Could you provide results or analyses on the weaknesses? In particular, it would be valuable to include experiments or discussions on sparse or semi-sparse reward domains.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

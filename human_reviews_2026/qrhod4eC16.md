@@ -1,0 +1,151 @@
+# Fractured Chain-of-Thought Reasoning
+
+- Decision: Reject
+- Scores: 2, 4, 6
+
+## Abstract
+Inference-time scaling techniques have significantly bolstered the reasoning capabilities of large language models (LLMs) by harnessing additional computational effort at inference without retraining. Similarly, Chain-of-Thought (CoT) prompting and its extension, Long CoT, improve accuracy by generating rich intermediate reasoning trajectories, but these approaches incur substantial token costs that impede their deployment in latency-sensitive settings. In this work, we first show that truncated CoT, which stops reasoning before completion and directly generates the final answer, often matches full CoT sampling while using dramatically fewer tokens. Building on this insight, we introduce Fractured Sampling, a unified inference-time strategy that interpolates between full CoT and solution-only sampling along three orthogonal axes: (1) the number of reasoning trajectories, (2) the number of final solutions per trajectory, and (3) the depth at which reasoning traces are truncated. Through extensive experiments on five diverse reasoning benchmarks and several model scales, we demonstrate that Fractured Sampling consistently achieves superior accuracy-cost trade-offs, yielding steep log-linear scaling gains in Pass@k versus token budget. Our analysis reveals how to allocate computation across these dimensions to maximize performance, paving the way for more efficient and scalable LLM reasoning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper challenges the common assumption that complete, long chain-of-thought (CoT) traces are necessary for accurate reasoning. The authors show that incomplete or truncated CoT trajectories can still yield highly accurate results—a concept they term Fractured Sampling. They introduce Depth of Reasoning (H) as a new sampling axis, complementing existing dimensions of Trajectory Sampling (n) and Solution Sampling (m). Empirical validation is conducted on five challenging reasoning benchmarks (MATH500 Lv5, AIME24, AIME25, AIMO2, GPQA) across multiple model scales (e.g., DeepSeek-R1, Qwen, etc.), demonstrating consistent improvements under equal token budgets.
+
+### Strengths
+- The paper identifies an under-explored dimension of inference-time sampling in CoT-based LLM reasoning—not only how many reasoning chains or final answers to generate, but where in the reasoning trace sampling should occur.
+- The empirical evaluation spans several mathematical and scientific reasoning benchmarks, using models of various scales, showing consistent and interpretable trends.
+- The method operates purely at inference time without requiring retraining, making it practical for latency- or resource-constrained settings.
+- The concept of fractured sampling (sampling across reasoning depth) is novel and provides new insights into inference-time scaling laws.
+
+### Weaknesses
+- Line 128: Pass@k is introduced as one of the sampling schemes. However, Pass@k is an evaluation metric that requires access to ground-truth answers, not a sampling method. Unless I am misunderstanding, please clarify this distinction in the text.
+
+- Line 152: Mathematical notations are overloaded. The use of ε with multiple subscripts (sometimes εᵢ, sometimes εᵢⱼ) and later with a superscript (Line 169) reduces readability. Please standardize these notations to avoid confusion.
+- The token-budget modeling (B(n, m, H) = n·C_thinking + n·m·H·C_solution) assumes uniform cost per reasoning step or solution. In practice, later prefixes may incur different costs, and generation speeds may vary. The resulting cost–performance curves could differ in real-world compute regimes, particularly under GPU batching, caching, or branching overheads.
+- The finding that truncated CoT (i.e., stopping reasoning early and directly generating the answer) often matches full CoT accuracy (Figure 2) is intriguing but raises an important question: Why does additional reasoning not always improve accuracy? The paper includes correlation analysis but could benefit from deeper investigation into failure modes—for instance, at what prefix length correct answers typically emerge.
+- Some benchmarks (e.g., AIME with only 30 samples) are relatively small, which may reduce statistical robustness. In addition, Pass@k (measuring whether at least one of k samples is correct) does not penalize low diversity or duplicate answers.
+- While the paper focuses on accuracy metrics such as Pass@k, the quality, coherence, or interpretability of truncated reasoning traces is not analyzed. For tasks requiring human-auditable reasoning, shorter CoTs may yield less informative or less interpretable explanations.
+- Line 309: The text states that the entire reasoning trace is first generated and then divided into H equal-sized segments (based on token count, e.g., H = 16). This raises an important question: during inference, how should one choose H? If the full trace must already be generated before segmentation, how does this method actually save tokens or computation?
+
+### Questions
+- Figures 4 & 5 (Log Scale): The x-axes in Figures 4 and 5 are plotted in log scale. The meaning of the “60” mark on the x-axis is unclear.
+For example, if n = 16 and the maximum token limit is 32 768, the total token budget would be 524 288. The natural logarithm of this value is approximately 13, not 60. Please clarify how the horizontal axis is normalized or scaled (e.g., whether it represents log₁₀ of tokens, or scaled thousands of tokens).
+- Please define all model abbreviations explicitly. For example, clarify that “DS-R1-1.5B” refers to DeepSeek-R1-Distill-Qwen1.5B, and explain what “DS-R1” alone represents.
+- A more explicit description or pseudocode of the procedure would improve clarity.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces Fractured Sampling, an inference-time strategy to improve LLM reasoning efficiency and accuracy. The authors first observe that generating a truncated CoT reasoning trace can achieve accuracy comparable to a full CoT, while using far fewer tokens. Building on this insight, Fractured Sampling is proposed to interpolate between solution-only decoding and full CoT by exploring three axes: trajectory count, solution count per path, and reasoning depth. By controlling these dimensions, the approach generates a diverse set of candidate answers at various intermediate reasoning stages, leveraging the model’s internal thought process. Extensive experiments on five challenging reasoning benchmarks across several model scales demonstrate that Fractured Sampling consistently yields a better accuracy-versus-cost trade-off than standard decoding strategies. Notably, under the same token budget, this method achieves higher success rates than both solution-only sampling and full CoT sampling, effectively shifting the inference scaling curve upward. The paper provides theoretical analysis explaining these gains: sampling at intermediate reasoning steps exposes diverse error modes that are less correlated with each other, thereby increasing the probability of finding at least one correct answer. The authors also analyze how to optimally allocate a fixed token budget across the three axes, finding that devoting more budget to reasoning-depth branching typically yields the greatest benefit.
+
+### Strengths
+Novel Method: The idea of sampling intermediate reasoning steps is novel and expands on prior inference-time techniques by introducing a new axis of diversity. Unlike conventional decoding which samples only complete solutions or final answers, Fractured Sampling explicitly fractures the reasoning process, aggregating partial reasoning outcomes. This unified framework can be seen as a fine-grained TOT approach where each branch corresponds to a partial reasoning prefix.
+
+Theoretical Analysis: The paper provides a solid theoretical explanation for why Fractured Sampling works. It derives a lower-bound on the success probability by considering the diversity of failure events across the K sampled branches. The key insight is that if errors at different reasoning depths are not perfectly correlated, then sampling across those depths markedly reduces the chance that all branches fail. The authors back this up with empirical correlation matrices showing that many pairs of depth positions have low or negative error correlation. This analysis is convincing and aligns with the experimental finding that tasks with more diverse error patterns across reasoning steps gain the most from the fractured approach.
+
+Practical Insights and Guidelines: Beyond raw results, the paper offers valuable insights for practitioners. It identifies that most of the token budget in CoT reasoning is spent on the thinking steps, not on final answers. This justifies the focus on optimizing reasoning depth. The scaling-law analysis reveals a roughly log-linear improvement in success as more compute is spent, and that Fractured Sampling yields the steepest slope among the methods. The authors distill a clear guideline: if you have a fixed token budget, invest in branching along the reasoning depth first, before adding more solution samples, as the former gives higher payoff in accuracy. Such guidance is extremely useful and demonstrates the authors’ deep understanding of the method’s behavior.
+
+### Weaknesses
+Complexity and Implementation Overhead: Fractured Sampling introduces additional complexity to the inference process. It requires controlling the generation to stop at multiple intermediate points and branching out multiple final answers from each, which in practice means many forward passes or a more complex decoding procedure. This could be cumbersome to implement, especially in black-box API settings where one cannot easily intervene mid-generation. The authors note that their approach assumes access to the model’s internal sampling process, which may not be feasible for all users. Even with access, the total number of model evaluations is n * H * m for full three-dimensional sampling. If not managed carefully, this could negate the token savings or increase latency. The paper does not explicitly discuss the wall-clock latency implications; a brief analysis of real-time speed vs. accuracy would further strengthen the practicality argument.
+
+Tuning of Hyperparameters: Using Fractured Sampling effectively might require tuning the axes (n, m, H) for different tasks or models. The authors provide general guidance that allocating budget to H is most efficient, and they use fixed values like H=16, m=4 in experiments. However, an open question is how to choose the truncation depth H optimally for a new task or how sensitive performance is to this choice. In one experiment, they found that including too many early-step solutions introduced noise for the reward model selector, which they solved by heuristically discarding the first 75% of steps. This suggests some trial-and-error in finding the right balance. A more systematic approach or discussion on setting these hyperparameters would be beneficial for reproducibility.
+
+Limited Discussion of Potential Downsides: The paper could discuss more the potential downsides or failure cases of Fractured Sampling. For example, one can imagine that if a model tends to make a particular systematic error early in reasoning, branching on that step might propagate the same error to many final answers. The authors do not report significant cases where more depth branching hurt performance. It would be insightful to know if there are tasks where adding intermediate branches yields diminishing returns or even confusion. Additionally, generating many candidate answers could complicate answer selection. The paper uses a strong process reward model and majority voting to pick final answers, which may not be available in all settings. These concerns do not appear to outweigh the benefits in the tested scenarios, but acknowledging them would provide a more balanced evaluation.
+
+### Questions
+Generality to Other Domains: Have you tested or do you anticipate Fractured Sampling to be effective on non-mathematical reasoning tasks? The current benchmarks are math and science-heavy. If a task doesn’t naturally involve multi-step reasoning or if the model tends not to produce a long CoT, how would the method behave? Any insight into applying FS in those contexts would be useful.
+
+Dynamic Truncation: How was the truncation depth H decided for your experiments? Could H be set dynamically per query? You implement an early-stopping heuristic based on answer convergence. Could this idea be extended to adapt the truncation depth during generation instead of using a fixed number of steps for all queries?
+
+Model Guidance: When generating intermediate solutions at depth t, did you simply prompt the model to output an answer directly after the truncated reasoning, or did you use any special prompting? Clarifying the implementation would help: e.g., do you run the model separately for each (prefix, final-answer) pair, or generate the full reasoning once and split it? I wonder if there is a way to get the model to “decide” it has enough information at depth t to answer, perhaps using a trained value function or uncertainty measure. This could potentially reduce generating very uncertain early answers. Any thoughts on guiding the model’s internal decision of when to answer would be interesting.
+
+Selection Mechanism Robustness: In your evaluation, you rely on a process reward model to pick the best answer and also use majority voting. Did you notice any cases where these selection mechanisms failed or were biased by the presence of many partial solutions? The result where using all H=16 steps slightly hurt PRM performance suggests that lower-quality early answers can introduce noise. Your solution was to filter out early steps. Could another solution be to weight answers by depth or confidence? More generally, how critical is the choice of PRM and could a weaker selection model diminish the gains of Fractured Sampling?
+
+Integration in APIs: You mention that Fractured Sampling assumes low-level control over the model’s generation process. For commercial LLM APIs that don’t allow iterative prompting at each reasoning step, do you have suggestions on how to approximate Fractured Sampling? Do you think the benefits of FS could be attained in such scenarios?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The authors propose "Fractured Sampling" which samples solutions at multiple intermediate CoT truncation points (H), combined with multiple trajectories (n) and solutions per trajectory (m). The claim is this achieves better accuracy per token by exploiting the observation that truncated CoT often matches full CoT performance.
+
+### Strengths
+The results are nice.
+
+### Weaknesses
+LLMs generate unnecessary padding tokens after reaching correct answers. I feel like this is just rebranding early stopping + ensemble methods as a "unified framework" with three "orthogonal dimensions"? - which are actually just self-consistency (n), best-of-n (m), and early stopping (H)?
+
+1. Figure 1 shows truncated CoT is better, but Table 1 shows H=16 degrades accuracy versus H=1 when using a PRM (61.4% vs 60.4%). They need to discard the first 11 positions as "noise" to make it work. If intermediate solutions are noisy, the whole premise fails?
+
+2. Proposition 1 is using trivial inclusion-exclusion with fancy notation? I think the claim negative covariances help but Figure 3 shows mostly positive correlations (green cells dominate)?
+
+3. This paper would be stronger with comparison to proper early stopping methods, speculative decoding, or any efficient inference techniques. They compare to naive "generate 32K tokens" baseline. 
+
+4. Scaling law C_H >= max{C_n, C_m} has little theoretical justification?Why should depth dominate? It would be nice to have an explanation here.
+
+I feel like this method takes an observation (models overthink) and builds maybe an overcomplicated framework that performs worse than its own simplified version (H=-4 beats H=16)? 
+
+
+I am recommending a marginal accept, and can move my score to be higher if you address these questions. Thanks.
+
+### Questions
+Scaling law C_H >= max{C_n, C_m} has little theoretical justification?Why should depth dominate? It would be nice to have an explanation here.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

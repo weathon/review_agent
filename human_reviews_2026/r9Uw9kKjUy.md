@@ -1,0 +1,211 @@
+# Matcha: Multi-Stage Riemannian Flow Matching for Accurate and Physically Valid Molecular Docking
+
+- Decision: Reject
+- Scores: 4, 2, 6, 4, 4
+
+## Abstract
+Accurate prediction of protein-ligand binding poses is crucial for structure-based drug design, yet existing methods struggle to balance speed, accuracy, and physical plausibility. 
+We introduce Matcha, a novel molecular docking pipeline that combines multi-stage flow matching with learned scoring and physical validity filtering. 
+Our approach consists of three sequential stages applied consecutively to progressively refine docking predictions,
+each implemented as a flow matching model operating on appropriate geometric spaces ($\mathbb{R}^3$, $\mathrm{SO}(3)$, and $\mathrm{SO}(2)$). 
+We enhance the prediction quality through a dedicated scoring model and apply unsupervised physical validity filters to eliminate unrealistic poses.
+Compared to various approaches, Matcha demonstrates superior performance on Astex and PDBbind test sets in terms of docking success rate and physical plausibility.
+Moreover, our method works approximately $25 \times$ faster than modern large-scale co-folding models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors introduce Matcha, a Riemannian flow matching model for molecular docking, which achieves strong results in comprehensive benchmarks. By not directly incorporating geometric symmetries, Matcha's model architecture provides fast inference at scale. Nonetheless, a few concerns remain regarding the authors' evaluation and discussion of their proposed method.
+
+### Strengths
+1. Incorporating no geometric symmetries directly into Matcha's (DiT-based) model architecture is nice to see, following trends from recent works such as AlphaFold 3.
+2. The authors' benchmarks are comprehensive and informative, following many best practices in the field.
+3. Using the 35M parameter version of ESM to avoid overfitting is a clever idea. I haven't seen other works try this.
+
+### Weaknesses
+1. Matcha doesn't encode protein side-chain atoms, only carbon-alpha (Ca) atoms. This could fundamentally limit its applicability in atomically precise docking tasks such as protein cryptic pocket docking. It'd be good for the authors to discuss this limitation and how it might affect the interpretation of their docking results for Matcha.
+2. The authors' analysis of the evaluation impact of using different alignment methods (in the appendix) is nice to see, but it still raises the question: "Why do Matcha's reported benchmarking metrics for the PoseBusters Benchmark (v2) dataset differ significantly from those reported in existing benchmarks such as those of AlphaFold 3 and PoseBench?". For example, PoseBench's reported docking success rates for NeuralPLexer and Chai-1 (using PyMOL for protein-ligand pocket-based alignment) are around 20% and 55%, respectively, whereas the success rates reported for them in this work are around 2% and 30%, respectively. This seems like a possible concern regarding whether these methods were (methodologically) evaluated correctly for such input data.
+
+### Questions
+1. Does Matcha's inference code support the prediction of multi-ligand docking targets?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper presents Matcha, a Riemannian flow-based model that predicts the rotation, translation, and torsion angles of ligands. The authors aim to demonstrate that Matcha achieves a favorable speed–accuracy tradeoff, which is crucial in practical settings.
+
+### Strengths
+- Matcha decouples translation prediction for rotation & torsion prediction, enabling a natural extension to pocket-informed settings.
+- The paper is clearly written and easy to follow.
+
+### Weaknesses
+- Matcha can be viewed as a flow matching version of DiffDock with a DiT-style architecture, which limits its methodological novelty/contribution.
+- While Matcha demonstrates fast inference speed and comparable results on Astex and PDBBind benchmarks, it demonstrates poor performance on PoseBusters V2 and DockGen benchmarks. 
+- Matcha lacks several recent/important baselines, such as DiffDock-L, DynamicBind, SurfDock (i.e., those in [PoseX](https://arxiv.org/abs/2505.01700v2)). Incorporating these models could provide a more convincing evaluation of Matcha's performance.
+
+### Questions
+1. Have the authors considered a more comprehensive comparison with other recent deep learning-based docking models?
+2. What is the motivation for including an additional pose refinement model as the final step? How critical is it to overall performance?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper presents MATCHA, a three-stage rigid-receptor docking pipeline that performs Riemannian flow matching on translation, global rotation, and ligand torsions. A DiT-style backbone with distance/direction attention biases predicts velocity fields; a separate scoring model ranks candidates after unsupervised PoseBusters-style physical-validity filtering. On ASTEX and PDBbind-time splits, MATCHA reports strong RMSD & PB-valid rates and fast inference versus co-folding models. Performance drops on DOCKGEN and PoseBusters V2, where co-folding pretraining breadth helps OOD pockets. Training uses PDBbind + Binding MOAD, inference samples about 40 poses and selects after filtering + scoring
+
+### Strengths
+- Clean formulation of flows on SO(2)/SO(3) with SLERP-based conditional velocities and a practical Euler rollout; torsion-only internal DOFs preserve bond geometry.
+- Three independently trained stages (translation to refine translation/angles to sharpen all) are intuitive, grounded and effective.
+- Competitive PB-valid success, clear speed/throughput analysis, and a lightweight scoring head geared for screening loops.
+
+### Weaknesses
+- DOCKGEN and PoseBusters V2 results drop. Analysis attributes this to co-folding pretraining breadth, but there’s no granular breakdown (pocket geometry shift, ligand size/rotor count, charge states, metal cofactors).
+- While overall very sound, the proposed approach is incremental to existing paradigms.
+
+### Questions
+- How did you ensure no overlap/near-overlap between MOAD training entries and PDBbind time-split test? Any interface-similarity or sequence-identity thresholds at the pocket? Will you release global dedup manifests?
+- How sensitive is MATCHA to Euler step count, loss weights, and removing distance/direction biases? Does an equivariant variant help or hurt given the DiT choice?
+- How do results change with alternate different packers, or AF-predicted pockets?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces MATCHA, a novel multi-stage pipeline for molecular docking. The method utilizes Riemannian flow matching to progressively refine the ligand's pose across translation, rotation, and torsional degrees of freedom. The pipeline consists of three sequential flow matching models for coarse-to-fine refinement, a separate learned scoring model for ranking candidate poses, and unsupervised physical validity filters to eliminate unrealistic structures. The authors evaluate MATCHA on several standard benchmarks, claiming it achieves a state-of-the-art balance between accuracy, computational efficiency, and physical plausibility, being significantly faster than co-folding models.
+
+### Strengths
+1.   The paper presents a novel and well-motivated application of Riemannian flow matching to the problem of molecular docking, which is a significant departure from the more common diffusion-based generative models.
+2.   Extensive experiments are performed on various import benchmark. MATCHA demonstrates performance on the ASTEX and PDBBind test sets, outperforming many existing methods, especially on the combined metric of geometric accuracy and physical validity (RMSD ≤ 2Å & PB-valid).
+3. The method is shown to be highly efficient, with an inference time approximately 25 times faster than large-scale co-folding models and a more efficient training process than other deep learning baselines.
+
+### Weaknesses
+1.  The model's performance significantly decreases on benchmarks designed to test generalization, such as POSEBUSTERS V2 and DOCKGEN. While the authors acknowledge this, it remains a major limitation, suggesting the model may not perform reliably on novel protein targets that are structurally dissimilar from its training set.
+
+2.  The source of performance improvement is not clearly isolated. The model is trained on an expanded dataset (PDBBind plus BINDING MOAD), which is larger than that used for some key baselines. The paper lacks an ablation study to disentangle the effects of the larger training set from the novel architecture. Furthermore, the contribution of the individual components of the three-stage pipeline is not validated, making it difficult to assess if all stages are necessary for the final performance.
+
+3. The POSEBUSTERS benchmark was specifically constructed to evaluate the generalization of models trained on PDBBind. By adding the BINDING MOAD dataset to its training, MATCHA may have been exposed to data more similar to the test set, potentially inflating its generalization performance. A detailed analysis of the structural similarity between the added training data and the test sets is needed for a fairer assessment of the model's true generalization ability.
+
+### Questions
+See above
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces MATCHA, a novel multi-stage pipeline for protein-ligand docking. The approach pioneers the use of Riemannian Flow Matching on non-Euclidean manifolds, structured within a coarse-to-fine framework. The method models the ligand's degrees of freedom across their corresponding geometric manifolds: translation in R 3, global rotation in SO(3), and internal torsions in SO(2)m. The pipeline employs three sequential, independently trained flow matching models to progressively refine the docking pose, progressing from a global translational search to fine-grained adjustments of all degrees of freedom. Architecturally, the model is based on a DiT-like structure, which incorporates spatial biases into its attention mechanism to effectively capture 3D geometric relationships. A separate scoring model and a physical validity filter are then used to screen the candidates and select the final pose. The authors demonstrate that their method achieves superior performance in terms of both docking success rate and physical plausibility. Furthermore, it operates approximately 25x faster than modern, large-scale co-folding models.
+
+### Strengths
+1.	The paper is written in a standard and concise manner; the methods and experiments are easy to understand and unambiguous, and the experiments are fairly sufficient.
+2.	The method is the first to apply Riemannian Flow Matching to the field of molecular docking, opening a new research direction with great potential for the field.
+3.	The method pragmatically deconstructs the complex docking problem; through its "coarse-to-fine," three-stage pipeline design, it demonstrates an efficient framework for multi-scale generative tasks that is both reliable and original.
+4.	The method achieves an excellent and practically significant balance between speed and accuracy. A major advantage of the model is its excellent ability to generate physically plausible conformations.
+
+### Weaknesses
+1. The paper proposes a complex multi-stage pipeline (3 generative models + 1 scoring model) but does not provide ablation studies to prove the rationale for this design. It cannot be determined if all components are necessary.
+2. The paper does not sufficiently discuss and evaluate the rigid protein assumption and the semi-flexible ligand treatment.
+3. The loss function optimized by the flow matching generative process may not be strongly correlated with true binding affinity or pose correctness, and the three-stage design can easily lead to the propagation and amplification of errors stage by stage.
+4. The multi-stage pipeline is quite engineered, and the training burden is also quite large. Training on existing datasets like PDBBind does not guarantee the method's generalizability, and the four test sets are not particularly convincing.
+5. The evaluation metrics are overly reliant on RMSD; are there other metrics?
+
+### Questions
+1.	The method relies on a post-processing filter to remove physically implausible poses. Does this mean that MATCHA's generative process routinely produces a large number of poses that do not conform to basic physicochemical principles?
+2.	The method uses random rotations for data augmentation. Could this be replaced with an equivariant graph neural network?
+3.	The algorithm description mentions that the final loss is a linear combination (a weighted sum) of the three components (translation, rotation, torsion). How were these weights determined?
+4.	The inference process uses 10 fixed steps. What is the rationale for this?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3

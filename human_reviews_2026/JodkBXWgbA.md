@@ -1,0 +1,130 @@
+# Contrastive Predictive Coding Done Right for Mutual Information Estimation
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6
+
+## Abstract
+The InfoNCE objective, originally introduced for contrastive representation learning, has become a popular choice for mutual information (MI) estimation, despite its indirect connection to MI. In this paper, we demonstrate why InfoNCE should not be regarded as a valid MI estimator, and we introduce a simple modification, which we refer to as *InfoNCE-anchor*, for accurate MI estimation. 
+Our modification introduces an auxiliary \emph{anchor} class, enabling consistent density ratio estimation and yielding a plug-in MI estimator with significantly reduced bias.
+Beyond this, we generalize our framework using proper scoring rules, which recover InfoNCE-anchor as a special case when the log score is employed. 
+This formulation unifies a broad spectrum of contrastive objectives, including NCE, InfoNCE, and $f$-divergence variants, under a single principled framework. 
+Empirically, we find that InfoNCE-anchor with the log score achieves the most accurate MI estimates; however, in self-supervised representation learning experiments, we find that the anchor does not improve the downstream task performance.
+These findings corroborate that contrastive representation learning benefits not from accurate MI estimation per se, but from the learning of structured density ratios.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This work revisits the theoretical foundations of the InfoNCE objective, arguing that it is not a valid mutual information estimator. The authors propose InfoNCE-anchor, a simple modification introducing an auxiliary anchor class that yields consistent density ratio and MI estimation with reduced bias. This work further generalizes this approach via proper scoring rules, unifying several contrastive learning objectives under one framework. Empirically, InfoNCE-anchor provides the most accurate MI estimates but offers no improvement in downstream self-supervised tasks.
+
+### Strengths
+- This study presents a theoretically grounded method to enhance existing mutual information (MI) estimation techniques and provides empirical evidence demonstrating its effectiveness.
+- The proposed “anchor” modification is straightforward yet addresses a subtle theoretical issue in density ratio identifiability.
+- The MI estimation experiments are comprehensive and show consistent advantages of the proposed method across different domains.
+
+### Weaknesses
+- Although theoretically neat, the proposed modification brings no tangible improvement to representation learning — arguably the main motivation for contrastive objectives.
+- Only a few relatively simple contrastive methods are considered; comparison with modern frameworks would strengthen the practical side.
+
+### Questions
+- The paper reports that introducing the anchor does not improve downstream task performance, despite yielding more accurate MI estimates. Could the authors elaborate on the possible theoretical reasons for this discrepancy?
+- From an empirical standpoint, could the authors provide more analysis or visualization (e.g., representation similarity, clustering quality, or linear probe performance) to support the claim that contrastive learning benefits primarily from structured density ratio learning rather than accurate MI estimation?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper revisits the InfoNCE objective, widely used in contrastive learning and mutual information (MI) estimation, and argues that it is not a reliable MI estimator due to its connection to a K-way Jensen-Shannon divergence rather than the KL divergence underlying MI. The authors propose a simple modification, InfoNCE-anchor, which introduces an auxiliary anchor class to enable consistent density ratio estimation without arbitrary scaling factors. They further generalize this to a framework based on proper scoring rules, unifying various contrastive objectives like NCE, InfoNCE, and f-divergence variants. Empirically, the approach achieves state-of-the-art MI estimation across Gaussian, image, and text benchmarks, and improves downstream tasks like protein interaction prediction. However, it does not enhance representation quality in self-supervised learning on CIFAR-100, suggesting that accurate MI estimation is not the key driver for contrastive representation learning success.
+
+### Strengths
+1. The analysis of InfoNCE's limitations is sharp and well-motivated, with a tight bound on its divergence (Theorem 2) that clarifies why it underestimates MI even for large K. The anchor modification is elegant and directly addresses the identifiability issue in density ratio estimation (Theorem 3). The generalization to proper scoring rules is a nice unification, recovering existing methods as special cases while providing a principled decision-theoretic foundation.
+2. Strong results in MI estimation benchmarks, where InfoNCE-anchor consistently shows low bias and variance compared to baselines like NWJ, JS, and DRF. The protein interaction prediction experiment is a practical application, demonstrating real-world utility with improved AUROC.
+3. By decoupling accurate MI estimation from representation learning benefits, the paper challenges common interpretations in the field and shifts focus toward structured density ratios or pointwise dependence.
+
+### Weaknesses
+1. While the SSL experiments are thorough, they are restricted to CIFAR-100 with a ResNet-18 backbone. It would be valuable to test on larger datasets or architectures (e.g., ViTs) to confirm if the lack of improvement holds more generally.
+2. The choice of ν=1 is defaulted without extensive tuning; sensitivity analysis (e.g., ν vs. performance) could reveal trade-offs, especially since asymptotic behavior links ν/K to bounds like DV/NWJ.
+3. The anchor introduces an extra term, potentially increasing compute for large batches. A brief discussion on efficiency relative to vanilla InfoNCE would be helpful.
+4. In SSL, did you observe any differences in learned representations (e.g., via CKA similarity or uniformity/alignment metrics) between InfoNCE and InfoNCE-anchor?
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+**The paper critiques InfoNCE as a biased mutual information estimator due to its loose bound on KL divergence, introduces InfoNCE-anchor with an auxiliary class for consistent density ratio estimation, generalizes via proper scoring rules to unify contrastive objectives, and shows empirically that anchor enhances MI accuracy but not representation learning.
+
+### Strengths
+1. The paper is clearly written with precise formulations.
+2. The theoretical analysis provides a sharp upper bound on InfoNCE via $K$-way JS divergence, clarifying its high bias. 
+3. The unified framework through proper scoring rules elegantly connects NCE, InfoNCE, and f-divergence variants.
+
+### Weaknesses
+1. Theorem 2 assumes known distributions $q_1$ and $q_0$ for equality conditions, but in practice with neural critics of finite capacity, the proportionality $r_θ$ ∝ $\frac{q_1}{q_0}$ may not hold, leaving gaps in how approximation errors affect the bound's tightness.
+2. Critique of α-InfoNCE in Section 3.3 claims a proof flaw without supplying a counterexample or alternative derivation.
+3. The extension to proper scoring rules claims consistency for class probability estimation, but this paper does not derive explicit conditions ensuring all rules yield unbiased density ratios beyond the log score case, potentially limiting generalizability.
+4. The critique of existing InfoNCE variants (e.g., MLInfoNCE) is theoretically sound but lacks empirical validation, such as comparisons in MI estimation accuracy, which would strengthen the argument for InfoNCE-anchor's superiority.
+
+### Questions
+1. How does varying the anchor parameter $\nu$ affect finite-sample bias-variance tradeoffs across different $K$ values, especially near degeneracy points?
+2. Why do scoring rules beyond log score not improve representation learning despite the unified framework?
+3. How do the proposed estimators compare to recent unmentioned methods like those in Gowri et al. (2024) on MI tasks?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

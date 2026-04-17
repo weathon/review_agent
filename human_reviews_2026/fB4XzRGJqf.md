@@ -1,0 +1,190 @@
+# TACO-Net: Topological Signatures Triumph in 3D Object Classification
+
+- Decision: Reject
+- Scores: 4, 6, 4, 4
+
+## Abstract
+3D object classification is a crucial problem due to its significant practical relevance in many fields, including computer vision, robotics, and autonomous driving. Although deep learning methods applied to point clouds sampled on CAD models of the objects and/or captured by LiDAR or RGBD cameras have achieved remarkable success in recent years, achieving high classification accuracy remains a challenging problem due to the unordered point clouds and their irregularity and noise. To this end, we propose a novel state-of-the-art (SOTA) 3D object classification technique that combines topological data analysis with various image filtration techniques to classify objects when they are represented using point clouds. We transform every point cloud into a voxelized binary 3D image to extract distinguishing topological features. Next, we train a lightweight one-dimensional Convolutional Neural Network (1D CNN) using the extracted feature set from the training dataset. Our framework, TACO-Net, sets a new state-of-the-art by achieving 99.05% and 99.52% accuracy on the widely used synthetic benchmarks ModelNet40 and ModelNet10, and further demonstrates its robustness on the large-scale real-world OmniObject3D dataset. TACO-Net also achieved one of the highest accuracies among all the from-scratch supervised learning techniques when tested on the hardest variant of the ScanObjectNN dataset. When tested with ten different kinds of corrupted ModelNet40 inputs, the proposed TACO-Net demonstrates strong resiliency overall.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a 3D object classification framework that combines topological data analysis with a 1D CNN. Each point cloud is voxelized, transformed via 57 different filtrations (height, radial, density, dilation, erosion, signed distance), and then processed through cubical persistence to obtain numerical descriptors such as persistent entropy and amplitude metrics. These handcrafted 2052-D topological features are then classified by a small 1D CNN. The method reports exceptionally high performance on several benchmarks.
+
+### Strengths
+(1) The integration of topology and learning is interesting. The use of cubical persistence and multi-filtration topological signatures for 3D object recognition is rarely explored in 3D deep learning.
+
+(2) The reported results outperform the existing baselines, with robustness and cross-dataset generalization demonstrated.
+
+(3) The pipeline is well explained, mathematically grounded, and reproducible.
+
+### Weaknesses
+(1) My main concern is the unfair comparison with the learning-based methods. The entire pipeline relies on handcrafted topological features rather than learnable representations. Every voxelization step, filtration direction, and persistence descriptor is manually designed and fixed before training. The CNN merely acts as a shallow classifier on pre-extracted features. This is not the purpose of conference like ICLR, where they prefer learning methods to replace such heavy manual engineering through representation learning. Thus, comparing TACO-Net’s performance against end-to-end learning models like PointNet, DGCNN, or PointMamba is unfair. Those methods avoid feature engineering to achieve scalability and generalization, whereas TACO-Net depends on it.
+
+(2) There is no gradient path from the classification loss back to voxelization or TDA computations. Persistent homology, entropy, and amplitude are computed once and never updated. As a result, the model cannot adapt its topological features to the task or data distribution. In ICLR’s context, this makes the contribution engineering-oriented rather than a learning advance. Existing differentiable TDA frameworks (e.g., differentiable persistence, learnable filtrations) are not included in the comparisons. Meanwhile, although the authors cite the stability and injectivity of persistent homology, it never formalizes how these properties translate into better generalization or robustness in learning. No theoretical or empirical analysis connects topological distance metrics to classification margin, robustness, or invariance.
+
+(3) The paper reports significant improvements on ModelNet40 and ModelNet10 using fixed voxel grids. However, voxelization implicitly aligns shapes and removes rotation/scale variance, which provides very strong priors unavailable to learning-based methods. Moreover, parameters such as voxel size and filtration selection were tuned for maximum test accuracy, which risks test-set overfitting. No cross-dataset or statistical variance analyses are presented. Therefore, the 99 % results likely reflect dataset bias and preprocessing effects rather than the contributions of the proposed topological descriptors.
+
+(4) Computing 57 filtrations and persistent homologies per sample is extremely expensive in voxel count. While the 1D CNN itself is small, the preprocessing cost dominates the runtime, making the method impractical for large-scale or real-time applications such as robotics or autonomous driving.
+
+### Questions
+(1) If the feature pipeline is manually engineered, what exactly is learned by TACO-Net beyond a linear/nonlinear classifier on hand-crafted descriptors?
+
+(2) Why name the framework a “network” when no gradient flows through the voxelization, filtrations, or persistence computations?
+
+(3) Would the same level of accuracy be achieved if you replaced the 1D CNN with a simple logistic regression or XGBoost classifier?
+
+(4) How are the voxel grid origin, alignment, and orientation chosen? If they are globally consistent across training and test data, your pipeline benefits from pose priors that invalidate comparison with rotation-invariant baselines.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+1．	This paper presents TACO-Net, a novel framework for 3D object classification that leverages Topological Data Analysis (TDA) through cubical persistence. 
+2．	The method converts point clouds into 3D binary images, applies a diverse set of 57 filtrations to generate grayscale images, extracts topological feature vectors from their persistence diagrams, and classifies these vectors using a lightweight 1D CNN. 
+3．	The authors demonstrate state-of-the-art (SOTA) or highly competitive results on multiple benchmarks, including ModelNet, real-world datasets (OmniObject3D, ScanObjectNN), and medical imaging datasets.
+
+### Strengths
+1. The core strength of this work is its innovative application of TDA. The move away from standard deep learning architectures on raw points/voxels/views to a topology-first approach is a significant and refreshing contribution to the field.
+2.  The results are impressive. Achieving SOTA accuracy on the highly competitive ModelNet10 and ModelNet40 benchmarks  is a remarkable feat that strongly validates the proposed method. Achieving SOTA on these canonical benchmarks is a clear indicator of a powerful new approach.
+3.  The paper thoroughly demonstrates the generalizability of TACO-Net across diverse data domains.
+4.  The experimental section is extensive and rigorous. The inclusion of shape retrieval results, an ablation study, comparisons with non-deep learning methods (XGBoost, Random Forest), and a parameter efficiency analysis provides a very complete picture of the method's capabilities and justifies the design choices.
+5. The paper provides a theoretical time complexity analysis for the pipeline adds rigor. The discussion on the trade-offs between feature vector length, voxel size, and accuracy is practical and useful for future researchers or practitioners looking to adapt this work.
+
+### Weaknesses
+1.  This is the most significant weakness of the proposed pipeline. A feature generation throughput is prohibitively slow for any real-time application. While the 1D CNN inference is fast, the TDA feature extraction is a major bottleneck. The paper acknowledges this and suggests future work on GPU acceleration, but this currently limits the practical applicability.
+2.  While the ablation study on feature sets and network layers is good, it could be deepened. A more granular ablation analyzing the individual contribution of each of the six filtration types (or at least groups like the four DEDS filters) would provide clearer insight into which filtrations are most critical for the performance gains. The current study combines DEDS, making it hard to discern the value of, for example, density filtration versus erosion filtration.
+3. The comparison tables are comprehensive but could be updated with a few more recent, high-performing baselines on ModelNet40 to further solidify the SOTA claim. However, the results presented are already highly competitive.
+
+### Questions
+1.	The process of selecting the optimal number of radial filtrations (18 for ModelNet40, 14 for AdrenalMNIST, etc.) appears to be empirical, based on a search over feature vector length. A more principled explanation or criterion for this selection would strengthen the methodology. Why are these specific centers the most informative?
+2.	For the medical datasets (VesselMNIST3D, AdrenalMNIST3D), the paper states the starting point is already a 3D binary image. It should be explicitly clarified how this affects the initial "point cloud to voxel" conversion step of the TACO-Net pipeline. Is that step simply skipped?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces TACO-Net, a novel 3D object classification framework that integrates Topological Data Analysis (TDA) with deep learning. The core idea is to convert unordered point clouds into voxelized 3D binary images, apply multiple filtration techniques (height, radial, density, dilation, erosion, signed distance), and extract cubical persistence-based topological signatures.
+
+### Strengths
+1. The use of cubical persistence features extracted from voxelized representations is creative and underexplored in 3D vision. The work effectively bridges topology and deep learning in a scalable framework.
+2. The corruption tests (ModelNet40-C) and shape retrieval results are thorough. Demonstrating resilience under noise and occlusion strengthens the claim of topological stability.
+
+### Weaknesses
+1. While the paper thoroughly describes the TDA pipeline, it lacks mathematical or conceptual explanation of why these topological features are so discriminative for 3D object recognition. Suggest including an analysis of feature distribution (e.g., t-SNE visualization or correlation between persistence features and class separability) to reveal interpretability and rationale.
+2. The model uses 57 manually chosen filtrations with fixed parameters (e.g., voxel size 0.05, r=1 for density). This extensive manual setup may limit adaptability.
+3. The paper claims new SOTA performance, but comparisons might not be fair since TACO-Net uses voxelized inputs while many baselines use raw point clouds or multi-view images.
+
+### Questions
+1. How sensitive is TACO-Net’s performance to voxel size, number of filtrations, or noise level? Could these hyperparameters be learned dynamically?
+2. Have the authors tried integrating topological features directly into a neural network (e.g., using persistent homology layers) instead of precomputing them?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+TACO-Net is a novel SOTA framework for 3D object classification that tackles challenges in unordered and noisy point clouds by integrating Topological Data Analysis (TDA) with image filtrations. TACO-Net transforms a point cloud into a voxelized 3D image and extracts topological signatures via cubical persistence across 57 filtrations (e.g., height, radial, density). These signatures are converted into feature vectors (up to 2052 dimensions) and classified using a lightweight 1D CNN. TACO-Net achieves record accuracies of 99.05% on ModelNet40 and 99.52% on ModelNet10, while also excelling on OmniObject3D and 3D medical datasets, maintaining robustness and efficiency with only 0.72M parameters.
+
+### Strengths
++ TACO-Net is robust with several low perturbations (Table 8).
++ TACO-Net is a very lightweight network with only 0.72 million parameters.
++ TACO-Net achieves SOTA results on 3D object classification on ModelNet40 and ModelNet10 datasets.
++ TACO-Net achieves a new SOTA retrieval performance with a mean average precision (mAP) of 99.33 on ModelNet40.
++ The proposed model also achieves excellent results on VesselMNIST3D and AdrenalMNIST3D datasets.
++ The paper is well-written and easy to follow.
+
+### Weaknesses
+- Lacks qualitative/visual results to show the effectiveness of the proposed model in the resilience test
+
+Incorrect use of the size of the input point clouds 
+- For ModelNet40-C experiments, 2048 points are used. Additionally, for ModelNet40/ModelNet10, the number of points is 2048, which is why the accuracy results are higher. 
+- Hence, comparison of 3D classification results with other methods that used 1024 input points is not fair.
+- It is unclear how many points are used for the ScanObjectNN and OmniObject3D datasets. 
+
+Results limited to a few selected datasets.
+- While the proposed method achieves SOTA results on multiple datasets, the paper does not show results on the six variants of the real-world dataset ScanObjectNN [1], including the hardest variant PB_T50_RS. The current version of the paper only uses the OBJ_BG variant.
+- Despite several of these datasets having already reached saturation points, recent real-world datasets (e.g., 3DGrocery100[2]) are not used to evaluate the proposed approach.
+
+[1] Uy, Mikaela Angelina, et al. "Revisiting point cloud classification: A new benchmark dataset and classification model on real-world data." Proceedings of the IEEE/CVF international conference on computer vision. 2019.
+
+[2] Sheshappanavar, Shivanand Venkanna, et al. "A benchmark grocery dataset of real-world point clouds from single view." 2024 International Conference on 3D Vision (3DV). IEEE, 2024.
+
+### Questions
++ Clearly mention the number of input points used for each point cloud.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

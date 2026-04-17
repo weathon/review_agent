@@ -1,0 +1,214 @@
+# INDUCED COVARIANCE FOR CAUSAL DISCOVERY IN LINEAR SPARSE STRUCTURES
+
+- Decision: Reject
+- Scores: 2, 4, 2, 4
+
+## Abstract
+Causal models seek to unravel the cause-effect relationships among variables from observed data, as opposed to mere mappings among them, as traditional regression models do. This paper introduces Sparse Linear Causal Discovery (SLCD), a novel causal discovery algorithm designed for settings in which variables exhibit linearly sparse relationships.
+		In such scenarios, the causal links represented by directed acyclic graphs (DAGs) can be encapsulated in a structural matrix. The proposed approach identifies the correct structural matrix by evaluating how well it reconstructs the data and how closely it satisfies the imposed statistical constraints.
+		This method does not rely on independence tests or graph fitting procedures, making it suitable for scenarios with limited training data. 
+        Simulation results on synthetically generated datasets with known linear sparse causal structures show that SLCD consistently outperforms the PC, GES, BIC exact search, and LiNGAM-based methods, achieving average improvements of \(35\%\) in precision and \(41.5\%\) in recall. Moreover, on the real-world Sachs dataset, SLCD further surpasses these methods in the low-sample-size setting.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a method called Sparse Linear Causal Discovery (SLCD), which aims to identify causal relationships under the assumption of a sparse linear structure among variables, to help causal discovery in the low data sample size regime.
+
+The authors claim that the method avoids conditional independence tests or score search. Instead, they optimize over a structural matrix D that reconstructs the data and satisfies a so-called induced covariance constraint. They then extend this idea to nonlinear settings via a Taylor expansion argument and provide several theoretical propositions about local uniqueness and sensitivity.
+
+Experimental comparisons with existing methods on synthetic data reportedly show improvements.
+
+### Strengths
+1. The topic of causal discovery in the limited data regime is a relevant and active area, and the motivation of avoiding CI tests under limited data is valid.
+
+### Weaknesses
+1. **The theoretical framework is poorly grounded:  trivial setting, self-contradictory results, no identifiability discussion at all.**
+ - The authors interpret causal relations as deterministic linear transformations (Equations 2,3,4).
+ - This makes the contribution trivial.  Let the covariance matrix among observed variables be cov(X).  The constraint D*cov(X)*D^T = cov(X) is just to require D to be orthogonal against cov(X).  There is no structural / causal implications for it.
+ - Hence, the claimed contribution "introduce the concept of induced covariance, a statistical property implied by causal structures" is just following directly from linear algebra and does not constitute a meaningful causal result.
+ - Such fully deterministic linear transformation is also contradicted to authors' own technical progression. E.g., at Equation 1 the hidden noise terms "u_i" are presented.
+ - There is no identifiability analysis at all: no argument that the true causal structure can be recovered under any set of assumptions. Theorems 3 and 4 are stated abstractly without clear causal interpretation or practical significance.
+ - The authors may also have misunderstandings about identifiability notion.  E.g., at line 151, "This is a common problem in causal discovery as multiple graphs can describe the same data Spirtes et al. (2001)."  It is actually not.  The problem that authors are presenting is simply rewriting the linear transformation.
+
+2. **Technical development is messy and difficult to follow: sloppy and inconsistent exposition**
+ - For example, in the problem statement (line 110), "We define I as the set of indices for independent variables and D as the set of indices for dependent variables. "  However, the meanings for "independent variables" and "dependent variables" are not defined. The notation "\mathcal{I}" is never used either.
+ - Line 118, "a vector with fewer than τ non-zero elements" -- I believe the authors intended to say "no more than".
+ - As mentioned earlier, in Equation 3, the authors define the causal model without exogenous noise, yet noise was present in Equation 1 when introducing the SCM.
+
+3. **Unprofessional and low-quality writing:**
+ - The narrative flow is chaotic: basic definitions appear late, theorems are introduced without intuition, etc.
+ - Sentences like "by an average of 35% in precision and 41.5% in recall across all tested datasets." appear in abstract, without any explanation to the experimental setting.
+ - The "proofs" and "theorems" are written more like algebraic manipulations than proper statements with clear assumptions and claims.
+
+### Questions
+n/a
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a method for causal discovery in linear SEMs based on a novel constraint termed induced covariance, where the observed covariance matrix $\Sigma$ must factorize as $D \sigma D^T$ with $D$ being the structural matrix and $\sigma$ a diagonal noise variance matrix. The authors frame causal discovery as a matrix factorization problem with reconstruction and covariance constraints and optimize for a sparse D. This paper claims identifiability under sparsity and independence assumptions and propose a variational approach (SLCD) to recover the causal graph from empirical covariance. Experiments on synthetic data show improved performance over standard causal discovery algorithms.
+
+### Strengths
+a. Introduces a new formulation for structure learning that leverages second-order constraints, avoiding conditional independence tests.
+
+b. The proposed optimization objective is intuitive, combining covariance factorization and data reconstruction with sparsity-promoting penalties.
+
+c. Theoretical results show local uniqueness of the true structural matrix under certain conditions.
+
+d. Experiments on simulated data suggest improved recovery of sparse DAGs in low-sample regimes.
+
+### Weaknesses
+a. Theorem 1, which establishes the covariance factorization $\Sigma = D \sigma D^T$, is not new and was previously formalized in, e.g., Sullivant et al. (2010) through trek separation theory. The paper should clearly cite this foundational work.
+
+b. The main theoretical guarantee shows only local uniqueness, not global identifiability. This means alternative structures could still satisfy the constraints elsewhere in the parameter space, so identifiability is not ensured in the full sense.
+
+c. The experimental evaluation is limited to synthetic datasets. Real-world evaluations or tests under assumption violations (e.g., with latent confounders) would improve the empirical case.
+
+Sullivant S, Talaska K, Draisma J. Trek separation for Gaussian graphical models[J]. 2010.
+
+### Questions
+a. Could you clarify how your method would behave when the diagonal noise assumption is violated (e.g., with latent confounders)?
+
+b. Could you provide examples where local uniqueness fails?
+
+c. Is the nonlinear extension implemented, or is it purely theoretical at this stage?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces a causal discovery method called Sparse Linear Causal Discovery (SLCD) for the scenarios where variables exhibit linearly sparse relationships. SLCD leverages the structural matrix's ability to reconstruct data and the statistical properties it imposes on the data to identify the correct structural matrix. SLCD does not rely on independence tests or graph fitting procedures.
+
+### Strengths
+Unfortunately, I find no obvious strength of this paper.
+
+### Weaknesses
+1. The theoretical results in this paper cannot demonstrate the superiority of their proposed SLCD.
+
+- Both Theorem 3 and Theorem 4 assume there is a solution $D$ s.t. $F(D) = 0$ and $DX = X$. However, such a $D$ does not exists if there are noise terms, which is a standard setting in the previous literature on causality. 
+
+- Even there exists such a $D$, Theorem 3 and Theorem 4 only demonstrate that two solutions $D, D'$ s.t. $F(D) = F(D') = 0$ and $D X = D' X = X$ are close to each other, which does not necessarily imply that $D$ is close to the ground truth.
+
+2. The experimental results are not convincing.
+
+- As claimed in Section 5, SLCD can be extended to scenarios in which the SCMs governing the causal relations are nonlinear. Why not conduct experiments on nonlinear SCMs?
+
+- Why not conduct experiments on real-world datasets?
+
+3. The presentation of this paper is not friendly to readers in the causality community. For instance, in Section 3, this paper introduce the high-level insights in the setting without noise terms, which does not align with most previous literature on causality.
+
+### Questions
+1. In the second graph of Introduction, the authors claim that causal discovery methods are generally classified into two categories: constraint-based methods and score-based methods. However, according to my experience, researchers in the causality community used to divide causal discovery methods into three categories: constraint-based, score-based, and functional causal model-based methods. LiNGAM is typically regarded as a FCM-based method rather than a constraint-based method.
+
+2. The authors classify variables of interest into independent variables and dependent variables, but they don't provide formal definitions of independent/dependent variables. According to my understanding, it seems that independent variables are root variables while dependent variables are non-root variables. But the authors also claim that each dependent variable is a function of a subset of independent variables that are considered as its parents, why cannot a dependent variable have another dependent variable as its parent?
+
+3. There is a typo in Equation (10), where $d_i^T \sigma d_j^T$ should be $d_i^T \sigma d_j$.
+
+4. In Equation (11), why do you minimize the rank and the trace of $D$? In other words, why do you think the ground truth is the one with the minimal rank and trace?
+
+5. Also in Equation (11), why do you impose the constraint that $\forall i, ||d_ i^T||_ 0 = \tau$ rather than $\forall i, ||d_ i^T||_0 \leq \tau$?
+
+6. Where is footnote 1 in Table 1?
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper discusses a method for accurately estimating causal structures even in scenarios with limited sample sizes. Conventional approaches that rely on independence tests or graph score optimization often suffer a significant loss of reliability when data are scarce. To address this issue, the authors propose a novel causal discovery algorithm called Sparse Linear Causal Discovery (SLCD), which leverages the structural matrix's induced covariance and reconstruction properties to recover the true causal structure. The method is particularly effective when the relationships among variables are linear and sparse. Furthermore, the paper extends the framework to handle nonlinear causal relations by using a Taylor-series-based polynomial approximation, enabling similar causal estimation under nonlinear transformations. The authors also analyze the local uniqueness and perturbation stability of the proposed method to provide theoretical insights into its identifiability properties. Experimental evaluations on simulated datasets demonstrate that SLCD outperforms existing approaches such as PC, GES, BIC exact search, and LiNGAM, achieving higher accuracy in recovering causal structures.
+
+### Strengths
+The paper introduces a novel approach to causal structure estimation based on the concept of induced covariance, offering a fresh perspective distinct from traditional statistical causal discovery methods. It demonstrates that, under the assumption of sparsity in the causal structure, the proposed method can accurately recover causal graphs even with a limited number of samples. This contributes to expanding the applicability of causal discovery to real-world scenarios where sample sizes are often small.
+
+The authors also provide theoretical analyses of local uniqueness and perturbation stability, which lend a degree of theoretical soundness and reliability to the proposed method.
+
+Through simulation-based experiments, the paper shows that the proposed algorithm achieves higher accuracy than many existing approaches, particularly in small-sample settings.
+
+### Weaknesses
+The paper lacks sufficient explanation of several critical assumptions, which raises major concerns about the soundness of its theoretical development. In particular, the derivation from Equation (7) to Equation (10) assumes that the variables $x_i$ are largely uncorrelated implicitly; without this assumption, the equations do not hold as presented. While such an assumption would make the derivation understandable, the paper provides almost no discussion of it. As a result, readers may struggle to follow the theoretical logic and, more importantly, may fail to recognize the key assumptions underlying the proposed method, potentially leading to misunderstandings about the scope and applicability of the technique.
+
+Another significant limitation is that the evaluation is conducted only on simulated data. Although the simulation results appear ideal under the assumed conditions, the paper focuses on scenarios with limited sample sizes, a setting that often arises in real-world applications. Therefore, it is essential to demonstrate the method’s performance on real-world datasets with small sample sizes to validate that the assumed conditions are realistic and practically relevant.
+
+Finally, the paper contains several inconsistencies and inaccuracies in its mathematical notation and presentation. For example, in Equation (1), the variables are denoted as $y$, whereas all subsequent equations use $x$, which is inconsistent. Moreover, in Equation (10), the right-hand side should correctly be $d_i^T \sigma d_j$. Such issues in the notation of key equations are numerous and suggest a lack of careful proofreading. Overall, these presentation flaws prevent the paper from meeting the standard of clarity and rigor expected for a top-tier conference submission.
+
+### Questions
+1. Could you clearly explain what assumptions are made in the theoretical derivation from Equation (7) to Equation (10)?
+
+2. If available, could you include experimental results using real-world datasets?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

@@ -1,0 +1,233 @@
+# ProcessLID: Step-wise Internal Reward in LLM Reasoning via Local Intrinsic Dimension
+
+- Decision: Reject
+- Scores: 6, 2, 6, 2, 4
+
+## Abstract
+Accurate step-level correctness signals are key to reliable LLM mathematical reasoning. Prior work either invokes external judges or Process Reward Models at inference time, incurring heavy compute, or leverages internal representations but yields outcome-level signals without step-wise granularity. We introduce $\mathbf{ProcessLID}$, a training-free, representation-based method grounded in local intrinsic dimension that produces step-level correctness signals. Across six models on four math benchmarks, ProcessLID attains the state-of-the-art step-level and outcome-level performance and remains competitive in inference-time settings. Lastly, we provide analyses explaining the effectiveness of our methodology.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces ProcessLID, a novel and training-free method for assessing the step-level correctness of LLM reasoning in mathematical problem-solving. Grounded in the concept of LID, the method innovates by using a step LID delta to isolate the marginal contribution of each reasoning step and incorporates a distinct 'prover' model to provide a complementary correctness signal from a different representation geometry. The final signal, an aggregation of these two components across multiple model layers, is shown to achieve sota performance in offline correctness classification and remains highly competitive with strong, trained reward models in inference-time answer selection tasks.
+
+### Strengths
+* Novelty: The paper proposes a highly innovative, training-free approach to a critical problem. The method is well-grounded in a concept (LID), and its core innovations—the step LID delta for isolating step-correctness and the use of a prover model for a complementary signal.
+
+* Empirical performance and theoretical robustness: ProcessLID achieves sota results on offline benchmarks and demonstrates remarkable competitiveness against a fully fine-tuned reward model in inference-time settings. Besiddes, The paper excels in its deep analysis of why the proposed components work.
+
+* Practicality: Eliminating the need for expensive data collection(MCTS) and model training, ProcessLID presents a highly practical and computationally efficient alternative to traditional scalar reward-based prms.
+
+### Weaknesses
+* Inference Cost Analysis: While ProcessLID is training-free, it introduces specific inference-time costs, namely the nearest-neighbor search for LID calculation and an additional forward pass for the prover model. The paper would be strengthened by a more explicit analysis of these computational overheads in comparison to a standard PRM.
+
+* Generalization: How does the performance of ProcessLID degrade if the reference dataset for the nearest-neighbor search is out-of-domain. A discussion on the method's sensitivity should be included.
+
+* Clear role of prover: Did you experiment with using a much weaker prover (e.g., a 1.5B model as a prover for a 32B base model)? Does a significant capability gap negatively impact the prover's alignment?
+
+* Stronger baselines should be considered, such as Qwen3.
+
+### Questions
+* For the inference-time experiments, could you elaborate on the decision to use fixed-length 100-token steps? How sensitive is the performance to this choice, and have you explored using semantic or logical step delimiters instead? (most commonly, \n\n)
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces ProcessLID, a  training-free method for generating step-level correctness signals for mathematical reasoning in LLMs. The problem addressed is the high cost and limited granularity of existing methods for evaluating reasoning steps. ProcessLID is based on the concept of Local Intrinsic Dimension (LID), which quantifies the complexity of a model's representation manifold. The core innovations are: 1) using a "Step LID Delta" to isolate the correctness of a single reasoning step by comparing LID before and after the step, 2) employing a separate "prover" model to provide a complementary correctness signal from a distinct representation geometry, and 3) aggregating these signals across multiple model layers. Experiments across six models and four math benchmarks show that ProcessLID achieves state-of-the-art performance in offline correctness classification and is competitive in inference-time answer selection scenarios.
+
+### Strengths
+- This paper using a Step LID Delta to isolate the marginal contribution of a single reasoning step, which is a clever way to adapt LID, which is typically a static measure, to a dynamic, step-by-step process. 
+- The evaluation spans six different generator models and four mathematical reasoning benchmarks of increasing difficulty.
+
+### Weaknesses
+**Questionable Motivation for LID in Mathematical Reasoning**: 
+
+*   The central hypothesis is that incorrect reasoning steps are sampled from a more complex, "fabricated model distribution" and thus have a higher LID, while correct steps narrow the solution space and have a lower LID. This is analogous to out-of-distribution detection in QA.
+*   However, mathematical reasoning is fundamentally different. Incorrect steps (e.g., calculation errors) are common even in human reasoning and do not necessarily represent a major deviation into an "unnatural" manifold. A model can often recover from a minor error in a subsequent step.
+*   Conversely, a correct reasoning path can involve exploring multiple branches or introducing complex new concepts, which might not necessarily "compress the reachable representation states" as the paper claims. This untested assumption about the relationship between correctness and representation complexity in math reasoning weakens the method's conceptual foundation.
+
+**Practicality Concerns and Unquantified Overhead**: While the method is training-free, it introduces dependencies and computational costs that affect its practical application.
+
+*   The method's performance is heavily reliant on the choice of the prover model μ, as shown in the ablation study and prover analysis. The paper provides a post-hoc analysis of what makes a good prover but offers little practical guidance on how to select one *a priori* without extensive experimentation.
+*   ProcessLID requires a full forward pass through the prover model for every reasoning step. This adds a significant computational overhead compared to baselines that only use the base model's representations. The paper claims competitiveness in "inference-time settings" but does not provide any measurements  to quantify this overhead.
+*   The computation of LID relies on a nearest-neighbor search over a set of CoTs from the same dataset. This introduces a data dependency, requiring a sufficiently large and in-domain corpus of reasoning trajectories to be available at inference time, which may not always be practical. The computational cost of this search is also not discussed.
+
+**Limited Scope of Inference-Time Experiments**: 
+
+*   The decision to segment rollouts into fixed-length steps of 100 tokens is not well-justified. Natural reasoning steps are variable in length, and this arbitrary segmentation might not align with the logical structure of the reasoning process. The sensitivity of the results to this hyperparameter is not explored.
+*   The evaluation is restricted to reranking-based answer selection (Oracle@N, BoN, etc.). It would be valuable to explore or at least discuss how ProcessLID could be integrated more deeply into the generation process, for example, by guiding a beam search or speculative decoding to prune incorrect reasoning paths early.
+*   While competitive, ProcessLID shows a noticeable performance gap compared to the supervised Reward Model on the BoN metric, which is often critical for improving final answer accuracy. This limitation could be more explicitly acknowledged and discussed.
+
+### Questions
+see weakness and:
+
+**Clarification on LID for Embedding Deltas**: Regarding the definition of the LID Embedding Delta in Section 4.3 (line 157), could the work provide a more precise mathematical formulation? Specifically, is the nearest neighbor search for computing `mµ(ΔΕμ,j)` performed over a pre-computed set of difference vectors ` {E(t)μ,j – E(t)μ,j−1} ` from the reference dataset? If so, what is the geometric intuition for measuring the intrinsic dimension of a manifold of such difference vectors?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+ProcessLID introduces a training-free representation-based method to estimate step-level correctness in multi-step reasoning.
+It refines the Local Intrinsic Dimension (LID) idea with the addition of a proxy prover model to provide step-level information on the degree to which information representation is collapsed in a reasoning chain. Authors experimented on different LLMs across multiple reasoning datasets (GSM8K, MATH, OmniMath, OlympiadBench) and demonstrates consistent performance gain. ProcessLID also performs competitively with a trained reward model during inference-time answer selection.
+
+### Strengths
+Having training-free internal reward is an important topic and the current work's approach of using geometric properties of representations as signal is novel and seem to be effective. 
+
+While the notations can be dense in the manuscript, the algorithm is actually relatively simple and could easily scale to more models and more reference problems.
+
+Ablations are quite thorough in the paper and the results seem effective.
+
+The fact that LID can be used to guide inference is quite interesting and potentially could be used as a diagnostic tool to better understand how different model families represent concepts during reasoning.
+
+### Weaknesses
+It is not clear to me how much the proposed problem would generalize if the reference problems are from a different domain, or in a real-life deployment when the user queries can be quite diverse. Since the underlying assumption is that the representation during reasoning train live on some kind of manifold at each given reasoning step, I'm not sure how much this assumption will hold up in more complex settings.
+
+The paper is a bit hard to follow, the notations can be quite dense. 
+
+Since the results in appendix suggests that hundreds of reference problems will be needed for best performance, it seems relatively heavy. Perhaps we could instead look like LID when perturbing model hidden state in prefix?
+
+### Questions
+One thing that would help reading a lot would be to include a pseudocode description of the algorithm, which would hopefully make the description easier to follow.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The authors propose ProcessLID, a training-free step-level evaluation method for reasoning tasks. It combines the hidden-state LID dynamics of the Base model with a Prover model that estimates step correctness. The method is simple to use and doesn't require extra training for a variety of models. Experiments examine correlations between ProcessLID scores and step correctness across multiple reasoning benchmarks. In the experiments, ProcessLID shows consistently high performance over various settings.
+
+### Strengths
+- Proposes a simple, training-free approach for step-level evaluation of reasoning processes, which can be applied across different models without additional supervision.
+
+- Demonstrates consistent correlation between ProcessLID scores and step correctness across multiple datasets and model scales, indicating good generalization of the signal.
+
+### Weaknesses
+[W1] Limited contribution beyond existing LID work. The idea of employing Local Intrinsic Dimension (LID) as a geometric indicator of confidence has already been explored and validated in prior work on QA-style and outcome-level tasks. This paper extends the concept to step-level reasoning, but this extension appears largely incremental rather than introducing a fundamentally new principle. If the aim is to adapt LID to the reasoning domain, the main challenge lies in handling long and unsegmented reasoning trajectories, where step boundaries are ambiguous or absent. In such cases, the proposed method’s reliance on explicit step segmentation is not well aligned with current reasoning paradigms. Demonstrating performance on long-form reasoning benchmarks such as AIME or other open-ended CoT settings would be required to substantiate the claimed reasoning-specific contribution.
+
+[W2] Unfair baseline comparison due to missing Prover alignment. The paper compares ProcessLID against vanilla LID baselines that use only the Base model’s hidden states, while ProcessLID incorporates an additional Prover model (DS-QW-14B). This discrepancy introduces a confounding factor: the reported improvements may partly result from leveraging the richer representations of the DS-QW-14B Prover rather than from the proposed step-wise asymmetric formulation itself. To ensure fairness, the authors should evaluate vanilla LID under the same cross-model setup (i.e., using DS-QW-14B as the Prover) to isolate the effect of the formulation from that of the additional model.
+
+[W3] Insufficient methodological justification for the asymmetric formulation. The paper argues that both the Base and Prover components are necessary, but provides limited empirical or theoretical justification for this design choice. The current ablations only evaluate partial removals (e.g., w/o Prover), without testing complementary configurations such as a Prover-only variant (using LID Embedding Delta alone) or a reversed-asymmetric setup where the roles of Base and Prover are exchanged. Such comparisons are essential to demonstrate that the proposed asymmetric combination is not arbitrary and that the claimed synergy between the two terms is empirically grounded. Without these results, it remains unclear whether the performance gains arise from the specific asymmetric formulation or simply from one dominant component.
+
+[W4] Missing vanilla LID baseline in inference-time evaluation. In Section 5.2 (“Inference-time intervention for answer selection”), the paper compares ProcessLID with various reward and entropy-based baselines, yet omits the vanilla LID result. Since ProcessLID’s main claim is to improve over vanilla LID by introducing step-level and cross-model components, including this baseline under the same rollout selection setup is essential to quantify the actual benefit of the proposed formulation.
+
+### Questions
+-Did the vanilla LID baseline also use the DS-QW-14B Prover model? If not, does this difference raise fairness concerns in the comparison? (see W2)
+
+- What are the results when using only the Prover term (LID Embedding Delta) or adopting the reversed-asymmetric configuration? Do these variants perform comparably to the proposed formulation? (see W3)
+
+- What are the vanilla LID results under the same inference-time intervention setup? How much does ProcessLID improve over that baseline? (see W4)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 5
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes ProcessLID, a training-free, representation-based method for estimating step-level correctness in math chain-of-thought (CoT) reasoning using local intrinsic dimension (LID). It computes a Step LID Delta signal from the base model and a complementary LID Embedding Delta signal from a separate prover model, then aggregates layer-wise scores via calibrated p-values and Fisher’s method. Experiments on four ProcessBench math datasets and an outcome-level MATH-CoT dataset show that ProcessLID improves step- and outcome-level AUROC over entropy-based uncertainty and prior representation-based baselines.
+
+### Strengths
+1. The paper clearly motivates step-level correctness estimation in math CoTs as a practically important problem and uses local intrinsic dimension in a conceptually grounded, easy-to-follow way.
+2. ProcessLID is a simple, training-free approach that combines base-model and prover LID signals with a calibrated multi-layer aggregation scheme that is straightforward to implement once embeddings are available.
+3. Experiments across four math benchmarks, six generator models, and an outcome-level MATH-CoT dataset show consistent AUROC gains over strong uncertainty- and representation-based baselines, supported by ablations, prover-choice studies, and neighborhood-size analyses.
+
+### Weaknesses
+1. Although the method is “training-free,” it relies on step-level labeled calibration sets for layer selection and p-value normalization, and the sample efficiency and cross-dataset/model transfer of this calibration are not systematically analyzed.
+2. The inference-time Best-of-N experiments are limited to 150 MATH-500 questions and two generators, and the gains over a strong reward model are modest, so the end-to-end impact on problem-solving performance is still somewhat preliminary.
+3. The evaluation does not fairly isolate the method’s contribution: ProcessLID uses a strong prover while vanilla LID does not, and missing variants (Prover-only, reversed roles, cross-model baselines) make the asymmetric design insufficiently justified.
+
+### Questions
+How well do the chosen layers, p-value mappings, and mixing weight α transfer across datasets and models, and how much step-level labeled calibration data is needed before performance degrades noticeably?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

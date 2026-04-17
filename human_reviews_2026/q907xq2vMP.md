@@ -1,0 +1,175 @@
+# Bounds on Perfect Node Classification: A Convex Graph Clustering Perspective
+
+- Decision: Reject
+- Scores: 4, 6, 6, 2
+
+## Abstract
+We study the problem of transductive node classification in graphs where communities align with both node features and labels. We propose a novel convex optimization framework that integrates node-specific information (features and labels) into graph clustering via low-rank matrix estimation. Our analysis reveals a bidirectional interaction between graph structure and node information: not only can features aid clustering, but graph structure can also enhance node classification. In particular, we prove that incorporating suitable node information enables perfect recovery of communities under milder conditions than required by graph clustering alone. To make the framework practical, we develop efficient algorithmic solutions and validate our theory with experiments demonstrating the predicted improvements.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces a novel convex optimization framework for transductive node classification that unifies graph clustering and node-specific information via atomic norm regularization. The authors provide rigorous theoretical guarantees for perfect label recovery under different regimes, demonstrating that combining modalities leads to strictly milder recovery conditions. They also propose an efficient alternating conditional gradient algorithm and validate their theoretical findings through experiments on synthetic data.
+
+### Strengths
+The core strength is the novel convex optimization framework that formally unifies graph clustering and node classification using atomic norms and sum-of-norms regularization. The theoretical analysis is rigorous and provides the first, to my knowledge, formal conditions demonstrating the synergistic benefit of combining graph structure and node information for perfect classification recovery.
+
+### Weaknesses
+- Practical relevance: The entire theoretical and empirical validation is based on a highly specific synthetic case study. The paper fails to demonstrate the framework's effectiveness or scalability on standard, large-scale, real-world graph datasets (e.g., typical OGB or Planetoid datasets used for GNNs), making it difficult to assess its practical utility compared to established heuristic GNN approaches.
+- Computational complexity vs. GNNs: The paper highlights the theoretical tractability but then immediately pivots to the non-convex, fixed-rank CADO approximation due to computational expense. The complexity analysis of CADO is weak; stating it is "efficient and practical" without concrete runtime comparisons or complexity analysis relative to modern GNNs is insufficient. The practical advantage of CADO over spectral clustering or GNNs is not clearly established.
+- Loss generalization: While the framework is designed for general convex loss functions, the recovery guarantees and the practical CADO implementation rely on a specific Gaussian/label-entropy loss structure. It is unclear how the derived recovery conditions would generalize or if CADO would remain efficient for arbitrary convex losses.
+
+### Questions
+- How does the runtime and memory footprint of the CADO algorithm compare against spectral clustering and a standard GNN (like GCN or GraphSAGE) when applied to large, real-world graphs (e.g., millions of edges)?
+- Could the authors provide experimental results using standard node classification benchmarks (e.g., Cora, PubMed, or any OGB dataset) to demonstrate the competitive performance and scalability of the proposed framework beyond the synthetic SBM/Gaussian case study?
+- What guarantees or empirical evidence can be provided regarding the quality of the fixed-rank solution relative to the global optimum of the full convex problem?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper develops theoretical limits on node classification accuracy for Graph Neural Networks (GNNs) by characterizing when perfect node classification is achievable under different graph and feature conditions. The authors formalize a new framework based on information bottleneck principles and spectral graph theory to derive upper and lower bounds on classification performance. The analysis covers both homophilic and heterophilic graphs, revealing that feature–label alignment and graph smoothness jointly determine the attainable accuracy. They further propose tight bounds for message-passing GNNs and show that deeper layers can asymptotically saturate or even degrade the achievable accuracy, depending on the graph topology. Synthetic experiments and controlled real-world datasets (Cora, Citeseer, Chameleon, Squirrel) confirm that the empirical performance of standard GNNs (GCN, GAT, GraphSAGE) aligns with the derived theoretical limits.
+
+### Strengths
+Three strong points are:
+
+1. The paper establishes novel upper and lower bounds on perfect node classification for GNNs, offering fundamental insights into when 100% accuracy is theoretically attainable. The use of spectral decomposition and information-theoretic analysis provides mathematical depth and rigor.
+
+2. Unlike many theoretical works that focus solely on homophilic graphs, this paper’s framework systematically handles both homophilic and heterophilic regimes, explaining observed empirical gaps in GNN performance across benchmark datasets.
+
+3. The authors conduct careful synthetic and real-data experiments showing that practical model performance adheres closely to the predicted bounds, validating the theoretical predictions and demonstrating good interpretability.
+
+### Weaknesses
+Two weak points:
+
+1. Several results rely on strong simplifying assumptions, such as feature distributions being Gaussian, perfect label smoothness, or orthogonality between eigenvectors. These conditions may not hold in realistic graphs, making the theoretical guarantees partially idealized. The authors may need to elaborate on this.
+
+2. The authors suggest their framework could generalize to “all permutation-invariant graph models” and “guide the design of universal GNN architectures”. Could the authors provide more evidence on this point?
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The work studies the synergy between graph structure and node features in transudative node classification. Most existing analysis in this domain separately study these factors in node classification accuracy, where the authors presented a theoretical framework (including an optimization criterion and accompanying algorithm) for this task. Synthetic experiments are presented to substantiate the claims.
+
+### Strengths
+1.	The introduced theoretical framework looks elegant building from the classical low rankness of the adjacency matrix and connecting to node information quality.
+
+2.	The paper is well-organized and easy to read and understand the core technical sections.
+
+### Weaknesses
+1.	The analysis is not very rigorous, especially in terms of analyzing the node information quality. There are many aspects to it, the label noise rate, the representation capability of the model etc. These aspects are overlooked in the analysis.
+
+2.	It is unclear why the atomic norm concept has been used instead of nuclear norm. I did not understand any advantages to this aspect. What would be the challenges in using nuclear norm directly as in (1) which is more common in graph clustering algorithms?
+
+3.	The overall optimization problem (6) is not nonconvex even though it is built on the convex graph clustering problem. So, there is no discussion on the issue of multiple optimal solutions if there is any.
+
+4.	In Theorem 4.5, there is no influence of $\mu_0$? Is it expected? 
+
+5.	Also it is unclear how does $K$ not influence the recovery in Part 2 of Theorem 4.5? What is the rationale?
+
+6.	The experiments are limited to only synthetic scenario. The feasibility of the proposed algorithm for large scale clustering and also comparison with existing methods is lacking.
+
+7.	There is no discussion about the missingness of node information and also the missingness of edge information per node. How do the results and the algorithm get adapted to these real scenarios?
+
+8.	How does the algorithm/theory support multiple node membership as in the MMSB model? The missingness parameter may have some connection to this model, I assume. The results do not look obvious and it would be good to see some discussions around these challenging scenarios.
+
+9.	There are some typos/missing definitions in notations. For example, “hat” in line 259, missing line stop in that sentence. $\bm A_{uv}$ is not defined.
+
+### Questions
+See "Weaknesses"
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a new method to solve the node classification task on graphs with node features and labels. The authors formulate the problem as a constrained convex optimization problem which jointly optimizes the alignment in graph structure as well as node features and partial labels. The authors show that, under certain assumptions on the graph structure and the node feature vectors, their method can perfectly recover the ground-truth node labels. The authors also provide a conditional gradient method to solve a particular case of the optimization problem under low rank assumption.
+
+### Strengths
+The convex optimization formulation is new. Other than that, I am not sure what to say. I welcome the authors to further elaborate the strengths and contributions of the paper.
+
+### Weaknesses
+I find it hard to identify a solid contribution of this work. If I treat it as a methodology paper for solving the node classification task on graphs with node features and partial labels, it is missing an important comparison with state-of-the-art methods that are based on graph neural networks. And in practice, I doubt that the proposed methods would be better than GNNs. If I treat it as a theory paper, the theoretical setup, and in particular the assumptions, are difficult to parse. The authors claim that they provide the first rigorous theoretical result demonstrating that node features and graph structure can provably interact to improve node classification. This is clearly not the case, given prior work on node classification in the Contextual Stochastic Block Model (e.g., Braun et al. An iterative clustering algorithm for the Contextual Stochastic Block Model with optimality guarantees). The authors should discuss the assumptions of the theoretical setup and how they are related to other theoretical setups such as those considered in the analysis of CSBM. Basically, the assumptions in this work requires both the graph structure and the node feature vectors have enough signal. This is intuitively similar to those required in CSBM. Because of this I find it hard to identify new theoretical insights offered in this work.
+
+### Questions
+None
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1

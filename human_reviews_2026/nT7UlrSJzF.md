@@ -1,0 +1,172 @@
+# Sculpting User Preferences for Recommendation with Positive-Negative Diffusion Guidance
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Diffusion models are emerging as a powerful generative paradigm for sequential recommendation, demonstrating a remarkable ability to model complex user-item interaction dynamics. Despite their strong modeling ability, most diffusion-based recommenders face limited generative control because the standard classifier-free guidance derives its repulsive signal from a global and user-agnostic unconditional prior, which prevents the model from directly exploiting negative feedback at inference. A natural solution is to replace the unconditional prior with user-aware negative conditions. However, this is challenging because, unlike in text-to-image tasks where negative prompts acquire stable semantics from a pre-trained text encoder, item embeddings in recommendation are learned dynamically. As a result, a ''negative condition'' is not guaranteed to provide effective repulsive guidance unless the model is explicitly trained to recognize it as a signal for avoidance. To enable effective and steerable negative guidance in diffusion recommenders, we propose **SteerRec**, a novel framework built upon two core innovations. At inference, we introduce Positive-Negative Guidance (PNG) inference mechanism, which replaces the generic unconditional prior with a user-aware negative condition. To ensure the negative condition provides meaningful repulsive guidance in the dynamic embedding space, we design a Guidance Alignment Triplet Loss (GAL). The GAL is a margin-based objective that explicitly aligns the training process with PNG by ensuring the model’s prediction under a positive condition is closer to the target item than its prediction under a negative condition. Extensive experiments on three widely used public benchmarks provide strong empirical evidence for the effectiveness of SteerRec. Our implementation is available at \url{https://anonymous.4open.science/r/SteerRec-5D70}.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper introduces SteerRec, a novel framework for sequential recommendation that leverages diffusion models (DMs) for more accurate and personalized predictions. Traditional diffusion-based recommenders struggle with incorporating negative feedback during inference, as the existing classifier-free guidance (CFG) mechanism relies on a global, user-agnostic prior, which limits control over the generative process. SteerRec addresses this limitation by introducing Positive-Negative Guidance (PNG), which uses user-aware negative feedback to explicitly steer the generation process away from undesired items. This is complemented by the Guidance Alignment Triplet Loss (GAL), a novel training objective that ensures the model generates predictions that are both closer to desired items and farther from disliked ones. Through extensive experiments on public benchmarks, SteerRec outperforms existing methods, providing a more precise and controllable recommendation system.
+
+### Strengths
+1. SteerRec's key contribution is the Positive-Negative Guidance (PNG) mechanism based on the well-known classifier-free guidance, which directly integrates user-aware negative feedback into the inference process of diffusion model-based recommenders, providing enhanced control over the generation process. To further optimize the proposed of PNG, the authors introduce the Guidance Alignment Triplet Loss which ensures that the negative guidance is both meaningful and effective during training. This alignment makes the model's predictions more reliable and better aligned with user preferences. The combination of both modules is both logical and effective.
+
+2. SteerRec converges faster than its counterparts like PreferDiff, demonstrating that its direct and efficient learning signal enhances the model's ability to learn user preferences quickly.
+
+### Weaknesses
+1. **Paper Writing:** A major issue in the paper's writing is the lack of a detailed comparison between SteerRec and previous methods (e.g., DreamRec [1], PreferDiff [2]). This omission assumes that readers are already familiar with diffusion-based recommenders, which increases the reading burden for those who may not have such background knowledge. Further
+
+2. **Brute Force Sampling:** I think the author's motivation is both reasonable and compelling. Replacing CFG with recommendation-tailored guidance is essential. However, in practice, the method of constructing the negative condition during inference by randomly sampling a set of items from the global item corpus seems somewhat crude. This approach overlooks the unique preferences encoded in the user's historical representation, potentially leading to less precise guidance. I think more tailored approaches for selecting negative samples that are more in line with the principles of diffusion-based recommenders.   I also noticed in Appendix F that the authors' experiments show SteerRec performing well when high-quality negative samples from the MIND dataset are used. **However, obtaining high-quality negative samples is challenging in most real-world scenarios.** Addressing this issue should be a key focus of the paper, as both PNG and GAL are quite intuitive ideas. A potential solution could involve methods to generate or identify high-quality negative samples in settings where they are not readily available.
+
+3. **Missing Some Hyperparameter Experiments** I find some key experiments related to diffusion, such as the impact of the diffusion steps and DDIM steps, were not presented. If SteerRec requires fewer diffusion or DDIM steps compared to PreferDiff, it would further highlight the efficiency brought by the introduction of negative guidance. Showing these results would provide stronger evidence for the practical benefits of SteerRec's approach.
+
+4. **Need More Novelty on Negative Guidance** The use of relevant negative signals aggregated into a centroid is shown to be effective in PreferDiff, but this approach lacks some novelty in SteerRec. A potential improvement could be to explore why other users' representations are not used as negative samples. Incorporating negative samples from different users might provide richer and more diverse guidance.
+
+
+[1] Yang, Zhengyi, et al. "Generate what you prefer: Reshaping sequential recommendation via guided diffusion." Advances in Neural Information Processing Systems 36 (2023): 24247-24261.
+
+[2] Liu, Shuo, et al. "Preference Diffusion for Recommendation." The Thirteenth International Conference on Learning Representations.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on the improvement of conditional guidance strategies for diffusion-based recommender systems. Specifically, the original classifier-free guidance simultaneously models both the conditional and unconditional distributions' score functions (log-likelihood gradients), thereby using the weighted difference between the conditional and unconditional score functions as an additional guidance condition during generation. In contrast, this paper replaces the unconditional vector (a trainable embedding) with a weighted embedding derived from in-batch negative samples, thereby introducing negative conditional guidance. Furthermore, this paper introduces a Guidance Alignment Triplet Loss to further regularize negative guidance. The proposed method is relatively simple and effective. However, on the one hand, it completely discards modeling the unconditional distribution, which may affect the model’s cold-start capability. On the other hand, the need for negative sampling during inference could further impact the inference efficiency of diffusion models.
+
+### Strengths
+1. This  paper is well-organized, with clear tables and figures.
+2. The motivation of this paper is well-founded, and the method is simple yet effective.
+3. The experimental setup in this paper is well-aligned with prior work and relatively extensive.
+
+### Weaknesses
+1. **Lack of diverse negative sampling strategies: **The computation of the negative condition in this paper relies on negative sampling; however, only in-batch negative sampling is considered. Exploring more diverse and fine-grained negative condition constructions—such as incorporating hard negatives—could further enrich the content and strengthen the contributions of the paper.
+2. **Lack of cold-start analysis:** This paper completely replaces the *none condition* with a *negative condition*. However, the computation of the negative condition relies on negative sampling (e.g., in-batch negative sampling). For cold-start users, whose positive interaction information is relatively scarce, the influence of negative signals becomes more significant, and the use of random negative sampling may adversely affect recommendation performance. Nevertheless, the paper does not include any discussion or analysis regarding the cold-start problem.
+3. **Training–inference inconsistency:** The proposed method computes the negative condition during training using in-batch negatives; however, batch information is unavailable during inference, so only random negative sampling can be applied. In this case, if positive items are accidentally sampled as negatives, it may undermine the validity of the negative condition.
+4. **Lack of efficiency analysis:** The proposed method requires explicit random negative sampling during inference to compute the negative condition, which could further reduce the model’s recommendation efficiency and even affect its applicability in online settings. However, the paper does not provide any comparative analysis of efficiency.
+
+### Questions
+Please refer to Weakness.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper proposes SteerRec to enable effective and steerable negative guidance in diffusion-based recommenders. It firstly introduces Positive-Negative Guidance inference mechanism in the inference stage, which replaces the generic unconditional prior with a user-aware negative condition. To ensure the negative condition provides meaningful repulsive guidance in the dynamic embedding space, it further designs a margin-based objective that explicitly aligns the training process with PNG by ensuring the model’s prediction under a positive condition is closer to the target item than its prediction under a negative condition. Extensive experiments on three datasets provide the effectiveness of SteerRec.
+
+### Strengths
+1. The idea about incorporating user-aware negatives into DM is interesting and the utilized Guidance Alignment Triplet Loss is well-aligned with the PNG.
+2. The experiments and analyses are entensive and the compared baselines are reasonable.
+3. The source code and the utilized datasets are released in anonymous Github repo.
+
+### Weaknesses
+1. It seems that Figure 2 omits many details. Could the authors use this figure to further clarify the technical contributions and highlight the novelty of their work compared to existing methods in the sequential recommendation and diffusion-based recommendation?
+2. The focus of this paper is Positive-Negative Guidance, but the utilized negative samples are just the in-batch negatives (training) and randomly-selected samples (inference). Compared to the reserve stage of diffusion models, the time complexity of performing negative sampling should not be significant.
+3. Lack of the the time complexity analysis and the comparison of the actual training and inference runtimes between the proposed SteerRec and baselines.
+4. In Figures 10–12, the authors claim that PreferDiff forms uneven clusters with indistinct boundaries, whereas SteerRec produces a well-structured representation space with multiple distinct and dense clusters separated by clear low-density regions. However, this is not immediately evident. Could the authors provide a more detailed explanation of the reasons behind these three figures?
+
+### Questions
+Please refer to the weakness. Since there is no borderline option in this review, I would be willing to raise my score if the authors can address my questions.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes SteerRec, a novel diffusion recommendation framework that enables direct and reliable negative guidance. It introduces a Positive-Negative Guidance mechanism that replaces the generic unconditional prior with a user-aware ngative condition, enabling targeted repulsion from disliked items. It also designs a complementary training objective that explicitly aligns the denoising network's behavior with the PNG mechanism by ensuring the model's positive prediciton is closer to the taget item than its negative prediction.
+
+### Strengths
+1. This paper is well motivated and addresses the limitation of Classifier-Free Guidance by incorporating user-aware negative feedback at inference time.
+2. The proposed Guidance Alignment Triplet Loss explicitly forces the model to distinguish between positive and negative conditions, solving the critical training-inference discrepancy.
+
+### Weaknesses
+1. Even without PNG or GAL, SteerRec still significantly outperforms DiffuRec and DreamRec, which raises some doubts whether the performance gains are from PNG/GAL or some tricks.
+2. All datasets are from Amazon Reviews, where the average sequence length is shorter than 10. It would be better to include experiments on datasets with longer sequences.
+3. It requires about 800 - 1200 steps during inference. However, recommendation differs from image generation, so it is unclear whether so many steps are necessary. Using a large number of steps may compromise efficiency.
+
+### Questions
+Could you address the above three weaknesses:
+1. Since SteerRec outperforms DiffuRec and DreamRec even without PNG or GAL, what factors contribute to such a large performance gap? Could there be implementation or evaluation differences that explain this result?
+2. How well would SteerRec generalize to datasets with longer user interaction histories?
+3. How does the number of diffusion steps affect the trade-off between model performance and efficiency?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,180 @@
+# MedCCO: Unleashing Open-Ended Reasoning in Medical Multi-modal Language Models via Curriculum Reinforcement Learning
+
+- Decision: Reject
+- Scores: 4, 2, 6, 4
+
+## Abstract
+Recent advances in reinforcement learning with verifiable, rule-based rewards have greatly enhanced the reasoning capabilities and out-of-distribution generalization of VLMs/LLMs, obviating the need for manually crafted reasoning chains. Despite these promising developments in the general domain, their translation to medical imaging remains limited. Besides, current reinforcement fine-tuning (RFT) approaches in medical reasoning are primarily designed for close-ended visual question answering (VQA), where answer choices are provided within the query. This narrow focus limits the model's capacity to leverage world knowledge and adapt to diverse clinical tasks. More importantly, such methods fail to meet the pressing clinical need for open-ended, reasoning-intensive decision-making, which requires generating answers without predefined options—a task proven much more challenging. To bridge this gap, we propose **MedCCO**, the first multi-modal reinforcement learning framework for medical VQA that integrates both close-ended and open-ended data under a curriculum-based RFT strategy. By explicitly fostering open-ended reasoning, MedCCO aims to enhance performance across both reasoning types. Specifically, MedCCO is initially fine-tuned on a diverse set of close-ended medical VQA tasks to establish domain-grounded reasoning capabilities, and is then progressively adapted to open-ended tasks to foster deeper knowledge enhancement and clinical interpretability. We validate MedCCO across eight challenging medical VQA benchmarks, spanning both close-ended and open-ended settings. Experimental results show that MedCCO consistently enhances performance and generalization, achieving a 11.4\% accuracy gain across three in-domain tasks, and a 5.7\% improvement on five out-of-domain benchmarks. These findings highlight the promise of curriculum-guided RL in advancing robust, clinically-relevant reasoning in medical multi-modal language models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents MedCCO, a curriculum reinforcement learning framework for medical visual question answering to handle both closed-ended and open-ended questions. The model is first trained on the closed-ended tasks and then progressively adapts to more complex, open-ended tasks with a hybrid reward function. Experimental results demonstrate improved performance across eight medical VQA benchmarks in both in-domain and out-of-domain tasks.
+
+### Strengths
+1. This paper proposes a curriculum learning strategy to improve the reasoning ability of medical VLMs on medical VQA. By staging the training, the model avoids the gradient imbalance that would otherwise hinder optimization.
+2. The proposed method is evaluated on eight benchmarks, including five out-of-domain datasets. The results demonstrate the effectiveness of the method and its generalization to new domains.
+3. The paper is well presented and easy to understand.
+
+### Weaknesses
+1. The paper claims to address open-ended reasoning (e.g., in the title), but the tasks are still limited in generating very short words or phrases of VQA tasks, which structurally resemble fill-in-the-blank answers rather than true free-text generation. It means the method isn't validated on tasks requiring more complex, narrative reasoning, such as generating diagnostic summaries or radiology report sections.
+2. The ablation study on the open-ended reward function feels incomplete. It does not include a direct comparison with a simpler exact-match reward baseline (or is the GRPO row in Table 2 referring to this? but not sure if it's done in a similar curriculum manner). Considering that the ground-truth answers are quite short, an exact-match metric could actually serve as a strong baseline. Without this comparison, it’s hard to tell how much the proposed hybrid reward (based on BLEU, ROUGE, and BERTScore) truly contributes beyond what a straightforward approach might already achieve.
+3. I think it would be helpful to compare with (1) state-of-the-art medical models such as MedGemma [1], and (2) medical reasoning models, e.g. [2][3].
+
+[1] MedGemma Technical Report https://arxiv.org/abs/2507.05201 \
+[2] MedVLM-R1: Incentivizing Medical Reasoning Capability of Vision-Language Models (VLMs) via Reinforcement Learning \
+[3] MEDVLTHINKER: Simple Baselines for Multimodal Medical Reasoning
+
+### Questions
+1. Since chain-of-thought SFT before RL has been shown to strengthen reasoning performance, it would be interesting to see how the model behaves with and without this initial “cold-start” stage.
+2. The authors mentioned combining multiple rewards to prevent reward hacking. But BLEU and ROUGE are still vulnerable to reward hacking because of the unigram matching. Also I'm not sure if BertScore is accurate enough to capture to distinguish between semantically similar yet meaningfully different phrases. Have the authors observed any related phenomena during training?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes MedCCO, a medical vision language model that can do reasoning for both close- and open-ended visual questions. It employs a curriculum learning paradigm that trains the model first on close-ended questions and then on open-ended questions.  During the open-ended question answering training, the authors propose a hybrid reward function that incorporates both the BLEU/ROUGE and BERTScore to measure the similarity between the hypotheses and the references. The model achieves good performance on both in-domain and out-of-domain benchmarks.
+
+### Strengths
+1. MedCCO can achieve good performance with reinforcement learning with the hybrid rewarding functions.
+2. Some designs on section 3 are interesting. For example, to minimize the affect of different reward scales on close- and open-ended questions, the authors proposed to we-weight the rewards for the GRPO algorithm. They also refine the datasets prior to using them to improve their quality.
+3. The paper is well-written with clear descriptions and diverse examples.
+4. Thorough ablation studies are conducted in the paper.
+
+### Weaknesses
+1. The paper lacks novelty on methodology: It is very hard to distinguish this paper from other reasoning papers.  From the viewpoint of methodology, this paper is an adaptation of existing methods to the medical domain.
+2. Not truly open-ended: Though the authors claim that MedCCO is curriculum learning based and can answer open-ended questions, its capability is far from real-world open-ended questions.  Datasets like SLAKE have short phrases as the candidate answers, which are not too much different from verifiable answers like multi-choice questions.  They can be easily evaluated with F1 or exact match.
+3. Not the first multi-modal medical reasoning model: Despite the ambiguity of the "reasoning," there are some multi-modal medical models, such as MedGemma, which also claimed to have reasoning capability.
+4. Quantification of "reasoning" capability: One of the selling point of this paper is "reasoning," while there lack evidence that the model conducts substantial thinking before delivering the final answer except for the case studies. Some quantified metrics, such as the change of response length w.r.t. training steps, can be very helpful.
+
+### Questions
+See my "Weaknesses" section.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposes a two-stage Reinforcement Learning paradigm for medical VLM post-training: (1) firstly training on close-end VQA questions; (2) then training using open-end samples. The proposed method leads to consistent performance improvement on Qwen-2.5-VL across multiple VQA benchmarks. This paper also introduces an effective data refinement strategy to improve the quality of close-end VQA data.
+
+### Strengths
+- The paper is well-written. Motivation of curriculum GRPO is clear and technically sound. 
+
+- Proposed methods result in consistent performance improvement on the Qwen-2.5-VL-7B model across multiple benchmarks.
+
+- This paper systematically analyzes the joint RL versus curriculum RL, which provides valuable empirical guidance for the training of medical VLMs.
+
+### Weaknesses
+- The effectiveness of curriculum RL is only validated on the Qwen-2.5-VL-7B model. The generalization capability of such a method is unknown.
+
+- Lack of comparison between stronger medical reasoning VLMs, including LingShu, MedVLThinker, and MedGemma
+
+[1] Xu, Weiwen, et al. "Lingshu: A Generalist Foundation Model for Unified Multimodal Medical Understanding and Reasoning." arXiv preprint arXiv:2506.07044 (2025).
+
+[2] Sellergren, Andrew, et al. "Medgemma technical report." arXiv preprint arXiv:2507.05201 (2025).
+
+[3] Huang, Xiaoke, et al. "Medvlthinker: Simple baselines for multimodal medical reasoning." arXiv preprint arXiv:2508.02669 (2025).
+
+### Questions
+- Can you compare the performance of joint RL versus curriculum RL on more VLMs, such as Qwen3-VL, LLava-1.5?
+
+- Can you provide results of comparing MedCCO with stronger medical VLMs (please refer to the weaknesses).
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents MedCCO, a curriculum reinforcement learning framework that trains a medical vision-language model first on close-ended VQA with accuracy rewards and then adapts it to open-ended VQA with a hybrid reward. The hybrid reward mixes lexical overlap, measured by BLEU-1 and ROUGE-1, with semantic similarity from BERTScore, combined through a mixing weight lambda. The method also adds a VQA-consistency auditor step that rewrites misaligned question-answer pairs to reduce ambiguity before open-ended reinforcement learning. Experiments cover eight medical VQA benchmarks, with in-domain and out-of-domain settings, and include ablations on curriculum versus joint training, model size, data refinement, and lambda. The results report higher in-domain accuracy and stronger transfer, and show that curriculum training yields more stable learning than direct joint optimization.
+
+### Strengths
+1. The work offers a single reinforcement learning pipeline that handles both close-ended and open-ended medical VQA. The training order is clear and practical, since it begins with structured close-ended supervision and then moves to free-text answers that require broader knowledge. This design is documented with an explicit curriculum description and training objective based on GRPO.
+
+2. The curriculum design improves stability and final scores relative to joint optimization. The paper attributes the gains to different reward smoothness across task types and supports the claim with ablation tables that compare joint GRPO and curriculum GRPO at two model sizes. The reported curves and averages show consistent improvements when the curriculum is used.
+
+### Weaknesses
+1. The evaluation and the open-ended reward share the same metric family, which raises a metric alignment risk. The reward for open-ended answers mixes BLEU-1, ROUGE-1, and BERTScore, and the main open-ended score in Table 2 also reports a fixed mixture, with lambda equal to 0.7 declared in the header. This tight coupling blurs whether gains reflect better clinical reasoning or better alignment to the metric itself. The design choice is clear in the reward equation and in the reporting format, which strengthens the concern. 
+
+2. The open-ended metrics do not prove clinical correctness. The paper itself notes that overlap and embedding-based metrics may miss fine-grained clinical validity, and that using an LLM judge adds cost and bias concerns. The appendix adds an LLM-judge analysis to mitigate this, yet the main table still relies on overlap and BERTScore. This weakens the clinical meaning of the reported open-ended gains.
+
+3. The novelty is modest relative to established GRPO pipelines with staged post-training. The method extends a known algorithm, adds a hybrid lexical-plus-semantic reward, and uses a curriculum order. These ingredients mirror recent general-domain recipes and reuse a standard instruction format with think and answer tags, rather than introducing a new verifier or a new algorithmic idea. The contribution lies more in a careful application to medical VQA and in the data refinement step than in a new learning rule. 
+
+4. The baseline setup creates comparability issues. LLaVA-Med appears only under zero-shot evaluation, although the original work reports fine-tuned results, which likely depresses its numbers in the main table. In addition, the primary GRPO baseline is trained on close-ended data only, while the proposed method benefits from both close-ended and open-ended signals. Joint GRPO appears later in ablations, which means the headline comparison mixes training regimes and data coverage, making it harder to isolate the value of the curriculum itself. The grouping and baseline description in the table and text support this reading.
+
+### Questions
+Please see the weaknesses above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

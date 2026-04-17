@@ -1,0 +1,215 @@
+# Pensieve: Self-supervised Novel View Synthesis via Implicit and Explicit Reconstruction
+
+- Decision: Reject
+- Scores: 4, 8, 6, 4
+
+## Abstract
+Currently almost all state-of-the-art novel view synthesis and reconstruction models rely on calibrated cameras or additional geometric priors for training. These prerequisites significantly limit their applicability to massive uncalibrated data. To alleviate this requirement and unlock the potential for self-supervised training on large-scale uncalibrated videos, we propose a novel two-stage strategy to train a view synthesis model from only raw video frames or multi-view images, without providing camera parameters or other priors. In the first stage, we learn to reconstruct the scene implicitly in a latent space without relying on any explicit 3D representation. Specifically, we predict per-frame latent camera and scene context features, and employ a view synthesis model as a proxy for explicit rendering. This pretraining stage substantially reduces the optimization complexity and encourages the network to learn the underlying 3D consistency in a self-supervised manner. The learned latent camera and implicit scene representation have a large gap compared with the real 3D world. To reduce this gap, we introduce the second stage training by explicitly predicting 3D Gaussian primitives. We additionally apply explicit Gaussian Splatting rendering loss and depth projection loss to align the learned latent representations with physically grounded 3D geometry. In this way, Stage 1 provides a strong initialization and Stage 2 enforces 3D consistency - the two stages are complementary and mutually beneficial. Extensive experiments demonstrate the effectiveness of our approach, achieving high-quality novel view synthesis and accurate camera pose estimation, compared to methods that employ supervision with calibration, pose, or depth information.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper presents a solution for novel view-synthesis (NVS) from raw, uncalibrated videos without using any additional camera parameters or geometric priors. The proposed solution consists of two stages. First, the model predicts per-frame latents for the camera and the scene context. Then an implicit renderer (LVSM) is used as an implicit renderer. This first stage provides a strong initialization that helps overcome common optimization challenges. The second stage is a per-frame, per-pixel predictor of 3D Gaussian parameters. By adding this second stage the model aligns the latent space with the real-world through an explicit representation, enforcing 3d consistency. The experiments show competitive quality in camera pose estimation and state-of-the-art results on NVS.
+
+### Strengths
+1. The paper addresses a very challenging and hot topic in 3D vision: fully self-supervised learning from uncalibrated videos. The core idea of "implicit pretraining, explicit alignment"  is a novel and clever strategy to tackle a known bottleneck. It sidesteps the poor-gradients/local-minima issues of purely explicit self-supervised methods by using an end-to-end implicit renderer (LVSM-like) first to learn a good latent space.
+
+2. The paper's central claims about its own design are exceptionally well-supported by ablations. The "w/o Stage 1" and "w/o Stage 2" experiments in Tables 3 and 4 compellingly demonstrate that both stages are essential and complementary.
+
+3. The method achieves state-of-the-art results (Tables 1 & 2)  against competing methods. Crucially, it does so without the priors that competitors require, such as camera intrinsics (K), pretrained depth (D) and matching (M) networks, or camera poses (P).
+
+4. The paper is well written overall and clearly embedded in the existing literature.
+
+### Weaknesses
+1. The evaluations seem misleading to me. The paper's main results ("Ours*") in Tables 1 and 2 are achieved by freezing the network and running a 40-iteration, per-scene optimization to refine the test-view camera pose. This is a form of test-time optimization that is not feed-forward. This makes the comparison to feed-forward methods, such as PF3plat, misleading. The true, feed-forward "Ours" result on RealEstate10K (22.20 PSNR) is significantly lower than the optimized "Ours*" (23.96 PSNR) and is actually worse than the competitor PF3plat (22.84 PSNR). This needs to be made much clearer in the results tables and abstract.
+
+2. The inference time solution for two images seems hacky to me. It involves running the network twice—first on 2 frames, then using the LVSM branch to render a new middle frame, and finally re-running the network on all 3 frames. The ablation in Table 3 shows this trick provides a large boost (23.25 to 23.96 PSNR), meaning it is critical for the reported "Ours*" scores. This is computationally expensive and less elegant than a single-pass solution.
+
+3. I am a bit confused about why using the implicit model as the default for the evaluation is supposed to be better. The paper states that "all our NVS evaluations are rendered using the implicit branch". However, in Table 1, the feed-forward explicit branch ("Ours-explicit") achieves a 23.11 PSNR, which is better than the feed-forward implicit branch ("Ours") at 22.20 PSNR. This makes the default use of the implicit branch for evaluation confusing.
+
+4. It would be helpful to include a description of the baselines and how they were retrained (if at all) on this new task. 
+
+5. The paper's experimental validation feels incomplete when compared to the baselines it cites. For instance:
+The SelfSplat paper also provides strong results on the ACID dataset, reporting an average PSNR of 26.71. The Pensieve paper does not include this dataset, which limits the comprehensiveness of the comparison. More importantly, the SelfSplat paper includes a cross-dataset generalization benchmark (e.g., training on RE10k and testing on ACID), achieving 26.60 PSNR. This is a much stronger test of a model's generalization. Pensieve lacks this critical evaluation, making it difficult to assess whether its two-stage strategy truly generalizes or overfits to the RE10k data distribution.
+
+### Questions
+1. My primary concern is the evaluation. I would like to see a more honest evaluation in the form of a table that directly compares the purely feed-forward "Ours" model (i.e., no 40-step pose optimization and no IF trick) against the feed-forward results of PF3plat and SelfSplat. This would be a much fairer "apples-to-apples" comparison of the generalizable models.
+
+2. Following up on the question above, how much of the final "Ours*" performance gain comes from the novel two-stage training strategy versus the 40-step inference-time pose optimization? The large gap between "Ours" (22.20) and "Ours*" (23.96) in Table 1 suggests the optimization is a major contributor.
+
+3. What is the computational overhead (e.g., in inference time or FLOPs) of the "Interpolated Frame Enhanced Prediction" (IF) trick?
+
+4. Why is the implicit (LVSM) branch used for the default NVS evaluation when the feed-forward explicit (GS) branch ("Ours-explicit") appears to achieve a better PSNR (23.11 vs 22.20 in Table 1)? What is the performance of the optimized "Ours-explicit*" model?
+
+5. The paper states the "w/o Stage 1" model "fails to converge". This is a key justification for Stage 1. Does this mean the loss diverges, or does it simply converge to a very poor local minimum (as suggested by the 12.97 PSNR in Table 3 )? Could this be due to large viewpoint changes or to the prediction of many redundant Gaussians under the per-pixel GS parameter prediction scheme?
+
+6. Following up on the question above, do we need to predict per-pixel Gaussians? In my opinion, this creates many problems down the line, such as the risk of losing multi-view consistency when dealing with long videos. 
+
+7. Could the authors please clarify the discrepancy in the SelfSplat baseline results? This paper reports 22.04 PSNR on RealEstate10K, while the v5 SelfSplat paper reports 24.22 PSNR. Which version of SelfSplat was used for the comparison? Was the SelfSplat baseline retrained from scratch using the Pensieve training curriculum (e.g., unordered frames, N in [2,7])? If so, this would be a fair comparison, but it should be stated explicitly to explain the performance difference. If an older version was used, how do Pensieve's results compare with those from the latest version of SelfSplat?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces a novel two-stage training strategy for self-supervised novel view synthesis (NVS), i.e., synthesizing novel views from uncalibrated videos or multi-view unposed images. The key challenge lies in ensuring meaningful 3D scene structure with camera parameters without any explicit supervision, i.e., learning 3D consistency in an implicit reconstruction framework (L.057-L.061). By applying a two-stage training strategy, where an explicit 3D representation (3DGS) is incorporated in the loss functions, the second stage enforces 3D consistency, grounding the model in real-world geometry.
+
+The paper's main contributions are the proposal of this two-stage implicit-to-explicit framework, which achieves state-of-the-art results in high-quality NVS, competitive camera pose estimation, and even the capability of depth estimation, while relying solely on raw video frames for training.
+
+### Strengths
+The paper is well-written and well-motivated. The core observation—that an implicit pretraining stage can circumvent optimization challenges and provide a robust initialization for a subsequent explicit 3D alignment stage—is a crucial challenge in recent advances of self-supervised novel view synthesis [1,2,3,4]. The experimental setup, including benchmarks (RealEstate10K, DL3DV-10K) and evaluation protocols (Target-aware, Target-aligned), is thorough. The results provide strong evidence for the necessity and effectiveness of the two proposed stages.
+
+[1] LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias
+
+[2] The Less You Depend, The More You Learn: Synthesizing Novel Views from Sparse, Unposed Images without Any 3D Knowledge
+
+[3] RayZer: A Self-supervised Large View Synthesis Model
+
+[4] No Pose at All: Self-Supervised Pose-Free 3D Gaussian Splatting from Sparse Views
+
+### Weaknesses
+### 1. Clarity
+
+The paper is well-written, but the clarity could be enhanced by more consistent use of notation. The descriptions in Section 3.3 (L.215-L.242), for example, are purely textual and could be difficult to parse. Incorporating the mathematical notations established in Sections 3.1 and 3.2 would make the methodology easier to follow. Similarly, using notations in the evaluation sections could improve readability; for instance, on L.409, explicitly mentioning that the results of the explicit branch correspond to the rendered image $\hat{I}^G$ would better connect the results to the method. As a minor stylistic point, replacing `\cite` with `\citep` where grammatically appropriate could improve rendering in some browsers.
+
+### 2. LVSM Details
+
+The relationship between the View Synthesis Transformer and the standard LVSM model could be explained more clearly. From Figure 1, it seems the LVSM architecture has been adapted to accept feature maps $F^C$ as input, rather than the raw pixels used in the original version. This suggests the model is not a pretrained, off-the-shelf decoder but is instead an adapted architecture trained from scratch during Stage 1. I believe clarifying these details, either in the main paper or the appendix, would benefit the reader's understanding and aid in reproducibility.
+
+### 3. (Optional) Validation
+
+The experimental results would be more robust with the inclusion of a cross-dataset evaluation. For instance, testing the performance of the model trained on RealEstate10K on the DL3DV dataset would be a strong validation of the method's robustness, e.g., if the camera motion distributions differ significantly between the two datasets, the model with Stage 2 alignment might exhibit superior generalizability compared to the model without Stage 2, even when using a target-aware evaluation protocol.
+
+### 4. Related/Concurrent Work
+
+Discussing some related/concurrent work [1,2] in the main paper or the Appendix could provide a more comprehensive understanding for future research.
+
+[1] RayZer: A Self-supervised Large View Synthesis Model
+
+[2] No Pose at All: Self-Supervised Pose-Free 3D Gaussian Splatting from Sparse Views
+
+### Questions
+1. There appears to be a slight inconsistency in the reported results for the main model under the Target-aware Evaluation setting. In Table 1, the "Ours" method is listed with a PSNR of 26.53, while in the ablation studies in Table 4, the equivalent "Full" model reports a PSNR of 26.62. Does this reflect a subtle variation in the experimental setup between the main results and the ablation studies, or is it a potential typo?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes a two-stage self-supervised framework for NVS and camera pose estimation from uncalibrated video data, consisting of: (1) implicit reconstruction pretraining and (2) explicit reconstruction alignment. In the first stage, the model learns to synthesize views implicitly through a latent camera representation inspired by LVSM, addressing the optimization limitations of explicit reconstruction methods. In the second stage, it is refined using 3DGS and a depth reprojection loss to enforce 3D geometric consistency. An interpolated-frame strategy further mitigates insufficient camera alignment in extreme two-view settings. Experiments show that the method outperforms prior pose-free and weakly supervised approaches in both view synthesis quality and pose estimation accuracy.
+
+### Strengths
+- The proposed two-stage framework is well-motivated. 
+  - The implicit pre-training addresses the optimization challenges/instability of explicit 3D methods.
+  - The second stage with 3DGS and depth reprojection enforces explicit geometric consistency and aligns the learned latent representation with the physical 3D space.
+- The evaluations are thorough
+  - Tab1 and 2 show superior performance over baselines on two datasets, i.e., RealEstate10K and DL3DV-10K.
+  - The authors ablate the effectiveness of two stages and IF in Tab3 and 4.
+
+### Weaknesses
+- Although the authors claim that 3DGS adds geometric consistency, the evaluation relies solely on rendering metrics (PSNR, SSIM, LPIPS), which may not fully capture geometric or temporal fidelity. Incorporating geometry-aware consistency metrics would strengthen the claims.
+- The multi-stage training pipeline (4 transformers, multiple losses) may be difficult to reproduce and is computationally demanding.
+- Fig1 is difficult to interpret, as it contains too many architectural details that make the overall pipeline visually overwhelming.
+- The paper doesn’t analyze failure cases (e.g., in scenes with extreme motion).
+
+### Questions
+Please find my questions in weakness.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper focuses on the field of learning 3D pose estimation and 3D appearance prediction from unposed and uncalibrated video frames. The key contribution lies in an implicit reconstruction for leaning camera poses with LVSM and an explicit reconstruction module that learns Gaussian attributes.
+
+### Strengths
+1. This paper focuses on a meaningful task that directly learns 3D reconstruction models from unposed images which are easy to collect in the real-world. The scheme provides a great potential in scaling up to large scale data. 
+2. The framework is simple, which also benefits  data scaling up. 
+3. The  results are convincing, outperforming SelfSplat.
+
+### Weaknesses
+1. The key idea of this paper seems to be replacing the matching-based camera pose estimation part of SelfSplat with the LVSM-based solution. The LVSM is also an off-the-shelf method.  More insights are needed for highlighting the differences.
+
+2. More comparison with DBARF and FlowCAM are required.
+
+3. I am curious with the scaling-up capability of the method. The key advance of the self-supervised learning scheme lies in a flexible scaling-up to unposed real-world images. However, the method are only trained with standard datasets where camera pose are easy to obtain, which does not demonstrates its effectiveness. I understand that the revision time are not enough for large-scale training, yet am still interested in the potential.
+
+### Questions
+1. How long does the method take to converge in current GPU settings?
+2. Does the method work for dense view inputs (e.g. 100 images)?
+
+I am willing to raise my score if the authors can convince me with the scaling-up capabilities and differences with SelfSplat.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

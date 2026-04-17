@@ -1,0 +1,174 @@
+# Visualizing Thought: Conceptual Diagrams Enable Robust Planning in LMMs
+
+- Decision: Reject
+- Scores: 6, 4, 6, 4
+
+## Abstract
+Human reasoning relies on constructing and manipulating mental models—simplified internal representations of situations used to understand and solve problems. Conceptual diagrams (e.g., a sketch drawn to aid reasoning) externalize these mental models, abstracting irrelevant details to efficiently capture how entities interact. In contrast, Large Language Models (LLMs) and Large MultiModal Models (LMMs) predominantly reason through text, limiting their effectiveness on complex multi-step tasks. In this paper, we propose Visual Thinking, a generalizable framework that enables LMMs to reason through multiple chains of self-generated conceptual diagrams, significantly enhancing their combinatorial planning capabilities. Our approach requires no human input beyond the natural language description of the task. It integrates textual and diagrammatic reasoning within an optimized Graph-of-Thought inference framework, enhanced by beam search and depth-wise backtracking. Evaluated on multiple challenging PDDL planning domains, our method substantially improves LMM performance (e.g., GPT-4o: 35.5% → 90.2% in Blocksworld) and consistently outperforms text-only search-based inference methods. On more difficult domains with solution depths up to 40, it also surpasses the o1-preview reasoning model (e.g., 16 percentage points improvement in Floor Tiles). These results demonstrate the power of conceptual diagrams as a reasoning medium in LMMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces "Visual Thinking," a framework that significantly enhances the performance of Large Multimodal Models (LMMs) on combinatorial planning tasks by enabling them to generate and reason with conceptual diagrams autonomously. The method integrates beam search and backtracking mechanisms within a Graph-of-Thought inference framework, requiring no manually drawn diagrams or domain-specific templates. Evaluations across multiple PDDL planning domains demonstrate that the approach substantially outperforms both pure-text reasoning models and search-based baselines. The paper also contributes a new challenging benchmark for long-horizon planning.
+
+### Strengths
+1. **Originality:** The paper is highly original, being the first to introduce autonomously generated conceptual diagrams as a reasoning medium for LMMs, combined with a graph-based reasoning framework and search optimization strategies. Compared to existing methods that rely on human-drawn diagrams or single-step visual aids, this approach is more generalizable and scalable.
+
+2. **Quality:** The experimental design is rigorous, encompassing multiple planning domains, including a newly proposed challenging benchmark. The ablation studies thoroughly validate the contribution of each component.
+Significance: This research not only technically advances the planning capabilities of LMMs but also opens up new directions for multimodal reasoning.
+
+### Weaknesses
+1. **Substantial Computational Overhead:** Although the paper claims the method is more efficient than text-only search, the generation and verification of diagrams still introduce significant computational costs.
+
+2. **Domain Limitations:** The method is currently limited to combinatorial planning problems expressible in PDDL. It has not been tested on more open-ended, unstructured reasoning tasks. The high error rate in domains with high branching factors like Tetris also indicates room for improvement in handling complex, parameterized actions.
+
+### Questions
+* Q1: The paper does not discuss how consistency in diagram generation affects long-horizon reasoning. Were there instances where inconsistencies in diagram style across steps led to reasoning breakdowns? Is there any mechanism in place to ensure coherence between consecutive diagrams in a multi-step sequence?
+
+* Q2: Is the method applicable to tasks not described in PDDL, such as everyday tasks specified by natural language instructions? Are there plans to extend the evaluation to broader reasoning benchmarks to demonstrate generalizability beyond formal planning domains?
+
+* Q3: Regarding the dramatic performance drop when replacing rendered diagrams with their underlying code, was a deeper analysis conducted on the specific bottlenecks the model faced when processing the code? Were alternative, simplified code representations or intermediate visual formats explored to mitigate this issue?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+In this paper, the authors propose to (using prompt primarily) conduct visual thinking for VLLMs. Specifically, the method involves textual and diagrammatic reasoning within an optimized Graph-of-Thought inference framework, together with beam search and backtracking. The authors primarily evaluate their prompting methods with LLMs from the recent GPT families (GPT-4o, o1-mini, and o1-preview) on several datasets. The result shows the promise of feeding both the diagram and the text in the reasoning process.
+
+### Strengths
+- The authors have demonstrated, at least for the GPT set of models, their method of prompting can enhance the model's reasoning on several datasets (which I would not call real-world, as from my understanding, they are simulated, including the ones proposed by the authors).
+- The proposed method has significantly improves the GPT models' performance on the datasets evaluated in this paper.
+
+### Weaknesses
+- How does the base model selection affect the outcome? For instance, for open-source VLLMs such as models from QWen family and other VLLM models? 
+- Are there any real world datasets that your method can help with? For instance, [1] tested their prompting method on several real-world planning tasks, [2] tested their methods on table-specific applications. I think including diverse datasets such as complicated real-world planning tasks, higher order theory of mind reasoning would demonstrate the value of the prompting methods.
+- One of the core arguments of this paper is to augment the text reasoning trace with the visual parts. This reminds of the recent discussion on reasoning with text versus images [3, 4] and many others. It would be nice for the authors to include these relevant works in the related work section.
+
+----
+### References
+
+[1] Sun, Zhenjie, et al. "Table as Thought: Exploring Structured Thoughts in LLM Reasoning." arXiv preprint arXiv:2501.02152 (2025).
+
+[2] Wang, Zilong, et al. "Chain-of-table: Evolving tables in the reasoning chain for table understanding." arXiv preprint arXiv:2401.04398 (2024).
+
+[3] Wei, Haoran, Yaofeng Sun, and Yukun Li. "DeepSeek-OCR: Contexts Optical Compression." arXiv preprint arXiv:2510.18234 (2025).
+
+[4] Deng, Naihao, et al. "Tables as texts or images: Evaluating the table reasoning ability of llms and mllms." arXiv preprint arXiv:2402.12424 (2024).
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Visual Thinking is a framework that enhances large multimodal models by integrating textual and diagrammatic reasoning through a Graph-of-Thought approach. It employs self-generated diagrams with beam search and backtracking to boost complex planning performance.
+
+### Strengths
+The author integrates graphical representations to allow the model to intuitively grasp reasoning structures via visual information, thus enhancing task performance.
+
+### Weaknesses
+It is uncertain whether any task can produce a concept, which would limit its ability to generalize.
+
+### Questions
+How are PDDL and graphs combined in a MLLM? Please explain.
+
+Could you explain how graphs are dynamically generated?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces diagram-based visual thinking, a framework that enables large multimodal models (LMMs) to reason through multiple self-generated diagrams. Instead of relying solely on textual descriptions, it represents intermediate reasoning states visually. The approach requires only a natural language description of the task—without any additional human input—and consistently outperforms text-based baselines such as GoT, optimized GoT, and the o1-series models.
+
+### Strengths
+(1) The paper presents a detailed efficiency analysis of both generation cost and time compared with baseline methods, which is an important contribution. It also includes thorough ablation studies and analyses of the diagram generation process.
+
+(2) The proposed method is evaluated across multiple game environments, with clear and well-structured methodological descriptions.
+
+### Weaknesses
+(1) The baselines using GoT and optimized GoT appear unreasonably weak. Could you provide more details about their outputs? If the task states are clearly described, GoT should achieve relatively strong performance on these tasks. It would be helpful to include some basic case studies and an analysis of the error types to clarify this gap.
+
+(2) While complex visual reasoning might be necessary for robotics tasks, the game-like environments used here may not require such intricate visual representations. Similar to environments like TextWorld or AlfWorld, the key lies in the language used to describe the relationships between objectives. A more cost-effective baseline could focus on describing these relationships rather than the absolute states of each object. For instance, in Figure 3, instead of generating diagram code, one could produce text captions emphasizing relative relationships (e.g., “Object A is held by the hand above; below, from left to right, are A, B, and C”). You could include baselines that generate such captions using different prompts—one focusing on absolute states and another on relational descriptions.
+
+(3) The generalization ability of the proposed method remains questionable. For real-world multimodal planning tasks, such as embodied reasoning, abstracting complex environments into diagrams is non-trivial. Additional experiments on more challenging and realistic scenarios would strengthen the paper’s claims about generalization. It is ok to provide just one or two examples to convince me it is working under more complicated tasks.
+
+### Questions
+How are the individual data point tasks constructed for each of the five additional IPC domains—Floor Tiles, Parking, Tetris, Elevator, and Barman? Do you add special difficulty for them? Could you provide more details about their design beyond the action space and brief task descriptions?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

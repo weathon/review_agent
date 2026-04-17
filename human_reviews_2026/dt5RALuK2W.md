@@ -1,0 +1,177 @@
+# Towards Human-Level Reasoning Benchmarks for Multimodal Language Models
+
+- Decision: Reject
+- Scores: 4, 4, 6, 6
+
+## Abstract
+The goal of achieving Artificial General Intelligence (AGI) is to imitate humans and surpass them. Models such as OpenAI's o1, o3, and DeepSeek's R1 have demonstrated that large language models (LLMs) with human-like reasoning capabilities exhibit exceptional performance and are being gradually integrated into multimodal large language models (MLLMs). However, whether these models possess capabilities comparable to humans in handling reasoning tasks remains unclear at present. In this paper, we propose Human-Aligned Bench, a benchmark for fine-grained alignment of multimodal reasoning with human performance. Specifically, we collected 9,794 multimodal questions that solely rely on contextual reasoning, including bilingual (Chinese and English) multimodal questions and pure text-based questions, encompassing four question types: visual reasoning, definition judgment, analogical reasoning, and logical judgment. More importantly, each question is accompanied by human success rates and options that humans are prone to choosing incorrectly. Extensive experiments on the Human-Aligned Bench reveal notable differences between the performance of current MLLMs in multimodal reasoning and human performance. The findings on our benchmark provide insights into the development of the next-generation models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes Human-Aligned Bench, a comprehensive benchmark designed to evaluate the fine-grained multimodal reasoning capabilities of Multimodal Large Language Models (MLLMs), with particular attention to human alignment. The benchmark comprises 9,794 bilingual (Chinese/English) multimodal questions from  Chinese Civil Service Examination across four reasoning categories: visual reasoning, definition judgment, analogical reasoning, and logical judgment. Extensive empirical evaluation of both open and proprietary MLLMs is conducted, uncovering persistent gaps compared to human performance and providing analysis of reasoning alignment, error patterns, and the presence of 'fake reasoning' phenomena in current models.
+
+### Strengths
+1. Fine-grained human alignment signals: Each question includes human performance rates and error-prone distractors, allowing detailed analysis of not only model accuracy but also model-human agreement in both correct and incorrect responses, which is important and different from previous benchmarks.
+
+2. Comprehensive analysis of reasoning processes in experiments: Beyond reporting accuracy, the paper investigates phenomena such as 
+reasoning consistency and 'fake reasoning', probing whether MLLMs simply mimic procedural answers or genuinely reason like humans.
+
+3. The writing is easy to follow.
+
+### Weaknesses
+1. Methodological details for human annotation and validation are ignored:  The process for gathering and verifying human accuracy rates and error-prone options is described at a high level but lacks key implementation specifics. For example, the paper does not detail the size or demography of the annotator pool, inter-annotator agreement measures, data sanitization for ambiguous questions, or how bilingual question quality was assessed. This omission calls into question the reproducibility and reliability of the human alignment signals, which are central to the benchmark’s value.
+
+
+2. No discussion of potential data bias: The heavy reliance on Chinese civil service exams may bias both linguistic and logical properties of items towards specific cultural/educational formats, yet the paper offers little investigation or mitigation of such skew. This concern is compounded by the observed performance gaps between English and Chinese.
+
+
+3. Some important related works such as EMMA[1] and RBench-V[2] are ignored in this paper.
+
+[1]. Hao Y, Gu J, Wang H W, et al. Can mllms reason in multimodality? emma: An enhanced multimodal reasoning benchmark. ICML 2025
+[2]. Guo M H, Chu X, Yang Q, et al. RBench-V: A primary assessment for visual reasoning models with multi-modal outputs. NeurIPS 2025.
+
+
+4. The work mentions "pure reasoning" several times. I think it is difficult to completely decouple knowledge and reasoning. Therefore, I think the author has overclaimed on this point, or can provide experimental proof of this.
+
+### Questions
+Seeing weaknesses
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces the Human-Aligned Bench, a benchmark designed to evaluate the alignment between the reasoning capabilities of multimodal large language models and human performance. It consists of 9,794 contextual reasoning questions spanning four types—visual reasoning, definition judgment, analogical reasoning, and logical judgment. A contribution is the inclusion of fine-grained human data, such as per-question success rates and the error-prone options that commonly mislead people.
+
+### Strengths
+- The paper studies an important and interesting problem -- the alignment of humans and LLMs on reasoning patterns. The authors collect a benchmark based on problems from the China Civil Service Exam and provide human responses and reasoning processes. 
+
+- Several major MLLMs are evaluated in the paper. It is interesting to see the study about the "fake reasoning" phenomenon.
+
+### Weaknesses
+- The motivation of the paper is to evaluate the alignment between the reasoning capabilities of multimodal large language models and human performance. However, except for some general studies shown in Figure 3 and Table 4, we still cannot evaluate why and how the model is different from the reasoning process of humans. The benchmark also didn't tell us which parts of the differences are good or bad. The paper can be stronger if there is a more in-depth analysis of this problem. 
+
+- The authors didn't provide a comparison with existing benchmarks on model performance. Will the benchmark show a different trend compared to general benchmarks like MMMU/MMMU-Pro or existing contextual reasoning benchmarks? How does the proposed benchmark add to existing ones, considering there are already quite a few reasoning benchmarks.
+
+
+- A minor issue, in Table 1: "Fake Reasoning" -> "Human-Aligned Bench"?
+
+### Questions
+The paper is well motivated -- it is nice to see studies on the alignment between humans and models from the perspective of reasoning. I think the main weakness of the paper is that the study is not that complete or solid. There are some studies on the alignment, but we cannot see any clear or significant conclusions about how or why they are different. It is also not clear whether the benchmark can provide us with new insights compared to existing ones, considering there are already a lot of reasoning benchmarks for LLMs/MLLMs.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces Human-Aligned Bench, a multimodal reasoning benchmark aimed at isolating contextual reasoning rather than domain knowledge for MLLMs. The dataset comprises 9794 items spanning four categories: Visual Reasoning, Definition Judgment, Analogical Reasoning, and Logical Judgment, with Chinese and English text and image+text variants. Each item is annotated with human accuracy rates and human error prone options; the authors also provide concise human solution sketches per category. Experiments across 12 state-of-the-art open and proprietary MLLMs analyze performance by reasoning type, language, modality, and human difficulty bins, and study response/error consistency with humans. Headline findings: (i) large “reasoning” models outperform smaller baselines but still trail humans, especially on visual reasoning; (ii) accuracy degrades with difficulty for text tasks but not reliably for visual tasks; (iii) “fake reasoning” is suggested by sensitivity to prompts and limited gains from injecting model-self solutions, whereas adding human solution heuristics sometimes helps.
+
+### Strengths
+The paper effectively focuses on evaluating pure reasoning capabilities of MLLMs, leveraging civil-service-style questions. This choice cleverly avoids the interference of domain-specific expertise, addressing a key gap in existing benchmarks where reasoning and knowledge assessment are often conflated.
+Each question is supplemented with human accuracy rates and labels for human error-prone options, which is instrumental for conducting in-depth analyses of behavioral consistency—particularly the alignment between model and human error patterns. This fine-grained annotation significantly enriches the benchmark’s analytical potential.
+The benchmark covers four reasoning types, supports bilingual (Chinese-English) content, and includes both text-image multimodal and text-only variants. Additionally, difficulty levels are stratified by human accuracy, ensuring a holistic and objective evaluation of model reasoning abilities across diverse scenarios.
+The findings clearly highlight the persistent performance gap between MLLMs’ visual reasoning and text reasoning capabilities. This insight provides concrete guidance for the optimization of next-generation multimodal reasoning models, enhancing the paper’s practical relevance.
+
+### Weaknesses
+The claim that "models exhibit fake reasoning" lacks robust methodological backing. Additional validation approaches are required, such as introducing adversarial rubric injection, conducting think-step ablation experiments, and implementing randomized strategy prompt testing.
+The paper fails to address or introduce specific measures designed to prevent data contamination.
+
+### Questions
+Will you release the labeling guideline used by annotators?
+Do you have a confusion matrix or analysis of borderline cases, particularly for items containing both text and image cues?
+Will you release the dataset (questions, images, per-item human accuracy and error-prone options, and labeling guidelines) along with licenses and a data card?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces Human-Aligned Bench, a multimodal reasoning benchmark containing a large number of tasks across four different reasoning types. Compared to existing benchmark, the proposed benchmark focuses on evaluating MLLM and human capability alignment.
+Each task in the dataset are annoted with human accuracy and error patterns. The experiments show that current MLLM's capability is still far from human, especially in difficult reasoning tasks.
+
+### Strengths
+1. The new proposed dataset contains annotations about human actions, which is novel in recent benchmarks and is beneficial to investigating the thinking mechanism of MLLMs.
+2. The paper conducts a thorough analysis across multiple dimensions and MLLMs. This provides a holistic view of model capabilities and their shortcomings compared to human reasoning.
+
+### Weaknesses
+1. More experiments on the leading MLLMs ( e.g. GPT-5, deepseek) can be carried out to better support the paper's conclusion.
+
+### Questions
+1. The representation of Fig.4 is complicated. Since the correspondence (x,y) is equal to (y, x), maybe there is a better way to represent the results more clearly? Also it is hard to compare the correspondence of a certain MLLM across different diffculty levels.
+2. Can authors conduct experiments on the leading MLLMs such as GPT-5 on a small part of the dataset?
+3. Is it possible for Human-Aligned Bench to include explicit problem-solving strategies for each question type, similar to how human reasoning is structured?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

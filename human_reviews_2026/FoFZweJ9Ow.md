@@ -1,0 +1,204 @@
+# End-to-end topographic auditory models replicate signatures of human auditory cortex
+
+- Decision: Reject
+- Scores: 2, 6, 4, 2
+
+## Abstract
+The human auditory cortex is topographically organized. Neurons with similar response properties are spatially clustered, forming smooth maps for acoustic features such as frequency in early auditory areas, and modular regions selective for music and speech in higher-order cortex. Yet, evaluations for current computational models of auditory perception do not measure whether such topographic structure is present in a candidate model. Here, we show that cortical topography is not present in the previous best-performing models at predicting human auditory fMRI responses. To encourage the emergence of topographic organization, we adapt a cortical wiring-constraint loss originally designed for visual perception. The new class of topographic auditory models, TopoAudio, are trained to classify speech, and environmental sounds from cochleagram inputs, with an added constraint that nearby units on a 2D cortical sheet develop similar tuning. Despite these additional constraints, TopoAudio achieves high accuracy on benchmark tasks comparable to the unconstrained non-topographic baseline models. Further, TopoAudio predicts the fMRI responses in the brain as well as standard models, but unlike standard models, TopoAudio develops smooth, topographic maps for tonotopy and amplitude modulation (common properties of early auditory representation, as well as clustered response modules for music and speech (higher-order selectivity observed in the human auditory cortex). TopoAudio is the first end-to-end biologically grounded auditory model to exhibit emergent topography, and our results emphasize that a wiring-length constraint can serve as a general-purpose regularization tool to achieve biologically aligned representations.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The authors used two topographical models to replicate the spatial organizations in the human auditory cortex, including tonotopy (spectral frequency), amplitude-modulation (temporal frequency) maps, and patches for speech and music. They employed the same model previously used in the topographic vision model (Deb et al., 2025, ICLR).
+
+### Strengths
+Originality:
+
+This is the first end-to-end model that tries to model the spatial organization (maps and patches) in the human auditory cortex.
+
+Quality:
+
+See “Weaknesses” and “Questions.”
+
+Clarity:
+
+The manuscript is easy to understand, and the figures are well illustrated. However, some parts are confusing. See “Weaknesses” and “Questions.”
+
+Significance:
+
+We need a computational model to explain the organization of the auditory cortex. This work will make a big contribution to our understanding of the auditory cortex and has broad implications for other sensory systems as well.
+
+### Weaknesses
+**First**, this is not a method paper that proposed a new loss function. The authors used the same method as TopoNets (Deb et al., 2025, ICLR).
+
+**Second**, since this is not a method paper, the contribution should be solely in the modeling or interpretation of neuroscience findings. I do not agree with the authors’ claim that “TopoAudio is the first end-to-end biologically grounded auditory model to exhibit emergent topography” (L29–L30). It only shows certain kinds of patches, but no clear topography. In L409 and L412, the authors mention “a smooth frequency gradient” and “smooth spatial transitions.” I do not think their results are smooth or show gradients.
+
+At the bottom of Figure 3, the ResNet-50 model shows one or two patches for spectral frequency and four or seven patches for temporal-modulation frequency. In contrast, the AST models show numerous (over 30?) much smaller patches. This problem may result from the extremely low spatial resolution in the ResNet-50 model. Why can’t the authors use a higher resolution, as in the TDANN paper (Figure 2C, right)?
+
+There is no gradient or transition in Figure 3B (temporal frequency or AM map). In the ResNet-50 model, the changes are arbitrary from one frequency to another. I do not know how to interpret the results from the AST model; it looks like a blurred version of the baseline model. Please correct me if I am wrong. In Figure 3A (spectral frequency or tonotopy), the frequency change in layer 2.1 is random, though layer 1.1 does exhibit a three-color gradient. Is this the topography the authors refer to? They need to show more evidence to convince us there is a gradient in their results.
+
+**Third**, the number of spectral/temporal maps (supposed to exist) and speech/music patches does not match the experimental results. In the auditory cortex, there are multiple spectral maps (low to high to low), but there is only one in their model (layer 1.1, ResNet-50). In the auditory cortex (Norman-Haignere et al., Neuron, 2015), there is only one speech patch (component 5) and one or two music patches (component 6). In contrast, their ResNet-50 model exhibits three speech patches and four music patches (Figure 4A), and the AST model exhibits over twenty patches (Figure 4B). Furthermore, there is no overlap between speech and music patches in the human auditory cortex, whereas the ResNet-50 model has at least two overlapping patches. I suggest the authors quantify these results as in Figure 3G, J of the TDANN paper.
+
+**Last**, in topographical vision models (TDANN and TopoNets), adding topographical constraints or loss usually reduces model performance. In contrast, there is absolutely no decrease—or even an increase—in the topographical audio model’s performance. The authors tested four scaling coefficients (5, 25, 50, and 100). What will happen if one uses a scaling factor of 1000 (i.e., a topo-loss ten times the task loss)? The authors used regression to quantify similarity between model and brain. Will different scaling coefficients play a role when using RSA (representational similarity analysis) as the metric?
+
+### Questions
+1. The layer information in the ResNet-50 models (baseline and TopoAudio) is unclear. In L354, the authors mention the 6th topographic layer, but the accuracy peaks at the 5th layer. In L432, the authors mention layer 3, yet it is actually the 5th layer. I suggest that the authors label the layers (relu1, maxpool1, layer1, layer2, layer3, layer4, avgpool) in Figure 2 and refer to them consistently throughout the paper.  
+
+2. In Figure 3, the minimal spectral and temporal frequencies both start at zero. This does not make sense.  
+
+3. In Figure 3A, do those large white pixels represent zero frequency or no tonotopy? If it is the latter, that also does not make sense, because tonotopy is present almost everywhere in the auditory system.  
+
+4. The maps of spectral and temporal frequency are orthogonal in both the inferior colliculus (Joris et al., 2004, Physiological Reviews; Baumann et al., 2011, Nature Neuroscience) and auditory cortex (Baumann et al., 2015, eLife). Can the authors demonstrate such a relationship in the model?  
+
+5. Following the previous question, what is the earliest layer—and how many layers— that exhibit maps of spectral and temporal frequency?  
+
+6. L321–322: “A key requirement for any biologically inspired model is that it must retain strong predictive performance while better aligning with the structure of neural data.” The model can also align with human auditory behavior.  
+
+7. Are the results shown in Figures 3 and 4 stable across different random seeds?  
+
+8. Do the speech and music patches shown in Figure 4 appear only in the deep layers? What about earlier layers?  
+
+9. Why does adding the topographic constraint enhance the speech and music components? Is this due to the smoothing effect during training?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper induces a topographic constraint on the task-specific objective fuctions used to train task-driven audio models to show that smooth topographic maps for tonotony and amplitude modulation, and clustered responses for music and speech emerge throughout the new model. Additionally, the new model does not seem to show a performance decline on audio tasks.
+
+### Strengths
+The paper is well-structured and the motivation is well-presented. The key hallmarks of functional organization in the auditory cortex have been replicated to a good extent. The biggest strength I notice is not in the recapitulating of topographic motifs in a sensory system but for the same topographic constraint to lead to the emergence of such motifs across seemingly disparate systems, highlighting that a common organizational principle, probably subserved by a wiring economy constraint, underlies how such systems are set up.
+
+### Weaknesses
+Initially, when reading the paper, I was a bit lost as to what topographic constraint was being used. In section 2.1, the authors describe three ways in which some form of spatial constraint has been applied in prior works. Then, in the caption for Figure 1, the word "TopoLoss" is used, which is never defined in the main manuscript. It is only in the appendix where the exact loss constraint is defined. I would maybe add a sentence or two in the main manuscript, and link to the corresponding appendix section as well.
+
+There are a lot of places in the manuscript where the authors say that results from their topographic model are "consistently" better than that from the baseline. I find the use of the term "consistently" to be very weak. Can the authors do some statistical significance tests for, say, task accuracy, map smoothness, etc.?
+
+Maybe I just missed this, but how many models were trained with different random seeds. What I want to know is if the results presented are robust across seeds. And along this line, I also had a hard time understanding what the error bars represented in, say, Fig 5c. Why are there no error bars to represent variance between-humans? And do the error bars over models represent variance between different seed runs?
+
+Finally, while I appreciate the finding that a topographic loss leads to more modular clustering of units on some simulated sheet, is there any quantitative data from humans or non-human animal models to get some form of a ceiling score? It would be nice to see if the amount of smoothness or size and shape of the clustering patterns match, to whatever degree, to those found in the biological auditory cortex.
+
+### Questions
+Please see the weaknesses above!
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces brain-like topographic models for auditory perception. They show that inducing a topographic loss as a secondary objective during training encourages models to learn smoothly varying hidden representations given some spatial embedding. They train ResNets and Transformers w/ varying topographic signatures and show that topographic models (1) match baseline performance on behavioral benchmarks and (2) match baseline performance on fMRI prediction. Further, they show that their TopoAudio models capture human-brain-like topographic signatures (tonotopy and amplitude modulation).
+
+### Strengths
+* I think this paper does a really good job with evals, specifically for the speech/music selectivity ICA maps; I'd like to see more of this kind of evaluation in other topographic neural net research.
+* This is to my understanding the first topographic audio model!
+
+### Weaknesses
+* The writing could be a bit clearer in places - e.g. I wasn't sure what topographic constraint you actually used in training until I dug into the appendix (you talk about both TDANNs and TopoNets, but you don't mention which is used for training).
+* I would like to see the same models trained with TDANN loss or with explicit connectivity constraints (e.g. Blauch et al. 2022). I'm not entirely convinced by the biological plausibility of TopoNet loss, insofar as maximizing the correlation of representations to a filtered version of those same representations is likely not what the brain is actually implementing (both mechanistically and analogously). I understand the point of the paper is not to introduce a new kind of loss or to motivate TopoNet loss, so I don't think this is actually a fatal flaw, but I do think it would be valuable to explore other methods for training topographic audio models.
+* I'm not convinced by the significance of the paper's results. On the one hand, I think it is reasonably interesting that topographic constraints also work in the auditory domain. On the other, I think this is a reasonably expected result, given evidence from both vision and language; it isn't clear to me that audition is something extremely unique. However, I do think that the evals are quite original / significant!
+
+### Questions
+* I'd like more clarity on why audition is an interesting or original domain compared to vision/language, i.e. why should we be surprised that connectivity principles transfer here?
+* I could be misinterpreting this, which is why I haven't listed it as a "weakness," but it seems like the results on topotonic and amplitude modulation maps are just saying "we see smoothness in early auditory representations when we train auditory representations to be smooth, and we also see smoothness in early auditory processing in the brain." It seems like there's nothing stimulus-specific or actually _comparative_ going on here; i.e. can you explain why these results specifically matter/are interesting?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper studies how topographic representation emerge in a speech recognition model. It presents a model called TopoAudio, which is trained to classify speech, and environmental sounds from cochleagram inputs. The key finding is that with an added constraint that nearby units on a 2D cortical sheet develop similar tuning, the model could develop spatially topographic representations for acoustic features such as frequency and amplitude. Two speech recognition models, CochResNet50 and AST were used as baseline models.
+
+### Strengths
+1. The problem this work targets at is very interesting. It tries to bridge the gap between a speech processing model and the biological auditory systems in the internal representation of acoustic features. 
+ 2. It shows that with added topographic constraint, the test speech processing models didn't show much degradation in prediction performance, which points out a promising direction for developing biologically plausible speech processing models.
+
+### Weaknesses
+1. The paper is poorly written. Many critical technical details are missing, which makes the paper hard to understand. In fact, throughout the main text, I don't find how the topographic constraint is imposed to the baseline models, but this constraint is said to be the core of the work. In addition, it is unclear how a layer or a block of a neural network is related to a cortical sheet. Finally, I found a related section A.2 in Appendix, but this is never cited in the main text. 
+
+It is unclear what are the matrices in Fig. 3, and what are the elements in these matrices. 
+
+It is unclear how the smoothness score defined in Section 3.2.2 could measure smoothness. More explanation is needed, though some references are given there. It seems that that this score is not used in later sections.  
+
+2. I have no idea about the purpose of Section 3.2.4. 
+
+3. The purpose of Section 4.2 is confusing. The speech processing models are used to predict fMRI responses on two datasets. What's the essential difference from the classification experiments on the ESC50, NSynth, and Speech Command datasets discussed in Section 4.1? I cannot see a direct relationship between the topographic representation of the fMRI response in the brain and the topographic representation in the proposed models. The target of the prediction happens to have a topographic representation, but it doesn't necessarily say a model with good prediction accuracy also has a topographic representation. 
+
+I was quite excited to read the abstract and the beginning of the paper, but soon became disappointed. The paper is not logically coherent, and it looks like it was written in a rush.  There must be some value inside it, but at its present form, it is hard to understand the value.
+
+### Questions
+N/A
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1

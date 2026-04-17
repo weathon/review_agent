@@ -1,0 +1,136 @@
+# ONLINE RANKING WITH UNFAIR FEEDBACK AND HUMAN VERIFICATION: HIERARCHICAL ELIMINATION AND REGRET BOUNDS
+
+- Decision: Reject
+- Scores: 2, 6, 2
+
+## Abstract
+Online platforms rely heavily on user feedback for ranking systems, such as restaurant ratings and e-commerce listings. However, these systems face challenges from unfair feedback, including merchant-induced and malicious feedback. Thus, platforms have adopted human verification to increase the reliability of the rankings. It can certainly identify genuine feedback, but introduces high latency into real-time updates, leading to non-static queuing dynamics and creating challenges for online learning. We model this as a continuous-time online learning problem, establish the lower bound on regret, and propose two algorithms: Hierarchical Elimination (HE) and Deficit Hierarchical Elimination (DHE), dealing with the case of single and multiple verifiers, respectively. We further prove upper regret bounds for both algorithms and demonstrate their effectiveness through numerical experiments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+This paper studies online ranking when user feedback can be unfair and only a limited portion of the feedback can be verified by humans with delay. The authors model the process as a continuous-time online learning problem with verification queues and propose two algorithms: Hierarchical Elimination (HE) for a single verifier and Deficit Hierarchical Elimination (DHE) for multiple verifiers with heterogeneous speeds. Theoretically, the authors provided regret analysis for both algorithms. They have also conducted numerical experiments on small synthetic data to show the efficacy of their methods.
+
+### Strengths
+- The paper formalizes ranking with unfair feedback and verification latency as a continuous-time bandit-queue hybrid. I think the idea here is conceptually novel and has not been studied by prior works. 
+- The authors provided a nice description of their algorithmic ideas, which consists of both ranking and scheduling components. (However, I think it'd be better to include the main algorithm in the main body of the paper to improve clarity.) The theoretical results also appear sound and complete, with both upper and lower bound analysis, though I have not checked the proofs in detail.
+
+### Weaknesses
+1. I have some major concerns related to the practicality of the proposed framework/methods:
+- In terms of the numerical experiments, I think they are conducted under very small synthetic setups $(K \leq 3, T \leq 2000) $ without real or large-scale data. The paper’s claims about practical relevance to real-world online platforms are therefore not empirically supported.
+- The numerical comparisons are restricted to variants of the authors’ own methods and there is no comparison against other learning-to-rank methods.
+- Neither HE nor DHE’s computational or queue-simulation cost is analyzed, and it is unclear whether the proposed method would be practically feasible to implement. 
+2. The model assumes that unfair feedback is corrected by human verifiers operating in queues with exponential service times, which in my opinion is not very realistic for modern platforms. In practice, large-scale online platforms can use automated anomaly detection or even LLM-based verification, which can handle biased or malicious feedback at far lower computational and operational cost. So I feel that the proposed model is rather limited in real-world applicability.
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper investigates online learning to rank (OLTR) under manipulated or unreliable feedback. Motivated by real-world systems that employ human verification mechanisms, the authors model the problem as one with delayed feedback and verification-induced queuing effects. They formulate it within a continuous-time online learning framework and introduce two algorithms that effectively combine verified and unverified feedback. Theoretical analysis establishes regret guarantees and asymptotic optimality, while empirical results demonstrate the practical advantages of the proposed approach.
+
+### Strengths
+1) The paper tackles a timely and practically important problem arising in real-world online platforms, where ranking systems must contend with manipulated or unfair feedback and delays caused by human verification. The problem formulation captures these challenges well and is highly relevant to practical applications.
+2) It introduces a novel and insightful perspective by incorporating queuing dynamics into the OLTR framework, leading to a delayed feedback model with verification-induced latency. This integration is conceptually interesting.
+3) The proposed HE and DHE algorithms are theoretically sound and designed to utilize both verified and unverified feedback while accommodating verifier heterogeneity. Their design is well-motivated and grounded in theoretical analysis.
+
+### Weaknesses
+1) When unverified feedback is excluded, the problem reduces to a new variant of delayed feedback learning with queuing dynamics. In this case, a more thorough comparison with existing work on delayed or batched bandits would help better situate the paper’s contributions and clarify its novelty.
+2) The proposed algorithms rely on a known upper bound for the probability of unfair feedback to incorporate unverified observations. This assumption may be unrealistic in practice, as such bounds are rarely available or easy to estimate. It would strengthen the work to explore adaptive approaches that can estimate or learn this parameter online.
+3) The experimental evaluation is limited in scope, relying solely on synthetic simulations without validation on real-world data. In addition, the lack of comparisons with simple and intuitive baselines, such as ranking based only on verified feedback combined with standard scheduling heuristics (e.g., FCFS), makes it difficult to fully assess the empirical benefits of the proposed methods. The current setup, involving only three items and two verifiers, also appears overly simplified and may not capture the complexity of practical scenarios.
+
+### Questions
+1) The only experiment with a larger setting (50 items and 10 verifiers) appears in Fig. 3b of the Appendix. It would be helpful to include more experiments with larger-scale settings, especially considering recommender system applications where the number of items is typically much higher. 
+2) The paper does not discuss or empirically evaluate the algorithm’s time complexity. Since the proposed methods repeatedly solve LP tasks, it would be helpful to include results that assess the computational efficiency.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper investigates incorporating human verification mechanisms into online ranking algorithms to address the impact of unfair feedback. The authors tackle this problem by proposing two algorithms: Hierarchical Elimination (HE) for a single verifier and Deficit Hierarchical Elimination (DHE) for multiple heterogeneous verifiers. Both algorithms achieve logarithmic regret bounds while handling verification scheduling.
+
+### Strengths
+- The integration of human verification feedback into online ranking frameworks is novel and interesting.
+- The algorithms consider both the use of unverified data and the presence of multiple verifiers, offering flexible solutions for different setups.
+
+### Weaknesses
+**Assumptions**
+- Assuming that human verification can always identify the manipulation behavior is too strong. I think it is not easy to accurately judge whether a feedback is manipulated in practice.
+
+**Theoretical analysis**
+- The proof of Theorem 1 in appendix A.1 seems not complete. The authors only present the regret bound of system $H^2$, but do not show that the original system that operates under HE algorithm enjoys less regret than that of the $H^2$ system.
+- The proof of Lemma 5 is unclear. The authors appear to use the Hoeffding's inequality to bound the failure probability. However, since the value $q_j(t)$ can be arbitrarily determined by an adversary, it may depend on the system’s history, making the feedback variables depend on the history feedbacks. As the Hoeffding's inequality requires the random variables to be independent, it is not applicable in this case.
+
+**Writing**
+- I'm confused about Algorithm 1. When $UCB_i < LCB_j$, the Algorithm 1 in Appendix C removes $I_i$ from both $\mathcal{A}^q$ and
+$\mathcal{A}^{q+1}$. However, the description in section 4.1 says that the algorithm should send $I_i$ from $\mathcal{A}^q$ to $\mathcal{A}^{q+1}$. Which one is correct?
+- In theorem 3, what does "satisfying 1" mean?
+- In line 175, the paper introduces a tuple to denote the system state, but does not provide formal definition of the entries in the tuple.
+- The paper should also provide the pseudocode of the DHE algorithm.
+
+Minors:
+- The titles of Appendices A.2 and A.3 should be swapped.
+- It seems that the references in line 511 and line 514 are the same paper.
+
+### Questions
+see weakness
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

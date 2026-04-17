@@ -1,0 +1,205 @@
+# Designing Time Series Experiments in A/B Testing with Transformer Reinforcement Learning
+
+- Decision: Accept (Poster)
+- Scores: 2, 4, 4, 4
+
+## Abstract
+A/B testing has become a gold standard for modern technological companies to
+conduct policy evaluation. Yet, its application to time series experiments, where
+treatments are sequentially assigned over time, remains challenging. Existing designs suffer from two limitations: (i) they do not fully leverage the entire history for treatment allocation; (ii) they rely on strong assumptions to approximate the objective function (e.g., the mean squared error of the estimated treatment effect) for optimizing the design. We first establish an impossibility theorem showing
+that failure to condition on the full history leads to suboptimal designs, due to the dynamic dependencies in time series experiments. To address both limitations simultaneously, we next propose a transformer reinforcement learning (RL) approach which leverages transformers to condition treatment allocation on the entire history and employs RL to directly optimize the MSE without relying on
+restrictive assumptions. Empirical evaluations on synthetic data, a publicly available dispatch simulator, and a real-world ridesharing dataset demonstrate that our proposal consistently outperforms existing designs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper addresses the design of A/B experiments in time series settings, where existing methods often fail to use the full history or rely on restrictive modeling assumptions. The authors propose a new method, TRL, which models the experimental design as an RL problem. This method uses a Transformer to encode the entire past history as its state, and a double DQN agent learns a policy to select the next action (treatment or control). The agent is trained within a simulation environment to directly optimize the ATE's MSE by using a dense reward function based on the intermediate MSE. Empirical results on three different simulation environments show TRL outperforms existing designs.
+
+### Strengths
+1. The paper introduces a novel concept for a problem of practical importance. The idea of using modern sequence models and RL to directly optimize a statistical objective like MSE seems original.
+2. The paper correctly identifies the limitations of traditional, more restrictive experimental designs. The problem is well motivated with clear context, and well situated within the literature.
+3. The authors test against a wide range of relevant baselines in their empirical evaluation, demonstrating the strong performance of their method.
+
+### Weaknesses
+1. There seems to be a discrepancy between the paper’s core premise and the experimental setup. The paper is motivated by the need for a full history model to capture complex, non-markovian dynamics (as suggested by Theorem 1). However, in the appendix (if I understand correctly), the simulation environments appear to be Markovian. For example, the "Synthetic" and "Real data-based" simulators (Appendix A.2, Eq. 5, 6, 11) model the next state as a function of only the previous state and action. Could the authors clarify this? If the environments are indeed Markovian, it is not clear how the experiments are testing the paper's central hypothesis about the necessity of the full history.
+2. The method's dependency on a simulator. The methodology seems to require a simulation environment to train in, and the reward function is defined by a "ground truth" ATE that must be pre-calculated from this simulator. This seems to suggest the method is for optimizing policies within a known simulator. Is this method applicable to real-world problems where a high-fidelity simulator is not available?
+3. Usage of dense reward function: The paper notes that “early ATE estimators are less accurate due to smaller sample sizes." (in line 331, page 7). This raises a concern about training on a noisy signal and potential credit mis-assignment. 
+For example, if an action at an early step $t$ leads to a good-looking (but noisy) intermediate MSE purely by chance, the agent will be rewarded and may learn to prefer this action, even if it is not truly beneficial (or is even detrimental) to the final, stable MSE at time $T$. The agent may be learning a policy that optimizes for short-term statistical noise rather than the true, long-term objective. I think it could be helpful for the paper if the authors could provide an ablation study on the alpha parameter, particularly comparing the final design quality against the true, sparse-reward objective (where alpha=zero). This would validate that the dense reward is indeed a helpful heuristic and not a flawed proxy.
+
+### Questions
+Please address the weaknesses above. 
+
+In addition:
+Regarding computational complexity: How is it possible to train the model in "approximately three GPU hours" when the method implies a quadratic complexity over sequences as long as $T=1008$ (24 hours x 42 days)? Please clarify the precise architecture (e.g., standard vs. linear Transformer) and provide a complexity analysis
+
+I am open to changing the score if the authors can resolve these points.
+
+### Soundness
+1
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The authors propose a transformer-based reinforcement learning (RL) approach for designing time-series experiments. In time-series experiments, the experiments should be conditioned on the entire history; the authors show that failing to do so yields suboptimal designs. However, conditioning on the entire history is challenging. Therefore, existing designs typically leverage only parts of the history. The algorithm in the paper then uses transformers to enable experiment design that depends on the entire history. They further use RL as an optimizer to avoid the simplifying assumptions commonly made in the literature. In synthetic and real-data experiments, the authors show that their approach outperforms various baselines.
+
+### Strengths
+1) The central contribution and gap in the literature are well presented.
+
+2) The evaluation covers various baselines and both synthetic and real data.
+
+3) The discussion of related literature is extensive.
+
+### Weaknesses
+1) While it is positive that the authors discuss a lot of related literature, the discussion itself is not as easy to follow. There are many references, but often little discussion to clarify the types of approaches presented. Also, the specific limitations are not always clear. For instance, when discussing A/B testing, it is said that some works relax the Markov assumption by modeling the data as a partially observable Markov decision process. Why is this still not enough to solve the problem? 
+
+2) The authors assume access to a simulation environment that approximates the data-generating process. What is then the motivation for using RL? One could also simply try out all possible designs. Or, if efficiency is a problem, use something like Bayesian optimization. RL is typically not very sample efficient and often gets stuck in local optima. So it would be good to argue why this is the "right" tool to use. Especially since, as an alternative to using a simulator, the authors propose collecting data throughout the day and then choosing a design for the next day. That is, there is a lot of time between experiments. Thus, a computationally more expensive optimizer could also be used.
+
+3) I find Figure 1 not very self-explanatory, and both the caption and when it is mentioned in the text don't provide much explanation either.
+
+4) The contribution itself to me feels rather limited. It seems like a rather straightforward application of RL + transformer to a specific problem. 
+
+5) Some smaller writing issues: I think the sentence part "identically distributed often leads to insignificant average treatment effect (ATE) estimator" doesn't work; the sentence part "motivated by applications in agricultural" is missing a word; the conditional distribution $\mathcal P_t$ should be properly defined. I would think about not using the word "treatment" in the abstract, as non-experts, who might still be interested in the paper, might lose interest as they could think this is related to medical applications.
+
+### Questions
+1) Can you motivate your choice of RL as an optimizer?
+
+2) Is the carryover effect not mixing two things? It should be a problem that first, experiments are not iid, and second, that feedback is delayed.
+
+3) Can you clarify the RL setup? Is it so that in each time step, the dimensionality of the state is growing?
+
+4) How reliable is the physical simulator? Is there some uncertainty quantification, at least empirically?
+
+5) What is the motivation for choosing exactly the mentioned baselines? Before, various lines of prior work have been discussed, so I think it would be good to motivate why now exactly those are selected as competitors.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The submitted manuscript studies the design of time series experiments in A/B testing where treatments are sequentially assigned and outmodes exhibit temporal dependencies. From a theoretical point of view, the authors derive an impossibility theorem showing that optimal design should consider full history. From a practical point of view they propose a transformer reinforcement learning approach. The proposed transformer architecture allows to allocate treatments on the entire history. Reinforcement learning is used to directly optimize the MSE. Empirical results on synthetic, simulated, and real ridesharing data indicate that TRL outperforms existing designs.
+
+### Strengths
+- The paper provides a comprehensive and well-structured literature review, clearly situating the work within the A/B testing, experimental design, and reinforcement learning communities.
+- It proposes a novel use of reinforcement learning for experimental design, employing transformer architectures to condition treatment allocation on the entire observed history, encoded as an augmented state. This design choice is both technically interesting and conceptually well-motivated.
+- The experimental evaluation is extensive, including multiple synthetic, simulated, and real-data environments with several relevant baseline methods. The empirical results appear to be convincing, showing consistent performance improvements of the proposed TRL approach over existing designs. Unfortunately, I cannot fully assess the correctness or completeness of all baselines due to limited domain familiarity.
+
+### Weaknesses
+My main concern lies in the formulation and proof of the main theoretical result (Theorem 1).
+
+- The statement of Theorem 1 does not align with what is actually proved. The optimization problem (2) is formulated for an arbitrary ATE estimator, implying that the theorem should hold universally. However, the proof effectively fixes a specific estimator, and the argument depends crucially on that choice. As a result, the theorem as stated appears too general, and it is not demonstrated that the claim holds for all possible estimators. Moreover, it is not obvious that an optimal policy necessarily exists in the general formulation.
+- In the proof, the authors fix a doubly robust ATE estimator and then derive a policy that minimizes the variance of this estimator. It is unclear, however, that minimizing the variance yields the same policy that minimizes the MSE, since the estimator may be biased. The potential dependence of the bias on the policy could alter the optimal solution, and the existence or uniqueness of such a minimizing policy is not established.
+
+### Questions
+Below are my questions and minor comments:
+- How would the analysis or algorithm change if the ATE objective were replaced by a discounted or finite-sum objective over time?
+- What are the assumptions on the ATE estimator used in Equation (2)? In particular, which assumptions are required for Theorem 1 to hold?
+- The sentence „In other words, it is impossible for treatment allocation strategy in which $\pi_t$ omits dependence on any observation, action or outcome at any time step to be optimal.“ should be moved outside of Theorem 1, as it summarizes the result rather than constituting part of it.
+- In the numerical experiments, the settings (i)–(iv) are not described in the main body. I had to refer to the appendix to find these details; including a brief description in the text would improve readability.
+- How do the different methods used in the experiments compare in terms of running time? Finding an optimal policy in the augmented state-space formulation may be computationally challenging.
+- Relatedly, how does the performance comparison change with larger time horizons T?
+- The augmented state formulation seems memory-intensive, as it requires storing the entire history. Would it be possible to apply dimension reduction or use summarized state representations to mitigate storage costs?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper tackles A/B testing when treatments are applied over time—like switching policies on a ride-sharing platform—and outcomes today depend on what happened earlier (carryover effects). It first proves a negative result: any design that doesn’t look at the entire past history when deciding the next treatment can be sub-optimal for minimizing the mean-squared error (MSE) of the final ATE estimate. Building on that, the authors propose a Transformer Reinforcement Learning (TRL) design strategy: use a transformer to condition treatment choices on the full history, and use RL to directly optimize a proxy for the ATE’s MSE. The approach is trained via a transformer-based DDQN with standard deep-RL tricks. Empirically, TRL yields lower MSE ATE estimates than switchback and MDP-based baselines.
+
+### Strengths
+Importance. I like that the paper targets time-series A/B testing where carryover effects are the norm; it seems very relevant for real platforms that roll out policies sequentially. 
+
+Empirical breadth. The breadth of experiments (synthetic, real-data-based, public simulator) and the many replications with CIs looks good; it seems the comparisons are careful.
+
+The overall presentation of the paper is clear.
+
+### Weaknesses
+Scope and assumptions of Theorem 1. The impossibility result hinges on constructing settings where optimal assignment depends on the full history; could you (a) delimit the regularity conditions under which this dependence is strictly necessary and (b) discuss practically checkable conditions indicating when shorter-memory designs are near-optimal? (Right now, the proof shows existence rather than prevalence.) 
+
+You define ATE and optimize MSE, but multiple ATE estimators appear (e.g., OLS in linear cases, LSTD in the nonlinear dispatch setting); can you clarify the exact estimator used in each environment,  and whether the reward’s squared error is an unbiased (or consistent) proxy for the final-time MSE across those choices? 
+
+Since the reward uses a simulator-based ATEmc as “ground truth,” how sensitive are results to simulator misspecification, and what happens if the simulator embeds the same linearity assumptions used to generate training data (risking optimistic bias)? Could you add stress tests that deliberately mis-specify transition or reward models? 
+
+Availability of simulators in practice. You note the design can iterate day-by-day when no simulator exists; could you quantify the sample (days) needed before TRL meaningfully outperforms simple switchbacks, and provide guidelines for when the sequential bootstrap is stable enough to guide next-day designs? 
+
+Discounting and hyperparameters. The reward uses a discount α and your DDQN uses several training choices; can you include ablations on α, transformer depth/width, context length, target-network update rate, and exploration ε, showing how final ATE-MSE responds? Note that this is an important ablation study. 
+
+Since your point is “full-history helps,” could you compare TRL to (a) GRU/LSTM-DDQN with identical training budgets, and (b) transformer variants with restricted attention windows, to isolate gains from long-range attention vs. generic sequence modeling? 
+
+You attribute TMDP/NMDP under-performance in the A/A-based simulator to positive outcome autocorrelation; could you report empirical autocorrelation functions and cross-correlations (demand/supply) and show how performance degrades as you dial this correlation up/down?
+
+### Questions
+see above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

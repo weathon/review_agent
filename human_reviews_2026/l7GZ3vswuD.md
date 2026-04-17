@@ -1,0 +1,146 @@
+# Neural-Guided Enumerative SAT Framework for Cryptographic Key Recovery
+
+- Decision: Reject
+- Scores: 4, 4, 4
+
+## Abstract
+Boolean satisfiability (SAT) provides a principled framework for cryptanalysis by encoding cryptographic problems into conjunctive or algebraic normal forms. While the well-known (conflict-driven clause learning) CDCL-based solvers excel at handling SAT instances, their performance on cryptographic instances deteriorates quickly with increasing cipher complexity due to exponential search spaces. Recent neural approaches, ranging from end-to-end prediction to solver-integrated heuristics, show some promise yet suffer from scalability issues, limited recovery accuracy, or high computational overhead. In this work, we propose two complementary neural-guided enumerative SAT frameworks tailored for cryptographic key recovery. The first integrates lightweight neural predictions with traditional solvers: it predicts a subset of $k$ key variables as critical variables and enumerates the candidate assignments of these predicted variables, yielding up to a 5× speedup on the public benchmark SAT4CryptoBench. The second employs a discriminator trained to distinguish correct versus incorrect assignments in ANF encodings, enabling accurate pruning and propagation. On Simon datasets, this method achieves 79.5\% full-key recovery accuracy, significantly surpassing prior neural approaches. Together, these frameworks bridge the gap between machine learning and classical SAT solving, offering scalable and efficient cryptanalysis.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes two neural-guided enumerative SAT frameworks for cryptographic key recovery.
+
+1.  **Heuristic Solver-Centered Enumerative SAT Framework:** This framework utilizes a lightweight neural network to predict a small set of $k$ "critical" variables. Subsequently, the system enumerates all $2^k$ possible assignments for these $k$ variables, generating $2^k$ simplified subproblems. These subproblems are then solved independently using conventional SAT solvers. This method achieves up to a 5x speedup on the public benchmark SAT4CryptoBench.
+2.  **Neural Distinct-Based Enumerative SAT Framework:** This framework trains a discriminator to predict whether an ANF instance is satisfiable. Once a potentially correct partial assignment is identified, the framework recovers the complete key via unit propagation. This method achieves a high full-key recovery accuracy on the Simon dataset.
+
+### Strengths
+* The paper is well-organized and clearly written.
+* The proposed frameworks offer a practical and viable path for enhancing SAT solver performance in the field of cryptanalysis. The experimental results demonstrate a significant improvement in the solving efficiency of SAT solvers for cryptographic problems.
+
+### Weaknesses
+* The computational cost required for generating the training dataset is not clearly specified.
+* The paper does not discuss whether the value of $k$ needs to be increased as the key length grows. While Figure 3 shows that an optimal $k$ exists, the paper does not explore how this optimal $k$ scales with problem difficulty.
+*  Although the Remark in Section 4.2 claims that the method does not "require knowledge of the underlying cryptographic scheme" and relies only on "symmetric clause blocks," the experiments for Framework 2 are limited to the Simon dataset. Consequently, its generalizability remains unverified.
+
+### Questions
+* Regarding the training of the variable selection network in the first framework: does generating the training label for each instance require a large-scale enumerative search? If so, what is the approximate computational cost of this process?
+* As the key length increases, does the value of $k$ need to be adjusted? Figure 3 shows an optimal value for $k$, but the paper does not discuss how this optimal $k$ scales with problem difficulty.
+* How should the term "Complementary" in the title be interpreted? The two frameworks presented—one for CNF (assisting a solver) and one for ANF (replacing a solver)—seem to be alternative solutions rather than complementary ones.
+* When unit propagation stalls, the authors employ a heuristic rule ("assign 0 to the first variable in the shortest clause"). This heuristic likely has an impact on accuracy, but this impact is not evaluated in the paper.
+
+Additionally, there are some writing issues:
+* Section 3.2, line 204-205, '... we construct a derived SAT instances ...' should be '... we construct a derived SAT instance ...'
+* Variable definitions are inconsistent. Section 3.3, line 242-243, "Formally, let $m$ be the length of plaintext/ciphertext and the input“, but the variable used in the subsequent text is $n$.
+* Section 4.1, '... use a neural network to distinct ...' should be '... use a neural network to distinguish ...'
+* Section 4.2, '... from the first two rounds clauses ...' should be '... from the first two rounds' clauses ...'
+* Caption in Fig. 3, '(s/intance)' should be '(s/instance)'
+* Appendix D, the phrase 'As shown in Table 4' is repeated.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper explores applying neural guidance to SAT-based cryptographic key recovery, noting that conventional CDCL solvers struggle with these instances due to symmetry and redundancy. To address this, the authors propose two complementary enumerative frameworks: Heuristic Solver-Centered Enumeration (HSESAT) uses a neural model to predict the top-k key variables for enumeration, with fixed subproblems solved by a classical SAT solver. Neural Distinct-Based Enumeration (NDESAT), for ANF representations, learns to distinguish structurally different instances to predict the correct key, using unit propagation to complete assignments. Experiments on SAT4CryptoBench show HSESAT achieves substantial speedups over Kissat/CryptoMiniSat, and NDESAT demonstrates high key-recovery success rates.
+
+### Strengths
+1. Two frameworks tailored for different representations (CNF vs. ANF) with complementary goals (solver acceleration vs. key recovery)
+2. Strong empirical results compared with NeuroSAT and CryptoANFNet baselines
+
+### Weaknesses
+1. HSESAT requires enumeration preprocessing to determine which k-variable combinations yield the fastest solving. For each training instance, this implies evaluating $C(n,k)* 2^k$ solver runs, which can be extremely expensive. The paper does not provide any runtime or resource analysis of this offline phase, leaving unclear whether the approach is practical beyond small keys.
+2. The paper never reports the top-k prediction accuracy of the neural model or its correlation with actual solver speedups. Without these statistics, it is difficult to evaluate whether the network genuinely learns meaningful structural signals or if the gains mainly come from enumeration randomness.
+3. The paper lacks a deeper insight explaining *why* these integrations succeed where prior neural-SAT attempts fail (e.g., what structural cues the model captures, what distinguishes “hard” and “easy” key variables). The stated insight—that “placing the neural model outside the solver loop reduces overhead”—is useful but not particularly surprising.
+
+### Questions
+1. Both frameworks depend on a manually chosen k. Is there a way to adaptively adjust k during inference or training?
+2. The paper reports average per-instance solving time for the enumerated subproblems, but not the overall runtime or resource usage. Could the authors clarify whether solving 2^k derived instances actually reduces the total computational cost under fixed hardware settings, or whether the observed speedup mainly arises from parallel execution?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposes two neural-guided enumerative SAT frameworks for cryptographic key recovery. The first predicts a small set of influential key bits and enumerates their assignments before invoking a standard SAT solver, yielding up to 5× speed-ups on SAT4CryptoBench. The second uses a neural discriminator to identify the correct assignment among 2^k ANF-derived instances and then performs unit-propagation to recover full keys, achieving ~80% full-key recovery on Simon-6-32-64 — substantially outperforming prior neural approaches.
+
+### Strengths
+1. This paper is well-written and easy to follow.
+
+2. Strong empirical results: up to 5× faster solving and over 79.5% key-recovery accuracy on real crypto benchmarks.
+
+3. General framework: solver-agnostic and adaptable to different ciphers/representations (CNF/ANF).
+
+### Weaknesses
+1. I recommend providing a more comprehensive and deeper comparative analysis of the two proposed methods. In particular, it would be valuable to clarify under what circumstances each method is preferred, and to present direct comparisons on the same benchmark settings to highlight their respective strengths and limitations. Additionally, please discuss whether the two methods can be combined into a unified pipeline; if not, clarifying the practical or conceptual barriers to doing so would strengthen the contribution.
+
+2. Regarding HSESAT, could the authors clarify the fundamental reason why it achieves faster performance than existing solvers? The method appears to rely on a strong assumption that a set of “top-k” key variables exists and can be identified reliably. How robust is HSESAT when this assumption does not hold — for example, when variable scores are relatively uniform and no clear top-k variables emerge? Additionally, can HSESAT generalize beyond SAT4CryptoBench? In particular, would it still provide benefits on broader SAT benchmarks such as SATLIB (https://www.cs.ubc.ca/~hoos/SATLIB/), where cryptographic structure and key-bit symmetry are absent? A discussion or experiment on general SAT datasets would help clarify the scope and applicability of the method.
+
+3. Figure 1 suggests HSESAT outputs the key, but the evaluation only reports solver runtime in Table 1. It would strengthen clarity to either (a) report key-recovery accuracy for HSESAT, or (b) explicitly state that HSESAT uses solver correctness as a proxy for key recovery. 
+
+4. I recommend to add failure analysis for Table 2. Why the remaining keys fail in Table 2. The relevant section simply states high recovery accuracy and mentions the method’s limitations compared to heuristic solvers, without analyzing failure causes.
+
+5 (Minor) It would be beneficial to include a brief discussion of SAT hardware accelerators in the background section and clarify whether such hardware efforts could be complementary to the proposed approaches. This would provide a more comprehensive view of the broader SAT-solving landscape.
+
+[1] S. Su et al., "A Stochastic Analog Boolean Satisfiability Solver," in IEEE Journal of Solid-State Circuits
+
+[2] Wu, Zihan, et al. "37.5 SKADI: A 28nm Complete K-SAT Solver Featuring Dual-Path SRAM-Based Macro and Incremental Update with 100% Solvability." 2025 IEEE International Solid-State Circuits Conference (ISSCC). Vol. 68. IEEE, 2025.
+
+### Questions
+Please see the weakness above.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2

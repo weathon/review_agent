@@ -1,0 +1,206 @@
+# ShieldedCode: Learning Robust Representations for Virtual Machine Protected Code
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 4, 6
+
+## Abstract
+Large language models (LLMs) have achieved remarkable progress in code generation, yet their potential for software protection remains largely untapped.    Reverse engineering continues to threaten software security, while traditional virtual machine protection (VMP) relies on rigid, rule-based transformations that are costly to design and vulnerable to automated analysis.    In this work, we present the first protection-aware framework that learns robust representations of VMP-protected code.    Our approach builds large-scale paired datasets of source code and normalized VM implementations, and introduces hierarchical dependency modeling at intra-, preceding-, and inter-instruction levels.    We jointly optimize language modeling with functionality-aware and protection-aware contrastive objectives to capture both semantic equivalence and protection strength.    To further assess resilience, we propose a protection effectiveness optimization task that quantifies and ranks different VM variants derived from the same source. Coupled with a two-stage continual pre-training and fine-tuning pipeline, our method enables models to generate, compare, and reason over protected code. Extensive experiments show that our framework significantly improves robustness across diverse protection levels, opening a new research direction for learning-based software defense. In this work, we present ShieldedCode, the first protection-aware framework that learns robust representations of VMP-protected code. Our method achieves 26.95\% Pass@1 on L0 VM code generation compared to 22.58\% for GPT-4o, and improves binary similarity detection Recall@1 by 10\% over state of art methods like jTrans.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes ShieldedCode, a framework that replaces traditional rule-based virtual machine protection (VMP) schemes with a learning-driven dynamic mechanism to enhance anti-reverse-engineering and anti-analysis robustness while preserving program semantics. ShieldedCode models code protection as a representation learning problem, where the model jointly learns in both semantic space and protection space through contrastive learning. This allows the model to understand code functionality while generating diverse and robust protection patterns.
+
+Experimental results show that compared with other baselines, ShieldedCode achieves better functionality preservation and security robustness. In reverse-engineering experiments, ShieldedCode-protected samples required an average of 14.7 hours to be successfully reversed—significantly longer than baseline systems.
+
+### Strengths
+- It is meaningful to use dynamic mechanisms to replace rule-based transformations for enhancing code security.
+- The paper is clearly written and well structured.
+- The proposed framework introduces a novel training design that models dependencies across intra-, preceding-, and inter-instruction levels. It also designs two loss functions: Functionality Contrastive Learning (FCL) and Protection Contrastive Learning (PCL), which enforce semantic consistency and improve discriminative capability.
+- Experiments are comprehensive, evaluating both the functionality and security of generated code, and include reverse-engineering experiments to validate real-world robustness.
+
+### Weaknesses
+- Although the paper enforces semantic consistency across optimization levels using FCL, the generated virtualized code still lacks formal correctness guarantees, which is critical in practice since the transformed code must strictly preserve original functionality.
+
+### Questions
+In the abstract and introduction, please explicitly state how much improvement ShieldedCode achieves over baselines.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes ShieldedCode, a framework to train LLMs on paired (source code, virtual-machine–protected code) so that the model can both generate VMP code at target protection levels and retrieve/rank differently protected variants of the same function. It builds a large corpus by compiling C code, running a commercial VMP tool, disassembling, and then normalizing the VM code into a stable token format with canonical [VINST-*] markers. On top of this, it introduces a hierarchical attention mask that respects instruction boundaries and two contrastive objectives: functionality-contrastive (pull same-function variants together) and protection-contrastive (order by protection level). Experiments on HumanEval-compile and a BinaryCorp-VirtualAssembly similarity task show higher Pass@1/Pass@10 and better Recall@1 than general code LLMs when the target is VMP code.
+
+### Strengths
+Originality: Treats software protection as a representation-learning problem on VMP code, with a clear inductive bias via hierarchical masking over [VINST-*].
+
+Quality: Data pipeline is concrete (compile → VMP(.) → disasm → normalize), the losses are fully specified (LM + FCL + PCL + PEO), and evaluation covers both generation and retrieval across O0-O3 and L1/L3. 
+
+Clarity: The normalization step is enumerated in four precise actions, and the masking formula is explicit, so a reader can reimplement the core idea. 
+
+Significance: Shows that in-domain training on protected code lets a 7B model beat general-purpose code LLMs on protected-generation tasks, which is practically relevant for protection/analysis workflows.
+
+### Weaknesses
+- The paper relies on one commercial VMP tool and two protection levels (L1, L3) in testing; this narrows the “heterogeneous protection” claim and makes it unclear how well the model transfers to other VMs or level taxonomies. 
+
+- Protection-contrastive learning is claimed to enforce an ordering, but the reported Recall@1 across (O?, L1/L3) is not strictly monotone, suggesting the ordering is noisy in practice.
+
+- Comparisons are against models that are not trained on this domain, so it is hard to isolate how much of the gain comes from the hierarchical mask versus just having millions of in-domain (src, VMP) pairs.
+
+- Reproducibility is limited because the key assets (commercial VMP, disassembler, large paired corpus) are not obviously releasable; reproducing exact normalization/tokenization may be nontrivial.
+
+### Questions
+1. Are all VMP variants (for pretraining, fine-tuning, and testing) produced by the same commercial VMP tool and interpreter template? If yes, how should we interpret “across heterogeneous protection levels”?
+
+2. In PCL, what margin or temperature is used, and did you check distance histograms per level to confirm the intended ordering? Current results suggest partial but not strict ordering.
+
+3. For generation failures on HumanEval-compile, what are the dominant error types (bad labels, wrong VM opcode, broken instruction grouping)? This would clarify how much the hierarchical mask helps.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The manuscript focus on anti-reverse engineering by learning from the VMP-protected codes  and associating with their corresponding source codes. To implement this, this paper builds large-scale paired datasets of source code and normalized VM implementations, and introduces hierarchical dependency modelling at intra-, preceding-, and inter-instruction levels. To facilitate the protection-level-aware, the authors propose functionality-aware and protection-aware contrastive objectives to capture both semantic equivalence and protection strength. And the evolutions empirically validate that the proposed ShieldedCode develops meaningful code representations.
+
+### Strengths
+The method is well motivated, with a highlight of urgent need for strengthening software resilience against reverse engineering. And the aimed challenges have practical values.
+
+This manuscript constructs a large, paired dataset of source code and normalised VM implementations, which can inspire further research on source-2-VMP codes transformations and similarity comparison via LLMs.
+
+### Weaknesses
+The manuscript mentions the protect level for VMP codes several times in the paper. However, this is no further justification of what does the protection level mean? From the current writing, it seems to be similar to code obfuscation level. Please consider adding illustrative examples and explicit explanation for this critical concept.
+
+In section 3.3, the proposed method utilise two contrastive loss components:  FCL and PCL, which were claimed to be one the innovative contributions. The FCL functions by pulling together representations of the same function across representations, forcing them to be in short distance in the latent feature space. However, minimizing the PCL seems to encourage the distance of representations from different applied protection levels to be closer, similar to the FCL. 
+
+From the statements of the motivation of this work, the aim is to transform source codes into VMP codes with various protection level, and the model is expected to be aware of the protection strength in the generation phase. However, the authors choose a task similar to binary similar matching or comparison to validate the mostly the semantic association between representations. For the current evaluations, it works more like a reverse-engineering tool, which can translate source-VMP code pairs or VMP with different protection level code pairs, rather than generating robust VMP codes against reverse engineering methods.
+
+Besides, some SOTA works utilize LLM to further enhance the performance of reverse engineering such as [1]. Please consider including these SOTA models as baselines to validate the performance of ShieldedCode against reverse engineering.
+
+[1] Hu, Peiwei, Ruigang Liang, and Kai Chen. "Degpt: Optimizing decompiler output with llm." Proceedings 2024 Network and Distributed System Security Symposium. Vol. 267622140. 2024.
+
+### Questions
+see Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses the critical problem of learning robust representations for VM-protected code. The authors propose an encoder model that takes VM-encoded binaries as input and outputs robust embeddings capable of handling various obfuscation transformations.
+
+
+## Dataset Construction
+
+The training dataset is constructed through a two-stage process:
+
+(1) Source code programs are compiled to binaries using different compilation options
+
+(2) The binaries are further obfuscated using VM transformations with varying obfuscation levels
+
+## Methodology
+
+The approach employs a two-stage training strategy starting from a pre-trained LLM checkpoint:
+
+Here are the training loss terms:
+(1) FCL: Encourages embeddings of source functions to be similar to their corresponding obfuscated versions
+
+(2) PCL: Enforces that embeddings of functions with lower obfuscation levels are closer to the source code than those with higher levels
+
+(3) Contrastive loss: Ensures embeddings of the same function are more similar than embeddings of different functions
+
+(4) Language modeling loss: Given source code and obfuscation level, generates the corresponding obfuscated code
+
+The second-stage contains losses 1, 2, and 4 (without the contrastive loss).
+
+Additionally, the authors design a regularized token mask to capture VM program structure, complementing the training losses.
+
+### Strengths
+The paper proposes a solid training technique with novel loss formulations and mask designs. The evaluation demonstrates good performance on retrieving VM code under different obfuscation levels.
+
+### Weaknesses
+Q1: Motivation: There appears to be a logical inconsistency in the motivating narrative. The paper argues that reverse engineering poses threats to software security, yet learning robust representations of VM code constitutes a form of reverse engineering. Please clarify.
+
+Q2: PCL loss. FCL requires all obfuscated embeddings to be similar to source code embeddings, while PCL mandates similarity gaps between different obfuscation levels. Are these objectives compatible, or do they introduce conflicting gradients? Additionally, does higher obfuscation always imply less semantic similarity? 
+
+Q3: Language modeling loss. The inclusion of a language modeling loss for generating obfuscated code from source is not well-justified. Representation learning for low-level code (e.g., binary) typically relies on contrastive losses (with attention regularizations). What specific benefit does this generative objective provide?
+
+Q4: Comparison setup with binary models. The work compares against binary code representation models, but most of these models were not pre-trained on VM code. Did the authors re-run pre-training on the VM dataset for fair comparison? If not, this should be clearly stated, as the comparison may be biased toward the proposed method given its VM-specific training.
+
+### Questions
+Please see above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3

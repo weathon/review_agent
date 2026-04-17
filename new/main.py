@@ -83,7 +83,7 @@ with open("prompts/timeline.md", "r") as f:
 
 
 PAPER_ACCESS_INJECTION = "The full paper text is included in the user message. Use it to verify reviewer claims directly."
-PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly."
+PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly. Read through the whole file first."
 
 CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
 
@@ -96,9 +96,10 @@ Your calibration process:
    - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
 3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale, **even if there is a topic mismatch**:
-   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
-   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
-   - Compare the paper under review against BOTH ends, not just the middle.
+   - Search for reviews of papers that were scored >7+ by humans. Read what made them strong.
+   - Search for reviews of papers that were scored <3- or below by humans. Read what made them weak.
+   - Search for reviews with similar strength/weakness patterns and sits around the same area as the current paper.
+   - Compare the paper under review against BOTH ends, not just the middle. You have to look up paper with extreme scores to understand what truly exceptional or truly weak papers look like, even if they are on different topics. If vector search cannot find extream scored papers, use keyword search to enforce hard accept/reject papers. The sarched papers must cover the full spectrum of scores.
 
    Examples: if reviewing a paper about privacy attacks on face recognition, search for:
    - "privacy attack face recognition strong paper" → find high-scored papers in the same area
@@ -118,7 +119,7 @@ You HAVE TO include a few extream high and low end samples.
 
 There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You HAVE TO also try to find papers with extreme scores to see what made a paper really good/bad, it doesn't need to be the same topic for these extream score queries. 
 
-Do NOT be afraid to give extreme scores if justified.
+Do NOT be afraid to give extreme scores if justified. 
 """
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""

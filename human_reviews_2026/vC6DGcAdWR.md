@@ -1,0 +1,202 @@
+# Social World Models: Universal Structured Representations for Social Reasoning
+
+- Decision: Reject
+- Scores: 2, 6, 6, 2
+
+## Abstract
+Humans intuitively navigate social interactions by simulating unspoken dynamics and reasoning about others' perspectives, even with limited information. In contrast, AI systems struggle to automatically structure and reason about these implicit social contexts, largely due to traditional input representations (e.g., free text) being lossy, shaped by reporting biases, and often omitting crucial details. In this paper, we introduce a novel structured social world representation formalism (S3AP), designed to unlock social reasoning in AI systems. Following a POMDP-driven design, S3AP represents social interactions as structured tuples, such as state, observation, agent actions, and mental states, which can be automatically induced from free-form narratives or other inputs. To demonstrate the power of our representations, we first show S3AP can help LLMs better understand social narratives across five social reasoning tasks (e.g., +51% improvement on FANToM's theory-of-mind reasoning over OpenAI's o1), reaching new state-of-the-art (SOTA) performance. Then, we introduce an algorithm for social world models using S3AP, which enables AI agents to build models of their interlocutor and predict their next actions and mental states. Empirically, S3AP-enabled social world models yield up to +18% improvement on the SOTOPIA multi-turn social interaction benchmark. Our findings highlight the promise of S3AP as a powerful, general-purpose representation for social world states, enabling the development of more socially-aware systems that better navigate social interactions.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces Social World Models (SWMs) and a structured representation format called S3AP (Structured Social Simulation Analysis Protocol).
+
+The central idea is to convert free-form social narratives—such as dialogues or stories—into structured tuples describing agents’ states, actions, and mental states, inspired by a Dec-POMDP formulation.
+The authors claim that this structured intermediate representation can improve large language models’ (LLMs) social reasoning abilities across multiple theory-of-mind benchmarks (ToMi, ParaToMi, FANToM, etc.) and enhance interactive decision-making on the SOTOPIA platform.
+
+Experimental results show consistent gains over Chain-of-Thought and several previous ToM-specific baselines.
+
+### Strengths
+The paper addresses an important and underexplored goal: enhancing social reasoning in LLMs through more structured world representations.
+
+The writing and figures are clear, making the proposed representation easy to follow.
+
+The empirical section covers both static and interactive reasoning, which helps connect theory-of-mind evaluation with agentic applications.
+
+### Weaknesses
+1. **Limited methodological originality**  
+   While the paper is well presented and motivated, the core mechanism of S3AP mainly reformats social narratives into structured state–observation–action tuples before reasoning.  
+   This design improves clarity but remains close to a **ReAct-style prompting modification**, rather than introducing a fundamentally new reasoning or learning paradigm.  
+   The contribution therefore feels more representational than algorithmic, raising questions about whether the improvements stem from true modeling advances or prompt restructuring.
+
+2. **Missing comparisons with modern reasoning frameworks**  
+   If S3AP is proposed as a general reasoning enhancement, it should be compared against stronger and more recent **agentic reasoning architectures**—such as **LLM-Debate** [1], **AFlow** [2], **DyFlow** [3]—which represent the current frontier of structured, workflow-based reasoning.  
+   These systems explicitly model dynamic reasoning steps, efficiency, and control flow.  
+   Without such baselines, it is difficult to assess whether S3AP offers real advantages beyond static prompt organization.
+
+3. **Limited analysis across model scales**  
+   Most experiments rely on large proprietary models (o1, GPT-4o, R1), which already possess strong social reasoning abilities.  
+   To demonstrate generality, it would be important to evaluate **different model sizes and families**, e.g., small and medium Qwen models, where social reasoning is notably weaker.  
+   Such evidence would clarify whether S3AP genuinely enhances reasoning robustness rather than amplifying capabilities of already strong models.
+
+---
+
+**References**  
+[1] *LLM-Debate: Improving Factuality and Reasoning in Language Models through Multiagent Debate*, ICLR 2024.  
+[2] *AFlow: Automating Agentic Workflow Generation*, ICLR 2025.  
+[3] *DyFlow: Dynamic Workflow Framework for Agentic Reasoning*, NeurIPS 2025.
+
+### Questions
+My main questions align with the issues raised in the Weaknesses section.  
+I would especially appreciate the authors’ clarification on the intended methodological novelty of S3AP, its differences from existing reasoning frameworks, and how broadly it can generalize across models of different sizes.
+
+While I remain skeptical about the current contribution, I am genuinely interested in the authors’ perspective and open to revising my assessment after reading a thoughtful and detailed rebuttal.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces S³AP (Structured Social Simulation Analysis Protocol), a novel structured representation formalism designed to capture the implicit dynamics of social interactions. The authors argue that current AI systems struggle with social reasoning due to the lossy and biased nature of free-text narratives. S³AP addresses this by structuring social world states into components such as environment state, agent observations, actions, and mental states, inspired by a POMDP framework.
+
+### Strengths
+The authors provide extensive empirical validation across a diverse set of tasks (five static benchmarks and one interactive platform) and multiple state-of-the-art LLMs, demonstrating consistent and often significant performance improvements.
+The paper successfully extends S³AP from static analysis to interactive agents via Social World Models, showing tangible benefits in a complex multi-agent environment (SOTOPIA).
+
+### Weaknesses
+While effective in SOTOPIA with a limited simulation horizon (N=1), the authors acknowledge that tracking mental states grows combinatorially with the number of agents and timesteps. The practical scalability for long, multi-agent interactions remains a significant, unaddressed challenge.
+The evaluation is confined to text-based simulations and benchmarks. It is unclear how S³AP would handle real-world noisy data, where social cues are far more subtle and complex.
+The S³AP schema is a fixed, pre-defined template. This may limit its ability to adapt to or discover entirely new structures of social interaction that are not captured by the current schema.
+For interactive settings with more than two agents or longer horizons, how do you propose to manage the combinatorial explosion of possible mental states?
+How would you extend the S³AP framework to incorporate multi-modal inputs (e.g., visual scenes, audio) to create a more grounded social world model?
+
+### Questions
+See weakness above.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes a POMDP-inspired schema that encodes, per timestep, environment state, agent actions, and agent mental states parsed from raw narratives. An LLM parser maps text to SAP tuples; feeding these tuples to LLMs improves performance on social reasoning benchmarks. The authors also induce a “social world model” to predict future actions/mental states, yielding higher task success in multi-turn SOTOPIA. These gains hold across model families and settings, with larger benefits in some cooperative scenarios. Overall, it appears that explicit structure bridges narrative understanding and interactive planning.
+
+### Strengths
+The paper provides clear, and general formalism for social dynamics.
+
+SOTA improvements on diverse belief tracking tasks.
+
+The study provides extension from offline reasoning to interactive planning with a learned/prompted world model.
+
+There are model agnostic benefits seen across LLM scales and thorough eval suite.
+
+### Weaknesses
+While the paper and proposed system introduces a complex solution to an interesting problem, this proposed system seems to introduce many moving parts. For instance, a parser to convert raw text to the schedule, the integration of this schema to LLM prompts, and an algo to simulate a social world model. This complexity is interesting but further raises questions about reliability. In particular, how accurate is the S3AP in parsing itself? There is no reporting on evolution of the parser’s fidelity, so in this case, it would be hard to assess if errors in the structure's representation might propagate. This approach might benefit from an analysis of parsing quality or examples of typical parse outputting. Additionally, it is unclear if using this ‘universal’ claim should hold as it is untested beyond text and two agent simulations. It is also unclear if it scales to multimodal, many agents, or long horizon settings.
+
+One other concern is practicality, reliance on large-model calls could be brittle or expensive in practice. While the authors acknowledge that fully simulating multistep mental state dynamics is computationally intensive, needing simplified one step lookahead in practice. This constraint would suggest that the method, as is, might struggle with very long or even real time interactions due to this complexity.  
+
+It appears that the success of the parser and improvements in reasoning largely leverage pre-trained LLMs abilities. The system reforms the input problem for the LLM by structuring it, instead of fundamentally learning social reasoning from scratch. This might mean the approach ‘inherits’ all the biases and knowledge gaps of the underlying models. So, for example, the parser might fill in some said inferred mental states or context that are plausible but not actually in the narrative, depending on the LLMs prior knowledge. Thus, the pipeline could occasionally introduce hallucinated facts or inconsistent agent states if the LLM overinterprets the text. Just to cover this base, the paper could benefit from examples or error analysis where it fails; for instance, does it ever insert incorrect assumptions about an agent’s belief that lead to wrong answers? One recommendation is a critical analysis of failure cases to establish the method’s reliability. 
+
+From a cognitive science perspective, it is interesting that the model is able to explicitly represent others’ beliefs and goals. However, though not critical, the work does not compare these representations to human social reasoning. Incorporating classic TOM tasks, even as case studies, would provide valuable context and even highlight whenever the model avoids/reproduces common human reasoning pitfalls.
+
+### Questions
+How would the approach handle inputs beyond text based narratives? For ex, in a real multimodal interaction, do you envision extending this framework to include perceptual elements or do you think the narrative description approach still be used as an intermediate? Also, does it scale to scenarios with more agents or longer running interactions?
+Would the authors please clarify how the social model is trained or used within the agent? Is it a learned model or a procedural roll out using the LLM at each step? The paper does mention inducing the world model from the S3AP but it would be useful if we could know if this involved any additional learning?
+The authors found that having a world model seems to yield different advantages in cooperative vs competitive settings.Could the authors please elaborate on the differences observed? So, did the world model improve success rates much more in cooperative than in competitive ones and how? 
+Did the authors compare S3AP’s structure representation to simpler prompting strategies like knowledge graphs etc. for these tasks? The authors showed one comparison with a CoT prompt baseline on some benchmarks where S3AP did better, but would be useful to know if any intermediate representation provides similar gains.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents a structured textual representation, S3AP,  for the social world. The observation space is extended with the agent’s internal mental states, like beliefs, goals, moral values, and emotions. The action space is extended to recall memory, reflect on past actions, and update beliefs. This paper performs multiple experiments across existing benchmarks, showing the effectiveness of the proposed S3AP.
+
+### Strengths
+- The representation can be constructed using the same prompt across different LLMs.
+- The proposed representation is compatible across multiple LLMs.
+- S3AP achieves high performance with low LLM calls.
+
+### Weaknesses
+- While eq 1 and 2 illustrate the computation of the social world model (SWM), it implies that the method relies on the internal world modeling capability of LLMs rather than building any world model, so the results can be highly affected by the LLM’s capability.
+- The baselines only include chain-of-thought, which is not the most powerful ToM reasoning method on these benchmarks. It is still hard to conclude how the proposed method performs against other explicit ToM reasoning methods like BIP-ALM [1] or Thought Tracing.
+   - [1] Jin et al. MMToM-QA: Multimodal theory of mind question answering. ACL 2024.
+- As the authors mention, the current input representations AI systems learn from “mention only salient events, omit explicit mentions of mental states…”. However, the proposed method heavily depends on LLMs’s capability to parse the mental states, which is trained from static text too. This limitation is unavoidable for the proposed method, which raises concerns about the validity of both S3AP and the SWM.
+
+### Questions
+- What’s the accuracy of the parsed mental states? How can the accuracy of the mental states in the posed results affect the performance?
+- Although Figure 8 illustrates the final utterance, it is unclear about the SWM's internal mechanisms. Could you provide some specific examples to explicitly demonstrate how the model generates At(−i)​ and predicts the future state given the current state and action, and how that affects performance?
+- When prompting the LLM to parse free-form narratives into S3AP, what is the procedure for text truncation as shown in Figure 3? Specifically, how is it determined which sentences or text segments accurately belong to time step t?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

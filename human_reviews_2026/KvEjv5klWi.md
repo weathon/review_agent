@@ -1,0 +1,153 @@
+# Locality-Attending Vision Transformer
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6
+
+## Abstract
+Vision transformers have demonstrated remarkable success in classification by leveraging global self-attention to capture long-range dependencies. However, this same mechanism can obscure fine-grained spatial details crucial for tasks such as segmentation. In this work, we seek to enhance segmentation performance of vision transformers after standard image-level classification training. More specifically, we present a simple yet effective add-on that improves performance on segmentation tasks while retaining vision transformers' image-level recognition capabilities. In our approach, we modulate the self-attention with a learnable Gaussian kernel that biases the attention toward neighboring patches. We further refine the patch representations to learn better embeddings at patch positions. These modifications encourage tokens to focus on local surroundings and ensure meaningful representations at spatial positions, while still preserving the model's ability to incorporate global information. Experiments demonstrate the effectiveness of our modifications, evidenced by substantial segmentation gains on three benchmarks (e.g., over 6% and 4% on ADE20K for ViT Tiny and Base), without changing the training regime or sacrificing classification performance. The code is available at https://github.com/sinahmr/LocAtViT/.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes LocAtViT, a ViT backbone augmentation aimed at making features more locality-aware (useful for dense prediction) while preserving image-level classification strength. Two components are introduced: (i) a Gaussian-biased self-attention that softly favors nearby patches; and (ii) a patch-aware classifier refinement that aggregates patch tokens (rather than relying solely on a [CLS] token or uniform pooling). Experiments (classification on ImageNet-1k; frozen-backbone segmentation on ADE20K, PASCAL-Context, COCO-Stuff; plus a DINO self-supervised setup) show consistent segmentation gains with parity or small gains in classification. 
+
+Relative to prior locality work—e.g., ConViT (soft convolutional inductive bias via GPSA) and LocalViT (injecting locality in the FFN)—the paper’s novelty is to impose a learned Gaussian locality bias directly on attention and to pair it with a patch-involving aggregation for classification, both kept lightweight. There is also prior art that explicitly studies Gaussian attention bias in ViTs; LocAtViT’s contribution is its particular way of learning and deploying such a bias for general pretraining and dense transfer.
+
+Summary of the review: The paper proposes a simple, low-cost locality bias for ViTs that improves spatial sensitivity while preserving global context, showing clear gains in frozen-backbone segmentation and self-supervised settings. Its design is elegant, lightweight, and broadly applicable, offering practical value for making ViTs more “segmentation-ready.” However, the evaluation scope is narrow—missing full fine-tuning, detection, and ablations against class-attention or pooling baselines—and more transparency on Gaussian stability would strengthen the case. Overall, this is a solid, well-motivated contribution with practical merit but limited empirical breadth, justifying a rating of 6 for clarity, utility, and moderate originality.
+
+### Strengths
+1) Simple, plug-in design with low overhead: Aligns with trends showing locality helps ViTs; uses a soft bias so global context remains available. 
+2) Clear target and protocol: Frozen-backbone segmentation fairly isolates representational gains; positive results in self-supervised DINO suggest generality beyond supervised pretraining. 
+3) Potential impact: Cost seems negligible and code is clean, thus many ViT backbones could adopt the tweak during pretraining to become more “segmentation-ready”.
+
+### Weaknesses
+1) Full fine-tuning and detection: Frozen-backbone segmentation is informative but not standard practice; include end-to-end segmentation fine-tuning and at least one object detection benchmark (e.g., COCO with a simple detector) to test if gains persist under typical training.
+
+2) Ablation transparency: Report stability and learned variance scales of the Gaussian (do they collapse or saturate?), and whether the [CLS] treatment or bias masking affects results.
+
+3) Aggregation vs. class-attention / pooling variants. The patch-aware classifier refinement should be positioned and compared to CaiT [1] (class-attention layers) and established token-pooling/labeling approaches; at least show the difference and the relation, or even at least small-scale ablations would help isolate benefits over these alternatives. 
+
+[1] Touvron, H., Cord, M., Sablayrolles, A., Synnaeve, G., & Jégou, H. (2021). Going deeper with Image Transformers. arXiv [Cs.CV]. http://arxiv.org/abs/2103.17239
+
+### Questions
+1) Aggregation baselines: How does your classifier-side refinement compare to CaiT’s class-attention and token pooling / token labeling? Can you add a small table isolating this component? 
+
+2) Generalization under full fine-tuning. Do the segmentation gains hold under end-to-end fine-tuning? If yes, please report one such setting (e.g, ADE20K with a standard decoder).
+
+3) Detection transfer: Have you tried COCO object detection (e.g., with a simple Detr head) to check whether locality-biased features help localization beyond conventional semantic tasks?
+
+4) Scaling + overhead: What is the measured training wall-clock and memory overhead for 224x224 → 512x512 inputs?
+
+5) In-Context Visual Understanding: Does the model gain any benefits on the recent proposed Hummingbird evaluation [2] ( implemented openly by [3])?
+
+6) Failure modes: Did you observe maybe whether there are any cases where the Gaussian bias hurt? 
+
+[1] Touvron, H., Cord, M., Sablayrolles, A., Synnaeve, G., & Jégou, H. (2021). Going deeper with Image Transformers. arXiv [Cs.CV]. http://arxiv.org/abs/2103.17239
+[2] Balažević, I., Steiner, D., Parthasarathy, N., Arandjelović, R., & Hénaff, O. J. (2023). Towards In-context Scene Understanding. arXiv [Cs.CV]. http://arxiv.org/abs/2306.01667 
+[3] https://github.com/vpariza/open-hummingbird-eval
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+LocAtViT proposes a simple yet effective way to enhance Vision Transformers with spatial locality by introducing GAug and PRR modules. The method achieves notable segmentation improvements while maintaining classification performance and requires only minimal architectural changes. Its strength lies in practicality and plug-and-play applicability across ViT variants. However, the work lacks a clear problem analysis, a theoretical motivation for the Gaussian kernel, and clarification of the interaction between GAug and PRR, making the approach appear more empirical than principled.
+
+### Strengths
+1. LocAtViT introduces locality awareness through the GAug and PRR modules with minimal architectural modification.
+
+2. The proposed modules yield substantial improvements on segmentation benchmarks while preserving or even slightly improving ImageNet classification accuracy.
+
+3. The work highlights a valuable perspective that ViT pretraining can be enhanced for dense prediction by refining patch-level representations.
+
+### Weaknesses
+1. Although the author pointed out that the global attention mechanism of ViT is not conducive to capturing local details, there is a lack of analysis on the degradation of local features in the baseline ViT. 
+
+2. The paper directly proposed Gaussian-Augmented attention, but did not explain why a Gaussian kernel was chosen (instead of other forms of local attenuation functions) and its correspondence with human vision or signal attenuation models. The lack of theoretical or empirical support makes this design more like a heuristic attempt. 
+
+3. The relationship between GAug and the PRR module was not clarified whether they are coupled or independent. Although LocAtViT is defined as a combination of the two, the paper did not discuss whether there is a complementary or redundant relationship between the two.
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes the Locality-Attending Vision Transformer, a new attention mechanism aimed at improving the local inductive bias of Vision Transformers (ViTs) without sacrificing global contextual modeling. The key design introduces a modular Locality-Attending (LocAt) add-on, which modulates the attention logits with a learnable Gaussian kernel centered on each query token's location. This work also enhances patch representations for segmentation by introducing minor changes prior to the classification head, preserving the meaningfulness of spatial tokens.
+
+### Strengths
++ Conceptually simple but effective modification. In specific, this paper computes a Gaussian kernel based on the query token and incorporates local spatial information into the attention logits, thereby balancing both global and local attention, which is beneficial for segmentation tasks. In addition, to mitigate the limitations of the [CLS] token, this work applies a parameter-free "self-attention"-style refinement to the output of the final layer. Though the solution is simple and straightforward, it is effective.
+
++ The related work provides a detailed discussion of methods that optimize attention locality.
+
++ The proposed method yields noticeable improvements across different models and tasks, and the gains observed in the ablation studies are also significant.
+
+### Weaknesses
+- The paper lacks visualization of the method's effects. For example, case studies showing attention heatmaps after applying Gaussian-Augmented attention and Patch Representation Refinement.
+
+- It is recommended to highlight the motivation for using the Gaussian kernel before the Method section. For example, by listing a table that qualitatively compares convolution-based hybrids, locality mechanisms inside attention, positional encodings, etc., and explicitly points out the advantages of using Gaussian kernel in this work.
+
+- Not all tasks necessarily require explicit local information. Directly adding S to the attention logits is a rather "hard" approach. Would it be possible to introduce a scaling factor $\alpha$ to balance the logits and S, for example, using $\alpha \cdot S$?
+
+- This paper uses a Gaussian term to enhance the locality. As shown in Figure 3, the resulting S matrix appears similar to the pattern of sliding window. The authors are encouraged to clarify how their approach, i.e., Gaussian-Augmented attention differs from sliding window and to explain the performance gain it achieves.
+
+### Questions
+My concerns are mentioned above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

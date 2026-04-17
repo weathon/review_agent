@@ -1,0 +1,198 @@
+# Pruning Long Chain-of-Thought of Large Reasoning Models via Small-Scale Preference Optimization
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4, 6
+
+## Abstract
+Recent advances in Large Reasoning Models (LRMs) have demonstrated strong performance on complex tasks through long Chain-of-Thought (CoT) reasoning. However, their lengthy outputs increase computational costs and may lead to overthinking, raising challenges in balancing reasoning effectiveness and efficiency. Current solutions often compromise reasoning quality or require extensive resources. In this paper, we investigate how to reduce the generation length of LRMs with limited tuning. We analyze generation path distributions and filter generated trajectories through difficulty estimation. Subsequently, we analyze the convergence characteristics of various preference optimization objectives under a unified Bradley-Terry loss based framework. Based on the analysis, we propose Length Controlled Preference Optimization (LCPO) that directly balances the implicit reward related to NLL loss. LCPO can effectively learn length preference with limited data and training. Extensive experiments demonstrate that our method significantly reduces the average output length of LRMs by over 50\% across multiple benchmarks while maintaining the reasoning performance. Our work highlights the potential for computationally efficient approaches in guiding LRMs toward efficient reasoning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents LCPO, a lightweight method for pruning overly long CoT outputs from large reasoning models. The authors mine short yet effective paths via self-distillation and difficulty filtering, then bias the policy toward them with a preference objective. On six math benchmarks, LCPO cuts average output length by >50% while preserving or slightly improving accuracy. Extensive results on OOD tests (MMLU, GPQA-D) show that the approach is general.
+
+### Strengths
+1. The paper reframes length reduction as “mine the model’s own short paths, then align”, and LCPO’s single-parameter BT loss is reasonable.  
+2. Extensive baselines (SFT, DPO variants) and OOD tests (MMLU, GPQA-D) are included.  
+3. With 0.8 k pairs and 50 steps, LCPO method can reduce average output length by over 50%.
+
+### Weaknesses
+1. Algorithmic novelty is limited. 
+
+    LCPO amounts to dropping the NLL term of ORPO and keeping the BT loss; a controlled ablation that simply scales up the BT weight in ORPO is missing, so the reader cannot tell whether the observed gains require a new objective or just a different hyper-parameter balance.
+
+2. Data efficiency. 
+    
+    The entire dataset must be rolled out 16× to obtain per-question accuracy and retain only the “easy” split. Moreover, all training pairs are self-generated, and the paper does not explore whether distilled high-quality pairs from another model (i.e., OOD preference data) could improve compression or robustness.
+
+3. Hyper-parameter sensitivity 
+
+    The manuscript reports only the best value of the key temperature λ, without any sensitivity analysis.
+
+### Questions
+1. Algorithmic novelty:
+  
+   Have you run an ablation where the BT-loss weight in ORPO is increased? If so, please report the length/accuracy curve and indicate whether LCPO still outperforms this baseline.  
+
+2. Data efficiency:
+  
+    What fraction of the total GPU budget is spent on rolling out medi um/difficult questions that are finally discarded? Could a two-stage or cheaper proxy be used to predict “easy” questions and reduce upfront compute?  
+
+3. OOG Geeralization:
+
+    Have you tried training LCPO on short–long pairs distilled from another model (e.g., GPT-4o) instead of pure self-distillation?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes LCPO, a Length Controlled Preference Optimization, to implement efficient reasoning. Through extensive experimental analysis, the paper demonstrates the length difference in the model's own output distribution and the feasibility of using this difference for preference alignment. Furthermore, the paper experimentally analyzes the limitations of the method based on NLL loss. Finally, the authors propose using the log NLL loss as a reward for preference alignment, which achieves good results in length preference alignment.
+
+### Strengths
+1.The paper empirically demonstrates that short and correct reasoning trajectories exist within the model's generation distribution, which can be leveraged to model length preference.
+2.The proposed LCPO method is highly effective and successfully alleviates the "overthinking" problem in large reasoning models.
+3.The paper provides a good insight by analyzing the limitations of the NLL loss from an empirical perspective， and, based on this, proposes using a reward function derived from the NLL loss to model preferences.
+
+### Weaknesses
+1. Generalizability of In-Distribution Preference Alignment: While effective, the method of filtering and training on model-generated trajectories is highly dependent on the base model's intrinsic ability to produce short reasoning paths. This significantly limits the method's generalizability across different models and its potential for further compressing reasoning length.
+
+2. Stability of LCPO: Although the authors claim the method is effective in small-scale data scenarios ()()()(), the lack of a reference model in LCPO raises concerns about distribution drift. It is difficult to guarantee that the model will not suffer from significant distribution shift, potentially leading to performance collapse, when trained on a larger volume of data. In this light, the reliance on small-scale data might be a necessary limitation rather than an advantage. Did the authors attempt to train the model on more data?
+
+3. Limited Baselines: The paper primarily discusses methods for in-distribution length preference alignment (like DPO, SimPO, etc.) . It lacks a comprehensive comparison and discussion against other families of methods, such as broader RL-based approaches or prompt-based techniques.
+
+### Questions
+See above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper first analyzes the generation path distributions of large reasoning models and filters their generated trajectories based on difficulty estimation to identify concise yet effective reasoning patterns.
+Then, it proposes Length Controlled Preference Optimization (LCPO) — a preference optimization method that directly balances implicit NLL-related rewards, effectively shortening reasoning chains by over 50% while maintaining accuracy.
+
+### Strengths
+1. This paper conducts a rigorous theoretical analysis of the characteristics of the Bradley–Terry loss and NLL loss, and proposes the LCPO method, which facilitates convergence in length control while reducing dependence on hyperparameters.
+2. The method achieves strong results on both the 1.5B and 7B models across multiple benchmarks, reducing output length by over 50% while maintaining accuracy, and also demonstrates excellent performance on out-of-distribution (OOD) benchmarks (GPQA, MMLU).
+
+### Weaknesses
+1. In Section 3, the experiments on LRMs are conducted using a relatively “simple” dataset (L196), making the conclusions less representative. This is because, in LRMs, reflective behavior on more difficult problems should lead to both an increase in tokens and an improvement in accuracy. Moreover, the final training data only includes the “easy” subset, which may cause the model to overfit or “hack” on simple problems while losing its ability to allocate more tokens to harder ones.
+2. There has been some research on difficulty-aware approaches, such as [1] AdaptThink and [2] Ada-R1, which reduces the novelty of this paper. Meanwhile, in RL-based methods, selecting the shortest response as the chosen one and the longest response as the rejected one is also a very common practice, as seen in works like [3] Kimi 1.5 and [4] Learning When to Think.
+3.  Lacks evaluation on the AIME25 dataset, and AIME24 may have been exposed to the models used in this work.
+4. For Table 2, I notice that the other methods use the different training time, could you provide the results in 50th step for other methods?
+
+BTW, the anonymous code link provided in the paper is no longer accessible.
+
+[1] AdaptThink: Reasoning Models Can Learn When to Think
+
+[2] Ada-R1: Hybrid-CoT via Bi-Level Adaptive Reasoning Optimization
+
+[3] Kimi k1.5: Scaling Reinforcement Learning with LLMs
+
+[4] Learning When to Think: Shaping Adaptive Reasoning in R1-Style Models via Multi-Stage RL
+
+### Questions
+See the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the “overthinking” problem in large reasoning models (LRMs) such as DeepSeek-R1, which often produce excessively long reasoning chains. The authors propose Length Controlled Preference Optimization (LCPO) — a small-scale, offline tuning method under a unified Bradley–Terry framework — that explicitly counterbalances the implicit NLL reward to align model preferences toward concise reasoning trajectories. Empirical results on multiple math reasoning benchmarks (MATH-500, GSM8K, Minerva-Math, AIME24, AMC23, OlympiadBench) show over 50% reduction in output length with minimal accuracy drop and good out-of-domain generalization to MMLU and GPQA-D.
+
+### Strengths
+1. The issue of long, inefficient chain-of-thought generation is increasingly important for practical deployment of reasoning models.
+
+2. The use of a Bradley–Terry loss analysis to interpret and modify preference optimization objectives (e.g., DPO, ORPO, SimPER) is clear and insightful.
+
+3. LCPO achieves competitive results with only ~0.8K training samples and 50 steps — a strong practical contribution.
+
+4. Strong empirical validation: Evaluations across multiple datasets (both in-domain and OOD) support the claimed efficiency and generalizability.
+
+5. Clear ablation design: The authors systematically analyze the impact of data difficulty filtering and algorithmic components.
+
+### Weaknesses
+1. Does LCPO risk collapsing reasoning diversity — e.g., over-shortening reasoning even for difficult problems? It would be interesting to measure the diversity of generations.
+
+2. OOD evidence is limited to MMLU and GPQA-D, without baseline comparisons, making the generalization beyond math unclear.
+ 
+3. The paper emphasizes using only a small number of preference samples, but the actual workflow involves a significant upfront computational cost: it requires multiple rollouts across the dataset. In other words, while the training phase uses limited data, generating this data itself demands substantial computational resources.
+
+### Questions
+see above weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

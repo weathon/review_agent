@@ -1,0 +1,187 @@
+# Confident Block Diagonal Structure-Aware Invariable Graph Completion for Incomplete Multi-view Clustering
+
+- Decision: Accept (Poster)
+- Scores: 4, 8, 4, 6
+
+## Abstract
+Multi-view clustering (MVC) adopts complementary information from multiple views to reveal the underlying structure of the data. However, the conventional MVC-based methods remain a crucial challenge on the incomplete multi-view clustering (IMVC) tasks,
+when some views of the multi-view data are missing. Particularly, current IMVC methods suffer from two main limitations: 1) they focused on recovering the missing data, yet often overlooked the potential inaccuracies in imputed values caused by the absence of true label
+information; 2) the recovered features were learned from the complete data, neglecting the distributional discrepancy between the complete and incomplete instances. In order to tackle these issues, in this paper, a confident block diagonal structure-aware invariable
+graph completion-based incomplete multi-view clustering method (CBDS_IMVC) is proposed. Specifically, we first design a confident-aware missing-view inferring strategy, where the confident block diagonal structures (CBDS) are learned to guarantee that recovered
+instances of all views have the same strict invariable local structure with the constraint of CBDS. Subsequently, we proposed an invariable graph completion strategy to learn the intrinsic structure across all views. Each parts are jointly trained, complementing and promoting
+each other to achieve the optimum together. Compared to other state-of-the-art methods, the proposed CBDS_IMVC demonstrates superior performance across multiple benchmark datasets.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes an incomplete multi-view clustering method named CBDS_IMVC. By introducing confidence-aware block diagonal structure perception and invariant graph completion strategies, it aims to address the issue that existing methods overlook structural consistency and distribution differences during missing view recovery. The method jointly learns the complete representations of multiple views and employs block diagonal regularization to ensure all views share a consistent intrinsic clustering structure, thereby enhancing clustering performance. Experimental results demonstrate that this method outperforms state-of-the-art approaches on multiple benchmark datasets.
+
+### Strengths
+1. A confidence-aware block diagonal structure regularization is proposed to ensure that all views maintain a consistent local structure after recovery.
+
+2. A joint learning framework is adopted to simultaneously optimize view recovery, graph completion, and clustering representation, thereby improving overall performance.
+
+3. Multi-view complementary information is introduced to effectively leverage cross-view information for recovering the structure of missing instances.
+
+### Weaknesses
+1. While the empirical results are promising, a more in-depth theoretical analysis of why CBDS and invariable graph completion lead to better clustering performance would strengthen the paper. 
+
+2. Please double-check the definitions of variables, typos, and citations overall in the manuscript.
+
+3. The complex mathematical solution process takes up too much space, resulting in insufficient necessary experiments, such as ablation experiments.
+
+### Questions
+1. How does the time complexity of the proposed method compare with other methods? Please supplement the analysis of time complexity.
+
+2. Although the experimental results have demonstrated the superiority of this method, could you further explain the differences and connections between it and other block diagonal methods?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper proposed a confident block diagonal structure-aware invariable graph completion-based incomplete multi-view clustering method, which designed a confident-aware missing-view inferring strategy to guarantee that recovered instances of all views have the same strict invariable local structure. This mechanism preserves distribution of the data from each view while enforcing a consistent and strict block diagonal pattern that remains aligned across all views.
+
+### Strengths
+1.This paper is well written with clear organization and significant contributions.
+
+2.Different from the other related papers, this paper designed a complete representation reconstruction strategy. This approach learns a unified, consensus structure that is invariant across all views, effectively maintaining the intrinsic structure of the recovered data.
+
+3.A novel confident block diagonal regularizer was proposed to guide all views toward learning an invariable structure with block diagonal form.
+
+### Weaknesses
+1.All equations presented in the manuscript must include clear definitions of their parameters. 
+
+2.Can the authors further clarify the importance of block diagonal structure learning compared with the other related methods.
+
+3.The conclusion should clearly summarize the main findings.
+
+### Questions
+1.Compared with the other block diagonal regularizers, what are the obvious advantages of the proposed model?
+
+2.Could the authors provide a more detailed explanation of Eq. (4)?
+
+3.Could  the authors provide a more detailed explanation for the function of each part in Eq. (6)?
+
+4.The mathematical formulas and explanations are too complex. Can the mathematical solution process be simplified, and add more explanations of the motivation and contributions of the proposed method?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+Incomplete multiview clustering is a significant and challenging sub-field within the research direction of multi-view clustering. This paper proposed a block diagonal structure completion method to guide the learning of the missing-instances of different views. Moreover, the re-constructed complete structures from different views can be adaptively aligned. The experimental results proved its positive performance in IMVC tasks.
+
+### Strengths
+1. The block-diagonal matrix represents a crucial property of data. It can clearly reveal the relationships within clusters and between clusters. This paper consider the IMVC problems from a unique perspective, where the property of the block diagonal structure of data is utilized to recover missing data from different views. 
+
+2. The proposed method designs the model simultaneously from the perspectives of missing data prediction and complete structure derivation. The joint learning strategy of this method enables the missing predicted data to maintain the structure of the original data on the one hand, and the complete predicted data to promote the derivation of the complete structure on the other hand.
+
+### Weaknesses
+1. The comparative experiments lack several state-of-the-art incomplete multi-view clustering (IMVC) methods. Including these would provide a more convincing evaluation of the proposed approach.
+
+2. Could the authors provide further analysis or experimental evidence to justify the necessity of the proposed block diagonal constraint, particularly in comparison with self-representation or low-rank regularization techniques?
+
+3. The paper would benefit from a more detailed explanation of the symbol “Pov” used in Equation (1), which would help readers better understand the proposed method.
+
+4. It would be beneficial for the authors to incorporate additional visual evaluation approaches. Moreover, how did the authors set the hyperparameters? Please provide a complete set of basis and methods for setting them.
+
+### Questions
+See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+In this paper, a Confident Block-Diagonal Structure (CBDS)-based framework is presented for incomplete multi-view clustering. The key assumption is that the recovered instances across all views should exhibit a consistent and strictly invariant local structure, enforced through the CBDS constraint. To further enhance robustness, an invariable graph completion mechanism is introduced to infer the intrinsic cross-view structure while accommodating missing views. All components are jointly optimized in a unified learning framework, enabling mutual reinforcement between structure recovery and clustering. The experiments conducted on multiple benchmark datasets demonstrate that the proposed approach consistently outperforms baseline methods.
+
+### Strengths
+1. The method adopts a complete representation reconstruction mechanism to infer missing views, ensuring that the recovered multi-view representations preserve the underlying data structure across views. 
+2. By explicitly learning a consensus and complete structure shared by all views, the framework enhances global structure alignment and reinforces clustering consistency. This cross-view agreement helps achieve more stable and reliable clustering outcomes.
+3. The introduction of a confident block-diagonal regularizer encourages each view to maintain its intrinsic distribution while enforcing a strict and invariant block-diagonal structure across views.
+
+### Weaknesses
+1. While the method handles missing views and distribution discrepancies, it does not explicitly address robustness to noise or outliers. It is better to include additional experiments with synthetic or real noise to demonstrate the method's resilience in practical scenarios.
+2. The current Figure 1 provides only a high-level conceptual overview, and some steps in the pipeline remain unclear from the illustration. Please enhance the figure with clearer modules, detailed annotations, and flow directions.
+3. The optimization part, especially Section 2.4, is a little long and detailed. It would be helpful to simplify this section or move some of the detailed derivations to the appendix.
+
+### Questions
+1. The transition from Eq. (6) to Eq. (7) feels a bit unclear and somewhat repetitive. Could this part be streamlined or explained more smoothly to make the flow easier for readers to follow?
+2. Could you clarify why the element-wise Hadamard product is used in Eq. (6)? A bit more explanation on its purpose (e.g., handling observed entries or enforcing consistency) would help readers understand the motivation behind this choice.
+3. Section 2.4 has a lot of detailed math, which may distract from the main ideas. Would it be possible to simplify this section or move some of the detailed derivations to the appendix so readers can focus more on the key concepts?
+4. There are a few typos and formatting issues. Please proofread the paper to improve clarity.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4

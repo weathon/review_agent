@@ -1,0 +1,149 @@
+# FactGuard: Detecting Unanswerable Questions in Long-Context Texts for Reliable LLM Responses
+
+- Decision: Reject
+- Scores: 4, 4, 6
+
+## Abstract
+Large language models (LLMs) have demonstrated significant advances in reading comprehension. However, a persistent challenge lies in ensuring these models maintain high accuracy in answering questions while reliably recognizing unanswerable queries. This issue remains critical, particularly as the length of supported contexts continues to expand. To address this challenge, we propose a collaborative multi-task workflow called FactGuard to automatically generate evidence-based question-answer pairs and systematically construct unanswerable questions. Using this methodology, we developed the FactGuard-Bench dataset, which comprises 25,220 examples of both answerable and unanswerable question scenarios, with context lengths ranging from 4K to 128K. Experimental evaluations conducted on nine popular LLMs reveal that all LLMs exhibit significant performance gap between answerable and unanswerable questions and the most advanced models achieve only 67.67\% overall accuracy. After training with FactGuard-Bench, the model achieves an overall accuracy of 81.17\%, along with enhanced reasoning capabilities on unanswerable questions. Our code is publicly available at https://anonymous.4open.science/r/FACTGUARD-5BBC
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses the problem of recognizing unanswerable questions when querying large language models (LLMs). The authors propose a workflow, FactGuard, for generating question–answer (QA) pairs with defined answerability/unanswerability from documents such as books and legal documents. Using this workflow, they construct the FactGuard-Bench dataset, which contains approximately 25,000 answerable and unanswerable questions with varying context lengths. The authors evaluate both open-source and commercial LLMs on this dataset and find notable performance gaps between answerable and unanswerable questions. They further analyze the impact of supervised fine-tuning with FactGuard-Bench on model performance.
+
+### Strengths
+- The problem addressed in the paper is well-motivated and interesting.
+- The dataset is substantial in size and exhibits diverse context lengths. It also maintains a balanced distribution between answerable and unanswerable questions.
+- The evaluation is comprehensive and considers multiple aspects of the problem.
+
+### Weaknesses
+- A large portion of the proposed framework and evaluation pipeline relies on LLMs. For instance, text quality scoring, topic labeling, question–answer generation, and even the evaluation of LLM-generated answers are all performed by LLMs. This extensive use of LLM-based components raises concerns about the reliability and objectivity of the resulting dataset. The authors should clarify why alternative, non-LLM approaches were not considered for these steps or provide justification for the exclusive reliance on LLMs.
+- Some important methodological details are missing. In particular, Section 3 lacks sufficient clarity regarding how the steps were implemented. For example, the specific prompts used, input–output formats, and parameter settings. Providing these details would greatly help understand the method better
+
+Minor comments: lines 80 and 221 have redundant words.
+
+### Questions
+- What is the text associated with each question-answer pair in the dataset? The entire document or only the fragment that was used to generate the question?
+- How do you prompt the LLMs to answer FactGuard questions? Do you provide the text chunk in the prompt as well? If yes, how? Do you call the LLM multiple times and report an average accuracy or only one time? Is it greedy decoding?
+- How do you explain the decrease in accuracy for answerable questions when performing SFT in section 5.3.5?
+- Could you explain a bit more about lines 225 to 230? This part was confusing for me.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a framework called FactGuard for generating both answerable and unanswerable questions. The unanswerable QA pairs are created by either modifying the fragment (used as context) or modifying the question, resulting in two types of unanswerable questions: lacking evidence and misleading evidence. The authors then apply their framework to construct the FactGuard-Bench benchmark, which contains 8,829 answerable and 16,391 unanswerable questions. Experimental results reveal a performance gap between answerable and unanswerable questions, with models struggling particularly on the latter. The authors also show that model performance improves after fine-tuning on their dataset, with models achieving their best results on shorter texts.
+
+### Strengths
+- Fine-tuning the models on their dataset improves performance on unanswerable questions across different model sizes, as well as on the SQuAD 2.0 dataset.
+- Their dataset is interesting because it reveals the weaknesses of existing models in answering unanswerable questions (Table 3).
+- They conduct experiments on a wide range of models, making the evaluation quite comprehensive.
+
+### Weaknesses
+- The manual review process for the dataset is not clearly explained (see questions). In addition, the inter-annotator agreement appears relatively low (0.64). There is also no human baseline reported for the task; based on my understanding, the overall quality score does not represent a human baseline.
+- Regarding the cross-benchmark generation ability evaluation, the authors only evaluate on one dataset, SQuAD 2.0, which is relatively old (2018). This does not sufficiently demonstrate the effectiveness of their dataset.
+- When fine-tuning on their dataset, the performance on answerable questions decreases, yet the authors do not provide any explanation for this (see Table 5).
+
+### Questions
+-The terms significant or significantly are used frequently, but no p-values are reported.
+- Section 5.3.5: Are there any other datasets that could be used for evaluation here, since SQuAD 2.0 is quite old?
+- How do you prompt models to solve the task? What is your approach to task prompting?
+- Section 4.2 Manual Review: in 480 examples here, how many are answerable and how many are unanswerrable questions.
+- Section 4.2 Manual Review: In the human guidelines in Appendix A.1, you also include the labels maybe correct and maybe incorrect. How are these labels used when calculating the inter-annotator agreement?
+- Section 4.2 and Appendix A.2: You mention that annotators are asked to “read the text and evaluate each example,” so is the task not to find the answer to the question, but rather to check whether the existing answer is correct?
+
+
+
+Comments/Typos/Suggestions:
+
+- It would be useful to provide a comparison table between existing datasets and your proposed dataset, highlighting the features that are unique to your dataset.
+
+- Many of the papers in the references were published at conferences, but the citations refer only to their arXiv versions. For example https://aclanthology.org/2024.acl-long.506/ and https://aclanthology.org/2023.emnlp-main.220/ 
+- Line 221: repeat “Lacking evidence”
+- Line 080 or 081: “we achieved achieves an” 
+- Line 247: Footnote misuse
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses the critical and timely problem of large language models (LLMs) hallucinating answers to unanswerable questions, with a specific and novel focus on long-context scenarios (up to 128K tokens). The authors make two primary contributions to the community. First, they propose "FactGuard," an innovative and scalable multi-task workflow for automatically synthesizing a large dataset of both answerable and unanswerable question-answer pairs from raw documents. Second, using this workflow, they construct and release "FactGuard-Bench," a new, large-scale benchmark comprising over 25,000 examples designed to evaluate and enhance the ability of LLMs to handle unanswerable queries in long texts. The paper empirically demonstrates that current state-of-the-art LLMs struggle significantly with this task and shows that fine-tuning on FactGuard-Bench can substantially improve a model's ability to correctly identify and provide reasoned refusals for unanswerable questions.
+
+### Strengths
+- **Pioneering and Valuable Benchmark:** The most significant contribution of this work is FactGuard-Bench. To my knowledge, it is the first large-scale benchmark specifically designed to test unanswerability detection within the challenging domain of very long contexts. As the community pushes the boundaries of context length, this benchmark provides an essential and much-needed tool for evaluating the reliability of these powerful models, moving beyond simple "needle-in-a-haystack" tests.   
+
+- **Systematic and Scalable Data Generation:** The FactGuard workflow is a well-designed methodology for data synthesis. The systematic creation of unanswerable questions through "evidence deletion" and, more impressively, "misleading evidence" (entity substitution, impossible conditions) produces challenging examples that test for deep contextual understanding rather than superficial keyword matching. This automated approach ensures scalability.   
+
+- **Comprehensive Empirical Validation:** The authors conduct a thorough evaluation across nine prominent LLMs, including GPT-4o, convincingly demonstrating that the inability to handle unanswerable questions in long contexts is a widespread and significant problem. This robustly motivates the need for their work.
+
+### Weaknesses
+- **Significant Performance Trade-off:** The paper commendably reports a critical weakness: fine-tuning on FactGuard-Bench, while improving performance on unanswerable questions, leads to a notable degradation in accuracy on answerable questions. This suggests the model may become overly cautious, potentially harming its utility in practical applications where users expect correct answers to valid queries. This trade-off is a major barrier to the direct deployment of this fine-tuning method.   
+
+- **Narrow Definition of Unanswerability:** The benchmark's scope is limited to contextual fidelity—whether an answer can be found within the provided text. This is a narrow slice of the unanswerability problem. More comprehensive benchmarks like AbstentionBench cover a wider range of epistemic uncertainties, such as questions with false premises, subjective queries, or those requiring knowledge beyond the model's cutoff date. FactGuard-Bench effectively evaluates a model as a "careful reader" but not necessarily as a "knowledgeable and cautious agent."   
+
+- **Reliance on a Single Methodological Paradigm:** The paper's solution relies exclusively on supervised fine-tuning (SFT). However, the field is rapidly exploring alternative, potentially more efficient paradigms. These include methods that probe a model's intrinsic self-awareness of its knowledge boundaries (e.g., by analyzing hidden states or reasoning trajectories) or employ mechanistic interventions (e.g., activation steering). These approaches may offer a path to improving refusal capabilities without the performance trade-offs associated with SFT.
+
+### Questions
+- **Regarding the performance trade-off:** Have you considered experimenting with parameter-efficient fine-tuning (PEFT) methods, such as LoRA? These techniques modify a smaller subset of parameters and are sometimes known to mitigate catastrophic forgetting of pre-trained abilities. Could such an approach lessen the observed performance drop on answerable questions?    
+
+- **Regarding the SFT paradigm:** How do you position your data-centric approach relative to emerging non-invasive methods that detect unanswerability by probing a model's internal states (e.g., using a linear classifier on hidden activations)? Could FactGuard-Bench serve as a high-quality, challenging dataset to train or validate these lightweight classifiers, potentially offering a more efficient solution?    
+
+- **Regarding synthetic data artifacts:** The entire benchmark was generated using a single model (Qwen2.5-72B-Instruct). Are you concerned that models fine-tuned on this data might overfit to stylistic quirks or biases of the generator model, thus limiting generalization to human-written questions or questions from other models? Have you considered using a mixture of generator models to enhance the diversity and robustness of the benchmark?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4

@@ -1,0 +1,244 @@
+# Constitutional Classifiers++: Efficient Production-Grade Defenses against Universal Jailbreaks
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 4, 6, 6
+
+## Abstract
+We introduce enhanced Constitutional Classifiers that deliver production-grade jailbreak robustness with dramatically reduced computational costs and refusal rates compared to previous-generation defenses. Our system combines several key insights. First, we develop exchange classifiers that evaluate model responses in their full conversational context, which addresses vulnerabilities in last-generation systems that examine outputs in isolation. Second, we implement a two-stage classifier cascade where lightweight classifiers screen all traffic and escalate only suspicious exchanges to more expensive classifiers. Third, we train efficient linear probe classifiers and ensemble them with external classifiers to simultaneously improve robustness and reduce computational costs. Together, these techniques yield a production-grade system achieving a 40x computational cost reduction compared to our baseline exchange classifier, while maintaining a 0.05% refusal rate on production traffic. Through extensive red-teaming comprising over 1,700 hours, we demonstrate strong protection against universal jailbreaks---no attack on this system successfully elicited responses to all eight target queries comparable in detail to an undefended model. Our work establishes Constitutional Classifiers as practical and efficient safeguards for large language models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces "Constitutional Classifiers++," a jailbreak defense system that is both significantly more robust and 5.4x more computationally efficient than prior work. The authors first identify that classifiers evaluating inputs and outputs in isolation are vulnerable to "reconstruction" and "obfuscation" attacks. They address this by introducing an "exchange classifier" that evaluates the model's output in the context of the full conversational input. To manage this method's high cost, they implement a two-stage "classifier cascade" where a cheap, lightweight classifier screens all traffic and escalates only suspicious queries to the stronger, more expensive one . This system is validated against over 560K red-teaming queries, demonstrating high robustness and a 10x lower refusal rate on production traffic. The paper also proposes using linear activation probes, trained with a novel softmax-weighted loss and logit smoothing, as a highly efficient future direction for the first-stage classifier .
+
+### Strengths
+1. The validation of the primary defense system against over 560K human red-teaming queries is a massive, high-quality evaluation that provides extremely strong evidence of robustness against adaptive attackers.
+2. The paper is written with a clear, compelling narrative. It begins by demonstrating a concrete failure in existing systems (Section 2, Figure 1), then systematically presents the solutions to fix the vulnerability (Section 3, exchange classifier) and its associated cost (Section 4, cascade). This structure makes the paper's contributions easy to understand.
+3. The paper reports not just on robustness, but on a 5.4x computational cost reduction and a 10x reduction in false positives (0.036% refusal rate), all backed by production deployment data . This directly addresses the most critical barriers to deploying LLM defenses at scale.
+
+### Weaknesses
+1. The paper's core thesis, established powerfully in the introduction and Sections 3 and 4, is that defenses must be validated against large-scale, adaptive human red-teaming to make credible robustness claims. However, the highly promising results for the linear probes—which are presented as a key part of the contribution—are validated only on a static, 7,000-example dataset.
+2. This makes the claims about the probe-classifier cascade's "100x reduction in compute costs" (Figure 3c)  feel premature. We have no evidence that this probe-based system would survive the 560K-query red-teaming that the main system was subjected to.
+
+### Questions
+Question-1.: Figure 3a shows the Probe-S ensemble is the most robust system on your static dataset, and Figure 3b suggests this is because the probe and the external classifier have low correlation and catch "complementary" attacks. Could you provide any qualitative examples of what kinds of attacks the probe catches that the external classifier misses, and vice versa? Understanding this complementary nature seems critical to assessing whether the probe is truly adding a new, generalizable layer of defense or just overfitting to this specific dataset.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces a series of new constitutional classifiers that achieve a high level of jailbreak robustness while reducing computational costs. The proposed classifiers build upon the last generation of constitutional classifiers, whose goal is to defend against most universal jailbreak attacks. The authors identify that existing classifiers are vulnerable to two types of attacks: reconstruction and output obfuscation attacks.
+
+### Strengths
+- Important and timely topic
+- Strong contribution in enhancing classifier performance and reducing computational cost
+- Practical insights for industry applications
+
+### Weaknesses
+- Lack of transparency and clarity
+- Unclear release plan
+
+### Questions
+Thank the authors for submitting this work. I believe this paper makes a strong contribution toward developing a robust and efficient classifier to defend against universal jailbreak attacks on LLMs. In detail, the main contributions can be summarized as follows:
+
+(1) Identification of two critical vulnerabilities in existing classifiers and the introduction of exchange classifiers to improve robustness;
+
+(2) A two-stage classification framework to reduce the computational cost of exchange classifiers;
+
+(3) The introduction of linear probes that reuse model representations to further reduce inference cost.
+
+Despite these strengths, I find it difficult to fully understand the technical details without carefully reading the original *Constitutional Classifiers* paper, as much of this work builds directly upon it (e.g., dataset construction, evaluation pipeline, and red-teaming protocol).
+
+Based on this, my main concerns are as follows.
+
+### **1. Lack of transparency and clarity**
+
+Many key aspects are described only at a high level, making it challenging to evaluate technical correctness.
+
+- For instance, after reading Section 3, I still find the definition and mechanism of the exchange classifier unclear. Does it operate alone, or does it replace the input classifier while being used together with the output classifier? Its relevant descriptions, such as “exchange classifier uses a small-size LLM to evaluate outputs, rather than an extra-extra-small LLM” and “internal LLMs,” are also ambiguous and lack of necessary clarity.
+- Another example is the discrepancy between the 569 K and 226 K query counts in the robustness results of Section 3. It is not explained how these datasets are constructed or sampled and why different classifiers are evaluated on different testbeds.
+- Such general and ambiguous descriptions are quite common throughout the paper.
+
+### **2. Limited reproducibility**
+
+Most of the experiments rely on internal proprietary models, datasets, and costly human red-teaming. The paper does not indicate whether any of these materials, or even synthetic evaluation data, will be released. Given ICLR’s emphasis on open and reproducible research, this limitation could weaken the work’s transparency and community impact.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This study aims to demonstrate the proposed Constitutional Classifiers as practical safeguards for large language models.
+
+### Strengths
+- Good motivation: A key strength of this work is that it accurately identifies the practical deployment bottlenecks of [1], specifically its significant computational cost and tendency toward over-refusal. The authors then systematically tackle these issues with a series of well-motivated and targeted methods.
+- Strong performance: high defense success rate with little refusal rate; 5.4x computation overhead reduction.
+
+[1] Mrinank Sharma, Meg Tong, Jesse Mu, Jerry Wei, Jorrit Kruthoff, Scott Goodfriend, Euan Ong, Alwin Peng, Raj Agarwal, Cem Anil, et al. Constitutional classifiers: Defending against universal jailbreaks across thousands of hours of red teaming. arXiv preprint arXiv:2501.18837, 2025.
+
+### Weaknesses
+**Presentation:** 
+- No illustrative figure about the proposed methods. The absence of illustrative figures or diagrams detailing the proposed system architecture and classifier cascade makes it difficult to fully grasp the methodological workflow and component interactions.
+
+**Novelty:** 
+- While the manuscript effectively builds upon [1], it overlooks meaningful discussion and comparison with established input-output-filtering based defense methods. This omission, along with the absence of comparative evaluation, undermines the claimed novelty, making the proposed exchange classifier appear more as a rebranding of existing filtering paradigms than a substantive methodological advance.
+- The proposed logit smoothing, while empirically beneficial, appears more as an engineering trick than a fundamental algorithmic contribution.
+
+**Several descriptions without theoretical justification, experimental verification, or detailed explanation:**
+- The quantitative results referenced in lines 173, 203, 230, 235, and 239 lack sufficient experimental context. The authors should provide comprehensive implementation details, including computational platform, test datasets, model specifications, and baseline configurations, to ensure reproducibility and facilitate meaningful evaluation of the reported performance.
+- The reliance on proprietary internal models and datasets, as indicated in lines 220 and 434, limits the verifiability and generalizability of the claimed results. To strengthen the validity and reproducibility of this work, the authors should supplement these findings with comprehensive experiments using publicly available models and standardized benchmarks.
+- Several descriptions remain ambiguous and require clarification. For instance, Line 177 should quantify the classifier's effectiveness with specific performance metrics, while Line 344 needs explicit documentation of data sources and formats. Additionally, the conclusion in Line 348 would be strengthened by presenting detailed ablation results demonstrating how performance scales with varying training data sizes.
+
+**Minor concerns:**
+- Typo in Line 43.
+
+### Questions
+- Does the replacement of the sliding window with an EMA during inference (Line 283) introduce a training-inference inconsistency? Have the authors conducted experiments incorporating EMA during training, which might yield improved results?
+- As shown in Figure 2(c), defense performance continues to improve with finer-grained probing. Have the authors experimented with even more granular approaches, such as inner-layer probing at the level of individual attention or MLP blocks?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper discusses a crucial problem: identifying jailbreak prompts designed to evade LLM safety mechanisms. A conversational classifier (known as exchange classifiers) is introduced, particularly to address reconstruction and obfuscation attacks. This is orchestrated using two stages to reduce computational costs while using internal model activations (through logit smoothing and weighted loss) to improve detection. The evaluation effort involves a red team, and also shows lower computational costs compared to previous approaches.
+
+### Strengths
+- The problem considered is very novel, and underexplored in LLM safety. The paper addresses deployment viability to achieve production-grade defenses.
+- The use of exchange classifier is clever to mitigate reconstruction and obfuscation jailbreaks. The scalable modular design improves computational overhead significantly, compared to existing frameworks.
+- The evaluation is excellent with LLM-based rubric grading for quantitative assessment
+
+### Weaknesses
+- Though the methodology is well described, it would be useful to have more details on architectural and training details for reproducibility and generalizability. 
+- It would be beneficial to compare alternative approaches to the probe methodology such as sparse autoencoder signals etc.)
+- The dataset used for evaluation primarily focus on CBRN-related jailbreaks and internal red-team benchmarks. However, it is unclear how these results translate to broader diverse threat domains such as misinformation, hate etc. 
+- It would be also useful to describe analysis aiding to understand why certain attacks fail under the exchange classifier approach. Interpretive results would be useful to the community at large.
+
+### Questions
+1. It is unclear how large is the context for each instances in the exchange classifier? What is the length of conversation? How does this affect performance?
+2. How well does the softmax-weighted loss differ from using moving average or median, particularly in the case where spurious tokens are present which skews the distribution?
+3. In section 5.1, the linear probe architecture mentions activation features. Could these activation functions be non-linear? If so, would the results still hold true?
+4. It is unclear what is the meaning of “calibrating classifier threshold to correspond to a 0.1% refusal rate on WildCat”? How can this statement be interpreted with respect to overall performance?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 5
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces Constitutional Classifiers++, replacing the traditional input–output separation with exchange-level classification that understands conversational context. The system employs a two-stage cascade, a lightweight Stage-1 screener and a high-precision Stage-2 classifier to reduce runtime cost. It further integrates internal activation probes with external classifiers for ensemble robustness. Experiments report 5.4× cost reduction, a 0.036% block rate on production traffic, and full mitigation of universal jailbreak prompts across large red-team evaluations. Technical contributions include streaming linear probes with smoothed logits and softmax-weighted loss functions tailored for online inference.
+
+### Strengths
+1)	Clear motivation: The paper provides a clear motivation by diagnosing vulnerabilities in the prior Constitutional Classifier (CC). The authors identify two concrete and realistic attack classes: reconstruction attacks, in which harmful instructions are fragmented across benign segments, and output obfuscation attacks, in which malicious outputs are hidden behind metaphorical or coded language. 
+
+2)	Novelty: The paper presents two technically distinct yet complementary innovations that meaningfully advance safety mechanisms. First, the two-stage classification architecture introduces an adaptive cascade that balances robustness and efficiency. A lightweight first-stage model screens all interactions, while a stronger second-stage classifier verifies only flagged exchanges. This design reduces computational overhead by 5.4× without compromising jailbreak resistance, offering a deployable and scalable defense solution. Second, the linear activation probes represent a use of the LLM’s own internal activations for real-time harmfulness detection. By reusing in-model representations and applying techniques such as sliding-window logit smoothing and softmax-weighted loss, the probes achieve performance comparable to full Constitutional Classifiers at negligible cost.
+
+3)	Training improvements: The study convincingly establishes that the proposed systems deliver cost-effective robustness. Both the two-stage cascade and the probe-based approach significantly reduce computational and training overheads while preserving or improving ASR performance, making them practical candidates for real-world, scalable LLM safety deployment.
+
+### Weaknesses
+1)	Analysis of the Failure Cases
+While the exchange-classifier architecture clearly improves robustness relative to previous Constitutional Classifiers, the results in Section 3 suggest that failure cases remain and deserve deeper analysis. Specifically, the system still exhibited two high-risk vulnerabilities across 226K red-teaming queries (≈ 0.00885 per thousand), implying that some jailbreaks can still bypass contextual evaluation.
+
+2)	Scaling trends for two-stage classifiers
+While the paper provides strong empirical validation of the two-stage cascade architecture, it lacks a robustness trend on model scale, which limits the interpretability of the reported robustness gains. In Section 4, the two-stage setup combines “extra-small” and “small” classifiers, but the impact of scaling each stage independently is not explored. 
+
+3)	Linear Probe Assumption of Linearity
+The proposed linear activation probe relies on the assumption that harmfulness signals are linearly separable within the model’s internal activation space. This simplification enhances computational efficiency but overlooks the nonlinear semantic dependencies that often define harmful or context-sensitive content. 
+
+4)	Insufficient Evaluation Scope:
+The evaluation’s domain restriction to CBRN data limits the paper’s external validity. Incorporating multi-domain datasets, such as AdvBench and JailbreakBench, would demonstrate whether the proposed method generalizes beyond structured, science-based harms. A broader evaluation would substantiate the claim that the method is a general-purpose, production-ready defense rather than a domain-specific safeguard.
+
+### Questions
+Please refer to the weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

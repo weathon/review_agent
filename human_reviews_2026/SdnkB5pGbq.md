@@ -1,0 +1,165 @@
+# Dynamic-dLLM: Dynamic Cache-Budget and Adaptive Parallel Decoding for Training-Free Acceleration of Diffusion LLM
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6
+
+## Abstract
+Diffusion Large Language Models (dLLMs) offer a promising alternative to autoregressive models, excelling in text generation tasks due to their bidirectional attention mechanisms. However, their computational complexity, scaling as $\mathcal{O}(L^3)$ with sequence length $L$, poses significant challenges for long-sequence and real-time applications, primarily due to the lack of compatibility with key-value caching and the non-autoregressive nature of denoising steps. Existing acceleration methods rely on static caching or parallel decoding strategies, which fail to account for the dynamic behavior of token properties across layers and decoding steps. We propose \textbf{Dynamic-dLLM}, a training-free framework that enhances dLLM inference efficiency through two components: Dynamic Cache Updating (DCU), which adaptively allocates cache-update budgets based on layer-wise token dynamics, and Adaptive Parallel Decoding (APD), which dynamically calibrates decoding thresholds to balance generation quality and efficiency. Extensive experiments on models like LLaDA-8B-Instruct, LLaDA-1.5, and Dream-v0-7B-Instruct across benchmarks such as MMLU, GSM8K, and HumanEval demonstrate that Dynamic-dLLM significantly improves inference speed, attaining an average speedup of exceeding 3$\times$ while maintaining performance. Dynamic-dLLM outperforms state-of-the-art acceleration methods and provides a plug-and-play solution for efficient dLLM deployment without compromising performance. Code and models will be made publicly available.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Diffusion-based Large Language Models (dLLMs) face high computational complexity (scaling with the cube of sequence length) and inefficiency from static acceleration strategies. To solve this, the paper proposes Dynamic-dLLM—a training-free framework that boosts dLLM inference efficiency via two core components: Dynamic Cache Updating (DCU): It adaptively distributes cache-update budgets across layers based on how much token inputs change between steps. To prevent "stuck tokens" (tokens never updated due to low variation), it adds a mandatory update window around "key tokens". Adaptive Parallel Decoding (APD): Instead of fixed thresholds for unmasking tokens, it adjusts thresholds dynamically using two signals. Experiments on three dLLMs (LLaDA-8B-Instruct, LLaDA-1.5, Dream-v0-7B-Instruct) across five benchmarks (MMLU, ARC-C, GSM8K, GPQA, HumanEval) show Dynamic-dLLM achieves an average speedup of 3.21 times.
+
+### Strengths
+1. Unlike baselines (e.g., dLLM-Cache, Fast-dLLM) that use the same update budget for all layers, DCU allocates budgets based on actual layer needs. It leverages a strong correlation (0.94–0.99) between layer inputs and intermediate features (like Key/Value tensors) to avoid redundant calculations—instead of checking expensive Value vectors, it uses simpler input changes to judge if a token needs updating. The mandatory update window (default size 32) ensures critical tokens near recently unmasked ones are always updated, solving the "stuck token" problem common in static methods.
+2. APD replaces fixed confidence thresholds (used by Fast-dLLM) with thresholds that adjust per token and per step. Tokens with clear, stable predictions get lower thresholds (unmasked earlier for speed), while uncertain tokens get higher thresholds (avoiding errors). At a high initial threshold (0.9), APD cuts inference steps by 30% vs. fixed thresholds without accuracy loss. For example, on LLaDA-8B-Instruct/GSM8K, APD pushes throughput to 37.29 tokens per second (TPS), much faster than the baseline.
+
+### Weaknesses
+1. All experiments use sequences up to 512 tokens (HumanEval) or 256 tokens (other benchmarks). For sequences longer than 1k tokens: (1) The fixed 32-size mandatory window may miss long-range dependencies (key tokens’ influence could span more than 32 positions); (2) Calculating layer-wise variation for thousands of tokens becomes slower, possibly offsetting speed gains; (3) APD’s temporal stability checks (comparing token distributions across steps) get more computationally heav. It is better providing more dicussion here.
+2. While DCU avoids recomputing Value vectors, it still spends time calculating token input variation and layer-wise metrics for every layer and token. For deep dLLMs (e.g., 128 layers), this adds extra work per step, but the paper seemingly ignores to present how much time this takes, or if it slows down inference compared to baselines like dLLM-Cache.
+
+### Questions
+1. For long sequences (e.g., extended GSM8K with 1k tokens), do adjustments like a larger mandatory window (64 instead of 32) improve accuracy? What’s the TPS and accuracy for 1k-token tasks, and how does APD’s overhead change with longer sequences?
+2. What percentage of inference time is spent calculating token variation and layer metrics? Can sampling fewer tokens (e.g., 50% of tokens) for variation checks reduce overhead without losing accuracy?
+3. For tasks with >256 steps (e.g., HumanEval’s 512 steps), do APD’s threshold adjustments get too strict/lenient over time? Does resetting thresholds periodically (e.g., every 64 steps) help?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper tackles the $\mathcal{O}(L^{3})$ inference cost of dllms. It argues that existing training-free methods use static caching and decoding strategies, which fail to account for the dynamic behavior of tokens across layers and steps. The authors propose Dynamic-dLLM, a training-free framework with two components. First, Dynamic Cache Updating adaptively allocates cache-update budgets to layers based on token input similarity, a proxy for feature change. It introduces a Mandatory Update Window to prevent token stagnation. Second, Adaptive Parallel Decoding dynamically adjusts the unmasking threshold for each token based on its prediction confidence concentration and temporal instability. Experiments on dLLMs like LLaDA and Dream show an average 3x speedup while maintaining accuracy.
+
+### Strengths
+- DCU is well-motivated, using layer input similarity as an efficient proxy for feature dynamics , and thoughtfully addresses the stuck in the mud failure case with a mandatory update window. 
+- APD is also a strong contribution, moving beyond static thresholds to a dynamic policy based on both confidence concentration and temporal instability. 
+- The empirical results are excellent, demonstrating a >3x average speedup with no performance degradation, and clearly outperforming SOTA baselines .
+
+### Weaknesses
+- While the method is training-free, both DCU and APD introduce non-trivial computations at each step (e.g., cosine similarities for all tokens/layers, probability sorting, and instability calculations). The paper does not quantify this overhead relative to the computation saved. 
+- The method introduces several new, sensitive hyperparameters (e.g., $B_{layer}$, $B_{window}$, $\alpha$, $\beta$). The paper provides an ablation for the budgets but states the APD parameters ($\alpha$, $\beta$) were set based on extensive statistical analysis, which is not shown. The Mandatory Update Window is also a heuristic whose robustness is not fully ablated.
+
+### Questions
+- Can the authors provide a detailed breakdown of the computational overhead (e.g., in latency) introduced by the DCU and APD  mechanisms at each step? How does this overhead scale with sequence length $L$?
+- Please provide the extensive statistical analysis or an ablation study used to determine the APD hyperparameters $\alpha=0.001$ and $\beta=0.0008$. How sensitive is the model's quality/speed trade-off to these two values?
+- The "stuck in the mud" phenomenon is mitigated by a $B_{window}$ around the previous key token. What is the failure rate if the next most confident token falls outside this window? Have the authors explored alternative, non-heuristic solutions to this problem?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Diffusion Large Language Models (dLLMs) have bidirectional attention strengths but face $O(L^3)$ computational complexity and inefficient static acceleration methods. Dynamic-dLLM, a training-free framework, solves this via two components: Dynamic Cache Updating (DCU) which adaptively allocates layer-wise cache budgets using layer input cosine distance (proxying intermediate changes) and a mandatory update window to avoid "token stuck", and Adaptive Parallel Decoding (APD) which adjusts thresholds via prediction concentration and temporal stability. Tested on NVIDIA Pro6000 with LLaDA-8B-Instruct/1.5, Dream-v0-7B-Instruct across 5 benchmarks, it achieves average 3× speedup (max 4.48× on GSM8K) while maintaining accuracy (difference ≤1% vs. baselines), outperforming dLLM-Cache, dKV-Cache, and Fast-dLLM.
+
+### Strengths
++ **Targeted Dynamic Adaptation Addresses Core Pain Points**：The paper is the first to systematically capture two key dynamic characteristics of dLLMs—heterogeneous inter-layer cache update demands and step-wise fluctuations in token confidence distribution—overcoming the limitations of existing static acceleration methods. For Dynamic Cache Updating (DCU), it uses layer inputs as a proxy for intermediate feature changes (Spearman correlation with Key/Value features > 0.94), avoiding the computational overhead of recomputing intermediate tensors while ensuring accurate update decisions. For Adaptive Parallel Decoding (APD), it adjusts thresholds by combining prediction distribution concentration and historical stability, solving the misjudgment issue of fixed-threshold methods (e.g., preventing premature unmasking of unstable tokens).  
++ **Training-Free Design Enables Strong Engineering Practicality**：Dynamic-dLLM requires no model fine-tuning or architectural modifications; it only optimizes inference via dynamic strategies, allowing direct integration as a "plug-and-play" module into open-source dLLMs (e.g., LLaDA-8B-Instruct, Dream-v0-7B-Instruct). The "Mandatory Update Window" (solving the "token stuck in the mud" problem) enhances engineering robustness, and no additional large caches are introduced, keeping memory overhead manageable and reducing deployment costs.  
++ **Comprehensive Experiments with High Persuasiveness**：Experiments cover 3 representative dLLMs, 5 task types (general reasoning, math, coding, QA), and 4 SOTA baselines (dLLM-Cache, dKV-Cache, Fast-dLLM). Results consistently show 2.45×–4.48× speedups with ≤1% accuracy loss (e.g., LLaDA-1.5’s average accuracy 60.67% vs. baseline 61.08%). Ablation studies (on $B_{\text{layer}}$, $B_{\text{window}}$, threshold types) fully validate the necessity of each component, and hyperparameter guidelines (e.g., optimal $B_{\text{window}}=32$) improve result reproducibility.  
++ **Tight Integration of Empirical Observations and Theoretical Foundations**：The method design is rooted in solid empirical insights—such as the monotonic increase in inter-layer update demand from shallow to deep layers, and the local update pattern around key tokens—rather than pure heuristics. Quantitative metrics (cosine distance for token variation, distribution concentration for confidence) provide mathematical grounding, enhancing the method’s generality and interpretability.
+
+### Weaknesses
++ **Key parameters lack adaptability**：Mandatory update window size ($B_{\text{window}}=32$) and APD hyperparameters ($\alpha=0.001$, $\beta=0.0008$) are fixed, failing to adapt to sequence length (e.g., redundant for short sequences, insufficient for ultra-long ones) or task differences, leading to suboptimal performance.  
++ **Extreme scenarios untested**：No validation on ultra-long sequences (>1K tokens) (to verify cache/memory stability) or low-resource hardware (e.g., RTX 3090) (to check cost-constrained deployment), limiting practicality.  
++ **Incomplete baseline comparisons**：Missing cross-paradigm methods (e.g., ES-dLLM’s early skipping) and industrial-grade dLLMs (e.g., Mercury), failing to fully prove relative advantages.
+
+### Questions
+I would be happy to increase my rating if my views are given a thorough discussion.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper introduces Dynamic-dLLM, a training-free way to speed up diffusion LLMs at inference. The idea is twofold: first, Dynamic Cache Updating—it watches how layer inputs change and only refreshes the cache where it matters, with a small must-update window around key tokens so you don’t get stuck. Second, Adaptive Parallel Decoding—it decides, token by token, when it’s safe to decode in parallel based on how sharp the distribution is and how much things are shifting over time. In short: fewer wasted updates, smarter parallel steps, similar quality, much faster runs.
+Across LLaDA-8B/1.5 and Dream-7B on MMLU, ARC-C, GSM8K, GPQA, and HumanEval, the method reports 3-4x speedups with near-baseline accuracy, outperforming prior dLLM acceleration methods (dLLM-Cache, dKV-Cache, Fast-dLLM).
+
+### Strengths
+1. Elegant DCU proxy (measuring changes in layer inputs instead of recomputing K/V/attn/FFN), plus a practical “mandatory window” to avoid tokens getting “stuck.”
+2. Solid empirical gains across three models/5 tasks; headline result: 37.29 TPS on GSM8K (4.48×) with parallel decoding on LLaDA-8B; similar trends for LLaDA-1.5 and Dream-7B.
+3. APD is simple and principled
+4. The two proposed components target each failure mode.
+
+### Weaknesses
+1. Using input-change proxies is cheaper than feature recomputation, but the paper could more explicitly break down wall-clock costs for computing dt and maintaining per-layer budgets.
+2. Limited discussion of long-form coherence/failures or quality trade-offs.
+3. Limited novelty vs. Fast-dLLM and prior caching work
+
+### Questions
+1. How stable are the chosen defaults (Blayer=32, Bwindow=32; α=0.001, β=0.0008) across sequence lengths >1k and other decoding schedules? Any auto-tuning strategy? 
+2. How is the “key token” window identified?
+3. How does parallel decoding length and context length impact the performance?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

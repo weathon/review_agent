@@ -1,0 +1,140 @@
+# Foundational Automatic Evaluators: Scaling Multi-Task Generative Evaluator Training for Reasoning-Centric Domains
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 6
+
+## Abstract
+Finetuning specialized generative evaluators has emerged as a popular paradigm to meet the increasing demand for scalable evaluation during both training and test-time. However, recent work has largely focused on applying new methodology, such as reinforcement learning (RL), to training evaluators, shying away from large-scale, data-driven development. In this work, we focus on data scaling, curating a set of 2.5M samples spanning five unique evaluation tasks (pairwise, step-level, reference-free and reference-based verification, and single rating) and multiple domains focused on reasoning evaluation. With our data, we train Foundational Automatic Reasoning Evaluators (FARE), a family of 8B and 20B (with 3.6B active) parameter evaluators, with a simple iterative rejection-sampling supervised finetuning (SFT) approach. FARE-8B challenges larger specialized RL-trained evaluators and FARE-20B sets the new standard for open-source evaluators, surpassing specialized 70B+ evaluators. Beyond static benchmarks, we evaluate FARE in real-world tasks: As inference-time rerankers, FARE-20B achieves near-oracle performance on MATH. As verifiers in RL training, FARE improves the downstream RL-trained model performance by up to 14.1\% vs. string-matching verifiers. When initialized from FARE, a continually-finetuned FARE-Code outperforms gpt-oss-20B by 65% on evaluating test-case quality
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper presents FARE (Foundational Automatic Reasoning Evaluators), a family of 8B and 20B parameter models trained to perform automatic evaluation across multiple tasks including pairwise comparison, step-level error detection, reference-based and reference-free verification, and single rating. The authors curate a 2.5M sample dataset spanning these evaluation tasks and multiple reasoning domains, then train their models using iterative rejection sampling supervised fine-tuning (RS-SFT). The paper evaluates FARE on seven static benchmarks and three practical downstream applications: inference-time reranking, verification during RL training, and domain-specific continual fine-tuning for code evaluation. The results demonstrate that FARE-8B challenges larger specialized evaluators, while FARE-20B establishes new state-of-the-art performance among open-source evaluators, even surpassing some 70B+ parameter models on certain tasks.
+
+### Strengths
+- The paper addresses a timely and important problem of building multi-task evaluators that can handle diverse evaluation scenarios, which is increasingly critical as LLMs become integrated into various applications.
+- The data curation strategy is thorough and well-designed, combining 1.4M existing samples with 1.1M synthetic samples using both programmatic error injection and generate-then-grade approaches across multiple domains.
+- The training methodology using iterative rejection sampling SFT is simple, stable, and scalable, avoiding the computational complexity and training instability of RL-based approaches while achieving competitive or superior results.
+- The evaluation is comprehensive, covering seven challenging static benchmarks (JudgeBench, ReasoningJudgeBench, PPE, RM-Bench, When2Call, ProcessBench, VerifyBench) and three practical downstream applications that demonstrate real-world utility.
+- FARE-20B achieves near-oracle reranking performance on MATH (Figure 3) and substantially improves RL training outcomes, with up to 14.1% relative gains over string matching verifiers (Figure 4), demonstrating strong practical impact.
+
+### Weaknesses
+- The cold-start initialization procedure for Qwen3-8B-Base using Qwen2.5-32B-Instruct data is not well-justified, and the authors acknowledge this produces a weaker baseline than the post-trained Qwen3-8B (Table 9), raising questions about whether better initialization could further improve results.
+- The paper lacks detailed analysis of failure modes or systematic error analysis that would help understand when and why FARE models struggle, particularly on the benchmarks where performance lags behind GPT-5 or larger models.
+- While the 2.5M sample dataset is impressively large, the paper provides limited information about potential data quality issues, redundancy across sources, or how the distribution of tasks and domains was optimized.
+- The comparison with Self-Taught Evaluators (STE) could be more direct and comprehensive, as STE represents closely related work but is only evaluated on a subset of benchmarks, making it difficult to fully assess the relative merits of the approaches.
+- Some experimental details are missing or relegated to appendices, such as the specific prompt templates used for each baseline model, hyperparameter selection procedures, and computational costs of training.
+- The paper does not discuss potential negative societal impacts or limitations of deploying automatic evaluators at scale, such as perpetuating biases present in training data or the risks of evaluator exploitation.
+
+### Questions
+1. Why was the cold-start initialization from Qwen2.5-32B-Instruct necessary for Qwen3-8B-Base, and have you experimented with alternative initialization strategies that might preserve more of the base model's capabilities?
+2. Can you provide more detailed error analysis showing specific failure modes of FARE models, particularly on the benchmarks where they underperform GPT-5 or larger baseline models?
+3. How did you determine the optimal mixing ratios for different data sources in your 2.5M sample training set, and did you experiment with dynamic reweighting during training?
+4/ What is the computational cost comparison between training FARE using RS-SFT versus training comparable evaluators using RL-based methods like RLVR?
+5. For the generate-then-grade approach, how did you select the 12 generator models, and did you analyze whether certain generator characteristics (model family, size, reasoning vs non-reasoning) led to more valuable training data?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper introduces FARE (Foundational Automatic Reasoning Evaluators), a family of large-scale generative evaluators (8B & 20B parameters) designed for multi-task, multi-domain reasoning evaluation. It curates a 2.5M-sample dataset covering diverse evaluation types like pairwise, step-level, and verification tasks across reasoning-heavy domains such as math, code, and tool-use. FARE is trained using an iterative rejection sampling supervised fine-tuning (RS-SFT) method, enabling stable, scalable evaluator training without expensive RL or teacher models. Results show FARE-20B surpasses even larger RL-trained or specialized evaluators, achieving near-oracle reranking on MATH and significant gains in RL training and code evaluation. The work establishes FARE as a strong, open-source foundation for general-purpose evaluators in reasoning-centric LLM applications.
+
+### Strengths
+1. The 2.5M-sample multi-task dataset is one of the largest curated for evaluation, spanning reasoning, code, math, and tool-use, enabling strong generalization across domains.
+2. The use of RS-SFT (rejection sampling SFT) achieves performance comparable to RL-based methods while being computationally more efficient and stable.
+3. Evaluations on 7 benchmarks and 3 real-world tasks (e.g., MATH reranking, RL training, code evaluation) show strong improvements over state-of-the-art baselines.
+4. The release of FARE models (8B, 20B) provides a valuable community resource for scalable evaluator research.
+
+### Weaknesses
+1. Novelty is rather low. The authors themselves mention that the method is simple and is a minor modification of methods like STE and RAFT. The paper emphasizes empirical scaling but provides little theoretical analysis of why RS-SFT works better for evaluators compared to RL or DPO approaches.
+2. While reasoning-centric, the dataset and evaluations largely focus on math, code, and tool-use; broader language understanding or multimodal evaluations are underexplored.
+3. Though large-scale, the paper lacks detailed quantitative analysis of noise, bias, or consistency across synthetic vs. real data sources.
+4. Comparisons are strong against RL-trained evaluators but do not include recent alternatives like bandit-based scaling or entropy-minimization approaches to evaluation.
+
+### Questions
+1. "Existing data lays a solid foundation, with 1.4M samples already dwarfing data scales found in recent work." Please quantify this properly. What recent work? What is the number of samples in that work?
+2. "Generate-then-grade" method. What model is used to grade the generated responses? What is the accuracy of the grader model? 
+3. What is task-wise and domain-wise distribution of existing vs synthetic datasets?
+4. "After grouping responses by correctness, we create verification and pairwise." This sentence needs to be reworded -- does not make sense to me. 
+5. Line 237: "Because the automatic evaluation setting is inherently verifiable". You have automatic verifiers for all kinds of tasks? not all domains (chat, safety, reasoning) are objectively verifiable.
+6. benchmarks: does it make sense to evaluate using PPE Correctness where golden responses are generated
+using a variety of weaker models, e.g., Gemma-2-9B (which is smaller than the FARE-20B model you train)? Also, how are golden responses for these benchmarks curated: RM-Bench, When2Call, ProcessBench, VerifyBench?
+7. Table 1: JudgeBench and RJB -- does not make sense to report GPT5 numbers and not GPT-4o numbers here. Aguably, GPT5 must be better than GPT4o. And since GPT4o was used to gather golden responses for these datasets, GPT4o must have 100% accuracy?
+8. How does your method compare with high-performing TTC methods that explicitly address confidence calibration and adaptive compute while performing generation and evaluation together, such as: Efficient Test-Time Scaling via Self-Calibration (Huang et al., 2025) https://arxiv.org/pdf/2503.00031 COME: Test-Time Adaptation by Conservatively Minimizing Entropy (Zhang et al., 2025) https://openreview.net/forum?id=506BjJ1ziZ
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes a novel methodology to generate data and train an LLM-based evaluator and verifier. By combining different types of evaluation and verification tasks, they collect lots of training data featuring both synthetic and human preferences for downstream training. Authors stress that their result is one the examples of larger scale data scaling for training the evaluator/verifier models compared to more recent approaches that utilized relatively smaller sets for RLVR finetuning. 
+Authors rely on iterative SFT training and train a few models in the experiments. Their extensive results show that their model outperform known competing baselines on the benchmarks designed for evaluators. Moreover, their models show solid improvements when used for RL training with LLM as a judge/reward model, and outperform rule based rewards.
+
+### Strengths
+* Well executed recipe without any perplexed tuning or parameterization
+* If the model will be released, then it will be especially useful
+* Multi-tasking across different eval formats was shown to work
+
+### Weaknesses
+* W.r.t. the last strength point, i would be great to see the ablation of multi-tasking and how that affects the performance on specific eval tasks. From my understanding, there is no such experiment in the paper.
+* When compared with competing evaluator models from literature, its a bit unclear what were other models initialization ckpts i.e. either its llama or qwen. Such difference may introduce not very fair comparison if we care about the added value of the proposed data and multitasking. Adding some extra notes about what are other model's pretrained architectures will help to make this more clear.
+
+### Questions
+* How was the model selection / early stopping performed? Is the same checkpoint used for all the evaluations in the paper?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

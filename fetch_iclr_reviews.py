@@ -31,7 +31,7 @@ load_dotenv()
 def main():
     year = 2025
     output_dir = Path(__file__).parent / "iclr2025_abstract_reviews"
-    existing_papers_dir = Path(__file__).parent / "iclr2025" / "papers"
+    existing_papers_dir = Path(__file__).parent / "iclr2026_cspaper" / "papers"
     balanced = "--balanced" in sys.argv
     seed = 42
     n_samples = None

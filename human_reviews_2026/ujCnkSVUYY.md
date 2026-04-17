@@ -1,0 +1,152 @@
+# Stable Spatiotemporal Memory in Echo-State Networks via Gliotransmitter Feedback
+
+- Decision: Reject
+- Scores: 4, 2, 2
+
+## Abstract
+Reservoir computing offers simple, stable training for sequence modeling, yet vanilla reservoirs struggle to sustain \emph{long, structured memory} without operating near fragile regimes. We seek a reservoir that retains echo–state guarantees and single–shot readout training while endowing the state with \emph{slow, spatially coherent} memory. We introduce \textit{TRIGR}, a neuro-inspired reservoir that augments a fast ESN core with a bidirectionally coupled astrocytic reaction–diffusion lattice. Neuronal activity generates rectified release proxies pooled onto astrocytes; astrocytic Ca$^{2+}$ evolves via a \emph{diffusive, saturating} update on a grid Laplacian; a bounded gliotransmitter fraction feeds back to neurons as an \emph{additive bias}. A one–step delay in each cross–coupling together with globally Lipschitz kinetics yields explicit, checkable \emph{row–wise operator–norm budgets} that make the joint map a uniform contraction in a block–$\ell_\infty$ norm, providing a clean \emph{echo–state certificate} for the coupled glia–neuron dynamics. We enforce these budgets by a norm–aware initialization that rescales diffusion and footprints (astrocyte row) and jointly scales recurrent and feedback gains (neuron row). The astrocyte update is computed by an $O(M)$ 5–point stencil (or an equivalent resolvent variant), so per–step cost remains dominated by the neuronal multiply. Beyond the ESP certificate, we establish (i) quantitative input–state and input–output Lipschitz/ISS bounds, and (ii) a small–gain condition certifying stability of the \emph{autoregressive} closed loop used at inference. Empirically, on canonical long–horizon benchmarks (chaotic forecasting and real–world series), TRIGR attains longer valid prediction horizons and stable rollouts with modest overhead; results are reported with time–aware splits and multiple seeds/initializations to assess robustness.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The manuscript is concerned broadly within the realm of modern reservoir computing. Authors propose a reservoir design with prolonged memory, which incorporates several components inspired by glial-neuron interactions. They provide formal proofs that their reservoir can have input-causal properties in certain regime of parameters, in which the reservoir dynamics are guaranteed to be driven by the inputs and not the initial activations of the units. They conclude with benchmarking experiments on long-time forecasting tasks.
+
+### Strengths
+- Introducing a spatial low-pass filter in the form of a reaction-diffusion lattice, which is referred to as glial-neural interactions, is a novel and smart addition to the reservoir computing paradigm.
+
+- The mathematical formulation seems to be sound after review. I have went through the proofs provided in the appendices, I believe the theorems stated in the main text are well supported, though such a theoretical work should be reviewed in much longer time frames.
+
+- There are some very nontrivial (yet under explored) additions in the methodology that could generalize beyond this particular application, please see below for more.
+
+### Weaknesses
+1) For me, the main weakness of this work lies in its scope/target audience, more precisely, the lack of focus. It is not clear for whom the work is intended: neuroscientists? machine learning practitioners who wish to model dynamical systems? neuromorphic computing community, who predominantly like to implement reservoirs in physical systems? Theorists who are interested in finding desirable reservoir properties? The literature review, benchmarks, and the modeling details remain cursory for any of the community: 
+
+- As a neuroscientist, I would like to understand what specific biological implications does this model have? How can we falsify it? What can it say about the brain that we already did not know? What empirical observations it can explain, qualitatively or quantitatively? This direction would also require further discussion of existing models on glial-neural interactions, e.g., see Kozachkov 2023 and 2025 in PNAS.
+
+- As an ML practitioner with interest in modeling dynamical systems, I would like to understand how the proposed reservoir model compares to more modern baselines. This involves many works done by physicists using PLRNNs such as Daniel Durstewitz' group, or more modern graph theory and/or transformer based baselines. What specific problem does using reservoirs solve in this problem? 
+
+- As part of the neuromorphic computation community, I would obviously like to see some discussions of implementations and citations to work where implementation of reservoir computing has solved real-world problems so that the broader audience can appreciate why reservoir computing is still extremely relevant in the age of LLMs. For instance, Angelatos et al. 2021 has shown that reservoir computing can help us do quantum state measurements more effectively than standard models, and using units whose interactions cannot be trained. Computing with physical systems is a very exciting topic, and in my opinion, the most appropriate community to target here.
+
+- As a theorist interested in the properties of reservoirs, I would argue that many approaches are underrepresented and not used in the comparisons. For instance, Laje et al., 2013 has learned to train an innate trajectory into reservoirs that seems to improve the long-term forecasting ability (even beyond what can be learned with BPTT). While I cannot remember the citation at the moment, I also remember a follow-up work showing that the capacity can be increased by a factor of 10 using a different methodology of the reservoir. Finally, Susillo and Abbott 2009 has shown that an online learning algorithm (FORCE), as opposed to batch linear regression, can help stabilize the predictions (especially for ESNs which seem to be not trained with FORCE in this work). A lot more exists in this domain that are not discussed or compared to by the authors.
+
+- As a physicist, I was surprised by the use of explicit integration method for simulating diffusion, which is guaranteed to blow-up and not correctly emulate diffusion in long-horizons. Instead, one often uses semi-implicit methods that are guaranteed to be stable for long times. Hence, the claims about modeling reaction-diffusion is likely not correct and requires further experiments (e.g., ablation experiments with changes in discretization times and/or spatial resolutions). 
+
+2) My second concern is about the presentation and the flow of arguments. Authors present their work by assuming the reader understands why reservoir computing is important. As is likely known to the authors, the relevance of reservoir computing for modern ML paradigms is currently under debate for many practitioners and experts. A devil's advocate could argue: We have the compute and the methods to train more complicated models. If the argument is we do not need to train anything beyond linear regression, this has to be shown with appropriate benchmarking. If the argument is reservoirs are useful in another way for this problem, this has to be made explicit and without a doubt. In general, ICLR is one of the top venues for publishing that aims a broad audience of readers, and thus the work needs to make clear these aspects to the broader audience, even if they may be obvious to the specialized subgroup of researchers interested in this topic. For instance, reservoir computing is not part of the call by ICLR this year (which I disagree with, but the argument still needs to be made!), hence it is safe to assume that readers may not know their relevance in modern ML.
+
+3) My third concern is about the fit of the venue. ICLR requires reviewers to provide reviews in 2-3 weeks for 5 papers. This is certainly sufficient for many empirical submissions, which are less ambitious in breadth but focus more on depth. But, the current work is a) quite theoretical in nature and requires substantial amount of time to review (e.g., math journals take years to review for this reason), and b) quite ambitious in its breadth that reviewing it requires having expertise in several domains that would benefit from a close-up editorial process of a journal. 
+
+Thus, while I find the manuscript has merits, I believe the paper needs a lot more work on the presentation to make those merits more explicit and has to provide more depth in at least one of the domains it wishes to move forward.
+
+### Questions
+I do not have much questions, as I believe I understood most of the work. One question to ask, especially for future versions, is whether the differences in accuracies (both for benchmarking and ablation studies) are meaningful. In many cases model accuracies are well within the mean +- s.d. range. Perhaps reporting the results of an appropriate statistical test (corrected for multiple testing) would help.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+The paper proposes TRIGR, a reservoir computing architecture that couples a fast ESN‑like neuronal core to a slow astrocytic lattice.  While the biological motivation and stability analysis are good, the hyper‑parameter handling is problematic.
+
+In particular \textit{narrow sweeps} + \textit{unclear parameter methodology for TRIGR} (assuming no optimisation of hyperparameters) means that many influential hyper‑parameters remain untuned, casting doubt on the fairness of the comparisons. I recommend against acceptance to ICLR in its current form.
+
+### Strengths
+I was really interested by the work.
+
+Bio-plausibility is always interesting and the theoretical guarantees and simple training (Section 3.2) is a good addition of this algorithm.
+
+### Weaknesses
+$\textbf{Hyper‑parameter sweeps for baselines are inadequate.}$ The authors state that each baseline “receives its own hyper‑parameter sweep”.  However, those sweeps are extremely narrow.  For the ESN baseline, the spectral radius and input scaling are selected from a tiny $3\times 3$ logarithmic grid $\rho_\star\in\{0.3,0.6,0.9\}$ and $\Vert W_{\text{in}}\Vert_2\in\{0.1,0.3,1.0\}$.  For SCR and CRJ reservoirs, only three cycle weights and three jump distances are tried.  Reservoir size, sparsity and leak rate are fixed a priori for most baselines (e.g., ESN reservoir size 300 with connectivity 0.2, SCR weight 0.8, CRJ weight 0.7 and jump size 20).  
+
+$\textbf{TRIGR’s hyper‑parameters lack justification.}$ The main method introduces several new hyper‑parameters: the number of astrocytes M, diffusion constant D, calcium relaxation time \tau_c, activation gain \eta, maximum gliotransmitter $\gamma$, and threshold $\theta$.  Appendix B.3 lists the values used but no procedure for selecting these values is described.  The main text emphasises that choosing footprints and allocating contraction budgets are “principled design choices” that invite automated tuning, yet no such tuning is performed.  The authors rely on norm‑aware scaling (Algorithm 2) to enforce stability, but this does not obviate the need to explore and justify the many free parameters.  Without a description of how TRIGR’s hyper‑parameters were set or any evidence of cross‑validation, it is impossible to assess whether the reported performance is robust or cherry‑picked.
+
+### Questions
+Fair comparisons in reservoir computing hinge on thorough hyper‑parameter optimisation. The baseline sweeps here are too limited to establish strong conclusions, and the lack of transparency around TRIGR’s own parameters undermines reproducibility.  
+
+
+In particular do the following:
+(1) rerun a comprehensive search for all baselines (including sparsity, bigger spectral radius, input and bias scaling, etc.) and report sampling strategy,
+(2) explain how TRIGR’s parameters are chosen (ideally via systematic optimisation as well.)
+(3) A good improvement would be to also replace single validation splits with time-aware cross-validation (for instance sklearn’s TimeSeriesSplit)
+
+### Soundness
+1
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes TRIGR, a reservoir computing architecture that augments standard Echo State Networks. Their contribution is a bidirectionally coupled astrocytic reaction-diffusion lattice, with a provable ESP certificate for the joint dynamics. Empirically, they demonstrate the effectiveness of their approach on synthetic dynamic systems and real-world datasets.
+
+### Strengths
+- The authors offer theoretical guarantees for their proposed architecture setup
+- Experiments are extensive and use suitable metrics across many benchmarks, testing accuracy, stability, and long-term behavior. Also, many seeds/init/splits are used to ensure good statistical significance.
+- Thorough ablation study to show each component contribution, matching their presented theory.
+- Demonstration that the proposed method stays efficient, adding minimal computation while keeping its benefits practical.
+
+### Weaknesses
+- The biological motivation is somewhat overstated.
+- The experimental setups are inconsistent. For the reservoir-based models, the authors use a 300-unit reservoir size to ensure comparability. However, for the gradient-based models, they employ architectures with significantly larger numbers of trainable parameters than required by their TRIGR model, which may lead to overparameterization. Smaller models might have performed better, but the criteria for selecting model sizes are not explained. E.g. LSTM results on BIDMC are very close to each other, regardless of the horizon length, whereas TRIGR has big differences. 
+- The hyperparameter selection process is unclear for many models (not only model size but also learning rate, number of training epochs, number of heads for the transformer model, etc.), making it difficult to fully assess the results.
+
+### Questions
+- The attractor deviation results show relatively large standard deviations (Table 1). What is the reason behind this? This leads to overlapping results, with no significant differences between the models.
+- Datasets with different horizon length: can you comment on why H=600 and H=1000 get better NRMSE results across almost all the models, compared to H=300 in the case of Sunspot and Santa Fe (Table 4)?
+- Please clarify the hyperparameter selection procedure to make the results more credible.
+- Please comment on the model sizes used, for the same reason.
+- Minor comment: the subplots in Figure 7 appear distorted.
+
+Overall, the authors address an interesting problem with great potential, but its contribution would be much stronger if the raised concerns were addressed.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3

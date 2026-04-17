@@ -1,0 +1,161 @@
+# Bayesian-Informed Diverse Sampling for Calibration of Fine-Tuned Foundation Models with Evidential Ensembles
+
+- Decision: Reject
+- Scores: 4, 6, 4
+
+## Abstract
+As large foundation models become increasingly crucial in critical domains, concerns regarding the handling of incorrect content from these models continue to grow. Fine-tuning these models for downstream tasks exacerbates the risks of generating poor-quality outputs, as potential domain shifts and variability in downstream task data size can significantly impact performance. Recent efforts have focused on improving model reliability by quantifying uncertainty in generated content. State-of-the-art solutions generate diverse answer paths through probabilistic decoding methods like top-k, nucleus sampling, or beam search, using the inconsistencies among these answers as a measure of uncertainty. From a Bayesian perspective, aggregating these diverse paths effectively marginalizes over the approximate model parameter distribution, while a single output based on maximum conditional probabilities serves as a point estimate of that distribution. This further justifies the superiority of multi-output methods over single-output approaches. However, fine-tuning on limited downstream data can result in a posterior distribution that is more complex, flatter, and potentially multimodal, rendering current methods insufficient for accurate uncertainty quantification. To better approximate this complex posterior, we propose a novel diversity-inducing ensemble approach guided by Distributionally Robust Optimization (DRO) and evidential theories. Our method is theoretically guaranteed to improve calibration performance. Empirical results across benchmark datasets and large visual language models demonstrate the effectiveness of our approach in estimating content quality and enhancing model reliability.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses the problem of unreliable and overconfident outputs from fine-tuned foundation models, especially under domain shift and when downstream fine-tuning data are limited or noisy. The authors observe that commonly used single-output or single-score uncertainty estimators (token-level probabilities, model self-reports, or embedding probes) are fragile. Multi-output approaches, which marginalize across decoding paths or measuring disagreement across multiple generations, can help, but still remain insufficient when the posterior over model parameters $p(\theta)$ becomes flat or multimodal after fine-tuning with limited/noisy data.
+
+The paper proposes a Bayesian-informed, diversity-driven ensembling method that (1) deliberately creates an ensemble whose members emphasize different subsets of training samples (simple vs. difficult) using Distributionally Robust Optimization (DRO), and (2) computes sample-wise difficulty and ensemble uncertainty using an Evidence Theory formulation applied at the token level. The combination yields an ensemble that is both diverse, which benefits from fine-tuning with different focuses, and calibrated for detecting unreliable outputs.
+
+The contributions of this article include: (1) It introduces the Evidence Theory to explicitly separate and quantify two failure modes, i.e., lack of knowledge (uncertainty mass $u$ ) and confusion among labels (incorrect belief $b^{inc}$ ), rather than treating all uncertainty as a single scalar. (2) It proposes a simple, scalable method to combine the Evidence Theory with DRO for creating diverse, calibration-aware ensembles by training multiple fine-tuned models with different difficulty-weighting hyperparameters $\gamma$  and combining their outputs with evidence-theoretic uncertainty scoring. This paper also uses adaptive sampling to reduce computation. (3) The approach targets practical failure modes of fine-tuned foundation models and demonstrates improved detection of incorrect outputs and overall calibration compared to single-output, multi-output, and naive ensemble baselines.
+
+Overall, the paper offers a theoretically guaranteed and practically applicable framework to make fine-tuned large foundation models more robust and better calibrated by combining evidence-based token-level uncertainty decomposition with ensemble diversity driven by DRO.
+
+### Strengths
+(1) The authors integrate principles from Bayesian modeling, DRO, and evidential theory to design an ensemble approach that targets the limitations of pure decoding-based or randomly initialized ensembles. The theoretical development ties the motivation to Bayesian marginalization and calibration guarantees.
+
+(2) The decomposition of sample difficulty using fine-grained evidential uncertainty (vacuity and incorrect belief) is insightful and novel in the context of generative models.
+
+(3) The methodology is explicit, with the loss and weighting strategy clearly defined, and the impact of the diversity parameter ($\gamma$ ) on ensemble behavior is both theoretically analyzed and empirically studied.
+
+(4) The experimental setup is robust. It includes multiple multiple choice questions benchmark datasets and two different LVLMs, and adopts several uncertainty quantification and calibration metrics. The paper also provides a detailed ablation study.
+
+### Weaknesses
+(1) The novelty is limited. This paper combines the prior DRO-based ensemble methods (Sapkota et al., 2023) with the Evidence Theory (Dempster-Shafer Theory). Although the combination is insightful, its core idea is not entirely new. The authors should clarify to what extent the evidence-based weight formulation is new, and provide evidence (either theoretical or empirical) that the proposed method offers advantages that are not achievable by existing approaches.
+
+(2) Some directly related works are neither discussed, nor compared in the experiments, e.g., Multi-class calibration [1] and gradient diversity in ensembles [2].
+
+(3) The choice of some key hyperparameters, such as $V'$ in Equation 3 and $\epsilon$ in the adaptive sampling, is neither well justified nor thoroughly explored.
+
+(4) To demonstrate broader generalization, the method should be evaluated on other generation tasks, such as open‑ended QA (especially multi‑hop reasoning), math QA, code generation, and other natural language generation benchmarks. These evaluations would strengthen claims about applicability and robustness.
+
+References
+[1] Zhao, Shengjia, et al. "Calibrating predictions to decisions: A novel approach to multi-class calibration." Advances in Neural Information Processing Systems 34 (2021): 22313-22324.
+[2] Trinh, Trung Q., et al. "Input gradient diversity for neural network ensembles." CoRR (2023).
+
+### Questions
+(1) Could the authors elaborate on the motivation for using DRO and the Dempster–Shafer Evidence Theory, and the point of putting these ideas together? A more detailed motivation would help readers understand the design choices behind the method.
+
+(2) Please provide a detailed statement of the default value of the vocabulary cutoffs ($V'$) used in Equation 3, and the reason for that choice. Could you further provide a quantitative sensitivity analysis for it? In particular, how does this choice affect calibration error and accuracy?
+
+(3) The proposed method does not achieve the highest accuracy (Table 1, 3). Can the authors provide a more detailed failure mode analysis?
+
+(4) The proof of Lemma 3.1 appeals to a relationship from Subjective Logic but omits several derivation steps. Please expand the proof and show the key intermediate steps and assumptions.
+
+(5) The discussion of computational overhead in Table 1 seems insufficient. Ensemble-based methods require each of the $M$ components to generate $N$ responses, implying an $O(MN)$ generation cost.
+
+(6) In the experiments, the authors use a Natural Language Inference model (deberta-base-mnli) to capture semantical consistency between the answer and the options, and the answer aggregation is natural given the options. How to handle the semantic equivalence and answer aggregation in more practical settings where options are not provided, such as multi-hop reasoning or open-ended natural language generation tasks?
+
+Typo: 
+Line 277: "and and"
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper presents a novel approach to improve the calibration and uncertainty quantification of fine-tuned foundation models in critical domains. It proposes a Bayesian-informed, diversity-inducing ensemble method guided by Distributionally Robust Optimization and evidential theories. The core challenge addressed is the miscalibration and overfitting that often occurs during the fine-tuning of these models, especially when domain shifts and limited downstream data exacerbate the complexity of the model’s posterior distribution. 
+Empirical results across benchmark datasets and large visual language models demonstrate the effectiveness of the approach in comparison to existing methods, with superior performance in both calibration and fault tolerance. The paper also introduces an adaptive sampling method to reduce the inference cost without sacrificing calibration quality.
+
+### Strengths
+1. The authors introduce a DRO-based loss function that enhances the diversity among ensemble components, allowing for more accurate uncertainty estimation. 
+2. The paper provides solid theoretical guarantees for the proposed method's calibration improvements, backed by extensive empirical validation across multiple benchmark datasets and LVLMs.
+3. The ability to accurately quantify uncertainty and improve the calibration of large foundation models is crucial for their deployment in critical, high-stakes domains.
+
+### Weaknesses
+1. please fully dissect the contributions of individual components (e.g., DRO loss, evidential uncertainty) to the overall performance.
+2. fine-tuning with limited data is a common real-world challenge, and the paper does not explore this 
+3. it does not consider long-tail data distributions or rare error cases that are crucial in practice. 
+4. how the method would perform if γ is misconfigured.
+
+### Questions
+1. Could the DRO loss function potentially cause overfitting or instability during training, especially in tasks with limited data?
+2. DRO ensemble enhances output diversity. How do we ensure that the diversity between the models is not just increasing computational complexity without significantly improving performance?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes a DRO-evidential ensemble method to improve calibration of fine-tuned foundation models. The key idea is to train M ensemble components with different γ values to focus on varying sample difficulties, where difficulty is measured by evidential uncertainties (vacuity u and incorrect belief b^inc). Experiments on three MCQ datasets show improvements in ECE and AUROC over multi-output baselines.
+
+### Strengths
+Well-motivated problem: Calibration after fine-tuning is important for deployment safety
+
+Solid empirical results: Consistent ECE improvements across datasets (e.g., 0.099→0.051 on CommonsenseQA)
+
+Adaptive sampling: Practical contribution reducing inference cost by ~50% while maintaining performance
+
+Theoretical attempt: Provides analysis connecting the loss to cross-entropy and entropy regularization
+
+### Weaknesses
+Limited experimental scope: The paper only evaluates on multiple-choice questions with small models (0.5B, 4B). This severely limits the claims: Real-world LLMs are 7B-70B+ with open-ended generation; MCQ with NLI-based answer retrieval is far from practical generation tasks. Authors acknowledge this ("leave open-ended QA as future work") but it undermines the paper's contribution
+
+Weak theoretical justification: Theorem 3.2 only provides an upper bound, not a guarantee of improved calibration. The choice of w_i = (u + b^inc)^γ appears ad-hoc - why sum? why not product or other combinations? The connection between Bayesian posterior approximation (Section B) and the actual method is tenuous
+
+Missing key comparisons: No comparison with post-hoc calibration methods (temperature scaling, Platt scaling) which are computationally cheaper, or with conformal prediction approaches. The claimed O(N) complexity ignores the M× training cost.
+
+### Questions
+See above weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

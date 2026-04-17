@@ -1,0 +1,183 @@
+# Video Latent Flow Matching: Optimal Polynomial Projections for Video Interpolation and Extrapolation
+
+- Decision: Reject
+- Scores: 6, 2, 2, 4
+
+## Abstract
+This paper considers an efficient video modeling process called Video Latent Flow Matching (VLFM). Unlike prior works, which randomly sampled latent patches for video generation, our method relies on current strong pre-trained image generation models, modeling a certain caption-guided flow of latent patches that can be decoded to time-dependent video frames. 
+We first speculate multiple images of a video are differentiable with respect to time in some latent space. Based on this conjecture, we introduce the HiPPO framework to approximate the optimal projection for polynomials to generate the probability path. Our approach gains the theoretical benefits of the bounded universal approximation error and timescale robustness. Moreover, VLFM processes the interpolation and extrapolation abilities for video generation with arbitrary frame rates. We conduct experiments on several text-to-video datasets to showcase the effectiveness of our method.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes Video Latent Flow Matching (VLFM), an efficient framework for text-to-video generation that leverages pre-trained image generative models as visual decoders. VLFM operates in the latent space of image models and assumes that video frames correspond to a smooth, time-differentiable trajectory in this space. Then the authors propose HiPPO-LegS to model this trajectory, and train a Flow Matching model to learn the continuous-time vector field governing the latent dynamics. The proposed method enables highquality video generation at arbitrary frame rates, as well as interpolation and extrapolation.
+
+### Strengths
+1. The proposed VLFM avoids training video diffusion models from scratch by reusing powerful pre-trained image decoders. And the cost of training in the latent trrajectories by flow matching is comparable to image models.
+2. The proposed HiPPO for optimal polynomial projection of sparse latents is novel and well-motivated, offering a useful way to reconstruct continuous dynamics from limited discrete samples. Also, this paper provides rigorous theoretical analysis about HiPPO and its applications.
+3. The paper provides qualitative results for text-to-video generation task across multiple datasets. And the ablation study demonstrates the benefits of flow matching over direct prediction.
+
+### Weaknesses
+1. This paper lacks quantitative comparisons (e.g., FVD and video quality metrics) against recent strong baselines. Without quantitative results, it's hard to assess the method's competitiveness in terms of visual quality. Besides, the interpolation performance is Figure 3 appears mediocre, with some loss of detail compared to the ground truth frames.
+2. While HiPPO provides theoretical guarantees, its practical performance depends heavily on the polynomial order s. As shown in Lemma 5.2, increasing s reduces approximation error (epsilon_1) but degrades generalization (epsilon_3). So how to select an appropriate s for videos of varying types and durations.
+3. Some implementation details are lost. How HiPPO is integrated into DIT, or how text conditions interacts
+with the latent flow remains abstract. Including a pseudo code would improve clarity.
+
+### Questions
+1. How sensitive is the proposed model to the hyperparameters, such as the order s in HiPPO, and how was it chosen in experiments. 
+2. Although training is efficient, inference requires solving an ODE and invoking a large visual decoder. I am curious about the inference time comparison with some current video diffusion models.
+3. How to get the visual decoder or the reverse function of \mathcal{D}? A more concrete illustration about the inversion algorithm is needed.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+VLFM (Video Latent Flow Matching) introduces a method for efficient text-to-video generation by modeling time-dependent latent flows rather than directly generating frames. It leverages pre-trained image generation models (like Stable Diffusion) as a visual encoder/decoder and uses Flow Matching and the HiPPO-LegS framework to achieve optimal polynomial approximations for latent dynamics over time.
+
+### Strengths
+1. The framework enables generating videos at any temporal resolution, providing arbitrary frame rate generation and supporting interpolation and extrapolation.
+
+2. Is theoretically grounded, with reasonable assumptions, demonstrating mathematical soundness throughout the framework.
+
+### Weaknesses
+1. Lack of quantitave results, there is only 1 table in the whole paper. Furthermore, qualitative results are not very illustrative: Figure 2 presents videos from $T=0$ to $T=0.5$ where there is almost no change, Figure 3 (Section 6.3) indicates from $T=2$ to $T=8$, I am assuming $\Delta t = 1$? In any case, in these examples one cannot see much (same for the ones provided in the Appendix). There is no comparison with any other method. Moreover, no supplementary material with video files is provided. Without comparisons and sufficient number of qualitative results it is impossible to assess the real performance of the proposed approach.
+
+2. Generation could still be computationally intensive, as each predicted latent frame must be passed through the full visual decoder (DiT) to obtain pixels, and the paper gives no inference-time analysis. For training one must: "... first introduce a deterministic inversion algorithm to the visual decoder and apply this inversion operation to the frames of all videos, obtaining a sequence including initial latent patches from each video.", however, no comparison on compute of this procedure versus VAE encoding for training is provided. Even though one of the main claims is to tackle "the necessity of training on large-scale models and datasets leads these studies to be undemocratic", no analysis on any computational cost is provided.
+
+### Questions
+See weaknesses. Could the authors provide more quantitative and qualitative results and comparisons with other methods as well as computational cost analysis and improvements?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes VLFM which is designed to simplify text-to-video modeling without relying on large-scale training data or models. The core idea is to approximate a continuous video distribution from limited discrete frame data using high-order polynomial approximation. The approach builds upon pre-trained image generative models, treating latent patch sequences as time-dependent trajectories and learning caption-conditional flow. The paper is theoretically well motivated and presents solid mathematical formulations.
+
+### Strengths
+- The motivation is clear and relevant to the growing demand for lightweight text-to-video models.
+- The idea is interesting and theoretically appealing.
+- The paper provides detailed theoretical proofs supporting the formulation.
+
+### Weaknesses
+1. **Lack of experimental validation**: The experimental evidence is insufficient to support the claimed contributions. The paper does not include meaningful comparisons with strong baselines such as existing text-to-video diffusion or flow-based models, nor with recent frameworks that extend image diffusion models to video generation (e.g., AnimateDiff [1]). Without quantitative results against such baselines, it is difficult to assess the true effectiveness and efficiency of the proposed method. This major omission strongly limits the credibility of the experimental results and motivates rejection in the current form.
+
+2. **Video quality and temporal consistency issues**: The generated video samples appear static, showing limited temporal variation across frames. Quantitative evaluations using standard metrics such as FVD, CLIP-score, or human preference studies are necessary to provide an objective assessment of visual quality and motion dynamics.
+
+3. **Dataset and scale limitations**: The paper claims efficiency as a key advantage, yet the experiments are conducted on relatively small datasets and with lightweight models. A clear comparison with existing methods in terms of dataset scale, model size, and computational cost is required to substantiate the efficiency claims.
+
+4. **Potential quality degradation due to inversion**: Because the approach uses pre-trained image diffusion models as visual decoders, inversion-based reconstruction can inherently reduce video fidelity. The authors should clarify whether additional training, for instance, training on video datasets or integrating DiT-based modules, can mitigate this degradation and improve reconstruction consistency.
+
+5. **Some minor editorial comment**: The Related Work section includes an excessive number of citations, which reduces readability. It is recommended to focus on the most relevant works and streamline the discussion to improve clarity and flow.
+
+Overall, while the theoretical motivation and formulation are strong, the empirical evaluation remains very weak. 
+
+[1] AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning, Guo et al., ICLR 2024
+
+### Questions
+Please refer to the Weakness section.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper proposes the Video Latent Flow Matching (VLFM) framework, an efficient method for text-to-video generation, interpolation, and extrapolation. The approach introduces a novel process that models the sequence of latent patches, obtained by inverting video frames using a pre-trained visual decoder, as a time-dependent and caption-conditional flow. A key innovation is the use of the HiPPO (High-order Polynomial Projection Operators) framework within a Flow Matching paradigm to approximate the optimal projection for this latent flow. This provides theoretical benefits, including a guaranteed bound on universal approximation error and robustness to various timescales, enabling the model to generate video with arbitrary frame rates. 
+
+Empirical evaluation on a diverse set of seven large-scale video datasets confirms the strong performance of VLFM across text-to-video generation, interpolation (e.g., upsampling 24 FPS video to 48 FPS), and long-duration extrapolation. The implementation utilizes Stable Diffusion v1.5 as the visual decoder and a DiT-XL-2 model as the flow matching backbone. The results demonstrate that modeling the process with Flow Matching is crucial, yielding significantly higher video quality (PSNR) compared to direct latent patch prediction. The contribution of VLFM in recovering continuous video from limited discrete observations positions it as a promising and resource-efficient training method for high-precision video synthesis.
+
+### Strengths
++ VLFM is supported by mathematical theory, introducing HiPPO-LegS to ensure optimal polynomial projections and bounded universal approximation error via the DiT backbone.
+
++ The method simplifies the video modeling process, claiming a computational requirement close to training a text-to-image model. This reliance on pre-trained visual decoders (like Stable Diffusion v1.5) potentially democratizes high-quality video synthesis.
+
++ By modeling the latent patches as a continuous flow, VLFM inherently supports video generation with arbitrary frame rates, allowing for precise interpolation and extrapolation.
+
++ The ablation study confirms the critical importance of the Flow Matching algorithm over direct prediction, showing a final PSNR score improvement from 53.77 to 61.18.
+
+### Weaknesses
+The empirical evaluation lacks competitive quantitative metrics, failing to compare VLFM's performance against contemporary state-of-the-art text-to-video generation models using established metrics like FID or FVD. The current focus on PSNR for video recovery in an ablation setting (Table 1) is insufficient for validating real-world generative performance. The method relies on several mild but key assumptions, including $k$-differentiable latent patches $u$ and a Lipschitz smooth visual decoder $\mathcal{D}$, the validity of which, especially the differentiability assumption, could limit robustness in practice. The paper acknowledges that it lacks comprehensive exploration of design choices and how they affect empirical performance, limiting insights for follow-up work. At the inference stage, VLFM requires additional computational consumption concerning the combination of the visual decoder part and the flow matching part, an area left for future exploration.
+
+### Questions
+- Please provide a quantitative comparison of VLFM against at least two state-of-the-art text-to-video models using standard video generation metrics (e.g., FID, FVD, Inception Score) to fully validate the claimed "strong performance" and superiority. 
+
+- The theoretical analysis suggests an "optimal choice of s" for the polynomial order involves a trade-off between approximating error $\epsilon_{1}$ and generalization error $\epsilon_{3}$. Can the authors provide an empirical ablation demonstrating this optimal trade-off in practice by varying the order $s$ and measuring a key metric like LPIPS or a similar perceptual quality score? 
+
+- The success of VLFM depends on the assumption of $k$-differentiable latent patches $u$. Can the authors discuss what evidence, empirical or theoretical, supports the smoothness and differentiability of latent spaces derived from complex, non-linear decoders like DDIM/Stable Diffusion, and whether violations of this assumption lead to catastrophic failures? 
+
+- Given the goal of achieving arbitrary frame rates, can the authors elaborate on the practical computational overhead of solving the ODE to generate a video with a significantly high number of frames (e.g., $1000$ FPS) during the final inference step?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

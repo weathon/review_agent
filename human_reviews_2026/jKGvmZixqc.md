@@ -1,0 +1,198 @@
+# DIVER: Diving Deeper into Distilled Data via Expressive Semantic Recovery
+
+- Decision: Reject
+- Scores: 4, 4, 6, 4
+
+## Abstract
+Dataset distillation aims to synthesize a compact proxy dataset that is unreadable or non-raw from the original dataset for privacy protection and highly efficient learning. However, previous approaches typically adopt a single-stage distillation paradigm, which suffers from learning specific patterns that overfit on a prior architecture, consequently suppressing the expression of semantics and leading to performance degradation across heterogeneous architectures. To address this issue, we propose a novel dual-stage distillation framework called ${\textbf{DIVER}}$, which leverages the pre-trained diffusion model to dive deeper into $\textbf{DI}$stilled data $\textbf{V}$ia $\textbf{E}$xpressive semantic $\textbf{R}$ecovery,  a process of semantic inheritance, guidance, and fusion. Semantic inheritance distills high-level semantic knowledge of abstract distilled images into the latent space to filter out architecture-specific ``noise" and retain the intrinsic semantics. Furthermore, semantic guidance improves the preservation of the original semantics by directing the reverse procedure. Ultimately, semantic fusion is designed to fuse conditional labels with inherited and guided semantics only during the concrete phase of the reverse process, compensating for the lack of category information in the original features. Extensive experiments validate the effectiveness and efficiency of our method in improving classical distillation techniques and significantly improving cross-architecture generalization, requiring processing time comparable to raw DiT on ImageNet (256$\times$256) with only 4.02 GB of GPU memory usage.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the problem of cross-architecture generalization in dataset distillation. Unlike prior approaches that generate synthetic images directly with generative models, the authors propose using generative models to refine already distilled images. Specifically, given a distilled image, the method embeds it into the latent space of a diffusion model, perturbs the latent embedding with noise, and then denoises it using the diffusion model combined with a guidance technique that constrains the output to remain close to the original embedding. Experimental results demonstrate that this refinement process improves the cross-architecture generalization performance of existing dataset distillation methods.
+
+### Strengths
+* The paper introduces a novel framework that refines distilled images to improve cross-architecture generalization. This approach has the potential to open a promising research direction and inspire further studies.
+* The proposed method is simple yet effective.
+
+### Weaknesses
+* The rationale behind why the proposed method works remains unclear. My understanding is that the method makes distilled images appear more realistic while preserving their overall structure and texture. This could explain improvements for unrealistic images, but the reported gains also extend to already realistic distilled images (e.g., $D^4M$ and $MGD^3$), which is less intuitive. The authors briefly state that the method "stably optimizes the prototypes," but this explanation lacks clarity.  
+
+* The presentation can be improved:  
+  * Eq. (1) is not clearly explained. The right-hand side deviates from the typical formulation of dataset distillation, where the goal is usually to synthesize a dataset such that models trained on it achieve low empirical loss on the original dataset. Matching loss values alone seems insufficient, since the objective could be met even if both losses are high but similar. In addition, if $\Phi_O^p$ and $\Phi_D^p$ are identical, it is unclear why they are written differently. The definitions of $L_L$ and $H_L$ are also abstract and ambiguous, and their absence on the right-hand side further reduces the clarity of the equation.  
+  * Similarly, $h$ and $\Delta R$ in Eq. (5) are introduced in an abstract manner. They also seem specific to the proposed method rather than the general framework for refining synthetic images, which may cause confusion.  
+  * Several expressions throughout the paper are vague or difficult to interpret, such as: "releases the visual semantics" (line 52), "lie dormant in the deep ~ specific artifacts" (lines 81–82), "characterizes the visual-semantic authenticity gap" (line 193), "Subsequently, in CP, limited ~ synthetic images" (lines 252–254), and "stably optimize the prototypes" (line 353).
+
+* The method also appears related to restoration techniques based on diffusion models (e.g, [1]). Discussing these connections would strengthen the contribution.
+
+[1] Arbitrary-steps Image Super-resolution via Diffusion Inversion, CVPR 2025.
+
+### Questions
+* Why does the proposed method improve the performance of already realistic images?
+* Are the reported results averaged over five different architectures, with each architecture evaluated five times?
+* In Table 6, was CFG used for the fourth row?
+* The paper mentions that the VAE in latent diffusion models itself enhances generalization. Could you provide quantitative results to support this claim?
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper proposes DIVER, a two-stage dataset distillation framework that enhances the meaningful semantics of distilled datasets. The first stage follows the classical DD method to obtain a distilled dataset, and the second stage DDD leverages a pre-trained diffusion model with three semantic recovery strategies. DIVER operates in a training-free and raw-data-free manner, acting as a plug-in refinement to existing DD datasets. Experiments across multiple ImageNet subsets and architectures show improved cross-architecture generalization over classical and diffusion-based DD methods with minimal computational overhead.
+
+### Strengths
+- **Novelty**: The idea of performing a second-stage refinement on top of the distilled data is conceptually new and interesting. The idea is similar to the denoising process of diffusion models: diffusion models aim to reconstruct images from noise, and DIVER aims to recover semantics from the distillation dataset.
+- **Practicality**: The proposed method is plug-and-play and does not require re-training or access to the original data, which is desirable for privacy-preserving.
+- **Clear motivation**: The authors point out that many DD methods overfit to the architecture used for distillation, leading to poor cross-architecture generalization.
+- **Efficiency**: The method demonstrates low GPU memory usage (≈4 GB) and comparable sampling time on DiT, which strengthens its practical relevance.
+
+### Weaknesses
+- **Limited Mathematical Depth**: Although the paper introduces several intuitively motivated components (semantic inheritance, guidance, and fusion), the overall formulation lacks mathematical rigor and theoretical grounding. The proposed strategies are primarily described at the conceptual level, with limited formal analysis of their effect on the data distribution, diffusion dynamics, or semantic representation. In particular, the core idea of separating architecture-specific and content semantic information is presented heuristically without a clear probabilistic or optimization-based framework. As a result, the paper is more like an empirical design than a theoretically grounded contribution.
+- **Lack of strong SOTA results**: While DIVER demonstrates consistent improvements over several distillation methods, the reported gains do not surpass the current state-of-the-art diffusion-based or generative prior methods by a convincing margin (for example, can you provide IGD + DIVER or MGD3 + DIVER on ImageNet-1k? So as the other datasets.).
+- Overall, I think DIVER is an interesting work and I would like to raise my score if the authors can address all my concerns and questions.
+
+### Questions
+- **About SI**: SI relies on a pre-trained VAE encoder trained on real images. However, the distribution of distilled data is highly non-natural and abstract, often lying far outside the real-image manifold. How can you ensure that this encoder can successfully separate architecture-specific artifacts from genuine semantic content in such an out-of-distribution setting? Without explicit mathematical disentanglement or domain adaptation, the claim that SI can “filter out architecture-specific noise” seems unsubstantiated.
+- **About SG**: The guidance defined as the distance between $z_0$ and $z_t$ is a heuristic design. The authors argue that latent codes suffer from information degradation during denoising,  but $z_0$ is derived from the encoded distilled image, which does not contain a clear semantic structure according to the visualizations in Fig. 2. Therefore, it is unclear what semantic information this guidance preserves. The motivation and theoretical foundation for SG require much clearer justification.
+- **About SF**: The authors claim that SF injects label semantics only during the “semantic phase” of denoising. However, according to the supplementary material, label prompts (or label ID) are provided throughout the denoising process, as required by the DiT’s classifier-free guidance. If so, SF is not a new methodological component but an inherent property of the diffusion model itself. Could the authors clarify how SF differs in practice from the standard DiT conditioning process?
+- How sensitive is the performance to the choice of diffusion model? Have you tried different pre-trained models (e.g., SD v1.5)?
+- What is the purpose of applying DIVER to the generative DD method, except for performance gain? Since the synthetic data of the generative model already contains clear semantic information.  
+- Why you argue that the generative DD methods "going so far as to fully discard its conventions in favor of strictly returning to the fundamentals of coreset selection"? (line 75-77)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+- This paper address the issue of architecture generalization in dataset distillation
+- This paper proposes a post-processing step to Dataset Distillation methods that claims to remove architecture-specific low-level details, but retain high level features which are useful to architecture generalization
+- The method basically involves using the autoencoder of latent diffusion models to generate latent codes of the distilled images, then adding (partial) noise to that latent code, and then denoising using the diffusion model. The generated images retain high level patterns from the original image, but remove the low-level artifacts
+- The cost of doing this method is low (several seconds per final distilled image)
+- Empirically, this method outperforms GLaD-based DD methods on architecture generalization, and is compatible with any dataset distillation algorithm
+
+### Strengths
+- The method is well presented and the general intuition behind it is clear
+- The fact that the method can be added on top of any existing DD algorithm is a major advantage
+- Empirical results are strong and the increase architecture generalization is strong and consistent
+
+### Weaknesses
+- The paper mentions "In the specific ConvNet, we observe a notable performance degradation with our method." at the very end of the paper. This needs to be mentioned earlier in the paper, as this is a **major drawback** of the method. Indeed, Table 7 in the appendix shows a very dramatic drop in performance. I suggest discussing this in the experiments sections with table 7 moved into the main text. This tradeoff between specific architecture performance and generalization needs to be more clear
+- Along the same vein as the previous point, it would be useful to show the performance of GLaD in table 7 to better understand the tradeoff of generalization performance and task-specific information
+
+### Questions
+- I'm struggling to understand the exact staging of the method, and the difference between SG and SF, specifically with section 3.3.3 and figure 2. If I understand correctly:
+ 1. Semantic Guidance (SG) uses $z_0$ generated from the original distilled image to guide the diffusion process, and is used 
+ 2. Semantic Fusion is unclear to me - is this using the text latent embedding from the true class label (i.e. the latent encoding of the phrase "dog") to guide the diffusion? It would be useful to write out the exact equation for this.
+Additionally, it would be useful in figure 2, show exactly which losses are active for each stage in the diffusion pipeline.
+
+- The pseudocode in Algorithm 1 doesn't really mention what semantic fusion is either.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes DIVER, a dual-stage framework to improve the poor cross-architecture generalization of classic Dataset Distillation (DD) methods. Stage I uses any standard DD algorithm to get a biased, noisy distilled dataset . Stage II, the core contribution, uses a pre-trained diffusion model (DiT) in a training-free and original-data-free manner to "refine" these images into a new, more realistic synthetic dataset. This refinement relies on three strategies: Semantic Inheritance (SI) (initializing diffusion from noisy latents) , Semantic Guidance (SG) (L2 guidance towards initial latents) , and Semantic Fusion (SF) (applying guidance only during specific timesteps). Experiments show DIVER significantly boosts cross-architecture performance for various DD methods.
+
+### Strengths
+1. Addresses an Important Problem: Tackles the well-known and critical issue of cross-architecture generalization in DD.
+
+2. Highly Efficient & Practical: The method works as a "plugin" that is training-free and original-data-free, making it easy to apply.
+
+3. Strong Empirical Gains: Consistently and significantly improves cross-architecture generalization for multiple DD baselines (Table 1, 2).
+
+### Weaknesses
+1. Insufficient Evaluation on Full ImageNet-1K: The paper's claims of scalability and broad applicability are undermined by a lack of thorough experimentation on the full ImageNet-1K dataset. While extensive results are provided on ImageNet subsets (e.g., Table 1, 2), the evaluation on the full 224x224 ImageNet-1K is confined to Table 3. This table only compares DIVER against two specific 'dual-time matching' methods ($SRe^{2}L$ and G-VBSM). Critically, the paper does not show how DIVER performs when combined with the other primary distillation baselines on the full dataset. This is a significant omission, as strong performance on subsets does not guarantee scalability or effectiveness in the more challenging large-scale regime.
+
+2. Unsubstantiated Core Claim: The central hypothesis of "filtering architecture-specific noise"  is never proven and is likely a simplistic misinterpretation of a "bias replacement" effect.
+
+3. Key Negative Result Downplayed: The method severely degrades performance on the original distillation architecture (ConvNet) , a major flaw that the authors dismiss as an "acceptable trade-off".
+
+4. Over-marketing ("Buzzwords"): The paper relies on a "semantic salad" of invented terms (SI, SG, SF)  to inflate the perceived novelty of simple implementation steps.
+
+5. Insufficient Ablation: The baseline for the ablation study is not minimal, making it difficult to isolate the true contribution of SI, SG, and SF beyond the inherent regularizing effect of the diffusion model itself.
+
+### Questions
+1. Why were the other key baselines excluded from the full ImageNet-1K evaluation presented in Table 3? To fully substantiate the claim that DIVER is a scalable and general "plug-in", it is essential to demonstrate its effectiveness on these core methods on the full dataset, not just on subsets.
+
+2. Evidence for "Filtering": What direct evidence supports the claim of "filtering noise"  rather than simply replacing the ConvNet bias with a VAE/Transformer bias?
+
+3. Justifying Performance Drop: How can the severe performance drop on the original ConvNet  be justified? Doesn't this indicate that DIVER is destroying useful information, not just noise?
+
+4. Minimal Baseline: What is the cross-architecture performance of a minimal baseline using only the VAE encode/decode (i.e., $\mathcal{F}(\mathcal{E}(\tilde{x}_i))$), without any DiT denoising? This is needed to isolate the VAE's effect.
+
+5. Guidance Design: Why guide the sampling process towards $z_0$28, which presumably contains the undesirable artifacts? Why is this better than guiding towards a cleaner target?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

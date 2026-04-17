@@ -1,0 +1,170 @@
+# EfficientLLM: Unified Pruning-Aware Pretraining for Auto-Designed Edge Language Models
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 2, 2
+
+## Abstract
+Modern large language models (LLMs) driven by scaling laws achieve emergent intelligence in large model sizes. Recently, the increasing concerns about cloud costs, latency and privacy make it an urgent requirement to develop compact edge language models. Distinguished from direct pretraining that bounded by the scaling law, this work proposes the unified pruning-aware pretraining, focusing on retaining performance of much larger optimized models. It features following characteristics: 1) Data-Scalable Pruning: we introduce minimal parameter groups in LLM and continuously optimize structural pruning, extending post-training pruning methods like LLM-Pruner and SparseGPT into the pretraining phase. 2) Auto-Designed Architecture: the LLM architecture is auto-designed using saliency-driven pruning, which is the first time to exceed SoTA human-designed LLMs in modern pretraining. It achieves top-quality edge language models, termed EfficientLLM, by the unification stage of pruning, pretraining, and auto-architecture design. EfficientLLM significantly outperforms SoTA baselines with $100M \sim 1B$ parameters, such as MobileLLM, SmolLM, Qwen2.5-0.5B, OLMo-1B, Llama3.2-1B in commen sense benchmarks. As the first attempt, EfficientLLM bridges the performance gap between post-training LLM compression and direct pretraining methods, and we fully open source EfficientLLM for future advancements.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a LLM pruning framework with three main components: (1) leveraging the computational relationship between consecutive layers to identify coordinated pruning regions, (2) employing a two-stage alternative optimization process involving saliency-driven pruning and global recovery training, and (3) utilizing a layer-wise Hessian (or its approximation) as the saliency metric. While the integration of these ideas into a unified framework is a reasonable approach, the paper would benefit from a clearer demonstration of its novelty. Specifically, core elements like coordinated pruning and Hessian-based saliency have been explored in prior work. Furthermore, the practical utility of the method is unclear due to unvalidated computational costs. The advantage of the complex alternative optimization over a single round of pruning followed by recovery training is not empirically established. Therefore, strengthening the comparative analysis and providing a more lucid presentation of the specific contributions beyond this combination of existing techniques would significantly enhance the paper's quality.
+
+### Strengths
+This paper introduces a pruning framework for LLMs that effectively integrates three key techniques. By combining these methods, the proposed approach demonstrates improved performance over the set of baselines included in its evaluation.
+
+### Weaknesses
+The paper suffers from significant ambiguities in its core methodology, most critically an inconsistent description of the proposed pipeline that alternates between an iterative optimization framework and a simple sequential pruning-then-training process. This ambiguity, combined with the use of an extremely powerful recovery phase involving hundreds of billions of tokens, makes it impossible to isolate and validate the unique contribution of the novel "unified pruning" method itself. Furthermore, the work lacks theoretical grounding for its optimization procedure, provides insufficient clarification on key implementation details (e.g., the integration of a SparseGPT-like step and the scope of parameter updates), and fails to adequately demonstrate novelty against prior art or to compare against recent state-of-the-art post-training pruning baselines. These issues collectively undermine the claims of the paper's technical contribution and practical effectiveness.
+
+### Questions
+1. The paper's distinction between "pretraining" and "post-training" is ambiguous. While the method is presented as a unified "pruning-aware pretraining" approach, its methodology, which operates on and modifies existing source models rather than starting from scratch, aligns more closely with established definitions of post-training techniques. This categorization should be clarified, as many previous methods that involve retraining a pre-trained model are also considered post-training. 
+
+2. The paper proposes leveraging the computational relationship between consecutive layers to identify coordinated pruning regions. However, this general concept has been explored in prior work on structured pruning, such as [1, 2]. Could you please clarify the specific novelty or modification introduced in their approach compared to these existing techniques? 
+
+3. The paper formulates pruning as a bi-level optimization problem and employs an alternating optimization strategy to handle the objective and constraints separately. Does this alternating optimization procedure have any theoretical guarantees, such as convergence to a local optimum or a stationary point of the original bi-level problem? What specific criterion is used in practice to determine that the iterative solution has converged? 
+
+4. Regarding the alternating optimization framework, the retraining phase's scope needs clarification. What is the exact set of parameters updated during the retraining step? Is it the entire set of model weights, or only the subset of weights that survived the previous pruning step? Equation (7) suggests the variable $w$ represents the entire set of model weights. If the optimization retrains the full set, what is the purpose or effect of updating the specific weight parameters that have already been pruned in the previous step? If retraining is applied only to the remaining weights, as early pruning decisions irreversibly constrain the solution space, how does the method address the risk of converging to a suboptimal solution? 
+
+5. Section 3.3 mentions utilizing a weight update mechanism from SparseGPT [3]. Several clarifications are needed regarding its integration into the proposed pipeline. Is variable $X$ a batch of data from the global retraining phase, or is it a separate, static calibration dataset as used in the original SparseGPT method?  Given that a subsequent global retraining step is applied, what is the specific necessity of this local SparseGPT-like update? 
+
+6. Based on the description, could the core pipeline be accurately characterized as: (1) Saliency detection (LLM-Pruner [4]), followed by (2) A one-shot, SparseGPT update of remaining weights, and then (3) A global retraining phase?
+
+7. Similar to Question 6, could you precisely define the pipeline for EfficientLLM-B? The description of EfficientLLM-B states it *"additionally applies the second-order weight updating based on EfficientLLM-A."* Is it a sequential process where the final step is to apply the second-order update after the completion of the global retraining used in EfficientLLM-A? 
+
+8. Section 3.2 (after Equation (7)) describes an alternating optimization between pruning and training. However, Section 4 (Lines 302-303) describes a different, seemingly sequential pipeline: *"large scale unified pruning followed by continued pretraining."* What is the exact pipeline evaluated in the main results? Is it the alternating optimization or a one-shot pruning followed by a massive continued pretraining?
+
+9. Given that the recovery uses "hundreds of billions" of tokens for continued pretraining, a very powerful recovery process, how can the effectiveness be definitively attributed to the novel "unified pruning" method itself, rather than to the extensive compute and data used for recovery? 
+
+10. Continue to Question 9, the results in Table 3 appear to validate that the significant performance boost is primarily attributable to the extensive continued pretraining phase, which utilizes hundreds of billions of tokens.  This observation makes it difficult to isolate and confirm the unique effectiveness of the proposed "unified pruning" method itself. The contribution of the pruning technique is confounded by the powerful recovery process.  Therefore, additional controlled ablation is necessary, for example, comparing the final performance against a baseline that applies the same extensive continued pretraining to a model pruned by a training-free post-training structued pruning method.
+
+11. To thoroughly validate the performance of the proposed method, the experimental evaluation should be expanded to include comparisons with recent state-of-the-art post-training structured pruning methods, such as [1, 2, 5, 6, 7].
+
+12. What is the computational cost of the proposed method?
+
+[1] Hu, Hanyu, et al. "Fasp: Fast and accurate structured pruning of large language models." arXiv preprint arXiv:2501.09412 (2025).
+
+[2] Ashkboos, Saleh, et al. "Slicegpt: Compress large language models by deleting rows and columns." arXiv preprint arXiv:2401.15024 (2024).
+
+[3] Frantar, Elias, and Dan Alistarh. "Sparsegpt: Massive language models can be accurately pruned in one-shot." International conference on machine learning. PMLR, 2023.
+
+[4] Ma, Xinyin, Gongfan Fang, and Xinchao Wang. "Llm-pruner: On the structural pruning of large language models." Advances in neural information processing systems 36 (2023): 21702-21720.
+
+[5] An, Yongqi, et al. "Fluctuation-based adaptive structured pruning for large language models." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 38. No. 10. 2024.
+
+[6] Shen, Xuan, et al. "Search for efficient large language models." Advances in Neural Information Processing Systems 37 (2024): 139294-139315.
+
+[7] Wang, Yuxin, et al. "Cfsp: An efficient structured pruning framework for llms with coarse-to-fine activation information." arXiv preprint arXiv:2409.13199 (2024).
+
+**Other Questions**
+
+1. For Equation (1), it is more formal to use a single "$\min$" symbol.
+
+2. For Equation (2), should it use $M^*$ in the constraint?
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes EfficientLLM, a unified pruning-aware pretraining approach for developing compact language models tailored for edge devices. Different from traditional direct pretraining or post-training pruning methods, EfficientLLM integrates pruning, pretraining, and architecture design within a single framework, enabling automatic architecture design during the pretraining phase. Empirical results on common sense benchmarks indicate that the EfficientLLM models are competitive with or even surpass existing SOTA baselines.
+
+### Strengths
+1. The paper conducts a wide range of experiments across multiple benchmarks (e.g., MMLU, common sense reasoning tasks) and model sizes (100M~1B parameters).
+2. The paper includes ablation studies to provide empirical evidence for the contributions of different components of the method.
+
+### Weaknesses
+1. The mathematical notations, particularly in Section 3, are inconsistent and poorly defined. For example, the loss function L_pretrain used with three different input domains across consecutive equations (1), (2), and (3), violating basic notational conventions. The \sum g_t and the minus operation between M and \sum g_t are not well-defined, which causes misunderstanding.
+2. The core idea of integrating architecture search into pretraining is not novel. Prior works, such as DARTS (Liu et al., 2018) and ShearedLlama (Xia et al., 2023), have already explored neural architecture search (NAS) during training for efficiency. 
+3. The robustness of this method is questionable. The overall optimization problem is solved via stochastic gradient-based optimizers (sensitive to initialization, batch ordering, learning rate) and an inexact method (as shown in equation (9)). While the paper evaluates accuracy robustness in Appendix A.2, it ignores the critical aspect of pruning consistency—whether the pruned channels remain consistent across different runs or random seeds. The experiments on pruning paths only report accuracy averages but do not analyze the variance or alignment of pruned structures, as required for robustness validation.
+
+### Questions
+Knowledge Distillation is a popular technique for developing compact models based on large models. Why were no comparisons made with KD baselines? How would EfficientLLM compare to a model distilled from the same source model (e.g., SmolLM-1.7B) under a similar computational budget?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes “unified pruning-aware pretraining”: a framework that interleaves structured pruning, saliency-based architecture selection, and second-order weight updates into the pretraining process of LLMs. Instead of (i) directly pretraining small “edge” models from scratch or (ii) applying post-hoc pruning with a small calibration set, the method firstly starts from a larger pretrained “source” model; and secondly defines minimal structured pruning groups (three types: attention heads, FFN channels, and “transformer stem” including embeddings & LM head); and then Iteratively: (1) estimates group saliency via Taylor-style criteria,(2) prunes the least important group,(3) updates remaining weights,(4) continues pretraining on large-scale data,(5) finally produces automatically “searched” architectures.
+
+### Strengths
+- The formulation that integrates pruning, pretraining, and architecture search into one loop is clearly described and practically implementable. The definition of three pruning types (heads, FFN channels, stem) as minimal structured units is concrete and architecture-aligned.
+- Using saliency metrics over structured groups to implicitly search architectures during pretraining is a natural and elegant idea.
+
+### Weaknesses
+1.Although the title and narrative emphasize edge deployment, the evidence is limited: (1) Inference benchmarks are reported only on Intel Xeon CPUs, not on mobile SoCs, NPUs, or typical constrained edge hardware. (2) There is no measurement of power consumption or energy per token. (3) FLOPs are not reported; model size and CPU latency are given, but end-to-end system constraints for real edge scenarios are not thoroughly characterized.
+
+2.Lack of rigorous, budget-normalized comparisons to alternative efficiency strategies. The central conceptual claim is that unified pruning-aware pretraining is a superior route to efficient small models and high-ratio compression. The method does not provide controlled experiments under a fixed compute/data budget comparing against:
+
+    - strong knowledge distillation pipelines (large → small teacher–student training),
+    - post-training pruning + finetuning with matched additional tokens,
+    - test-time adaptation style approaches,
+    - or quantization-first / quantization-only baselines.
+
+While the paper briefly discusses some of these works in related work and notes that, e.g., NutePrune uses distillation and extra components, it does not present a systematic “for the same extra GPU-hours, how do we compare?” study.
+
+3.Conceptual novelty is incremental and closely related to existing enlarge-and-prune / LTH-style views. The paper itself connects its architecture robustness result with a generalized Lottery Ticket Hypothesis, i.e., good subnetworks/architectures exist inside larger models and multiple trajectories can reach them. However, this connection is only discussed qualitatively in Appendix A.2; there is no deeper theoretical development or new formal insight about LTH or about when/why this unified scheme should dominate alternatives.
+
+4.While there are ablations, several aspects remain under-explored: (1) sensitivity to pruning schedule / type mix beyond the Appendix robustness test (which fixes a target architecture); (2) dependence on saliency metric variants.
+
+### Questions
+-  Can you provide experiments where unified pruning-aware pretraining is compared to: (1) training a small model from scratch, (2) distillation from the same teacher, (3) and post-training pruning + finetuning, under the same additional GPU-hour or FLOP budget? This is crucial to support the claim of being a more efficient or more practical route.
+
+- For all baselines in the main tables, please summarize (or reference) their token counts, context lengths, and tokenizers, and discuss how mismatches might affect your comparisons.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

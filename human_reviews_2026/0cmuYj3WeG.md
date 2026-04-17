@@ -1,0 +1,163 @@
+# PALC: Preference Alignment via Logit Calibration
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 4
+
+## Abstract
+Aligning Large Language Models with human preferences typically requires computationally intensive training or complex reward architectures. We introduce PALC (Preference Alignment via Logit Calibration), a parameter-efficient framework that achieves test-time alignment through a novel intervention strategy: direct calibration in vocabulary space. Unlike existing methods that manipulate entangled hidden representations or rely on external reward models, PALC operates at the logit layer where each dimension corresponds to a distinct token, providing interpretable and efficient control. Our approach employs a bottleneck architecture that learns to compress the base model's hidden states and generate position-dependent calibration vectors, requiring only a fraction of the base model's parameters. Through this design, PALC sidesteps the superposition problem inherent in representation engineering while eliminating the computational overhead of guided decoding methods. A single scaling factor enables runtime adjustment of alignment strength without retraining, allowing practitioners to balance between preserving model capabilities and enforcing preferences. Experiments demonstrate that PALC outperforms most test-time alignment methods while maintaining near-baseline inference speed. Our ablations reveal that human preferences concentrate on surprisingly low-dimensional manifolds, validating our architectural choices. By establishing vocabulary-space intervention as an effective alignment paradigm, PALC makes preference alignment accessible for resource-constrained deployments where traditional methods are infeasible, opening new avenues for scalable and adaptive AI alignment.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper presents PALC (Preference Alignment via Logit Calibration), a novel and lightweight method for preference alignment during LLM inference time. By employing a bottleneck architecture between the final hidden states and output logits, PALC learns to generate position-dependent calibration vectors from hidden states to adjust logits accordingly. Experiments on the HH-RLHF dataset demonstrate that PALC achieves competitive or superior performance compared to several baseline methods while requiring minimal training resources and introducing negligible inference latency. Furthermore, theoretical analysis and empirical ablation studies validate that the bottleneck architecture has sufficient capacity to capture the principal dimensions of human preferences, with the learned manifold concentrating on an effective dimension substantially smaller than the bottleneck size.
+
+### Strengths
+- The proposed method is intuitive and straightforward to implement, making it accessible for practical adoption.
+- The paper provides thorough optimization and experimental analysis for each component of the method, offering strong empirical support for the design choices.
+
+### Weaknesses
+- Modest Performance Gains: While PALC demonstrates computational efficiency, the experimental results show limited advantages compared to the base model and several baseline methods. Moreover, the paper does not discuss whether the compared baselines were optimally tuned, raising questions about comparison fairness. That said, given PALC's focus on providing a new methodological direction, some performance trade-offs may be acceptable.
+- Limited Evaluation Scope: Following from the first point, it remains unclear whether this alignment method performs better in some domains while underperforming in others. The evaluation is limited to a single dataset, and the paper lacks qualitative analysis such as case studies, making it difficult to characterize when and where PALC is most effective.
+
+### Questions
+- Regarding Equation 12 (the power-law assumption for singular values), does this assumption have theoretical justification? Since subsequent theoretical analysis heavily relies on this assumption, why not directly perform singular value decomposition analysis on the trained bottleneck structure to empirically validate it?
+- Other concerns are included in the weaknesses section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses preference alignment, identifying limitations of both existing training-time and test-time methods. To address this, the paper proposes a method called PALC (Preference Alignment via Logit calibration), which leverages a lightweight, trainable calibration module to intervene directly in the vocabulary logits at inference time. The calibration module uses a low-rank design to reduce parameter size and is trained with DPO loss on a frozen base model, which reduces computational cost and avoids unnecessary drifts. Experiments on the HH-RLHF dataset with the LLaMA 7B SFT model show that PALC performs on par or better than most test-time alignment baselines with lower latency. However, it still underperforms DPO and GenARM, while GenARM requires ~3x latency. Overall, PALC offers a resource-efficient approach for preference alignment, but evaluation on a single dataset and model limits conclusions about its generalization.
+
+### Strengths
+1. The paper clearly articulates the limitations of existing work, and the proposed logit-space intervention is well-motivated and interesting. 
+2. The method is clearly presented, with theoretical claims well supported.
+3. The calibration module is lightweight due to low-rank design, with low training resource required and low inference latency.
+4. Experiments cover a wide range of baselines (training-time and test-time methods), which clearly illustrate the trade-offs between quality and latency.
+
+### Weaknesses
+1. The experiments are limited to a single model and a single dataset, as noted by the authors. Testing on additional datasets and models would help demonstrate its generalization. For example, how would the method perform on more complicated preference criteria; how would the optimal bottleneck dimension B vary with criteria complexity.
+2. While PALC achieves low latency than GenARM, it underperforms than GenARM by a non-neglible margin. This quality-latency trade-off may not always be acceptable in practice.
+
+### Questions
+1. How would the model behavior change when \gamma becomes negative?
+
+nit: line 288 should be \citet
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper proposes PALC (Preference Alignment via Logit Calibration), a test-time alignment method that adds a small “calibration module” to generate position-dependent vectors in vocabulary/logit space (rather than hidden states). A single inference-time scalar γ controls alignment strength. On HH-RLHF with a 7B SFT base model, PALC reports higher win rates than several test-time baselines with less latency overhead, while trailing training-time DPO and reward-model methods. The work argues that acting in vocabulary space is interpretable, and is parameter-efficient.
+
+### Strengths
+1. Clear intervention point & simplicity. Acting directly on logits is conceptually clean and operationally simple. The $\gamma$ knob is practical for deployment, enabling a tunable alignment/utility trade-off.
+
+2. Theoretical framing. Provides analysis of SoftMax sensitivity, low-rank structure, and (bounded) KL divergence to the base model; these help justify stability and interpretability claims. 
+
+3. Positioning vs. prior work. The paper clearly distinguishes PALC from activation steering and reward-model guided decoding, highlighting an underexplored “vocabulary-space” control point.
+
+### Weaknesses
+Results are limited to a single dataset (HH-RLHF), a single base model family/size (7B SFT), and 300-prompt evaluations. This is a slim basis for generality, especially for safety-critical alignment claims.
+
+### Questions
+My only question is that do the authors plan on more robust evaluations?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a new alignment method that trains a calibration network to modify the $\text{LLM}$'s output logits directly. The goal is to achieve alignment comparable to full fine-tuning while avoiding the high computational cost and the "entanglement" problem inherent in manipulating dense hidden representations (Representation Engineering). The Calibration Network is trained using the DPO objective and operates by reading a compressed signal from the LLM's hidden state, which is then applied as a position-dependent scaling vector to the final logits. Empirical results show superior performance to certain calibration methods but is behind state-of-the-art in terms of quality, which is a deliberate tradeoff for improving training efficiency.
+
+### Strengths
+- The method proposes a new apprach that solves the entanglement problem of hidden representations by intervening in the disentangled logit space.
+- The system is highly efficient, as it only trains a small, auxiliary calibration network, which is inherently cheaper than full model backpropagation.
+- The theoretical section demonstrates that alignment is fundamentally a low-rank problem, providing mathematical justification for the lightweight architecture.
+- The method adds only a small overhead during inference and outperforms certain previous approaches in terms of quality such as CAA, Re-control, ARGS.
+
+### Weaknesses
+- W1. The positioning and motivation of this work does not include several training approaches that achieve competitive quality-efficiency tradeoff in the context of inference-time alignment (e.g. DPO trained tiny auxiliary LLMs or original LLM trained with lightweight, selective PEFT). 
+- W2. The claim related to "avoiding entangled hidden representations" was not qualified theoretically or empirically. The calibration network still relies on the hidden representations of the model. 
+- W3. The evaluation is incomplete, as it fails to compare against other simple, efficient alternatives (e.g., small, distilled LLMs) that compete on the same axis of low parameter count and simplicity.
+- W4. Despite its complexity, the method still performs worse than DPO and GenARM, so the efficiency gain during training comes with a significant quality degradation.
+
+### Questions
+- Why were methods that compete on efficiency and simplicity, such as small distilled $\text{LLMs}$ finetuned with $\text{DPO}$ + LoRA with very low rank or selective layer application, omitted from the comparison?
+- Could the authors clarify how the calibration approach avoids the hidden state entanglement issue? The phrasing on this makes it sound that there is no dependence on the hidden state which is not the case.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

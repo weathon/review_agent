@@ -1,0 +1,188 @@
+# Any-Depth Alignment: Unlocking Innate Safety Alignment of LLMs to Any-Depth
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6, 6
+
+## Abstract
+Large Language Models (LLMs) exhibit strong but shallow alignment: they directly refuse harmful queries when a refusal is expected at the very start of an assistant turn, yet this protection collapses once a harmful continuation is underway (either through the adversarial attacks or via harmful assistant-prefill attacks). This raises a fundamental question: _Can the innate shallow alignment in LLMs be unlocked to ensure safety at arbitrary generation depths?_ To achieve this goal, we propose Any-Depth Alignment (ADA) an effective inference-time defense with negligible overhead. ADA is built based on our observation that alignment is concentrated in the _assistant header tokens_ through repeated use in shallow-refusal training, and these tokens possess the model’s strong alignment priors.  By reintroducing these tokens mid-stream, ADA induces the model to reassess harmfulness and recover refusals at _any point in generation_. Across diverse open-source model families (Llama, Gemma, Mistral, Qwen, DeepSeek, and gpt-oss), ADA achieves robust safety performance _without requiring any changes to the base model's parameters_. It secures a near-100% refusal rate against challenging adversarial prefill attacks ranging from dozens to thousands of tokens. Furthermore, ADA reduces the average success rate of prominent adversarial prompt attacks (such as GCG, AutoDAN, PAIR, and TAP) to below 3%. This is all accomplished while preserving benign utility with minimal over-refusal and maintaining resilience even after the base model undergoes subsequent instruction tuning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This work identifies the vulnerabilities of existing alignment schemes and the limitations of deep alignment solutions. Based on observations of intrinsic safety signals, it proposes an inference-time alignment scheme. By injecting a designed safety checkpoint during token generation, it recalls the model's harmful judgments, achieving rejection at arbitrary depth. Two implementations, RK and LP, are presented, maintaining security without compromising the model's utility.
+
+### Strengths
+1.The method is well-organized and the research concepts are clear. 
+
+2.Figure 3 supports the core hypotheses Q1 and Q2 proposed by the authors, namely that the security signal within the model will gradually decay during the deep generation process, but can still be reactivated through specific context tokens. 
+
+3.The proposed mechanism does not rely on retraining and can be executed only by security token injection or linear discriminator, showing high practical potential and cross-model versatility.
+
+### Weaknesses
+**1. The RK method's lookahead assumptions are limited:**
+
+The current implementation relies on partial observation or detection of future token distributions, which may affect its applicability in streaming decoding scenarios. It is recommended to consider introducing a tree-of-thought or treePO-style structure to reduce prior reliance.
+
+**2. Probe Robustness:**
+
+The probe effect demonstrated in the experiment is limited to a specific data domain and sampling parameter configuration. It is unclear how well this linear probe generalizes under different sampling parameters.
+
+**3. Lack of in-depth analysis of cross-layer and cross-model consistency:**
+
+The security signal attenuation trends presented in the paper are primarily based on single-layer representations or single-model observations, lacking more systematic cross-layer stability verification.
+
+4. From "models can self-reflectively reject" to "security signals can be triggered by headers" and then to "this can be generalized to arbitrary defense-in-depth," there is a lack of mechanistic analysis or formalized assumptions at a high level of abstraction.
+
+### Questions
+**1. Key terms such as "innate safety," "safety tokens," and "alignment priors" appear intertwined in the introduction, but their definitions and hierarchical distinctions are unclear, making it difficult to determine whether they refer to the representation space, gradient directions, or training data attribution.**
+
+**2. Can the authors further explain the origin of the "safety signal" in the representation space? Is it the embedding pattern induced by the training data, or the stable direction of the alignment objective in parameter space?**
+
+**3. Is the so-called "re-injection of the assistant header" simply a re-triggering of the language pattern through the context template (prompt conditioning), rather than a true activation of the safety representation? If the latter is the case, can more direct representation-level evidence (such as changes in activation patterns or directional analysis) be provided?**
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the "shallow alignment" problem in Large Language Models (LLMs), where models effectively refuse harmful prompts initially but fail when harmful content emerges later in the generation (e.g., via assistant-prefill attacks). The authors propose Any-Depth Alignment (ADA), an inference-time defense mechanism designed to unlock the model's innate safety alignment at arbitrary generation depths. ADA is based on the observation that "Safety Tokens" (typically assistant header tokens) concentrate the model's safety priors. By re-injecting these tokens mid-stream, ADA forces the model to reassess the ongoing generation. Two variants are presented: ADA-Rethinking (ADA-RK), a training-free method that checks for refusals in a short lookahead after token injection, and ADA-Linear Probe (ADA-LP), which uses a lightweight linear classifier on the hidden states of injected Safety Tokens to detect harmfulness with minimal overhead.
+
+### Strengths
+Novelty and Significance: The paper introduces the important concept of "deep prefill attacks" to rigorously evaluate alignment depth and identifies a fundamental mechanism (unlocking innate alignment via Safety Tokens) rather than just proposing another fine-tuning method or external model. The idea of leveraging the model's own latent safety knowledge at inference time is highly significant.
+
+Effectiveness and Generality: ADA, especially the ADA-LP variant, demonstrates outstanding effectiveness, achieving near-perfect refusal rates against very challenging deep prefill attacks and substantially mitigating strong adversarial prompt attacks (GCG, AutoDAN, PAIR, TAP). Crucially, this high performance is shown across a wide variety of modern open-source models (Llama, Gemma, Mistral, Qwen, DeepSeek, gpt-oss) and even commercial ones (Claude), indicating the underlying principle is broadly applicable.
+
+Efficiency and Practicality: ADA-LP offers a compelling practical solution. It requires only a simple linear probe (trained once) and operates with negligible, constant-time inference overhead by reusing the KV cache. This makes it suitable for real-time streaming applications where traditional guardrails are often too slow or memory-intensive, especially for long contexts.
+
+### Weaknesses
+Reliance on Hidden State Access (ADA-LP): The most effective variant, ADA-LP, requires access to the model's internal hidden states. This limits its direct applicability to scenarios where users interact with closed APIs that only provide text outputs. While ADA-RK offers a training-free alternative for such cases, it is shown to be less consistently effective, particularly on models with weaker base alignment.
+
+Vulnerability in User-Controlled Environments: As acknowledged by the authors, ADA is primarily effective when the inference process is controlled by the service operator. In fully open-source deployments where the end-user can modify the model or the inference code, the ADA checks (token injection and probing/lookahead) could potentially be disabled by a malicious user, bypassing the defense entirely.
+
+### Questions
+The linear probe for ADA-LP is trained on a specific dataset (WildChat/WildJailbreak) and shown to generalize across models. How sensitive is the probe's performance to the type of alignment used in the base model (e.g., RLHF vs DPO vs Constitutional AI)? Would a probe trained on data from an RLHF-aligned model work as effectively when applied to a DPO-aligned model, or does the nature of the internal safety representation differ significantly?
+
+ADA operates by injecting Safety Tokens periodically (e.g., every 100 tokens). What is the sensitivity to this checkpoint frequency? Is there a trade-off between computational overhead (checking more often) and detection latency (potentially generating more harmful tokens before a check triggers refusal)? Could an adaptive checking strategy be more optimal?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes Any-Depth Alignment (ADA), a training-free, inference-time defense that restores refusals mid-generation. The key observation is that alignment signals concentrate in assistant-header “safety tokens.” Two variants are presented: ADA (RK), which re-injects the header to trigger a refusal, and ADA (LP), which applies a lightweight linear probe to the hidden states of injected safety tokens. ADA achieves high refusal rates under deep assistant-prefill attacks and low adversarial prompt ASR, while preserving benign utility and incurring minimal overhead. Results generalize across model families and remain robust after SFT.
+
+### Strengths
+1. The identification of assistant-header tokens as safety tokens that surface a strong, separable harmfulness signal is an insightful finding, which makes the proposed ADA well-motivated and empirically grounded.
+2. The authors show strong empirical performance of ADA compared to existing methods: high refusal rates against harmful prompts, minimal over-refusal with benign prompts, and relatively efficient. Various robustness checks are also provided.
+3. ADA doesn’t require fine-tuning and model-agnostic, making it broadly applicable across diverse model families and architectures. By leveraging only inference-time interventions or hidden-state probing, ADA can be easily integrated into existing model pipelines.
+4. The paper is well-structured and the writing is easy to follow. Good presentation overall.
+
+### Weaknesses
+1. Leakage before cutoff: Because interventions trigger mid-stream, a small amount of harmful content can be emitted before the refusal fires; although the authors acknowledge this limitation, some quantification or examples of such leakage across tasks would strengthen the argument about the utility of ADA.
+2. Dependence on the base model: the effectiveness of ADA, especially ADA-RK, fundamentally relies on the base model’s alignment strength (i.e., the model must already possess latent robust refusal behavior for safety-Token injection to “unlock”). This means ADA is not a universal defense but rather a mechanism amplifier for already-aligned models. On weakly aligned or uncensored models, ADA may not be very effective.
+3. The paper attributes ADA’s effectiveness to the reactivation of an “innate” safety signal triggered by reinjecting the assistant-header tokens mid-generation. However, this interpretation may conflate two distinct phenomena. Reintroducing the assistant header effectively resets the conversational state, prompting the model to begin a new assistant turn, which inherits its default alignment priors from the system prompt and chat template. In other words, the refusal that follows might result from a stylistic or structural re-anchoring of the model’s dialogue state, rather than the activation of a latent safety representation.
+
+### Questions
+1. Starting line 192: the authors mention that as d increases, the hidden states of safety tokens are increasingly separable, while for generated tokens the features become more entangled. Any explanations or hypotheses for this trend?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces Any-Depth Alignment (ADA), an inference-time safety mechanism designed to unlock latent alignment signals within large language models (LLMs) and ensure robust refusal behavior at any generation depth. The authors argue that LLMs possess innate safety priors encoded in their assistant-header tokens, which can be reactivated mid-generation through two mechanisms: ADA (RK) and ADA (LP).
+
+### Strengths
+(1) Novel framing and insight: The paper advances a conceptually fresh hypothesis—that safety alignment priors already exist in model hidden states but remain “locked.” The discovery that assistant headers act as Safety Tokens is both empirically supported and intuitively plausible.
+
+(2) Strong empirical coverage: Evaluation spans 9 diverse model families, 4 harmfulness benchmarks (AdvBench, JailbreakBench, StrongReject, HEx-PHI), and multiple defense baselines. ADA (LP) outperforms both deep alignment and strong guardrails such as Llama-Guard 4 and IBM Granite-Guardian.
+
+(3)Technical soundness and clarity: The linear-probe formulation is clearly explained. The visualization of hidden-state separability is compelling, showing safety signals becoming linearly separable only when probed via header tokens.
+
+(4) Practical significance: ADA offers zero-training, constant-time inference, and minimal overhead. This makes it deployable in real-time settings—an appealing property for industry safety stacks.
+
+### Weaknesses
+(1) Mechanistic claims need deeper causal validation: While the authors show correlations between Safety-Token activations and refusal behavior, the causal mechanism remains partially speculative. The Transcoder neuron analysis is suggestive but does not yet establish that these neurons cause refusal rather than correlate with it.
+
+(2) Scope of evaluation is primarily safety-focused: The work measures safety robustness and over-refusal but does not test whether ADA affects reasoning quality, factuality, or calibration under benign long-context workloads. These would strengthen claims of “no utility degradation.”
+
+### Questions
+(1) Could the authors provide additional evidence that the Safety-Token activations cause refusal rather than merely correlate with it? For example, have the authors tried causal ablations (e.g., zeroing out or rescaling the most activated neurons or attention heads identified via the Transcorder features) to test whether refusals disappear when those activations are suppressed?
+
+(2) Have the authors evaluated whether ADA (LP) alters model behavior on non-safety, reasoning-intensive, or long-context tasks—for example, reasoning depth in GSM8K or factual calibration in MMLU when ADA checks are active?
+
+(3) Since ADA introduces mid-generation checkpoints, is there any measurable latency or coherence degradation in multi-step reasoning chains or tool-use tasks? Quantitative or qualitative analysis would clarify the “no utility degradation” claim.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

@@ -1,0 +1,197 @@
+# Revisiting Hallucination Detection Through The Lens Of Effective Rank-based Uncertainty
+
+- Decision: Reject
+- Scores: 8, 4, 6, 6
+
+## Abstract
+Detecting hallucinations in large language models (LLMs) remains a fundamental challenge for their trustworthy deployment. Going beyond basic uncertainty-driven hallucination detection frameworks, we propose a simple yet powerful method that quantifies uncertainty by measuring the effective rank of hidden states derived from multiple model outputs and different layers. Grounded in the spectral analysis of representations, our approach provides interpretable insights into the model's internal reasoning process through semantic variations, while requiring no extra knowledge or additional modules, thus offering a combination of theoretical elegance and practical efficiency. Meanwhile, we theoretically demonstrate the necessity of quantifying uncertainty both internally (representations of a single response) and externally (different responses), providing a justification for using representations among different layers and responses from LLMs to detect hallucinations. Extensive experiments demonstrate that our method effectively detects hallucinations and generalizes robustly across various scenarios, contributing to a new paradigm of hallucination detection for LLM truthfulness.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduced a novel uncertainty quantification approach for LLMs. The core idea of the approach is to compute the effective rank of multiple sampled generations. The authors conducted experiments on four datasets with three LLMs. The result showed that their proposed method outperforms other uncertainty quantification baselines on hallucination detection. The authors also provided a theoretical analysis of uncertainty quantification for LLMs, showing that the aleatoric uncertainty dominates the epistemic uncertainty and suggesting that their proposed approach effectively quantifies the aleatoric uncertainty.
+
+### Strengths
+1. The writing is clear and easy to follow.
+2. The paper proposed a simple yet effective approach for uncertainty quantification, which would be useful for hallucination detection and improving the reliability of LLMs. In addition, the proposed approach is training-free, which would be easier to deploy in real-world setting.
+3. The theoretical analysis provides further support for the proposed approach, making it more sound. In addition, it provides a justification of sampling-based uncertainty quantification, which will benefit the future research of uncertainty quantification for LLMs.
+
+### Weaknesses
+1. **Comparison to Eigenscore.** The proposed method is highly similar to Eigenscore [1]. Both aggregated the singular values of a matrix formed by the embedding of multiple generations. While I can see that the method proposed in this paper is simpler and theoretically grounded, it would be clearer if the authors could provide a detailed comparison to Eigenscore, showing the mathematical differences between these two approaches and the fundamental strength approach proposed in this paper.  
+2. **Baselines and LLMs.** There are other (more recent and powerful) uncertainty quantification baselines that were not included in this paper, such as [1, 2, 3, 4]. This paper could be strengthened more if the authors could show that their approach outperforms these additional baselines. In addition, the experiments are conducted on relatively outdated LLMs. It would be more convincing if the authors could include the performance of newer models, like Qwen3, Llama4, and Gemma3.  
+3. **Significance of the performance.** The performance of sampling-based uncertainty quantification depends on the stochastic nature of sampling. It would be great if the authors could report the variance/std of each approach, especially when their performance is close to Eigenscore.
+
+[1]: INSIDE: LLMS’ INTERNAL STATES RETAIN THE POWER OF HALLUCINATION DETECTION (2024)
+
+[2]: Enhancing Uncertainty-Based Hallucination Detection with Stronger Focus (2023)
+
+[3]: Shifting Attention to Relevance: Towards the Predictive Uncertainty Quantification of Free-Form Large Language Models (2024)
+
+[4]: HaloScope: Harnessing Unlabeled LLM Generations for Hallucination Detection (2024)
+
+[5]: Steer LLM Latents for Hallucination Detection (2025)
+
+### Questions
+1. The current experiments were mainly conducted on short-form QA. I wonder whether ER can be applied to long-form QA, which is a more realistic setting.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a novel hallucination detection method for large language models (LLMs) based on the effective rank of hidden state embeddings. By analyzing the dispersion of embeddings across multiple layers and responses, the method quantifies uncertainty without requiring external tools or fine-tuning. Extensive experiments show that it performs competitively or better than existing baselines across diverse datasets and model architectures.
+
+### Strengths
+1. The paper introduces a spectral perspective (effective rank) for uncertainty quantification, which is effective.
+2. The paper provides a clear theoretical motivation linking aleatoric and epistemic uncertainty to semantic divergence in hidden states.
+
+### Weaknesses
+1. Missing 2025 baseline, e.g., [1].
+2. Llama-2 is old. It is recommended to conduct experiments on newer models and models from different series to verify the effectiveness and generalization of the proposed method fully.
+3. While the proposed method is somewhat effective, measuring uncertainty through multiple sampling is not practical in real applications. Ten samplings means ten inferences, which is not very user-friendly for some long responses or even thinking-based LLMs.
+4. The proposed method is essentially a measure of consistency and does not feel too novel.
+
+Ref:
+> [1] Beyond semantic entropy: Boosting LLM uncertainty quantification with pairwise semantic similarity
+
+### Questions
+See Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes a lightweight, training-free method for hallucination detection in large language models (LLMs) based on the effective rank of hidden-state embeddings. The core idea is that hallucinations correspond to higher semantic divergence in the model’s internal representations across multiple sampled responses and intermediate layers. By constructing an embedding matrix from these hidden states and computing its effective rank—defined as the exponential of the Shannon entropy of its singular values—the method yields an interpretable uncertainty score that reflects the “effective number of distinct semantic modes” in the model’s behavior. The authors provide both theoretical justification (via decomposition of aleatoric and epistemic uncertainty) and extensive empirical validation across four QA datasets and three LLMs (Llama-2-7B/13B, Mistral-7B). Results show that the proposed approach achieves competitive or superior AUROC compared to recent baselines—including Semantic Entropy and Eigenscore—while being computationally efficient and requiring no external tools or fine-tuning. Ablation studies further demonstrate robustness to choices of layer depth, number of samples, and temperature.
+
+### Strengths
+- **Clear Spectral Approach**: The paper introduces a lightweight, theoretically-motivated effective rank metric for detecting model uncertainty, rooted in spectral properties of internal representations. The method is both simple and interpretable.
+- **Solid Empirical Validation Across Models and Tasks**: Experiments on three diverse LLMs (Llama-2-7b-chat, Llama-2-13b-chat, Mistral-7B) and multiple datasets (TriviaQA, NQ, BioASQ, SQuAD) show the method is robust and scalable (Table 1, Table 3).
+- **Computational Efficiency**: Time benchmarks (Table 2) indicate negligible computational overhead, making the approach appealing for practical deployment.
+- **Unification of Internal and External Uncertainty**: Theoretical analysis (Section 5) thoughtfully decomposes hidden state uncertainty into aleatoric and epistemic components, motivating the use of multiple sampled outputs and internal representations for hallucination detection.
+
+### Weaknesses
+### 
+
+- **Limited Novelty Relative to Prior Work**: The core idea of quantifying hallucination through dispersion or uncertainty in internal hidden states has clear precedents in recent literature—most notably in Eigenscore (Chen et al., 2024), which also leverages internal representations to measure model inconsistency. While the use of effective rank offers a novel spectral perspective, it shares substantial conceptual and methodological overlap with these prior approaches, as both operate on hidden-state covariance structures and aim to capture semantic uncertainty through representation diversity. Consequently, the advance appears incremental rather than fundamentally distinct. 
+
+- **Experiment Focuses on Factoid QA, Neglects Complex or Long-Form Generation**: All experiments are confined to **short-form, factoid QA tasks** (TriviaQA, NQ, BioASQ, SQuAD). The method’s applicability to more complex settings—such as multi-turn dialogue, long-form generation, or reasoning-intensive tasks—is untested. Given that hallucination manifests differently in these regimes (e.g., narrative drift, logical inconsistency), the generalizability of the approach as a “new paradigm” remains unsubstantiated.
+- **Modest Performance Gains Over Strong Internal Baselines**: Despite winning on some datasets and models (see Table 1), the method is only modestly better or competitive with Eigenscore and SE/DSE; The improvement over the best prior internal-embedding metric is marginal (average AUROC gains are often under 0.005), raising questions about the practical significance of the advance. A more thorough analysis of when and why ER succeeds or fails relative to other baselines would strengthen the contribution claim.
+- **Lack of In-Depth Failure Analysis**: While the paper includes ablation studies on factors like temperature (e.g., Table 4), it offers limited qualitative analysis of failure cases. In particular, there is insufficient discussion of two critical scenarios: (i) **low Effective Rank (ER) but hallucinated outputs**—which may arise from confidently held false knowledge—and (ii) **high ER but factually correct generations**—which could reflect legitimate ambiguity or paraphrasing. Such cases are essential for understanding the method’s blind spots and practical reliability. A deeper error analysis (e.g., categorizing failure modes or visualizing representation clusters) would significantly strengthen the paper’s empirical contribution and trustworthiness claims.
+
+### Questions
+- **Generalizability Beyond Factoid QA**: How does the effective rank approach perform for open-ended, long-form QA, or dialog tasks? Is it robust to hallucinations arising from multi-hop or contextual failures rather than surface-level entity mismatches?
+- **Adaptive Layer Selection**: The ablation studies show that the optimal hidden layer for computing effective rank varies across models, datasets, and temperatures. Is there a practical, automatic strategy—e.g., based on prompt features, layer-wise consistency, or lightweight meta-learning—to select the best layer (or layer ensemble) without ground-truth labels?
+- **Applicability to Black-Box/Closed Models**: The method requires access to internal embeddings; is there any potential for black-box adaptation, or is it confined to white-box settings?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper proposes "Effective Rank-based Uncertainty," a novel, training-free method for hallucination detection. The core idea is to quantify uncertainty by measuring the semantic divergence of hidden states across multiple sampled responses, using the "effective rank" of the hidden state matrix as a proxy.
+
+### Strengths
+The method is elegant, grounded in spectral analysis, and the intuition that high rank (i.e., high semantic divergence) correlates with high uncertainty (hallucination) is compelling. 
+
+The paper demonstrates competitive performance against other response-level uncertainty-based baselines like Semantic Entropy and Eigenscore.
+
+### Weaknesses
+The following weakness is not significant. So I give a positive overall score.
+
+
+
+W1: The evaluation is confined to simplistic tasks that do not reflect modern LLM use cases. The paper's entire empirical validation rests on short-form, factual question-answering datasets (TriviaQA, NQ, BioASQ, SQUAD), these tasks are arguably "solved" problems for modern LLMs and do not represent the frontier of the current hallucination challenge.
+
+The critical applications where hallucination detection is most needed today are in long-form generation (e.g., summarization, report writing), complex reasoning (e.g., multi-step math problems), and agentic workflows (e.g., software development, tool use). In these scenarios, hallucinations manifest as subtle logical fallacies, fabricated evidence, inconsistent reasoning steps, or non-existent API calls, not just incorrect facts. It is  unclear whether this method can effectively capture hallucination in these more complex errors.
+
+
+
+W2: In real-world applications, LLM outputs are often hundreds or thousands of tokens long. A hallucination (e.g., a fabricated statistic in the first paragraph of a summary, or a subtle bug in a code block) could occur very early in the generation. 
+
+The design choice in this paper limits the method to a response-level label ("this entire 2000-token output is a hallucination: Yes/No"), which is of little practical use. Modern applications require real-time, token-level detection to pinpoint where the model deviates from a faithful trajectory. The proposed method is incapable of providing this necessary granularity.
+
+
+
+W3: Some existing works develop classifiers (both supervised and unsupervised) that operate directly on the contextualized embeddings (hidden states) of each token to predict hallucinations [1]. Comparing against such methods is essential. Without this comparison, it is impossible to know if this complex, multi-sample spectral approach is more effective than a simple, single-pass classifier trained on the hidden states themselves. At least, you should mention these works in Section 2.
+
+[1] Unsupervised Real-time Hallucination Detection based on the Internal States of Large Language Models
+
+I am open to increasing my score if the authors address these weaknesses
+
+### Questions
+Please refer to the previous section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

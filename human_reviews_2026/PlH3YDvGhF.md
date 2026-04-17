@@ -1,0 +1,182 @@
+# Hidden in the Haystack: Smaller Needles are More Difficult for LLMs to Find
+
+- Decision: Reject
+- Scores: 4, 6, 4, 6
+
+## Abstract
+Large language models (LLMs) face significant challenges with needle-in-a-haystack tasks, where relevant information (``the needle``) must be drawn from a large pool of irrelevant context (``the haystack``). Previous studies have highlighted positional bias and distractor quantity as critical factors affecting model performance, yet the influence of $\textit{gold context size}$, the length of the answer-containing document, has received little attention. We present the first systematic study of gold context size in long-context question answering, spanning three diverse benchmarks (general knowledge, biomedical reasoning, and mathematical reasoning), eleven state-of-the-art LLMs (including recent reasoning models), and more than 150K controlled runs. Our experiments reveal that LLM performance drops sharply when the gold context is shorter, i.e., $\textbf{smaller gold contexts consistently degrade model performance and amplify positional sensitivity}$, posing a major challenge for agentic systems that must integrate scattered, fine-grained information of $\textit{varying lengths}$. This effect persists under rigorous confounder analysis: even after controlling for gold document position, answer token repetition, gold-to-distractor ratio, distractor volume, and domain specificity, gold context size remains a decisive, independent predictor of success. Our work provides clear insights to guide the design of robust, context-aware LLM-driven systems.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper studies moderately long-context QA by isolating gold context size - how long the actually relevant passage is inside a long distractor-heavy prompt. The authors build controlled “haystack” prompts from biomedical QA, NaturalQuestions, and math problems, varying (i) gold passage length (small / medium / large, where each longer version strictly contains the shorter) and (ii) where in the full context that gold passage appears. They then evaluate 11 strong models (GPT-4o, Gemini-2.0-Flash, LLaMA-3.1-405B, DeepSeek-R1, etc.) across 150K+ trials.
+
+Main result is that models are dramatically worse when the gold passage is short, especially if it appears late in the context. Longer gold passages both raise accuracy and make it less sensitive to position. In gold-only settings (no distractors), models are near-perfect, so the difficulty isn’t the task itself — it’s finding and using the right span in a sea of noise. The authors argue this matters for retrieval-augmented / agentic systems that merge evidence from multiple tools.
+
+### Strengths
+1. The experimental setup is clean: same question, same distractors, but systematically varying gold length and position.  The baselines (closed-book, gold-only, distractor-only) are helpful controls.
+
+2. Across domains and models, the pattern is stable. Longer gold ⇒ higher accuracy, shorter gold ⇒ positional fragility. For example, in biomedical QA, accuracy jumps 20–30 points going from “small” to “large” gold for leading models, and late-placed short gold is often ignored almost completely. This is consistent across biomed, web QA, and math.
+
+3. The takeaway is operational. If you pass a model only a tiny “critical snippet” from one tool alongside lots of irrelevant but plausible-looking text from other tools, it may miss it. That’s highly actionable for system designers.
+
+### Weaknesses
+1. The headline conclusion that the more/denser relevant information you show the model, the more likely it is to answer correctly; tiny late snippets get ignored is intuitively what most people would predict. The paper proves this rigorously and at scale, which is valuable, but the scientific novelty feels modest. 
+
+2. The authors hypothesize that longer gold passages “attract attention” and reduce positional brittleness, but don’t dig into internal attention patterns or multi-gold scenarios (e.g. several short relevant snippets spread across the prompt). The current analysis is observational rather than explanatory.
+
+3. The study inserts a single gold passage at controlled positions among distractors, but real deployments use RAG pipelines where retrieval ranking determines position and where multiple semi-relevant chunks, reranking, chunk sizes, and length-normalized scoring all interact. An end-to-end RAG setting (with retriever errors, ranking-induced positions, and multi-gold evidence) would test whether the “short gold gets ignored” effect persists under realistic ranking—and whether strategies like padding/expanding short gold, reranking by gold-length proxies, or top-k fusion mitigate it. This missing evaluation limits external validity.
+
+### Questions
+1. Does distributing multiple short gold snippets across early/mid/late approximate the robustness of one long gold block, or is contiguity essential?
+
+2. Can you provide any model-internal evidence (e.g. attention focus) for the “longer gold is harder to ignore” story?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper investigates the impact of gold context length on the performance of LLMs in Needle-in-a-Haystack (NIAH) tasks. Through controlled experiments across multiple LLMs and different benchmarks, the paper draws a clear conclusion, i.e., LLM performance in NIAH tasks degrades significantly when the gold context is shorter. The study demonstrates that even after controlling for confounding variables such as gold context position, answer repetition rate, and distractor volume, gold context length remains a significant independent predictor of success. The research also finds that smaller gold contexts amplify the model's positional sensitivity.
+
+### Strengths
+1. This paper proposes an interesting and intuitive factor affecting NIAH performance, i.e., the gold context length. The study of this factor breaks down the reliability of the notion that "longer inputs always lead to performance degradation" in practical scenarios.
+2. The paper conducts extensive experiments to demonstrate that gold context length reduces LLM performance in NIAH tasks and that this performance is more sensitive to position.
+
+### Weaknesses
+1. The most significant issue is that this paper only points out the problem without conducting a mechanistic analysis. This makes it difficult to determine whether this is a temporary issue or a fundamental deficiency in LLMs. Furthermore, the paper does not test on the latest models known for excellent long-context performance, such as Gemini 2.5 Pro and Claude. Notably, Figure 3 shows that o3-mini is less affected by changes in context length, which heightens my concern about the significance of the problem raised by the paper .
+2. A minor concern: Performance on the NIAH task may not necessarily correlate with real-world LLM in-context performance. Therefore, the lack of validation of this phenomenon on realistic tasks makes it difficult to judge the problem's importance.
+3. The gold contexts used in this paper differ not only in length but also in content type . This implies that the performance shown in Figure 3 could also be caused by variations in content quality 
+4. The x-axis labels in some figures are rotated, making it difficult to clearly locate the corresponding data, such as in Figure 3 and Figure 7.
+
+### Questions
+1. Can the authors demonstrate whether this problem remains significant for state-of-the-art models, such as Gemini 2.5 Pro and Claude?
+2. I noticed in Figure 3 that for some models and tasks, the "medium" group performed better than the "large" group (e.g., o3-mini in (a) and o3 in (c)). This phenomenon slightly contradicts the authors' conclusions. Can the authors provide an analysis of this anomaly?
+3. Why was the repetition rate metric from Eq. (1) used for the experiment decoupling answer repetition and gold context length, rather than other repetition metrics, such as the more intuitive "Exact Mentions" (as defined in Eq. (7))?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper investigates how the size of the relevant context (the "needle") affects an LLM's performance in a needle-in-a-haystack setting. The authors conduct a large-scale study by creating three versions of each "gold" document (small, medium, large) and embedding them at various positions within a fixed-size haystack of distractors.
+
+The core findings are:
+1. LLM performance drops significantly when the gold context is smaller.
+2. This "size effect" is strongly linked to positional bias. Smaller needles are far more sensitive to their position and show an extreme primacy bias (i.e., they are only found reliably at the very beginning of the context).
+3. The authors perform several analyses to argue that this effect is not an artifact of answer repetition or distractor volume.
+
+### Strengths
+1. The study is comprehensive. The authors conducted a sheer scale of the experiments, testing 11 modern LLMs (including strong proprietary and open-weight models) on three diverse tasks (biomedical, general QA, and math). This provides strong evidence that the findings are not a model-specific or task-specific fluke.
+2. The paper's most valuable contribution is not just that "size matters," but its demonstration of the interaction between gold context size and positional bias. 
+3. The findings are useful for anyone building real-world retrieval-augmented systems. It directly challenges the common wisdom that retrieving the smallest, most minimal-and-relevant chunk is always the best strategy. This work provides a clear, data-driven reason why that approach might fail.
+
+### Weaknesses
+My main concerns are with the experimental design, which seems to entangle the core variable of interest ("absolute size") with other, more powerful confounding variables.
+1. Entangled variables (size vs. ratio): The study fixes the distractor (haystack) size. This means gold_context_size and gold_to_distractor_ratio are perfectly correlated. A "small needle" is always a "low signal-to-noise ratio," and a "large needle" is always a "high ratio." The post-hoc analysis in Sec 4.3 does not adequately de-couple these variables. The results could just as easily support the less novel conclusion that "lower signal-to-noise ratios are harder to find."
+2. Conflated variables (size vs. quality): The gold contexts (see Fig 8) are not just different in size; they differ in quality. The "large" gold context contains the "complete reasoning process," while the "small" one has only the "minimal span." The experiment is thus conflating size with information richness. It's unsurprising that models perform better when given a more comprehensive, "better" answer, which just also happens to be larger.
+
+### Questions
+1. Given the entanglement of absolute size and gold_to_distractor_ratio, why are the authors confident that absolute size is the determining factor, rather than the (in my view, more likely) signal-to-noise ratio? Maybe a small-scale experiment can be conducted to truly isolate the variables. 
+2. Could the authors clarify the mechanism of failure? When a model fails on a "small needle," is it an attention failure (the model's attention mechanism literally does not "see" the relevant tokens) or an aggregation failure (the model sees the small needle but judges it as less credible or important than a larger, more "authoritative-looking" distractor document)?
+3. Related to Weakness #2: Can you defend the choice to make the larger contexts also contain more comprehensive supporting information? How can you be sure that the performance gain doesn't simply come from this higher quality of evidence, rather than the size of the context it's embedded in?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper studies how the size of the relevant passage (“needle”) affects long-context QA when mixed with many distractors (“haystack”). Results show that the larger the needle, the less impact of positional bias of relevant fact in long context (e.g., the previously found lost in the middle effect). Analysis was performed on 3 datasets (CARDBiomedBench, NaturalQuestions, and NuminaMath 1.5) and across closed (OpenAI, Gemini models) and open-source (DeepSeek, Phi-4, and Llama) models. The authors also analyze confounders (gold position, answer repetition, gold-to-distractor ratio, distractor volume, domain specificity) and claim the size effect persists. The main finding is that short “needles” are systematically missed more often.
+
+### Strengths
+- main finding is clear
+- strong empirical evidence supporting the impact of needle size across different domains and models
+- confounder checks (answer repetition, gold/distractor ratio, etc.) strengthen the core claim
+
+### Weaknesses
+- The proposed mitigation (balance sizes of needles, L469-470) seems oversimplified and unconfirmed. Since the gold needle isn't known a priori, we cannot enlarge only the gold; making all passages similarly long may be the only option. Because experiments vary only the gold size, it's unclear whether balancing helps in practice. Evaluating a setup where all passages (not just gold) are large (and/or of other but equal length) could clarify this.
+- The single-needle setup mainly probes retrieval. Labeling results as “aggregation ability/performance” (L39-45, L228, and others) overstates scope; true aggregation requires combining multiple relevant needles. Either rephrase the claim or add multi-needle (2+ complementary/conflicting needles, multi-hop) evaluations and report if size/position effects persist.
+- There are some clarity and presentation issues listed in the questions section.
+
+### Questions
+- If all passages (gold and distractors) are made equal in length, do positional biases and the size effect persist?
+- Please clarify on “real-world system”: e.g., L166-167, L136-137: “Quantities per benchmark were calibrated to match token distributions observed in a real-world multi-agent retrieval system (∼20k tokens).” Which system(s) specifically? Please name or characterize them and provide evidence for the “~20k tokens”.
+- Figure 1, axis Y, quality rate, what is it? What dataset is used? It is unclear from the figure and caption.
+- Figure 5, what model is used here? It is not clear from the figure.
+
+comments:
+- Figure 7: the labels with the model names on the x-axis are difficult to align with the curves. The plot is hard to read.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

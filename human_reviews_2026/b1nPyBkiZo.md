@@ -1,0 +1,185 @@
+# Dissecting Transformers: A 'CLEAR' Perspective towards Green AI
+
+- Decision: Reject
+- Scores: 4, 8, 4, 4
+
+## Abstract
+The rapid adoption of Large Language Models (LLMs) has raised significant environmental concerns. Unlike the one-time cost of training, LLM inference occurs continuously at a global scale and now dominates the AI energy footprint. Yet, most sustainability studies report only coarse, model-level metrics due to the lack of fine-grained measurement methods, treating energy efficiency more as an afterthought than as a primary objective. We present the first fine-grained empirical analysis of inference energy across core components of transformer architecture. We propose a novel methodology, Component-Level Energy Assessment via Repeated sampling (CLEAR), to overcome temporal mismatch between microsecond($\mu$ s) scale component execution and monitoring of millisecond(ms) scale energy sensors. Using CLEAR, we evaluate 15 models spanning four distinct architecture types and consistently keep component-wise energy variance below 9.5% while capturing more than 90% of the model’s total energy as individual components. Our empirical analysis reveals that Attention blocks consume significantly more energy per floating-point operation (FLOP), indicating that energy consumption is not proportionally aligned with FLOP counts. This shows that FLOPs alone fail to capture the true energy cost at a component level. Our findings establish detailed component-level energy baselines and provide insight as an initial step to build energy-efficient transformer models through component-level optimizations.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper provides an approach to tracking the environmental cost of large language models. The inference latency and flops reports coarse, model-level energy metrics, which obscure the contribution of individual architectural components. To bridge this gap, the paper introduces Component-Level Energy Assessment via Repeated sampling (CLEAR), a method to measure the inference energy consumption of fine-grained components within Transformer architectures.
+
+### Strengths
+1. **Practical Method**: CLEAR is a practical approach that produces an accurate component-level energy assessment.
+2. **Insights**: The findings provide insights into the relationship between energy and floating-point precision, input token length, and flops.
+3. **Clarity**: The paper is well-structured and clearly explains the method and conclusion. The commitment to releasing the code enhances reproducibility.
+
+### Weaknesses
+1. **Lack of scientific contribution**: CLEAR is a simple measuring method that averages over multiple samples, which is more like a common practice in engineering rather than scientific discovery. Although the motivation is interesting, it has little influence on the energy measuring approach or insights into efficient architecture design.
+2. **Limited Insights on Model Architecture Design**: While the paper identifies the energy cost of each component in the Transformer architecture, it lacks an analysis of how to design a more efficient architecture. A more in-depth discussion or experiment would further strengthen the work.
+3. **Limited Hardware**: The study is conducted exclusively on NVIDIA Ada-Lovelace GPUs using the NVML interface. The findings and the precise behavior of CLEAR may not generalize directly to other hardware (e.g., other GPU vendors, TPUs, or Arm devices). These devices may have different power management, sensor granularity, and architectural optimizations.
+
+### Questions
+1. **Dependency on Implementation**: Is the energy cost related to the implementation, such as Flash Attention, fused CUDA kernel, PyTorch compile, etc?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper presents a fine-grained empirical analysis of inference energy across different components of transformer architecture, and proposes a CLEAR approach that aims to bridge the temporal mismatch between component execution and energy measurements. 
+
+They test 15 models spanning and show that they approach captures more than 90% of the model’s total energy as individual components.
+
+Their analysis shows that Attention blocks use more energy per FLOP, and that FLOPs alone don't capture the true energy cost at a
+a component level, which is important because it's an approach that is often used by the community as a proxy for energy estimation.
+
+### Strengths
+This paper tackles an important challenge that arises from the temporal mismatch between the speed of component execution for Transformers and the energy monitoring approaches that are used to measure it. 
+
+They look at 4 different classes of Tranformer-based models, not only Decoder-only models that currently most popular, and including MoX variants, which are increasingly used. 
+
+The way in which their methodology is described and results presented is clear and easy to read, and the code is readily available for validation and reproducibility. 
+
+The results are compelling and the experiments are done in a methodologically-sound way.
+
+### Weaknesses
+-Some related work is overlooked, e.g https://aclanthology.org/2021.acl-long.167.pdf and https://github.com/ml-energy/zeus 
+
+- Unless I missed something, there isn't a full list of models tested in one place? I saw the figures in the Appendix, but I would appreciate an overview table with the model names and parameter counts. 
+
+- While the approach is very interesting and valid, what's missing for me is the next steps or takeaways - can CLEAR be used to create new types of Transformer-based architectures that are more efficient? can it help developers identify energy sinks or hotspots?
+
+### Questions
+- Why not test models for a set time (e.g. 30 seconds) instead of a a set number of repetitions?
+
+- What kind of actionable insights can your work yield for AI practitioners? i.e. how does it help someone to know that a certain component of a Transformer model consumes more/less energy? "Attention is the most computationally expensive sub-component" is difficult to put into practice since it's the main building block of Transformer models to begin with..
+
+- Why not test different sizes of the same model to validate your findings more in depth? e.g. different versions of LLaMa or Qwen?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies the energy consumption of large language models (LLMs) at an individual component (operator) level, such as attention, MLP, layer norm, embedding layer, LM head, etc. In order to measure the energy consumption of small components, the paper proposes to repeat measurements many times and calls this methodology CLEAR (Component-Level Energy Assessment via Repeated sampling). The study found that the proposed approach can capture most of the energy consumption of a full model. It also found that the energy consumption per token varies significantly for individual components, and that the FLOP is not a good measure of energy consumption.
+
+### Strengths
+The energy consumption of moden LLMs is one of the most important practical concerns that need to be addressed as LLMs are widely deployed at scale. I believe that understanding the energy efficiency of individual building blocks of an LLM will be an important first step in designing more energy efficient model architectures - Knowing how individual components affect the energy consumption, AI model designers can try to use more energy efficient components. In that sense, I think the paper studies an important and timely problem. 
+
+While not surprising, the main take-away points of the paper - that the number of floating-point operations (FLOPs) is not a realiable measure of a component's energy consumption and the energy consumption varies significantly for different components will be valuable for model designers to know.
+
+### Weaknesses
+The proposed method to repeat (replay) a short/fast operator multiple times to more reliably measure its power consumption is somewhat obvious and has been used in many domains. For example, in order to measure the energy consumption of individual microprocessor instructions, people typically run the same instruction many times. In that sense, I do not think the repeated measurement itself can be considered as a main technical contribution. In my opinion, the paper's main contributions come from the experimental validation of this approach for an LLM and the findings from experimental results. 
+
+While the proposed methodology appears to work well enough for the specific setups used in the paper, It is not clear if simply repeating an operator multiple times will work well for production systems with optimizations such as speculative execution and caching of KV cache values. It will be helpful if the paper can provide more clear discussions and experimental results on which aspects of a component's operations are indeed repeated and where the repeated executions may differ from the exeuction when running a full model. In particular, data movement overhead (for example, KV cache movements) can be significantly different between a single execution and multiple repeated executions - for example, if data is cached, repeated executions will be faster and require less data movement. 
+
+While the main findings are interesting, it is not surprising that the energy consumptions vary significantly among different components and that FLOPs do not reliably represent energy consumption. The paper will be much stronger if it can more concretely show how its findings can be used or what their implications are for designing more efficiency AI models and systems. For example, did the experimental results found certain types of components will be better or certain types of model architecture willl be more efficient? Can the component level energy consumption results be used to predict which model architecture will be more energy efficient or inspire new building blocks? If FLOPs are not a good metric to use, is there a better way to estimate the energy consumption w/o measuring on a real system? Does the cost of individual components change for different types of hardware? I would suggest adding more concrete discussions on the impact of the experimental findings.
+
+### Questions
+See the questions above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The authors propose a method, CLEAR, for benchmarking energy consumption associated with individual components of LLMs during inference. One challenge noted by the authors is that the GPU power sensor refresh rate (dozens of milliseconds) is too coarse-grained to capture accurate readings of operations corresponding to components that take only microseconds to execute. In the CLEAR method, measurements are repeated sufficiently many times to reduce uncertainty. The authors observe a mismatch between FLOPs and energy consumption for different model components; for example, attention blocks consume more energy per FLOP than other types of modules.
+
+### Strengths
+1. Important problem, and simple method with relatively low barrier to adoption
+2. A relatively extensive coverage of model architectures and families
+3. Well-written related work section, even if coverage is not complete (see below)
+
+### Weaknesses
+1. line 218 ("Since no existing literature has yet provided the energy consumption of individual components..." -- the existence of IrEne (https://arxiv.org/abs/2106.01199) directly contradicts this. Not necessarily completely damning, but I would want to see explicit engagement with such a relevant related work, as well as an updated statement about the novelty and contribution claims the authors are making
+2. 320-322: "We focus specifically on single-token generation to control for variability in output sequence length and to minimize cache based auto-regressive generation." -- This feels like a pretty significant limitation, as variability in output sequence length is emblematic of modern inference with language models, and the decode phase of generation has a different profile from the prefill phase. That being said, it would help if the authors could explain what precisely remains to be understood due to this limitation, or what findings are expected to generalize if any. 
+3. I am more than willing to update my rating given improvement/clarification, but it was extremely difficult to understand Figure 2 given that axes are unlabeled and even the main tables of measurements were confusing to understand without units directly in the tables
+4. I see this as a writing quality issue more than a scientific soundness issue, but certain statements are written in a way that inadvertently creates unsubstantiated claims. One particularly glaring example is in 
+
+In-line comments:
+1. line 038: earth.org source quotes a towardsdatascience blogpost that makes an extremely conservative estimate that doesn’t reflect the billions of daily queries that ChatGPT serves in reality. To be fair, the foresight of contextualizing the estimate alongside equivalencies is what quickly flagged the quoted cost as suspicious to me — please do just recheck the central figure quoted
+2. line 163: I would want to see a citation for the 20-50ms figure (I think the authors include a citation elsewhere for similar information)
+3. I would also prefer to see a citation and/or a specific ballpark range for the "significant amount of idle 
+energy drawn by CUDA" mentioned in line 174
+4. organization of paragraph starting at line 364 could be improved for clarity — leading with the less obvious normalization layer observation can cause confusion if the more obvious overall trend (energy greater for float32) is not first established
+
+### Questions
+1. What findings are novel, vs what is a confirmation of previously established observations, vs common/general knowledge that does not have a formal source?
+2. How exactly is the denominator obtained for the % Capture metric? i.e. how is $E_{model}$ measured? Please let me know if I missed this, but I was unable to find detailed methodology on this.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2

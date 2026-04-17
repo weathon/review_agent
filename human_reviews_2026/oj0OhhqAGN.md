@@ -1,0 +1,178 @@
+# SparseSwaps: Tractable LLM Pruning Mask Refinement at Scale
+
+- Decision: Reject
+- Scores: 2, 8, 6, 4
+
+## Abstract
+The resource requirements of Neural Networks can be significantly reduced through pruning -- the removal of seemingly less important parameters. However, with the rise of LLMs, full retraining to recover pruning-induced performance degradation is often prohibitive and classical approaches such as global magnitude pruning are suboptimal on Transformer architectures. State-of-the-art methods hence solve a layer-wise mask selection problem, the problem of finding a pruning mask which minimizes the per-layer pruning error on a small set of calibration data. Exactly solving this problem to optimality using IP solvers is computationally infeasible due to its combinatorial nature and the size of the search space, and existing approaches therefore rely on approximations or heuristics. In this work, we demonstrate that the mask selection problem can be made drastically more tractable at LLM scale. To that end, we decouple the rows by enforcing equal sparsity levels per row. This allows us to derive optimal 1-swaps (exchanging one kept and one pruned weight) that can be computed efficiently using the Gram matrix of the calibration data. Using these observations, we propose a tractable and simple 1-swap algorithm that warm starts from any pruning mask, runs efficiently on GPUs at LLM scale, and is essentially hyperparameter-free. We demonstrate that our approach reduces per-layer pruning error by up to 60% over Wanda (Sun et al., 2023) and consistently improves perplexity and zero-shot accuracy across state-of-the-art GPT architectures.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper proposes a heuristic local optimization algorithm for finding better pruning masks for LLMs.
+Achieves better results than DSnoT.
+
+### Strengths
+The proposed algorithm is sound and correct.
+
+### Weaknesses
+- "EQUAL SPARSITY-LEVEL ACROSS ROWS MUST NOT BE DETRIMENTAL" is supported by the findings in Wanda, but it is not supported in SparseGPT and ADMM pruning [1]
+- SVD trick on calibration data might be unnecessary, since the reconstruction error can also be written as $tr((W_p - W)(X^TX)(W_p - W)^T)$ and $X^TX$ has $d \times d$ shape. Or in other words, why do costly SVD, when one can just store Hessian ($X^TX$) for the layer-wise reconstruction problem?
+- There is no explicit runtime mentioned, only something vague in the last sentence.
+- Why would I use the SparseSwaps algorithm over SparseGPT/ADMM? For example, SparseSwaps achieves 19.75 perplexity on 60% Llama-3.1-8B, while ADMM achieves 13.92. And ADMM/SparseGPT are fast.
+- Also, something weird is happening for 50% sparsity (Table 2), where SparseSwaps did not provide any benefit over Wanda.
+- "Optional Weight Reconstruction" section does not make much sense, since computing $(X_uX_u^T)^-1$ for each row would need way too many matrix inverses. Approaches such as [1] are much better.
+- Metrics for original dense models should also be presented (e.g., in Table 1)
+
+[1] Boža, Vladimír. "Fast and Effective Weight Update for Pruned Large Language Models." Transactions on Machine Learning Research.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper studies layer-wise pruning for LLMs by reframing the mask-selection objective as a GPU-friendly local optimization problem that monotonically reduces the reconstruction loss. It is argued that exactly solving the combinatorial mask selection is intractable, hence existing methods must rely on surrogates that ignore within-row interactions. The authors propose to make the per-row objective separable by enforcing equal sparsity per row or N:M blocks, compress the calibration activations via an SVD-based unitary transformation to shrink the data dimension, and then apply 1-swap evaluations with efficient incremental updates to greedily pick the best kept or pruned exchange per row. The proposed method caches the weighted contributions and maintains a running sum of pruned rows; each candidate 1-swap is scored via a precomputed norm and a dot-product with the current residual, which gives fast monotone improvements under per-row or N:M constraints. For implementation, the algorithm warm-starts from any mask, performs up to certain swap iterations per row, and optionally applies a least-squares weight reconstruction on the kept indices. Experiments show that the proposed method yields up to 70% reductions in per-layer pruning error over previous method and attain consistent performance gains at higher sparsity. Improvements at milder sparsity can be lower.
+
+### Strengths
+The paper is well-written.  The main observations on row separability, unitary invariance and SVD compression, and exact 1-swap with incremental updates are convincing and directly related to the complexity bottlenecks of pruning LLMs. Using exact 1-swap search over the true objective is a new and interesting approach compared to previous LLM pruning methods which often optimize surrogates.  The proposed method is well-motived based on the observations, with detailed discussion on complexity and memory trade-offs. Experiments on several LLMs show good error reduction and performance gains. Discussion is also given for the cases where local loss reductions don’t translate to performance gains.
+
+### Weaknesses
+I don't see any major weaknesses. Perhaps the authors should consider taking account of structures within q/k/v or MLP sub-blocks into their approach to understand why some layers benefit more than others.
+
+### Questions
+1. It might be helpful to see peak per-layer GPU memory, wall-clock and GPU cost for different T_max's and sparsities.   
+2. Are perplexity and zero-shot accuracy sensitive to calibration corpus domain shifts and the number of calibration tokens?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper addresses the problem of finding optimal pruning masks for Large Language Models (LLMs) in a post-training, retraining-free setting. The authors correctly identify that state-of-the-art methods solve a layer-wise reconstruction error minimization problem, but that solving this problem exactly is computationally intractable due to both the combinatorial search space and, more critically, the prohibitive memory cost of caching intermediate values required for the optimization.
+
+1. The paper introduces SparseSwaps, a method to refine an existing pruning mask by making this optimization problem tractable. The core of the work rests on three key insights:
+2. Row-wise Decoupling: Enforcing equal sparsity per row (a common practice in LLM pruning) decouples the optimization problem, allowing each row of the weight matrix to be handled independently.
+3. SVD-based Compression: Leveraging the unitary invariance of the Frobenius norm, the high-dimensional calibration data matrix X can be compressed via SVD into a much smaller matrix X' without changing the optimization objective. This elegantly solves the memory bottleneck.
+
+Efficient 1-Swap Local Search: The authors propose an iterative local search algorithm that efficiently evaluates all possible "1-swaps" (exchanging one pruned weight for one unpruned weight) by pre-computing intermediate values and using incremental updates. This allows for monotonic improvement of the true row-wise reconstruction error.
+The proposed SparseSwaps algorithm is presented as a post-hoc refinement step that can be applied to row-wise sparse masks (e.g., from Wanda or RIA). Extensive experiments on a suite of modern LLMs (Llama-3.1, Gemma-2, etc.) demonstrate that SparseSwaps consistently improves perplexity and zero-shot accuracy over strong baselines for both unstructured and semi-structured (2:4) sparsity.
+
+### Strengths
+1.The paper correctly identifies a major practical limitation of sota layer-wise LLM pruning methods: the computational intractability.
+2.This paper proposes  three clever insights includes Row decouping, SVD Compressing and 1-Swap optimization that significantly reduce the problem's complexity with clear mathematics analysis.
+3.The paper provides compelling evidence for the effectiveness of SparseSwaps across multiple modern LLM architectures and sparsity patterns (unstructured, 2:4 N:M).
+
+### Weaknesses
+1. Constraint to Per-Row Sparsity: The first insight, which enables the method's tractability, is also its main limitation. By decoupling the rows, the algorithm cannot reallocate sparsity between different rows of a weight matrix. This restricts its ability to find a truly optimal unstructured mask at the layer level, as the sparsity budget for each row is fixed by the warm-start mask. The authors acknowledge this limitation in the conclusion.
+2. Computational Overhead: While the paper argues the cost is amortizable, SparseSwaps is inherently more computationally expensive than the one-shot methods it refines. A more detailed analysis of the practical wall-clock time and peak memory usage on standard hardware (e.g., for a 7B model on an A100) would be beneficial for practitioners to gauge the trade-off between performance gain and computational cost. The theoretical complexity is given, but its real-world implication remains somewhat abstract.
+3. Lacks ablation on the key findings and design choices i.e. p-u interaction and Tmax.
+
+### Questions
+1. Practical Cost Analysis: Could you provide concrete wall-clock timings for running SparseSwaps (e.g., for T_max=100 iterations) on a model like Llama-3.1-8B and compare it to the runtime of the baseline methods it refines (Wanda/RIA)? This would provide a clearer picture of the practical cost involved.
+2. Overfitting and Regularization: Your analysis showing that minimizing local error can sometimes hurt perplexity (Table 2, 50% sparsity) is very interesting. Have you considered any mechanisms to mitigate this? For example, could one use a small validation set of calibration data to implement early stopping for the swap iterations on a per-layer basis?
+3. Exploring Inter-Row Swaps: Given the limitation of the per-row constraint, have you considered a hybrid approach? For instance, after the per-row optimization converges, one could perform a limited number of swaps between rows (e.g., swapping a pruned weight in a "low-impact" row for a kept weight in a "high-impact" row). Do you believe such an extension would be feasible and/or beneficial?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces SparseSwaps, a scalable and tractable post-training mask refinement algorithm for pruning LLMs. Empirical validation is performed across various large-scale open-source LLM, reporting significant improvements over existing pruning methods in terms of per-layer pruning error, perplexity, and zero-shot accuracy.
+
+### Strengths
+1. To address the core bottlenecks in LLM pruning, this paper propose an integrated framework that combines row decoupling, SVD-based compression, and a 1-swap strategy. This approach achieves substantial improvements over existing pruning methods such as DSnoT and Wanda.
+2. This paper is well-motivated by three insights in Sec. 2.
+3. The experiments report consistent and sometimes substantial improvements on both local pruning loss and downstream task metrics across multiple model families.
+4. The theoretical analysis in this paper is convincing, as it not only explains the effectiveness of SparseSwaps but also clarifies why previous methods are suboptimal.
+
+### Weaknesses
+1. The experiments in this paper are somewhat limited. Although results are provided for five LLM models, all of them are language models. It remains unclear how SparseSwaps performs on vision models or other types of Transformer architectures. This limitation constrains the generality and comprehensiveness of the evaluation.
+
+2. The paper does not provide the runtime of SparseSwaps on different models or comparisons with baselines, which makes it difficult to evaluate the proposed method.
+
+3. The paper lacks a theoretical or experimental characterization of the convergence behavior of 1-swap.
+
+4. The experiments in the paper appear to use a fixed setup (see line 350), lacking evaluations of the method under different sequence lengths and on other datasets.
+
+### Questions
+1. Can the authors provide a comparison of runtime and memory usage between SparseSwaps and other baselines, using the same experimental setup?
+2. Is the effectiveness of SparseSwaps limited to specific data distributions and experimental setups? Could the authors provide additional experimental results under different calibration data settings?
+3. Since SparseSwaps depends on warm-start masks (such as outputs from Wanda or RIA), how sensitive is the method to the quality of these masks? If the warm-start mask is of low quality (e.g., randomly generated masks or poor heuristic pruning masks), can SparseSwaps still effectively minimize pruning errors?
+4. Are there any plans to expand the theoretical work on 1-swap? For example, could the authors derive a quantitative relationship between the number of 1-swap iterations and the reduction in pruning error, or prove the degree of approximation to a local optimum under specific conditions (such as row-level sparsity or SVD compression)?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

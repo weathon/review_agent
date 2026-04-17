@@ -1,0 +1,182 @@
+# Investigating VLM Hallucination from a Cognitive Psychology Perspective: A First Step Toward Interpretation with Intriguing Observations
+
+- Decision: Reject
+- Scores: 6, 2, 2, 2
+
+## Abstract
+Hallucination is a long-standing problem that has been actively investigated in Vision-Language Models (VLMs). Existing research commonly attributes hallucinations to technical limitations or sycophancy bias, where the latter means the models tend to generate incorrect answers to align with user expectations. However, these explanations primarily focus on technical or externally driven factors, and may have neglected the possibility that hallucination behaviours might mirror cognitive biases observed in human psychology.  In this work, we introduce a psychological taxonomy, categorizing VLMs' cognitive biases that lead to hallucinations, including sycophancy, logical inconsistency, and a newly identified VLMs behaviour: appeal to authority. To systematically analyze these behaviours, we design AIpsych, a scalable benchmark that reveals psychological tendencies in model response patterns. Leveraging this benchmark, we investigate how variations in model architecture and parameter size influence model behaviour when responding to strategically manipulated questions. Our experiments reveal that as model size increases, VLMs exhibit stronger sycophantic tendencies but reduced authority bias, suggesting increasing competence but a potential erosion of response integrity. A human subject study further validates our hypotheses and highlights key behavioural differences between VLMs and human respondents. This work suggests a new perspective for understanding hallucination in VLMs and highlights the importance of integrating psychological principles into model evaluation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper investigates VLM hallucinations from a cognitive psychology perspective, introducing a taxonomy of biases including sycophancy and "authority bias." The authors present AIpsych, a scalable benchmark with 60,000 image-question pairs designed with "trap options" to probe these behaviors. Through a multi-step prompting methodology, the paper classifies model failures into different bias types. Experiments on SOTA VLMs suggest that as model size increases, sycophancy (specifically Type II) increases while authority bias decreases. The results are also compared against a human subject study.
+
+### Strengths
+1.  **Good Perspective:** The paper's reframing of VLM hallucination using concepts from cognitive psychology (authority bias, sycophancy) is a valuable contribution, moving the discussion beyond simple error quantification.
+2.  **Systematic Benchmark Design:** The AIpsych benchmark is well-designed. Its multi-step query process to differentiate *why* a model fails (e.g., knowing compliance vs. blind trust) is a clever methodology for interpreting model behaviors.
+3.  **Interesting Scaling Findings:** The core finding that authority bias and sycophancy scale differently with model size (one decreasing, the other increasing) is an intriguing and important observation for the field.
+4.  **Human-AI Comparison:** The inclusion of a human subject study provides a useful baseline and enhances the psychological framing of the paper.
+
+### Weaknesses
+1.  The concept of "authority bias" (over-trusting the user)  strongly overlaps with the "counterfactual presupposition" phenomenon discussed in prior work [1]. The paper fails to discuss or differentiate its contribution from this existing work.
+2.  The benchmark's reliance on COCO 2014 validation and Visual Genome datasets introduces a unaddressed risk of data contamination, as these sets are often part of VLM training data. Furthermore, the manual quality check of only 200 images seems insufficient to guarantee the quality and lack of ambiguity for 60,000 questions.
+3.  The evaluation of authority bias is purely categorical. The analysis could be much stronger by incorporating metrics of model uncertainty (e.g., confidence-weighted accuracy as in [1]), which would differentiate between low-confidence compliance and high-confidence belief in the flawed prompt.
+4.  The study does not analyze the prompt sensitivity of the key instruction "Don’t be sycophantic"  used in the third prompt. The paper's sensitivity test only covers stylistic/lexical changes, not structural changes (e.g., placement, system vs. user prompt). It also fails to consider cases where this instruction might negatively cause a model to switch from a correct to an incorrect answer.
+5.  The paper's finding that VLMs become more sycophantic with size appears to contradict findings from [1], which observed that larger models have an improved ability to detect prompt traps. This significant contradiction with related work is not discussed.
+
+REF:
+
+[1] Antidote: A Unified Framework for Mitigating LVLM Hallucinations in Counterfactual Presupposition and Object Perception
+
+[2] CertainlyUncertain: A Benchmark and Metric for Multimodal Epistemic and Aleatoric Awareness
+
+### Questions
+Please see the weakness section above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper studies hallucination in Vision-Language Models (VLMs) through a cognitive psychology lens. It proposes that model errors may mirror human-like biases such as authority bias and sycophancy. The authors build a benchmark, AIpsych, with 3,000 images and 60,000 automatically generated question–answer pairs to test these behaviors. Results on models like GPT-4o, Qwen2.5-VL, and LLaVA show that larger models tend to be more sycophantic but less authority-biased. A small human study provides limited comparison between model and human responses.
+
+### Strengths
+The paper raises an interesting interdisciplinary perspective, attempting to connect cognitive psychology with VLM hallucination analysis.
+The writing is clear and the paper is well-structured, making it easy to follow the motivation and experimental design.
+
+### Weaknesses
+1; The mapping between model responses and human cognitive biases is analogical rather than theoretically defined. “Authority bias” closely overlaps with standard instruction following or over-alignment.
+2: The study reports frequency trends without statistical testing or causal modeling. Observed scaling effects replicate well-known alignment patterns rather than revealing new mechanisms.
+3. The benchmark mainly re-labels existing hallucination behaviors under psychological terms, no mitigation or modeling implications are provided.
+
+### Questions
+1. The paper reports that around 7–9% of GPT-generated object annotations or descriptions are inaccurate, and states that such errors “serve as natural traps rather than noise.” However, it is unclear whether these samples were explicitly retained in the benchmark, and whether their impact on evaluation consistency was empirically analyzed. For a benchmark study, it would be important to validate this assumption (e.g., by comparing model behaviors on verified vs. noisy samples) to justify that these inaccuracies indeed contribute meaningfully rather than introducing uncontrolled variance.
+2. How are the four categories formally distinguished, and how robust are they to prompt phrasing or translation?
+3. The discussion on architecture effects (Section 4) seems largely descriptive, e.g., claiming that Qwen2.5-based models “consistently outperform” others due to stronger language backbones. However, the paper does not analyze why these architectural differences lead to distinct cognitive patterns, nor does it control for confounding factors such as dataset size, instruction tuning, or parameter count. Could the authors provide a more systematic validation (e.g., matched-size ablation or cross-backbone comparison) to support the claim that backbone choice, rather than training scale or data, drives the observed psychological behaviors?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper aims to analyze hallucination phenomena in VLMs from a cognitive psychology perspective.
+The authors introduce AIpsych, a benchmark designed to categorize VLM hallucinations into several types inspired by human cognitive biases (like authority bias, sycophancy, logical inconsistency). They further propose a ReS measue to quantify how strongly a model is influenced by each bias, conduct extensive experiments across multiple VLMs. The main claim is that VLM hallucinations share structural similarities with human cognitive biases, offering a psychologically grounded interpretation of hallucination behaviors.
+
+### Strengths
+- This paper is addressing one of important challenges towards the multi-modal AI systems. They re-organized the current hallucination problems in the VLMs' responses into cognitive psychology, which is novel angle for conceptual shift. They defined and curated psychologincal taxanomy for the VLM's bias and hierarchically designed for extend to AIpsych bnehcmark that systematically organizes diverse visual scenarios for the hallucination.
+
+- The paper evluates multiple VLM of diffrent scales covering various architectures trained with various datasets, which also includes analysis with human study.
+
+### Weaknesses
+- The idea of linking cognitive bias with hallucination is interesting, but the data design does not really support this claim. Most tasks in the benchmark are simple binary or attribute-level questions that test visual recognition rather than cognitive reasoning. The results seem to reflect perceptual errors, not true psychological bias.
+
+- As one of the critical issues is that the paper mainly describes and categorizes hallucination types without suggesting how to reduce or handle them. There is no discussion of mitigation methods or model improvements based on these findings.
+
+### Questions
+- How do the authors verify that their experiments actually measure cognitive bias rather than simple visual recognition errors or dataset artifacts?
+
+- Can the proposed Reliability Score (ReS) be validated against human judgment or calibration metrics to show that it truly reflects bias instead of general uncertainty?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper examines context bias (LLMs will believe things if they appear in context; also related to in-context learning) from the lens of sycophancy. To study these behaviors, the researchers developed a benchmark called AIpsych, which consists of 3,000 images and 60,000 questions designed to trap the models. They tested a variety of models as well as humans on this benchmark. They present the outcomes and some analysis of these outcomes.
+
+### Strengths
+- The paper examines the problems discussed from an interesting angle. I have to admit this is the first paper I've read that tries to fit human psychology concepts and anthropomorphize them this much. It remains to be seen whether this is the right approach but it is interesting at least.
+- The benchmark introduced seems to be of reasonable size and I think it will provide insights on model behaviors.
+
+### Weaknesses
+- The writing is a bit poor (eg. at end of page 4: "because we want to see if the model naturally inherent some psychological disorder without intervention") and the presentation is generally confusing.
+
+- The paper's central claim rests on a flimsy and unclear distinction between "sycophancy" and "authority bias." The authors essentially rename a known artifact of autoregressive models - bias towards information present in context - to "authority bias." From the context of a VLM responding to a flawed/broken user query, the difference between these two concepts is not obvious, and the methodology used to separate them is weak. It relies on the strong assumption that directly asking the model if there's a mistake and taking its "yes/no" response at face value is a faithful report of an internal "belief state," rather than the model simply succeeding or failing at a secondary meta-reasoning task.
+
+- The point above is further confounded by the fact that human preference alignment can amplify sycophancy (user-pleasing behavior) but does not necessarily associate said behavior with the word/concept of sycophancy. I would the presented benchmark is measuring truthfulness or usefulness which are other metrics human preference alignment may optimize for, provided it is targeted in the model's post-training dataset.
+
+- The paper does not seem to discuss the sampling settings used or log probabilities of model outputs. As an simple example: Assume the model outputs probabilities of 51% and 49% for "yes", "no" respectively. Naively sampling would either reduce the results to coin-tossing. Greedy sampling would ignore that the model was not very confident. More clarification on methodology here is needed.
+
+- The paper does not seem to establish reliable baselines or references, and the proposed benchmark dataset seems to be entirely constructed of bad/corrupted questions. For example, it may be interesting to test the performance of the models on the task without any corruption of the prompt as this lets us have a reasonable reference/baseline to compare and normalize on. It is also relevant to test the "mistake verification" and "prevent sycophancy" portions of the prompt with clean questions to identify rate of hallucinations at those tasks.
+
+- The authors seem to generate all of the dataset with GPT4o and then report GPT4o as an outlier but they do not seem to attempt to analyze or correct for this in any way (eg. generating another 60k questions would be cheap with Gemini Flash and testing GPT4o and other models on that may show whether or not GPT4o performs anomalously only on GPT4o generated prompts).
+
+- Table 2 shows that 79% of human respondents did not provide a full response. Given the already small sample size, it is difficult to say whether there is anything conclusive about the human survey presented.
+
+### Questions
+- The paper makes multiple references to "GPT" with no further clarification on the specific model under question. Is it GPT-4V? GPT4o? GPT4o mini? Some GPT-5 variant? What is the model's date on the API?
+- Figure 3 has "GPT" listed with 2 different points along the "parameter size" axis. As far as I know, there's not many reliable source for the actual parameter count or architecture (dense vs moe..) for OpenAI models. Clearly citing and clarifying what models are being discussed would be appreciated.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2

@@ -1,0 +1,177 @@
+# BIRD: Behavior Induction via Representation-structure Distillation
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 4, 6
+
+## Abstract
+Human-aligned deep learning models exhibit behaviors consistent with human values, such as robustness, safety, and fairness.  Transferring these behavioral properties to models trained on different tasks or data distributions remains challenging: aligned behavior is easily forgotten during fine-tuning, and collecting task-specific data that preserves this behavior can be prohibitively costly.  We introduce BIRD, a flexible framework for transferring aligned behavior by matching the internal representation structure of a student model to that of a teacher.  Applied to out-of-distribution robustness in image classification, BIRD outperforms fine-tuning, transfer learning, and continual learning methods, improving robust accuracy by up to 18\% over the next strongest baseline. It remains effective even when the teacher is trained on a much simpler dataset and is $25\times$ smaller in parameter count than the student.  In a large-scale study of over 400 teacher-student pairs, we show that three interpretable and computable properties of the teacher's representations explain up to 85\% of the variance in transfer success, offering practical guidance for teacher selection and design.  We further show that BIRD generalizes beyond applications in vision by enhancing safety alignment in language models when paired with Direct Preference Optimization and improving weak-to-strong generalization when combined with soft-label distillation.  BIRD turns small, well-aligned models into scalable alignment seeds, mitigating challenges from key bottlenecks in deploying safe AI systems.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes BIRD that aligns student model to teacher model by using a similarity loss between the representations of the teacher and student models. This alignment works even without access to the teacher data, or even if the dimensions of the teacher and student models do not match. CKA is used here as a similarity metric, which performs matrix multiplication of features of student and teacher models across the batch dimension. Experimental results are provided comparing the work with existing works of distillation and alignment.
+
+### Strengths
+- The paper provides an algorithm to align student model with teacher models by increasing the similarity between student and teacher models using CKA ensuring that the dimensions of the student and teacher models need not align
+- Experimental results are provided to show the benefits of the method.
+
+### Weaknesses
+- The novelty of this method as well as the application scope and results are very limited. The main selling point of models of different dimensions getting aligned, but finetuning using labels from teacher model also works in such cases. Moreover, the results shown in Table.1 has very little improvement compared to prior works
+- The experiments limited to robustness is very limited. What properties from the teacher is getting transferred in this case? Moreover, finetuning/alignment usually provides control over the reward or utility to align on (robustness in this case), but how is BIRD is used to align in general.
+
+### Questions
+In addition to addressing the weaknesses, how do we choose the batchsize used in CKA, the similarity here seems to be dependent on the batchsize.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper presents BIRD (Behavior Induction via Representation-Structure Distillation), a framework for transferring desirable behavioral properties (e.g., robustness, safety, fairness) from a teacher model to a student model by aligning the geometric structure of their internal representations (using Gram matrices) rather than matching outputs or activations. Inspired by NeuroAI insights, BIRD enables weak-to-strong generalization across differing architectures, tasks, datasets, and domains without requiring shared inputs or labels. guidance for teacher design.
+
+### Strengths
+Flexibility and Scalability: Unlike traditional knowledge distillation or continual learning, BIRD doesn't require shared tasks, data, or output spaces, allowing transfer from small/simple teachers (e.g., CIFAR-10-trained MobileNetV2) to 25× larger students on complex datasets like TinyImageNet.
+
+Principled Teacher Selection: The identification of three interpretable, computable properties (quantifying task and behavioral relevance in representations) makes the method actionable and predictable, advancing beyond ad-hoc approaches.
+
+Broad Applicability: Demonstrates versatility beyond vision (e.g., OOD robustness) to language models, improving DPO for safety on PKU-SafeRLHF and soft-label distillation for generalization, positioning it as a general alignment tool.
+
+### Weaknesses
+Computational Overhead: Computing Gram matrices over batches adds overhead during training, potentially scaling poorly for very large models or high-dimensional representations.
+
+Layer Selection Sensitivity: Relies on choosing specific "guiding" and "guided" layers; while properties help, this introduces hyperparameters and may not generalize across all model families.
+
+Limited to Encoded Behaviors: Assumes behaviors are fully captured in representation structure (e.g., geometry via Gram matrices); subtler or output-specific alignments might not transfer well.
+
+### Questions
+In the language model experiments, how does BIRD integrate with DPO—does it modify the loss function, act as a regularizer, or run in a separate phase? What ablation studies support this combination?
+
+What are the typical runtime and memory costs of BIRD compared to standard fine-tuning or logit-based KD, especially for large models like those in your 400+ pair study?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+1
+
+### Summary
+The paper introduces BIRD (Behavior Induction via Representation-structure Distillation), a new framework for transferring "aligned behaviors" (such as robustness or safety) from a teacher model to a student model. The core problem it addresses is that aligned behaviors are costly to instill and are often lost when a model is fine-tuned on a new task (a phenomenon known as "catastrophic forgetting"). Traditional transfer learning and distillation methods often fail because they require the teacher and student to share tasks, data, or output spaces. The key method of this work is to distill the internal representation structure of the teacher, rather than its outputs or raw activation values. It does this by minimizing the dissimilarity between the pairwise similarity of inputs in the teacher's and student's representation spaces, using Centered Kernel Alignment (CKA) as its loss function.
+
+### Strengths
+1. BIRD does not require the teacher and student to share an input space, output space, task, or architecture.
+2. The paper successfully shows BIRD is not just a vision technique. Its application to DPO (safety) and soft-label distillation demonstrates its potential as a general tool.
+
+### Weaknesses
+1. The method relies on selecting a single "guiding" and "guided" layer. This selection was based on a heuristic, and the authors acknowledge that exploring multi-layer extensions is a direction for future work.
+2. The experimental setup is not representative of modern, real-world applications. The use of CIFAR-10, CIFAR-100, and TinyImageNet, with all images downsampled to $32 \times 32$ pixels, deemed a "toy problem" by 2026 standards. It is highly uncertain whether robustness features learned on $32 \times 32$ images, and the CKA-based structural alignment that transfers them, are in any way representative of the features and alignment challenges in high-resolution, large-scale vision foundation models.
+3. The language experiments use models that are orders of magnitude smaller than the popular models (e.g. SmolLM2-135M/360M and GPT2-Large v.s. Qwen3-8B). The paper itself admits these are "relatively small". The gains on these tiny models provide very little evidence of practical utility because scaling up to multi-billion parameter models introduces alignment challenges and it's a significant leap to assume this method would be effective.
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper introduces BIRD, a method to transfer behavioral properties like robustness by matching the representation structure (via CKA) between a teacher and a student model. The central claim is that this enables transfer across different tasks, datasets, and architectures. The authors provide comprehensive experiments, primarily in robust image classification, showing BIRD outperforms strong transfer learning baselines. A large-scale analysis identifies interpretable properties of teacher representations that predict transfer success. The paper is complemented with LLM experiments, showcasing the method's generalizability. The idea is novel and can indeed be a practical tool for achieving desirable representation structures within various models.
+
+### Strengths
+1. I believe the main idea is quite solid, using the geometry of the representation is justified, and the authors show that it also yields practical utility, beyond the intuitive justification. The overall hypothesis has high potential impact.
+2. Identifying predictive factors is a valuable contribution. The high explained variance (up to 85%) provides practitioners with a principled way to select teachers.
+3. The paper is well written and clearly explained, which helps with reproducibility.
+4. The robust image classification experiments are extensive, covering many model architectures and dataset pairs. Hinting at solid results.
+
+Overall, I believe the idea is quite solid and has high potential impact. I would like to see this paper accepted; However, I have a few concerns, which I will list below. I believe addressing these can indeed increase its potential.
+
+### Weaknesses
+There is a lack of ablation studies on some key aspects, or at least some important metrics are not reported.
+
+Major:
+1. The batch size B is a fundamental hyperparameter for CKA. This is not reported anywhere. The performance could be highly sensitive to this parameter.
+Minor:
+2. The choice of kernel (e.g., linear vs. RBF) can drastically change the geometry being compared. No ablation or discussion is provided on why this specific similarity measure was chosen over others.
+3. The paper does not explore multi-layer distillation, which is a natural extension.
+4. The values for $\alpha$ and $\beta$ should be reported.
+
+Another problem would be with some claims, which are not justified by current experiments.
+
+Major:
+4. The paper repeatedly emphasizes that BIRD works "even when the teacher and student differ in architecture, task, and training data" and "does not require a shared input space." However, all experiments use the same input modality and resolution (images resized to 32x32). The teacher and student process the same input batches. The method has not been demonstrated to work across truly different input spaces (e.g., teacher on text, student on images; teacher on high-res images, student on low-res images). This is a significant overstatement of the current evidence.
+
+### Questions
+1. Could you provide more experimental details, especially the batch size used, and how it affects the performance?
+2. Were other design choices, e.g., different kernels, multi-layer distillation, explored? If not, are there any reasons why we should not look into those, or is it just not that beneficial to do so?
+3. What would happen if we use some pretrained teacher models? e.g., foundation encoders like CLIP would indeed be good examples of models with aligned representations, which could also be good for assessing the claim that "BIRD does not require a shared input space.".
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4

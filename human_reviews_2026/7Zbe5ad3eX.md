@@ -1,0 +1,179 @@
+# Convergent Differential Privacy Analysis for General Federated Learning
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6
+
+## Abstract
+The powerful cooperation of federated learning (FL) and differential privacy (DP) provides a promising paradigm for the large-scale private clients. However, existing analyses in FL-DP mostly rely on the composition theorem and cannot tightly quantify the privacy leakage challenges, which is tight for a few communication rounds but yields an arbitrarily loose and divergent bound eventually. This also implies a counterintuitive judgment, suggesting that FL-DP may not provide adequate privacy support during long-term training under constant-level noisy perturbations, yielding discrepancy between the theoretical and experimental results. To further investigate the convergent privacy and reliability of the FL-DP framework, in this paper, we comprehensively evaluate the worst privacy of two classical methods under the non-convex and smooth objectives based on the $f$-DP analysis. With the aid of the shifted interpolation technique, we successfully prove that privacy in Noisy-FedAvg has a tight convergent bound. Moreover, with the regularization of the proxy term, privacy in Noisy-FedProx has a stable constant lower bound. Our analysis further demonstrates a solid theoretical foundation for the reliability of privacy in FL-DP. Meanwhile, our conclusions can also be losslessly converted to other classical DP analytical frameworks, e.g. 
+$(\epsilon,\delta)$-DP and R$\'{e}$nyi-DP (RDP), to provide more fine-grained understandings for the FL-DP frameworks.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper presents a novel federated privacy analysis framework based on f-DP. By applying a drift interpolation technique from a global perspective and introducing a new interpolation sequence that separates data and model sensitivities at the local level, the authors provide the first convergence-privacy analysis for two general FL-DP methods. This contribution offers a theoretically grounded and technically elegant approach to bridging the gap between privacy guarantees and convergence behavior in federated learning.
+
+### Strengths
+- The overall theoretical development is clear and complete, and the conclusions are sound. The paper provides the first convergent privacy bound under the FL-DP framework and offers an extensive discussion on how various hyperparameters. This analysis represents a valuable contribution to the federated learning community.
+- The comparative study between FedProx and FedAvg presented in this paper is particularly meaningful. By jointly analyzing stability and sensitivity, the authors provide an insightful discussion of how different mainstream optimization methods exhibit distinct privacy behaviors. This analysis can further guide the development of new and more effective privacy-optimized federated learning algorithms.
+- The paper is very well written and provides a thorough review of prior theoretical work. It extends convergence-based privacy guarantees in federated learning from strongly convex objectives to the more general non-convex setting. 
+- The authors conduct extensive experiments on standard datasets and tasks, providing solid empirical evidence that strongly supports and validates the theoretical findings.
+
+### Weaknesses
+- It would be helpful for the authors to clarify whether the proposed analytical framework can be extended to cover the fundamental DP-SGD approach to better highlight the privacy advantages of federated learning. Including such a discussion would make the paper more comprehensive and strengthen its contribution.
+- It would further strengthen the theoretical contribution if the authors could include some experiments demonstrating DP convergence. Such empirical results would provide more direct evidence supporting the theoretical claims.
+
+### Questions
+- Does this result also extend to other fundamental methods? In addition, it would be helpful if the authors could provide a theoretical comparison with DP-SGD to better illustrate the advantages of their approach.
+- Can the authors provide results of gradient inversion or membership inference attacks to validate the claimed bounded convergence?
+- In DP-FedProx, how can one determine the optimal choice of the parameter $\alpha$?
+- What would be the impact if the number of clients is increased but the amount of data per client is reduced?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+Many prior FL-DP studies build on the foundational lemma of privacy amplification by iteration, which typically motivates choosing a certainly small number of communication rounds T (since as $T \to \infty$, privacy guarantees can deteriorate). This tension is counterintuitive, so a precise and tight analysis of FL under DP is meaningful. This paper provides a worst-privacy analysis for two classic DP-FL methods—Noisy-FedAvg and Noisy-FedProx—under non-convex, $L$-smooth objectives. As summarized in Table 1, for Noisy-FedAvg (across several learning-rate schedulers) and for Noisy-FedProx (under the condition $\alpha > L$), the worst-privacy bounds are shown to be convergent even as $T \to \infty$.
+
+### Strengths
+**(S1) Clear presentation of major contributions (Table 1).**
+The high-level claims and settings are well organized and easy to follow.
+
+**(S2) Sufficient theoretical contribution.**
+By using shifted interpolation, the analysis avoids loose privacy amplification and attains tighter bounds. The key sensitivity term is decomposed into model sensitivity + data sensitivity (as in Eq.  (11)), and with an appropriate choice of interpolation coefficients $\lambda_t$, the paper derives convergent worst-privacy bounds. Concretely, for Noisy-FedAvg the results cover four practical learning-rate schedulers, and for Noisy-FedProx the analysis holds under $\alpha > L$. In both cases, the worst-privacy bound remains finite-convergent as $T \to \infty$.
+
+### Weaknesses
+**(W1) Coverage beyond non-convex, L-smooth objectives.**
+Table 1 neatly covers the non-convex, $L$-smooth case. However, are there worst-privacy results for strongly convex or (general) convex objectives? Have techniques akin to those proposed here already been applied to those regimes? Lines 77–80 and Table 3 briefly allude to related settings, but the status remains unclear.
+
+**(W2) Noisy-FedProx when $\alpha \le L$.**
+In Lines. 360-361, “When $\alpha \le L$, under a decayed learning rate, its worst privacy bound remains convergent, consistent with Noisy-FedAvg.” Where is this proved (including the appendix)?
+Also, since Noisy-FedProx reduces to Noisy-FedAvg at $\alpha=0$, do your results recover the Noisy-FedAvg guarantees in that limit? A short corollary or pointer would help. 
+
+**(W3) “Constant-level noise can still achieve convergent privacy.” (l.341).**
+What is the quantitative range for “constant-level” here? In Table 4, it appears that $\sigma=1.0$ may not work as expected.
+
+### Questions
+1.	In Table 1, explicitly labeling Noisy-FedProx ($\alpha > L$) may be better. 
+
+2.	Maybe typo at l.357: Regularization Coefficient $\alpha$
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+In this paper, the authors investigate the privacy of two classic DP-FL methods, namely Noisy-FedAvg and Noisy-FedProx, and their worst-case privacy. For the Noisy-FedAvg method, four typical learning rate decay strategies have been studied, providing the coefficients corresponding to each case for a tighter privacy lower bound. The nondivergence of iterative privacy with respect to the number of communication rounds has been studied for non-convex and smooth objectives. The decay properties of the proximal term in Noisy-FedProx have also been studied, which has the worst privacy. The authors claim to challenge the belief that the privacy budgets of FL-DP must increase as training processes progress and provide reliable guarantees for their ability to protect privacy.
+
+### Strengths
+1. The use of f-DP (a lossless, information-theoretic DP definition) represents a rigorous advancement over traditional additive privacy accounting.
+2. The introduction of shifted interpolation for analysing privacy amplification paths is elegant and well-motivated.
+3. Addresses a long-standing gap
+
+### Weaknesses
+1. Proofs need better explanation. The paper is hard to follow.
+2. Only two datasets (MNIST, CIFAR-10) are used. More experimentation is required.
+3. Poor notation use makes the paper even more difficult to follow.
+4. Lack of empirical ε, δ estimates.
+
+### Questions
+1.  The f-DP composition lemma requires control over the total mean shift under a valid coupling; the paper may show the coupling exists and is measurable.
+
+2. If some steps use non-measurable randomness or side information not included in the coupling, can the post-processing inequality be applicable?
+
+3. State a lemma or short proof explaining why per-round mean shifts combine into the squared sum inside the square root (or provide bounds if exact orthogonality does not hold).
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses a problem of the arbitrarily divergent privacy bound in FL-DP. The authors provide a convergent privacy analysis for FL-DP by leveraging the f-DP framework combined with a shifted interpolation technique. The analysis focuses on two classical algorithms, Noisy-FedAvg and Noisy-FedProx, under the non-convex and smooth objective settings. The results establish a solid theoretical foundation for the long-term privacy reliability of FL-DP.
+
+### Strengths
+1. With the aid of the recently developed shifted interpolation technique for f-DP, this paper proves that privacy in Noisy-FedAvg has a convergent bound, and privacy in Noisy-FedProx has a constant lower bound.
+2. The results for the shifted interpolation technique are extended to the non-convex and smooth objectives, which advance the literature.
+
+### Weaknesses
+1. The threat model is not very clear. Does this paper consider the privacy of each client or the overall privacy of all the clients?
+2. The readability could also be improved if the differences between the proposed proof techniques and the existing shifted interpolation technique in Bok et al. (2024) are clearly demonstrated and highlighted. 
+3. The authors derive convergent privacy bounds for Noisy-FedAvg under four different LR schedules. However, the experimental section omits any validation or comparison of these strategies.
+
+### Questions
+1. Could the authors provide more insights about how assuming **$t_0 = 0$** affects the tightness of the privacy bound?
+2. Which of the four learning rate strategies analyzed in Theorem 3 was actually used to generate the experimental results?
+3. What are the new techniques introduced in this paper to eliminate the need for the convexity assumption, compared to the literature?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

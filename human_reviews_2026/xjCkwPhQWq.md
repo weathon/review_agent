@@ -1,0 +1,169 @@
+# SceneTransporter: Optimal Transport-Guided Compositional Latent Diffusion for Single-Image  Structured 3D Scene Generation
+
+- Decision: Accept (Poster)
+- Scores: 6, 6, 6, 6
+
+## Abstract
+We introduce SceneTransporter, an end-to-end framework for structured 3D scene generation from a single image. While existing methods generate part-level 3D objects, they often fail to organize these parts into distinct instances in open-world scenes. Through a debiased clustering probe, we reveal a critical insight: this failure stems from the lack of structural constraints within the model's internal assignment mechanism. Based on this finding, we reframe the task of structured 3D scene generation as a global correlation assignment problem. To solve this, SceneTransporter formulates and solves an entropic Optimal Transport (OT) objective within the denoising loop of the compositional DiT model. This formulation imposes two powerful structural constraints. First, the resulting transport plan gates cross-attention to enforce an exclusive, one-to-one routing of image patches to part-level 3D latents, preventing entanglement. Second, the competitive nature of the transport encourages the grouping of similar patches, a process that is further regularized by an edge-based cost, to form coherent objects and prevent fragmentation.  Extensive experiments show that SceneTransporter outperforms existing methods on open-world scene generation, significantly improving instance-level coherence and geometric fidelity. Code and models will be publicly available at \url{https://2019epwl.github.io/SceneTransporter/}
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes SceneTransporter, a novel framework for generating structured 3D scenes from a single image using compositional latent diffusion guided by Optimal Transport (OT). The authors first diagnose a key failure in prior part-level 3D generators—namely, the lack of explicit structural constraints leading to structural mispartition and geometric redundancy. They introduce a Debiased Clustering Probe to reveal this issue and then reframe scene generation as a global correlation assignment problem. The proposed OT-guided module imposes two constraints within the diffusion model’s cross-attention mechanism: (1) an OT Plan–Gated Cross-Attention enforcing exclusive patch-to-part routing, and (2) an Edge-Regularized Assignment Cost ensuring spatial coherence across image regions.
+Empirical results show substantial improvements in instance-level coherence and geometric fidelity over state-of-the-art methods such as PartPacker, PartCrafter, and MIDI.
+
+### Strengths
+1. The motivation of this paper is clear.  Extending the end-to-end structured generation pipeline from the object level to the scene level is an interesting endeavor, which simplifies the common "divide and conquer" solution and provides bigger potential for scaling up. 
+
+2. Recasting feature-to-part assignment as an entropic OT problem is conceptually elegant and mathematically well-grounded. The OT-guided attention gating is seamlessly embedded in the denoising process, preserving end-to-end differentiability.
+
+3. Quantitative benchmarks (ULIP, Uni3D, IoU metrics) and qualitative visualizations convincingly show better object separation and geometric consistency.
+
+### Weaknesses
+1. The computational cost of solving the OT problem (e.g., Sinkhorn iterations) is briefly mentioned but not thoroughly analyzed in terms of training or inference scalability for large scenes.
+2. The experimental dataset (74 web images) seems small and lacks diversity benchmarks such as Objaverse or large-scale indoor/outdoor test sets. Generalization beyond curated examples remains unclear.
+
+3. The qualitative ablation figures are insightful, but quantitative ablation should also be conducted (e.g., removing OT gating or edge regularization) to make the contribution breakdown stronger.
+
+4. Although the OT can improve the global consistency in allocating image patches to 3D parts, it is practically hard to guarantee due to the occlusion, semantic ambiguities, etc. Did you observe failure cases?
+
+5. All the experiments are conducted on synthetic data. Have you ever tried to deploy the proposed method to real-world imaegs to check the generalization ability?
+
+### Questions
+1. How sensitive is performance to the hyperparameters of the OT solver (e.g., entropy regularization, number of Sinkhorn iterations)?
+2. Can SceneTransporter be adapted for text-conditioned or multi-view inputs?
+3. Does the OT guidance improve consistency when compositing previously unseen object categories?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces SceneTransporter, an end-to-end method for generating 3D scenes at the part level from a single image. This work builds upon PartPacker [Tang et al. 25]. By analyzing the latent structure of part-level generators, the authors observe that part tokens lack structure constraints, leading to mixed patch-to-part assignments in the DiT architecture. The authors thus propose to solve optimal transport (OT) problems to guide the assignment of image patches to part tokens in attention maps. In the OT formulation, the authors also consider the image edge map in the assignment cost to promote coherent structures grouping. Experimental results show that SceneTransporter outperforms prior methods on structured 3D scene generation from a single image.
+
+### Strengths
+- I like that the authors first present an interesting motivation for their work by analyzing the latent sets of part-level generators through canonical correlation analysis (CCA). They find that the learned features implicitly encode part structures, but the networks do not establish part associations explicitly. This analysis motivates their method of enforcing explicit patch-to-part constraints in attention maps.
+- The authors propose to use entropy-regularized optimal transport to guide the assignment of image patches to part tokens in attention maps. To promote region-wise consistency and reduce information exchange across image regions, the authors incorporate image edge maps into the assignment cost of the OT problem, which I find interesting.
+- The authors compare their method with baselines including MIDI, PartCrafter, and PartPacker on structured 3D scene generation from a single image. Results show that the proposed method has better geometry fidelity and improved part disentanglement.
+
+### Weaknesses
+- The results shown in the paper does not include any real-world image inputs. While these cartoon-style scene images show the effectiveness of the proposed method, it is unclear how well the method can generalize to real-world images with more complex structures.
+- While this explicit patch-to-part assignment approach improves the generation of coherent object-level parts, it seems that the method struggles to generate fine-grained details. For example, in Fig. 6 (Uni geo), the boats in the bottom part of the image are not well generated, whereas the standard cross-attention method correctly generates the five boat shapes. This makes me wonder if the proposed method may overconstrain the information exchange and thus reduce the context information from other image patches needed for generating fine details.
+- Several implementation details (like hyperparameters for the OT solver, training details) are missing. This makes it hard to reproduce the results. Quantitative ablation results are also not included.
+
+### Questions
+- Have the authors trained and tested SceneTransporter, for example, on real-world indoor scene images? If so, how well does the method work on such images?
+- In the generated results, the proposed method struggles with fine detail generation, however, the evaluation metrics (Geometry Fidelity) do not seem to reflect this, which is concerning. 
+- In the ablation study, only qualitative results are provided. It is unclear, for example, how much improvement the edge-regularized Assignment cost brings. Other ablations like the authors enable OT plan-gated attention in the first half of the DiT blocks, but it is unclear whether this is the optimal choice and how it affects the geometry fidelity to input images.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces SceneTransporter by reformulating the task of structured 3D scene generation as a global correlation assignment problem.
+
+### Strengths
+1. Strong performance: better experimental results have been observed against baselines like PartPacker, PartCrafter, MIDI. The generation speed is also comparable. 
+
+2. The proposed Debiased Clustering probe can produce stable instance groupings, leading to better generation in the following stages.
+
+### Weaknesses
+1. No apperance: It seems that all methods, including baselines, only generate meshes without textures, which might limit the real-world applications. Can the authors provide more details about this?
+
+2. Lack of quantitative ablations: all ablations are qualitative, can the authors provide numeric results? If not, please explain it.
+
+### Questions
+1. How many GPU hours does the training take?
+
+2. What is the GPU memory usage for generation?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes SceneTransporter, an end-to-end framework for structured 3D scene generation from a single image. By introducing a debiased clustering probe, the authors identify a key limitation of existing methods—the lack of structural constraints in internal feature assignment. They reframe the structured scene generation task as an Optimal Transport (OT)–guided global correlation assignment problem, solving the OT objective at each denoising step to enforce one-to-one routing between image patches and part-level 3D latents. The approach further introduces an OT Plan–Gated Cross-Attention mechanism and an Edge-Regularized Assignment Cost to prevent semantic entanglement and object fragmentation.
+
+### Strengths
+The paper presents a promising analysis of current 3D scene generation methods and proposes a simple yet effective solution to the structural inconsistency problem. The overall methodology is well-motivated, technically sound, and the experimental results demonstrate clear improvements over existing baselines.
+
+### Weaknesses
+The work lacks a detailed discussion on the optimization stability and convergence of the OT formulation, as well as the influence of hyperparameters (λ_edge, ε_t, γ_edge) on the generation quality and computational efficiency. The computational cost of solving OT during inference should be analyzed more thoroughly. Compared to other compositional latent diffusion models such as PartPacker, the innovation mainly lies in adding an OT-based constraint rather than proposing a fundamentally new architecture. It is also recommended to clarify the setting and methodology of the user study.
+
+### Questions
+See the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

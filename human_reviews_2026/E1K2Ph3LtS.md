@@ -1,0 +1,168 @@
+# MetaVLA: Unified Meta Co-Training for Efficient Embodied Adaptation
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 8, 4
+
+## Abstract
+Vision–Language–Action (VLA) models show promise in embodied reasoning, yet remain far from true generalists—they often require task-specific fine-tuning, incur high compute costs, and generalize poorly to unseen tasks. We propose MetaVLA, a unified, backbone-agnostic post-training framework for efficient and scalable alignment. MetaVLA introduces Context-Aware Meta Co-Training, which consolidates diverse target tasks into a single fine-tuning stage while leveraging structurally diverse auxiliary tasks to improve in-domain generalization. Unlike naive multi-task SFT, MetaVLA integrates a lightweight meta-learning mechanism—derived from Attentive Neural Processes—to enable rapid adaptation from diverse contexts with minimal architectural change or inference overhead. On the LIBERO benchmark, MetaVLA with six auxiliary tasks outperforms OpenVLA by up to 8.0\% on long-horizon tasks, reduces training steps from 240K to 75K, and cuts GPU time by 76%. These results show that scalable, low-resource post-training is achievable—paving the way toward general-purpose embodied agents. Code will be available.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The paper presents MetaVLA, a unified post-training framework for Vision–Language–Action (VLA) models that introduces Context-Aware Meta Co-Training (CAMC). By integrating a lightweight Action-Attentive Neural Process (Action-ANP) module, the method allows a single model to leverage both in-domain and auxiliary task contexts to achieve efficient multi-task adaptation. Experiments on the LIBERO benchmark show consistent improvements over OpenVLA and vanilla multi-task SFT.
+
+### Strengths
+1. The paper addresses a highly practical and underexplored problem—efficient post-training of VLA models—with a clear motivation and well-articulated methodology.
+2. The proposed Action-ANP module is well integrated into the existing architecture and effectively stabilizes multi-task optimization without increasing inference complexity.
+3. The experiments are thorough and convincing, showing clear improvements in both success rate and efficiency with detailed ablations that support the claims.
+
+### Weaknesses
+1. The method is evaluated only on the OpenVLA-7B backbone, leaving its claimed backbone-agnostic property unverified.
+2. The inclusion of large-scale π₀․₅ results in Table 1 could confuse readers, as those models operate under significantly different training regimes.
+
+### Questions
+N/A
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes MetaVLA, a post-training framework for fine-tuning vision-language-action (VLA) models. The approach builds on the Attentive Neural Process (ANP) paradigm, maintaining a context bank of demonstrations drawn from both in-domain and auxiliary tasks. During training, MetaVLA leverages the ELBO objective of ANP to reconstruct action sequences while regularizing them toward the underlying demonstration distributions. The method is evaluated on the LIBERO benchmark across four task suites, where it outperforms the OpenVLA baseline with fewer training steps.
+
+### Strengths
+1. The paper introduces a formulation for post-training VLA models through a single unified model, reducing the need for per-task fine-tuning.
+2. The paper reports both training and inference costs, providing a clearer view of the method’s computational efficiency.
+
+### Weaknesses
+1. The motivation for few-shot meta-learning is to handle data-scarce scenarios, yet this paper builds its context bank from the entire dataset. Although it is sampled at the size of 32, it means full data access is still required. If the full dataset is available, direct supervised fine-tuning is equally feasible. In addition, the main results show that standard SFT performs only about 3% worse than the proposed method, even without the additional GR00T dataset used by the authors. An experiment of using truly few-shot data could strengthen the paper's arguments.
+2. The comparison excludes stronger, more recent fine-tuning baselines such as OpenVLA-OFT [1], which reaches ~97% average success on LIBERO with significantly faster inference, whereas MetaVLA achieves only 79%. A comparison between these 2 methods could clarify the paper's contribution.
+3. The claimed generalization is tested only within the four LIBERO suites, which are all visually and semantically similar. Evaluation on cross-benchmark transfer tasks, or more diverse embodied tasks (e.g., RLBench, ManiSkill, FrankaKitchen) would be helpful.
+4. The method is described as “backbone-agnostic,” yet experiments are conducted solely on the OpenVLA backbone. No evidence is provided that the approach transfers to other architectures.
+5. The presentations need substantial improvements. For example, several citation formats are incorrect; when the author or publication name is not mentioned in the text, citations should appear in parentheses. Also, the definitions of variables such as x, y, s_C are unclear. Figure 2 implies inputs are image observations and text instructions, yet these symbols seem to be something else. The experimental notation (e.g., “SFT-4LIBERO + 5single + 1bimanual”) is not defined in the description/ text, making it difficult to interpret results.
+
+[1] Fine-Tuning Vision-Language-Action Models: Optimizing Speed and Success, RSS 2025.
+
+### Questions
+Please see my comments above.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper adopts the ANP approach from the field of meta-learning, effectively addressing the issue in VLA models that requires separate training for tasks with large distribution differences, thereby improving training efficiency and reducing the training costs of multiple models. Furthermore, the MetaVLA approach even enables mutual enhancement across different tasks, which is promising for the general multi-task embodied agents.
+
+### Strengths
+1.	The paper innovatively applies methods from the meta-learning domain to address the cross-task generalization problem in Vision-Language-Action (VLA) models. While VLA research has long focused primarily on compositional generalization, this work provides a valuable direction for future research on cross-task generalization.
+2.	The use of meta-learning significantly reduces computational overhead, enabling a single model trained across multiple task suites to achieve performance comparable to models individually trained for each suite. This component can thus eliminate a large amount of redundant and labour-intensive training.
+3.	The core ANP component introduced in the paper is decoupled from the backbone architecture, making it highly modular and extensible, and easily adaptable to various VLA model frameworks.
+
+### Weaknesses
+1.	Extensive experiments are conducted only on the LIBERO+GT000 setting. However, the method should be evaluated on more diverse cross-task datasets and auxiliary data sources to demonstrate its generalizability better.
+2.	The explanation of the ANP method in the paper is difficult to follow. It would be better if there were a more detailed exposition. Additionally, the concept of "Context-Aware Meta Co-Training" is not introduced until the Method section; it should be presented earlier in the paper to aid reader comprehension.
+3.	The ablation studies do not address key concerns. For example, under what conditions do subtask co-training mutually enhance each other, and when might they degrade performance? Furthermore, how does the domain similarity of different auxiliary data sources affect task synergy?
+
+### Questions
+1.	In Table 1, performance with ‘single 3’ is worse than with 1. How does the method scale? When more auxiliary data from diverse sources are used, does performance improve consistently? If so, where might the performance plateau?
+2.	It would be valuable for the authors to conduct experiments in embodied settings beyond robotic arm manipulation.
+3.	Why does SFT-4LIBERO outperform OpenVLA in Table 1? It is generally believed that individual suite-specific training is necessary for optimal performance, yet even a naive co-training approach via SFT surpasses individually trained models. What explains this result?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces MetaVLA, a unified framework designed to improve post-training efficiency and generalization in VLAmodels. Unlike prior work that focuses on larger datasets or architectural changes, MetaVLA targets the post-training stage, addressing the limitations of naive multi-task SFT, which struggles with convergence and degraded performance when tasks differ widely in domain or action space.
+
+MetaVLA introduces Context-Aware Meta Co-Training, which intelligently integrates auxiliary tasks through a memory-augmented mechanism inspired by Attentive Neural Processes. This approach allows the model to leverage out-of-domain information without destabilizing optimization, effectively combining the benefits of multi-task learning and meta-learning. The framework is backbone-agnostic, easy to integrate, and applicable beyond SFT to reinforcement learning setups.
+
+Experiments on the LIBERO benchmark demonstrate MetaVLA’s strong performance and efficiency, compared to OpenVLA and multi-task SFT baselines.
+
+### Strengths
+1. The paper proposes some empirical originality by integrating Attentive Neural Processes (ANP) into a large-scale VLA architecture, introducing Action-ANP, a compact module that enhances meta-learning for low-data task adaptation. This integration allows the model to capture both global and task-specific semantics through self- and cross-attention, improving convergence and generalization.
+2. Context-Aware Meta Co-Training effectively combines in-domain and diverse auxiliary tasks, leveraging an external context bank that broadens the learning signal without destabilizing optimization. The framework is able to train a single scalable model instead of separate ones for each task, and is robust to task diversity, handling heterogeneous data.
+3. Experimental results show that MetaVLA scales more robustly, leveraging auxiliary data without encountering optimization instability.
+4. Authors perform comprehensive ablations to evaluate effectiveness of design choices in each part.
+
+### Weaknesses
+1. Since the auxiliary task selection part incorporates additional data, such as GR00T dataset and tasks, I wonder whether performance gain of this co-training paradigm comes in architecture design, i.e. attentive neural process, or better usage of more training data?
+2. How generalizable is the proposed ANP architecture?Will this be only applicable to Llama 2 model or any other open source LLMs?
+3. I'm a little confused about the efficiency argument in the paper. Since during post-training, more training samples are included and seen by VLA model through auxiliary tasks, it seems that this will increase training cost. Are there statistics about how much time does training/inference time take?
+
+### Questions
+See weakness
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

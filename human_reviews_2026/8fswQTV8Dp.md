@@ -1,0 +1,188 @@
+# SaFeR-VLM: Toward Safety-aware Fine-grained Reasoning in Multimodal Models
+
+- Decision: Reject
+- Scores: 4, 4, 6, 6
+
+## Abstract
+Multimodal Large Reasoning Models (MLRMs) demonstrate impressive cross-modal reasoning but often amplify safety risks under adversarial or unsafe prompts, a phenomenon we call the *Reasoning Tax*. Existing defenses mainly act at the output level and do not constrain the reasoning process, leaving models exposed to implicit risks.
+In this paper, we propose **SaFeR-VLM**, a safety-aligned reinforcement learning framework that embeds safety directly into multimodal reasoning. The framework integrates four components:  (I) QI-Safe-10K, a curated dataset emphasizing safety-critical and reasoning-sensitive cases;  (II) safety-aware rollout, where unsafe generations undergo reflection and correction instead of being discarded;  (III) structured reward modeling with multi-dimensional weighted criteria and explicit penalties for hallucinations and contradictions; and  (IV) GRPO optimization, which reinforces both safe and corrected trajectories. This unified design shifts safety from a passive safeguard to an active driver of reasoning, enabling scalable and generalizable safety-aware reasoning. SaFeR-VLM further demonstrates robustness against both explicit and implicit risks, supporting dynamic and interpretable safety decisions beyond surface-level filtering. SaFeR-VLM-3B achieves average performance **70.13** and **78.97** on safety and helpfulness across six benchmarks, surpassing both same-scale and >10× larger models such as Skywork-R1V3-38B, Qwen2.5VL-72B, and GLM4.5V-106B. Remarkably, SaFeR-VLM-7B benefits from its increased scale to surpass GPT-5-mini and Gemini-2.5-Flash by **6.47** and **16.76** points respectively on safety metrics, achieving this improvement without any degradation in helpfulness performance.  Our codes are available at [https://anonymous.4open.science/r/ICLR2026-5065](https://anonymous.4open.science/r/ICLR2026-5065).
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces SaFeR-VLM, a safety-aligned reinforcement learning framework that embeds safety constraints into the reasoning process of multimodal LLMs. Across six safety/helpfulness benchmarks, SaFeR-VLM-3B reports average scores of ~70.1 (safety) and ~79.0 (helpfulness), outperforming same-scale models and some models >10× larger; SaFeR-VLM-7B further surpasses GPT-5-mini and Gemini-2.5-Flash on safety while maintaining helpfulness.
+
+### Strengths
+1. $\textbf{Problem importance and motivation.}$ The safety of VLMs is clearly motivated and timely. The framing of “reasoning tax” (strong reasoning can still be unsafe) is compelling.
+2. $\textbf{Comprehensive experiments.}$ The paper compares SaFeR-VLM against open/closed-source baselines at multiple model sizes and evaluates on six benchmarks; ablations for the proposed components (dataset, safety-aware rollout, reward design) support the method’s effectiveness.
+
+### Weaknesses
+1. $\textbf{Framework novelty.}$ While results are strong, the training recipe: curate data → specify task-aligned rewards → optimize with GRPO, follows a fairly standard RL pipeline. The paper would benefit from clarifying what is fundamentally new about the framework beyond careful engineering and integration of known ingredients.
+2. $\textbf{Dataset scale and validation.}$ Although QI-Safe-10k is described as high-quality and instability-aware, its size is modest, and labels are primarily validated with a generative reward model (GRM) rather than additional human verification. Without human audit, GRM-driven scores may introduce bias or propagate model errors, limiting the dataset’s reliability for broader use.
+3. $\textbf{Generalizability of components.}$ Elements such as thresholding, reflection/self-correction, and task-specific reward shaping appear tailored to the paper’s setting. It is unclear how portable these designs are across domains. Moreover, reflection/self-correction has precedents in prior work (e.g., test-time self-correction to mitigate reward hacking[1]), which reduces the technical novelty of these parts.
+4. $\textbf{Beyond fine-tuning?}$ The paper positions safety “in the reasoning loop,” but architecturally it remains a fine-tuning/RL recipe. Additional insight (or analysis) showing new behaviors or guarantees that go beyond standard RLHF/GRPO pipelines would strengthen the contribution. 
+
+[1] Gallego, V. (2025). Specification self-correction: Mitigating in-context reward hacking through test-time refinement. arXiv:2507.18742.
+
+### Questions
+My main concern is contribution/novelty. Could the authors articulate the principled novelty of SaFeR-VLM relative to a standard “data + reward + GRPO” pipeline? Addressing these points would make me more comfortable raising my score.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents SAFER-VLM, a safety-aligned reinforcement learning framework for multimodal models. The work is built upon the GRPO method and adapts it specifically for the safety domain through several key modifications: (1) the curation of the QI-Safe-10K dataset using a quality-instability filter to select safety-critical examples for training; (2) the use of a Generative Reward Model (GRM) to provide fine-grained, safety-oriented rewards for both the reasoning process and the final answer; and (3) the incorporation of a reflection-and-correction mechanism for unsafe rollouts during training. The proposed method demonstrates improved performance on six safety benchmarks compared to a range of baseline models.
+
+### Strengths
+- The paper tackles the important and timely problem of "reasoning safety" in multimodal models, arguing that safety should be an intrinsic part of the reasoning process rather than just a final output filter.
+
+- The proposed framework is a complete and well-engineered system that integrates data curation, rollout correction, reward design, and RL optimization in a cohesive manner.
+
+- The experimental results show consistent and significant improvements in safety metrics across multiple benchmarks and model scales, compared to a wide range of baselines.
+
+### Weaknesses
+- The training process depends on a GRM for providing reward signals. There is no validation to confirm that this GRM accurately and consistently reflects true safety concerns. 
+
+- The reliance on GPT-4o-mini for final evaluation is concerning, as its own poor safety performance (Tab 1) suggests it may not be a competent arbiter of safety, thereby casting doubt on the validity of the main comparative results.
+
+- The paper's central thesis—that SAFER-VLM improves the reasoning process itself—lacks direct quantitative support. The evidence provided (case study in Fig 6) only shows a scenario where the baseline model produces an unsafe output. A compelling demonstration would require a quantitative comparison of the internal reasoning chains (e.g., by systematically scoring the <think> sections) between SAFER-VLM and baselines in scenarios where final outputs are equally safe, which is currently absent.
+
+- Some details of the reward modeling and related ablations are missing, hindering understanding and reproducibility. (Details in questions)
+
+### Questions
+- The description of the reward model in Section 3.3 lacks critical implementation details, which affects reproducibility. It is unclear how many sub-dimensions are used for evaluation, what they specifically entail, and the rationale behind their selection. Furthermore, the process for determining the weights assigned to these sub-dimensions is not mentioned. The penalty rules (line 247) are also ambiguous—it is unspecified whether they are part of the GRM's scoring or applied separately, how they are triggered and assessed, and what justifies the specific numerical values assigned (e.g., -2 to -4 points).
+
+- Figure 5 (Left) and its associated description are difficult to interpret due to a lack of essential details. The experimental setup, the metrics represented in the radar plot, and the definitions of key terms such as "Rule-based strict," "Refined rule-based," "Boundary refinement," and "Scoring transparency" are not explained.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper introduces *SaFeR-VLM*, a safety-aligned RL framework designed to embed safety directly into the reasoning process of multimodel reasoning models. There are four main components for this framework:
+- Curated dataset of 10,000 "safety-critical" reasonsing QA examples called *QI-Safe-10K* filtered down from 159k samples from other dataset, and the selection criteria are moderate quality but high instability (i.e. high variance in their responses).
+- *Safety-Aware Rollout:* model allows to self-reflect on safe generation and adds the reflection to the context to generate a correction
+- The reward model provides multi-dimensional feedback like: logical coherence, visual grounding, safety awareness, and explicit penalties for hallucinations and contradictions in the reasoning traces regardless of the correctness of the final answers.
+- Optimize Qwen2.5-VL using GPRO and the curated dataset proposed in this paper.
+
+The end products, the finetuned models, outperform proprietary models like GPT-5-Miniand Gemini-2.5-Flash on safety metrics, or open-source based models that is 10x larger than its size (e.g. Qwen2.5VL-72B and GLM-4.5V-106B)
+
+### Strengths
+1. The evaluation is very thorough and comprehensive.
+2. The research is timely, addressing an important problem of unsafe reasoning traces.
+
+### Weaknesses
+1. The training and evaluation seems to present a clear risk of data overlap. The paper explicitly lists Beavertails-V as one of the three sources used to create the initial 159K sample pool for training the QI-Safe-10K dataset. It also clearly lists Beavertails-V as one of the six benchmarks used for evaluation, as shown in Table 1. 
+2. The evaluations are all static benchmarks, but the authors concede this limitation themselves in Appendix B. They state, "Our evaluations are conducted mainly on widely-used benchmarks, which... cannot fully capture the complexities of real-world applications" and that "dynamic context shifts are not covered by static benchmarks".
+3. The VQA task in this paper is single-turn, which is very well studied at this point.
+4. The entirely pipeline depends on a single reward model (GRM-7B) as training dataset annotation expert and the source of reward signal in RL training.
+
+### Questions
+Why should we care about unsafe reasoning traces while almost all propertiory models decide not to display full reasoning traces to the user? And another open question: is it really neccessary to strickly enforce that the reasoning model to also "think" safely?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The submission proposes a reinforcement learning framework that embeds safety directly into the reasoning process of multimodal large reasoning models (MLRMs).  Unlike prior methods that rely on output-level filters, SaFeR-VLM introduces safety-aware reasoning as an intrinsic part of inference through four integrated components:  (1) QI-Safe-10K, a curated dataset emphasizing reasoning instability and safety-critical cases; (2) Safety-Aware Rollout, which reflects and corrects unsafe generations instead of discarding them; (3) Structured Reward Modeling, combining multi-dimensional weighted criteria with penalties for hallucination and contradiction; and (4) GRPO optimization, reinforcing both safe and corrected reasoning trajectories. Experimental results on six multimodal safety benchmarks demonstrate significant gains in both safety and helpfulness—SaFeR-VLM-7B surpasses GPT-5-Mini and Gemini-2.5-Flash on safety metrics while maintaining comparable utility—highlighting its scalability and robustness to risks.
+
+### Strengths
+1. The authors collected QI-Safe-10K, a large-scale multimodal reasoning dataset targeting implicit risks from reasoning instability. It captures samples with moderate quality but high variability, offering a valuable resource for safety-aware reasoning alignment.
+
+2. Safety-Aware Rollout converts the traditional outcome-level saferty constraints into reinforcement of reflected safe responses. This design encourages the model to engage in safety-aware reasoning.
+
+3. Strong empirical performance, SaFeR-VLM outperforms state-of-the-art open-source and closed-source models on 6 benchmarks, showing superiror robustness and generalization.
+
+### Weaknesses
+1. Although the author claims that the framework can train models with a sense of security, it seems that its main framework is to enable models to have reflective abilities. While I will not ignore the author's contribution of applying the reflective reasoning framework to the VLM safety field, there is no significant innovation compared to the traditional reward design-guided reflective reasoning training. For example, the following work is reflections in the field of pure linguistics:
+
+[1] Think Before Refusal: Triggering Safety Reflection in LLMs to Mitigate False Refusal Behavior
+
+[2] Learn Beyond The Answer: Training Language Models with Reflection for Mathematical Reasoning
+
+2. Learning reflective patterns does not mean that the model has developed safety awareness. On the other hand, there has been some controversy about the role of reflection in many previous works:
+
+[1] First Try Matters: Revisiting the Role of Reflection in Reasoning Models
+
+Therefore, I would like to have a deeper understanding of what the safety awareness here is? There is no learning of safety rules by the model like deliberative alignment, but rather learning an end-to-end judgment?
+
+3. The GRM acts as the sole source of supervision throughout the entire pipeline, from dataset construction to rollout selection and GRPO reward design. Consequently, SaFeR-VLM's safety alignment may, in practice, represent a distillation of the GRM's safety preference.
+
+### Questions
+Same as Weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

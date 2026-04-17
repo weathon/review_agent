@@ -1,0 +1,201 @@
+# Harnessing task overload for scalable jailbreak attacks on large language models
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 2, 4, 2
+
+## Abstract
+Large Language Models (LLMs) remain vulnerable to jailbreak attacks that bypass their safety mechanisms. Existing attack methods are fixed or specifically tailored for certain models and cannot flexibly adjust attack strength, which is critical for generalization when attacking models of various sizes. We introduce a novel scalable jailbreak attack that preempts the activation of an LLM's safety policies by occupying its computational resources. Our method involves engaging the LLM in a resource-intensive preliminary task—a Character Map lookup and decoding process—before presenting the target instruction. By saturating the model's processing capacity, we prevent the activation of safety protocols when processing the subsequent instruction. Extensive experiments on state-of-the-art LLMs demonstrate that our method achieves a high success rate in bypassing safety measures without requiring gradient access, manual prompt engineering. We verified our approach offers a scalable attack that quantifies attack strength and adapts to different model scales at the optimal strength. We shows safety policies of LLMs might be more susceptible to resource constraints. Our findings reveal a critical vulnerability in current LLM safety designs, highlighting the need for more robust defense strategies that account for resource-intense condition.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper introduces a task-overload jailbreak attack that bypasses LLM safety by first overloading the model with a resource-heavy Character Map decoding task, then issuing a harmful instruction. This overload prevents safety filters from activating. The attack is black-box, scalable, and tunable by adjusting task complexity. Experiments show high success rates across models, revealing that LLM safety mechanisms can fail under computational strain.
+
+### Strengths
+Computing resource constraint is an interesting dimension for either the attacker side or the defence side. This idea is novel and relevant for understanding how safety mechanisms might fail under load.
+
+### Weaknesses
+The threat model is weak and poorly justified. The paper claims that safety policies fail when the model’s compute is overloaded, but it provides no direct evidence that modern safety subsystems actually depend on per-request compute budgets in the way the authors assume. Public LLM services run on large, distributed infrastructure with elastic compute. The paper does not explain how a single attacker could realistically saturate resources in those environments or show any deployment case where safety logic is disabled under load. Without concrete traces, measurements, or an analysis of real inference pipelines, the claim remains speculative.
+
+The link between computational strain and jailbreak success is loose. There are known attacks that simply force long outputs or long chains of thought to consume resources, and those can be executed independently from prompt-based jailbreaks. The paper’s character-map cipher is just a way to force decoding work and is not novel in principle. See below papers for general denial-of-service attacks.
+
+* Kumar, Abhinav, et al. "Overthink: Slowdown attacks on reasoning llms." arXiv preprint arXiv:2502.02542 (2025).
+* Zhang, Yuanhe, et al. "Crabs: Consuming resource via auto-generation for llm-dos attack under black-box settings." arXiv preprint arXiv:2412.13879 (2024).
+* Anil, Cem, et al. "Many-shot jailbreaking." Advances in Neural Information Processing Systems 37 (2024): 129696-129742.
+
+The evaluation did not present satisfying results. The attack success rate seems higher than baselines, but the success rate numbers are lower than the numbers presented in the original related papers. I wonder why the success rate is not consistent. The attack strength control is presented as an advantage, yet the results show volatile behavior: success rate curves fluctuate and do not exhibit a clear monotonic relationship with the proposed strength parameters. This undermines the claim of stable, tunable control.
+
+### Questions
+* Can the attacker execute the resource straining attack and the jailbreaking attack separatedly and simultanously, to achieve a similar attack impact?
+
+* Is there any evidence that real system could suspend safety checking when computing resourse is low?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a task-overload-based jailbreak attack on large language models (LLMs). The core idea is to first overload the model with a computationally heavy Character Map lookup and decoding task, thereby saturating its “resource budget” before presenting a malicious instruction. The authors hypothesize that this saturation delays or suppresses the activation of safety policies, increasing Attack Success Rate (ASR). They empirically evaluate the approach across multiple models and datasets, and report scalable performance controlled by three tunable parameters.
+
+### Strengths
+1. The proposed method introduces a tunable “load intensity” that provides a continuous measure of attack strength, filling the gap between fixed-prompt and fully optimized jailbreaks.
+2. Prompts, judges, and CM templates are clearly documented in the appendix, making replication straightforward.
+
+### Weaknesses
+1. The statement “Existing attack methods are fixed or specifically tailored for certain models” seems inaccurate to me. To the best of my knowledge, most black-box jailbreak attacks are not tailored to specific models, and recent methods such as [1] are also not fixed; they dynamically generate jailbreak prompts rather than relying on fixed templates. Could authors explain more about this statement?
+
+2. The related work section appears somewhat outdated, as it only covers studies from 2024 and earlier. The comparison in Table 1 is also insufficient, as it does not fully capture the recent challenges and trends in jailbreak attacks. Jailbreak attacks are rapidly evolving, including cipher-based methods [2], multi-turn jailbreaks [3], and other adaptive attacks [4]. Could the authors clarify why recent works from 2025 were omitted and explain why the comparison in Table 1 remains limited?
+
+3. The notation is inconsistently used. The symbol p represents a probabilistic function learned by the model, while p_i also denotes a string, which confuses. In addition, since Equation (1) already defines the token sequence, it is unclear why Equation (2) redefines P=p_1p_2p_3...p_n. The notations should be aligned for clarity and consistency.
+
+4. The Character Map attack resembles cipher-based jailbreak methods [5–6]. How does its performance compare with these existing approaches?
+
+5. The use of two different automatic judges (keyword-based GCG vs. semantic Llama-70B) raises potential consistency concerns. Have the authors evaluated the agreement between these judges and human annotators? If possible, could the authors report metrics such as Cohen’s κ to quantify inter-judge reliability and clarify whether human judgments align with automated evaluations?
+
+6. The central claim that computational overload suppresses safety mechanisms is only supported by correlation. Could the authors include a simple control experiment, such as a length-matched non-computational filler task or position variation, or measure direct safety-trigger signals to better support the causal explanation?
+
+7. There are several grammatical and formatting issues throughout the paper, such as “Succssful” and “We shows.” In addition, the authors appear to use very limited spacing. For example, in Table 4, the title and the table body are not properly separated. These issues give the impression that the paper is not yet fully polished or finalized.
+
+References.
+
+[1]. Liu, X., Li, P., Suh, E., Vorobeychik, Y., Mao, Z., Jha, S., ... & Xiao, C. (2024). Autodan-turbo: A lifelong agent for strategy self-exploration to jailbreak llms. arXiv preprint arXiv:2410.05295.
+
+[2]. Jin, H., Zhou, A., Menke, J., & Wang, H. (2024). Jailbreaking large language models against moderation guardrails via cipher characters. Advances in Neural Information Processing Systems, 37, 59408-59435.
+
+[3]. Russinovich, M., Salem, A., & Eldan, R. (2025). Great, now write an article about that: The crescendo {Multi-Turn}{LLM} jailbreak attack. In 34th USENIX Security Symposium (USENIX Security 25) (pp. 2421-2440).
+
+[4]. Kuo, M., Zhang, J., Ding, A., Wang, Q., DiValentin, L., Bao, Y., ... & Chen, Y. (2025). H-cot: Hijacking the chain-of-thought safety reasoning mechanism to jailbreak large reasoning models, including openai o1/o3, deepseek-r1, and gemini 2.0 flash thinking. arXiv preprint arXiv:2502.12893.
+
+[5]. Yuan, Y., Jiao, W., Wang, W., Huang, J. T., He, P., Shi, S., & Tu, Z. (2023). Gpt-4 is too smart to be safe: Stealthy chat with llms via cipher. arXiv preprint arXiv:2308.06463.
+
+[6]. Handa, D., Zhang, Z., Saeidi, A., Kumbhar, S., & Baral, C. (2024). When" competency" in reasoning opens the door to vulnerability: Jailbreaking llms via novel complex ciphers. arXiv preprint arXiv:2402.10601.
+
+### Questions
+See my aforementioned weaknesses.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a method that gives the model a computationally demanding preliminary task before a harmful prompt. The motivation is that this initial task depletes the limited computational resources that are also used for the model's safety mechanisms. This resource drain can weaken safety filters, which allows the subsequent malicious instruction to execute. The study finds that the attack's intensity can be scaled, and larger models require a more significant computational load to be compromised.
+
+### Strengths
+* Originality: This paper proposes a new attack based on computational overload rather than semantic manipulation.
+* Clarity: The paper is well-structured with a clearly defined methodology and formalization of the attack's parameters.
+* Significance: The paper identifies a practical black-box vulnerability in a wide range of LLMs and offers a quantifiable framework for security testing.
+
+### Weaknesses
+* I think the paper's central premise of computational overload is presented as a metaphor rather than a falsifiable scientific hypothesis. The method fails to define or measure what specific computational resource (e.g., attention scores, layer capacity, memory) is being saturated. Without a concrete mechanism, the work amounts to an observation of a correlation, not an explanation of a vulnerability.
+* The method assumes that the complexity of the preliminary task is the direct cause of the safety failure. However, the experiments do not adequately disentangle the effect of task complexity from confounding variables like prompt length, structural confusion, or the presence of a long, irrelevant preamble. The observed effect could simply be an artifact of a long and confusing context rather than a genuine overload.
+
+* The attack's success is predicated on the model first successfully executing the difficult preliminary task before failing at the safety check. The evaluation shows that as the load task's difficulty increases, the model's accuracy on that very task decreases. This creates a fragile operational window: the attack only works if the model is capable enough to follow the complex first step but incapable of applying its safety protocols. This may not be generalizable across different models.
+
+### Questions
+* Regarding Weakness 1, how would the authors operationalize the measurement of computational load? can the authors propose a metric derivable from the model's internal states (e.g., entropy of attention distributions or something like magnitude of activations) that correlates with the attack's success? Furthermore, if the mechanism is overload, why is it that the safety function fails while the instruction-following ability for the malicious command remains intact? I think this suggests a more dedicated process than simple resource depletion.
+
+* Regarding Weakness 2, the preliminary task forces the model into a repetitive lookup-and-report mode. could this be inducing a behavioral pattern that simply overrides the more complicated safety-checking procedure, irrespective of resource load?
+
+* Regarding Weakness 3, how does the attack perform on models specifically fine-tuned for high-complexity, multi-step instruction following? would a model that is better at the primary task paradoxically become more or less vulnerable to the jailbreak?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper proposes a scalable jailbreak attack that bypasses LLM safety mechanisms by overloading the model’s computational resources. The method introduces a “Character Map Lookup” task to saturate processing capacity before presenting harmful instructions, preventing safety policy activation. Experiments on open-source and closed-source LLMs show its effectiveness and controllable attack strength, revealing a new resource-based vulnerability in current LLM safety designs.
+
+### Strengths
+1. The proposed attack is simple yet effective, particularly on open-source LLMs.
+
+2. The central idea of jailbreaking by exploiting computational overload is novel and thought-provoking.
+
+3. The ablation studies provide comprehensive analyses and clearly demonstrate the effects of different parameters.
+
+### Weaknesses
+1. The paper lacks a convincing explanation for why saturating a model’s processing capacity suppresses its safety mechanisms. If the safety filters operate as external modules, this might make sense; however, most alignment mechanisms are embedded during fine-tuning, so it remains unclear how resource exhaustion alone can bypass them.
+
+2. While the inclusion of closed-source LLMs in the evaluation is appreciated, the results are relatively weak. The proposed method performs comparably to ReNeLLM, and the absolute ASR values (around 0.2) are also not high enough. Given that the method is black-box, results on closed-source models would be more convincing than on open-source ones (especially the evaluated open-source 7-8B LLMs are not strong enough).
+
+3. The evaluated closed-source models are somewhat outdated. It would be more relevant to include recent models such as GPT-5, GPT-o3/o1, or Gemini-2.5 instead of GPT-3.5 and Gemini-2.0-Flash.
+
+4. The paper does not compare against newer strong baselines such as AutoDAN-Turbo[1], which is an optimized version of AutoDAN. A comparison with it can further strength the paper. 
+
+[1]. Liu, Xiaogeng, et al. "Autodan-turbo: A lifelong agent for strategy self-exploration to jailbreak llms."
+
+### Questions
+Please see the weakness above.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

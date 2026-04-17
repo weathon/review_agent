@@ -1,0 +1,190 @@
+# Agentic Design of Compositional Machines
+
+- Decision: Reject
+- Scores: 6, 4, 6, 4
+
+## Abstract
+The design of complex machines stands as both a marker of human intelligence and a foundation of engineering practice. Given recent advances in large language models (LLMs), we ask whether they, too, can learn to create. We approach this question through the lens of compositional machine design, where machines are assembled by selecting and placing mechanical components to satisfy functional demands—such as locomotion or manipulation—within a simulated physical environment. To support this investigation, we introduce BesiegeField, a testbed built on the physics-based game Besiege, which enables part-based construction, physical simulation, and reward-driven evaluation. Using BesiegeField, we benchmark state-of-the-art LLMs with agentic workflows and identify key capabilities required for success, including spatial reasoning, strategic assembly, and instruction-following. As current open-source models fall short, we explore reinforcement learning (RL) as a path to improvement. We curate a compositional design dataset, conduct RL finetuning and ablation studies, and highlight open challenges at the intersection of language, design, and physical reasoning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The authors propose a novel benchmark task for LLM agents: compositional machine design, where the task is to assemble a machine by selecting and orienting different mechanical parts and then evaluating through physical simulation.  They will release BesiegeField, an environment based on a physics based game.  They describe an agentic LLM framework for machine design and benchmark SOTA LLMs with zero-shot CoT prompting and with RL finetuning, on two tasks: building a car and building a catapult.
+
+### Strengths
+1. The authors propose a very interesting and novel benchmark task that requires multiple capabilities not commonly seen in existing benchmarks.
+2. They provide comprehensive benchmarking experiments over SOTA models.
+3. They detail a reasonable but somewhat complex baseline LLM agent and data collection pipeline for the environment.
+
+### Weaknesses
+1. The authors propose this work as an "environment"/"testbed" instead of a full benchmark suite of tasks, which makes it a weaker contribution.  While the task domain is very interesting, they only propose two tasks (car and catapult), which does not provide a diverse variety of tasks for future works to evaluate on.  Furthermore it's not clear how easy this environment would be to use as a benchmark (ie. installation, environment interface, standardized observation/action spaces etc.)
+
+2. The benchmark result scores are hard to interpret without success rates or reference score.  Adding some human or optimal scores here could be helpful to see what the gap is.  Also, it would be nice to have some more discussion and analysis of failures modes.
+
+3. Related work is missing a discussion of existing benchmark suites for LLM agents.
+
+### Questions
+1. Section 4.2 was difficult to understand due to the many components and steps.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces and formalizes the task of compositional machine design for Large Language Models (LLMs). To facilitate this research, the authors present BesiegeField, a new interactive testbed built on the physics-based game Besiege. This environment allows LLM agents to construct machines from parts, test them in a physical simulation, and receive reward-driven feedback.
+
+### Strengths
+- A Novel and Well-Scoped Benchmark: The "narrow" focus of BesiegeField can also be seen as a primary strength. The authors motivate it as a "minimalist, component-level setting"  that thoughtfully balances complexity. It is more sophisticated than simple block-stacking environments (like LEGO or Minecraft) because it incorporates realistic physics, part semantics, and machine destruction. Simultaneously, it is more tractable and abstract than full-scale CAD modeling, which has prohibitively complex rules. This calibrated environment allows for the specific "spatial and behavioral reasoning challenges"  of design to be isolated and studied effectively.
+- Detailed Analysis of Agentic Workflows and Failure Modes: The paper provides more than just performance tables. It offers a qualitative and empirical analysis of why LLMs fail. A key finding is the "CoT-machine correspondence" failure , where agents generate machines that deviate from their own high-level chain-of-thought plans. The experiment where Gemini 2.5 Pro's high-quality CoT is fed to other LLMs, resulting in improved performance, is a strong piece of evidence that effectively decouples the high-level planning capability from the low-level geometric execution.
+
+### Weaknesses
+- Overly Specialized Task and Limited Generalization. This paper is very ambitious, but its implementation is too "narrow." Frankly, it's somewhat "misleading." Because "the performance of large models assembling tools on BesiegeFields" is not equal to, or even approximates, "the performance of large models creating tools," as the BesiegeField task is too specialized and narrow. The performance of large models on this task also depends on whether their pre-training corpus contains relevant data for this task. Therefore, it's difficult to attribute the performance of large models entirely to their "tool-making ability."
+- Limited Insight and Overly Simplified Experimental Design. Aside from the example diagrams used for ease of understanding, the experimental section of the paper contains only two tables, and the information in the tables is very simple: 1. Closed-source models have their own strengths and weaknesses; 2. RLVR can improve model performance. This was an expected result, but the lack of in-depth data presentation and careful design resulted in a rather thin insight analysis in the experimental section.
+- Confusing paper writing and data presentation. Admittedly, the authors provided some experimental analyses in the text, such as the experiment of feeding the high-quality CoT of the Gemini 2.5-Pro to other LLMs. Frankly, I liked this experiment, but many figures, including this one, were placed in the appendix, with no links or explanations found in the main text. Although I could access the corresponding figures in the appendix, I believe this was due to possible space constraints. However, I think that as an academic paper, authors should consider the length and formatting during the writing process, ensuring that every figure and citation in the main text corresponds to the original; this is a basic requirement.
+
+### Questions
+The authors state that the performance of open-source models "fall short". Was any investigation conducted to determine how much of this poor performance is due to a lack of "tool-making ability" versus a simple lack of Besiege-related data in their pre-training corpora? How can we be sure the high performance of a model like Gemini 2.5 Pro isn't simply a result of it having seen more Besiege gameplay examples?
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper explores whether large language models can design functional machines, not just describe them. The authors introduce BesiegeField, a new physics-based testbed built on the game Besiege, where an AI assembles machines from parts like wheels, gears, and beams to achieve goals such as driving or throwing a projectile.
+
+The setup treats the model as an agentic designer: a planner drafts blueprints, builder agents assemble them, and a simulator provides feedback on how the machine performs. The process even uses Monte Carlo Tree Search to refine designs. Two tasks — building a car and a catapult - test both structural stability and dynamic control.
+
+They benchmark several LLMs in this environment and also explore reinforcement learning with simulation-based rewards to improve their performance. The results show that while current models can produce simple working machines, they still struggle with precise spatial reasoning and complex coordination.
+
+Overall, the paper introduces a creative new way to test AI’s ability to reason about physics, engineering, and design, marking a step toward language models that can actually build things.
+
+### Strengths
+This paper tackles a really fresh and gutsy problem getting AI to design actual working machines and does it with a custom-built setup called BesiegeField. The environment hits a nice balance: it’s realistic enough to feel meaningful, but not so complicated that it’s impossible to study. And by focusing on machines made of parts instead of single monolithic shapes, the work opens a pretty exciting new direction for generative AI research.
+
+The evaluation is super thorough. The authors didn’t just run one model they benchmarked a whole lineup of state-of-the-art LLMs under consistent conditions, and even tried different agent designs and prompting styles. It’s not just “look what we built,” but a deep analysis of why certain strategies help or fail. That level of detail really adds credibility and makes the findings practical for others. Technically, the paper’s also impressive. Integrating a physics engine, multiple LLM agents, and RL fine-tuning is not easy but they made it work. They deal with long contexts, valid XML outputs, structured plans, and even throw in MCTS and LoRA fine-tuning. It’s clear they actually built and ran a working system, not just a concept.
+
+Some of the insights are honestly quite interesting. For example, reasoning-heavy models didn’t outperform simpler ones — suggesting the real limitation is spatial reasoning, not chain-of-thought. They also did smart ablations, like giving a weaker model a strong model’s “blueprint,” which improved results. That shows that design knowledge transfer might be a key piece here.
+
+Overall, the paper’s both ambitious and grounded. Seeing an AI design a small car or catapult that actually works is kinda amazing. The writing’s clear, the claims feel honest, and the contribution is genuinely new. It’s the kind of work that makes you think — okay, maybe AI-assisted engineering isn’t that far off after all.
+
+### Weaknesses
+The paper’s scope is a bit narrow, it only tests two machine types (cars and catapults) in one environment. Those are good proof-of-concept tasks, but it’s unclear whether the approach would generalize to new goals like lifting or jumping. Each model was trained separately per task, suggesting the method isn’t yet a general “design anything” system. A short discussion or test on multi-task generalization would’ve helped. 
+
+Performance-wise, results are modest. Many designs fail outright catapults especially, where only about a quarter of outputs even worked. Cars did better, but still far from optimal. The paper is honest about this, but some of the framing feels a bit more optimistic than the data justifies. In reality, the LLMs produce workable but far-from-expert designs, so the contribution is an early step, not a solved problem. The system is also very complex, with multiple agents, MCTS, RL loops, and structured prompts. It works, but reproducibility could be hard — it’s not obvious which component drives what improvement. Simpler baselines would make the contribution easier to isolate.
+
+BesiegeField itself is a strong testbed, but like any simulator, it simplifies a lot. The machines use fixed control scripts, so the LLM doesn’t design control policies, just structures. There’s also no notion of cost, materials, or nois: a design that works here might not in reality. That’s fine for research, but it means the findings are more conceptual than practical for now.
+
+Also, while the authors talk about diversity in design, their RL training tends to collapse solutions into a few high-reward patterns. The model becomes more of a reward maximizer than a creative generator. Some explicit diversity mechanisms could have helped. And while the quantitative metrics are solid, we don’t get much qualitative evaluation — it’d be nice to see whether the machines actually look well-designed or just barely functional.
+
+### Questions
+How well does the method generalize beyond the two tested tasks? If asked to design something new, say, a bridge or a multi-launch catapult would the current agent adapt with prompting, or does it need full retraining? It’d be useful to know whether the authors see this evolving toward a single generalist design agent or a set of specialized ones.
+
+On design diversity, the RL phase seems to cause convergence toward a few dominant strategies. Did the authors track how diversity changed over training? Could rewarding novelty or using multiple agents help avoid mode collapse and encourage more creative designs?
+
+Regarding scaling, are the improvements mainly due to model size (Gemini being massive), or do current LLMs fundamentally lack strong spatial priors? Would adding explicit 3D reasoning modules or geometry-aware representations help more than just bigger transformers?
+
+Since BesiegeField fixes control policies, do the authors see future extensions where the LLM also designs controllers? Real machines couple structure and control tightly, so co-design could be a major next step.
+
+About reproducibility: the RL setup required heavy compute (8×A100). Will code and pretrained models be released, and can smaller setups reproduce the main findings? Also, is the simulator deterministic enough for stable reward signals?
+
+Gemini 2.5 Pro clearly dominates. Is that simply due to its scale, or might it have specialized training (e.g., multimodal or code-based) that gives it an edge in physical reasoning?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces the problem of compositional machine design to test LLMs' capabilities in creating machines to complete a given task. To achieve this, the authors propose BesiegeField, a new simulation testbed built on the physics-based game Besiege. The authors design two compositional machine design tasks. The paper then provides comparisons of different state-of-the-art LLMs using three different agentic workflows. Additionally, they also fine-tuned Qwen2.5-14B with RL and showed improvements compared to the base Qwen model.
+
+### Strengths
+- The paper studies an interesting question – whether the current state-of-the-art LLMs are able to create tools to complete a desired task. The proposed simulation testbed, BesiegeField, provides the potential to answer this question.
+- Another key strength is the paper's systematic evaluation. The authors test a wide range of state-of-the-art LLMs across three distinct agentic workflows (Table 1). This is complemented by fine-tuning an LLMs with rewards from the designed tasks. These experiments provide some interesting observations discussed in Section 4.3.
+
+### Weaknesses
+- The coverage of the tasks is limited. There are only two target machines (car and catapult). Also, the tasks for these two target machines are very similar (driving distance or boulder throwing distance). A meaningful benchmark would need to include a much wider variety of target machines and tasks.
+- The paper's metrics are limited to validity and performance scores , which contradicts the authors' own claim that "generating a diverse set of candidate solutions" is an essential requirement for this task (in line 128 - 132).
+- The related works are not discussed enough. There are recent works that leverage LLMs to robot morphology, which is also an instance of creating machines (see [1,2]).
+
+[1] Ringel, Ryan P., et al. "Text2robot: Evolutionary robot design from text descriptions." 2025 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2025..
+[2] Qiu, Kevin, et al. "Robomorph: Evolving robot morphology using large language models." arXiv preprint arXiv:2407.08626 (2024).
+
+### Questions
+- The targeted machines and the tasks chosen seem to test a very narrow slice of the exponentially large design space of the compositional machine design problem. Why would the authors think these two tasks are representative? 
+- Also, the authors justify the tasks as simple enough to fit into LLMs context window (Line 197, 198). 
+- What are the related works for hardware or embodiment design in LLMs? How is the proposed work different from them?
+- The paper identifies that solution diversity is a major distinguishing factor for this task compared to math benchmarks, stating a model "should function more like a generative model than a simple reward maximizer". Given this, why do the current evaluation metrics, which focus only on validity and performance scores, not include any measure of solution diversity?
+- How are the powered blocks controlled? In line 152, the authors mentioned that the power blocks can receive control commands. Are the control commands also generated by LLMs?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

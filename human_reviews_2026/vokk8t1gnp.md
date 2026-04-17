@@ -1,0 +1,135 @@
+# Weak Correlations as the Underlying Principle for Linearization of Gradient-Based Learning Systems
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 4
+
+## Abstract
+Deep learning models, such as wide neural networks, can be viewed as nonlinear dynamical systems composed of numerous interacting degrees of freedom. When such systems approach the limit of infinite number of degrees of freedom, their dynamics tend to simplify. This paper investigates gradient descent-based learning algorithms that exhibit linearization in their parameters. We establish that this apparent linearity, arises from weak correlations between the first, and higher-order derivatives of the hypothesis function with respect to the parameters, at initialization. Our findings indicate that these weak correlations fundamentally underpin the observed linearization phenomenon of wide neural networks. Leveraging this connection, we derive bounds on the deviation from linearity during stochastic gradient descent training. To support our analysis, we introduce a novel technique for characterizing the asymptotic behavior of random tensors. We validate our theoretical insights through empirical studies, comparing the linearized dynamics to the observed correlations.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes a criterion, that of having weak correlations between the first derivative of the model. and the higher derivatives, and shows that it is equivalent to the model being in a linear/NTK regime where one can take a Taylor approximation around initialization. Thus any model with weak correlation can be proven to convergence exponentially fast, and wide DNNs can be thought as just a special case of this result.
+
+### Strengths
+This is to my knowledge the first equivalent condition to NTK-type linearization, and offers a pretty novel point of vue. Other conditions such as the ratio of the Hessian norm to the gradient norm were more sufficient conditions. This aligns well with an intuition I (and other) had: proving NTK dynamics by looking at a ball around initialization often yields loose rates, instead one has to leverage the fact that the parameters typically move along directions where the NTK moves little.
+
+### Weaknesses
+Some parts of the paper are very technical and a bit hard to follow, as well as some parts of the discussion. 
+
+Also the criterion is probably very hard to compute in practice because it involves high-dimensional objects (higher order derivatives). It seems that it would be easier in practice to simply compute how much the NTK moves rather than computing these correlation values.
+
+### Questions
+- It seems that you have missed a paper that is very closely related (it is very similar to Dyer & Gur-Ari 2019): https://arxiv.org/abs/1909.08156 . I wonder how close your condition is to assuming that the higher order terms vanish in the Neural Tangent Hierarchy defined in this paper.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper tries to connect the linearity of training wide neural networks with the weak correlations between the first and higher-order derivatives. The authors propose a novel formalism for this purpose by investigating the asymptotic behavior of random tensors, which might be generalized to other cases of machine learning.
+
+### Strengths
+The framework of this paper is generally novel. The goal of this paper is clear and straightforward. To this end, the authors are able to develop a sophisticated asymptotic theory for random tensors, which might be of independent interest. This formalism is roughly applied consistently across the proofs, providing a uniform treatment of various architectures.
+
+### Weaknesses
+1. I think the presentation is obviously under the bar of ICLR, which sometimes makes the paper challenging to read. Below I list some examples: 
+
+   - line 278 "under the conditions described above". I'm confused about the exact conditions mentioned here: it seems that there is not any condition above this line. Similar issues exist in Theorem 3.2 line 298.
+
+    - line 279 "sufficiently small learning rate $\eta < \eta_{the}$". How is this $\eta_{the}$ obtained? And how small it should be? 
+
+    - line 294, I think a "for example" should not be stated in a formal Theorem.
+
+    - line 405-407 "then exists some 0< T, such as for every s =1 ... S, if:". I'm confused about the statement: 
+
+        - $0 < T$ is obvious, why exists? 
+
+        - "such as for every $s$": Why "such as" here? It seems that "such as" should not be in a Corollary. 
+
+         - Again, how is $\eta_{cor}$ obtained here? Is it a same one as $\eta_{the}$ in Theorem 3.2?
+
+2. The authors do not sufficiently justify that existing tools are inadequate for deriving the main results, which makes the motivation of designing a new formalism a bit unclear. In addition, the overwhelming technical machinery in fact raises a barrier for readers to appreciate the methodology, and I'm only able to roughly read the proofs.  
+
+3. The authors make a new and even bold claim, yet the empirical validation is far from sufficient to support this new claim.
+
+4. Indeed, the framework is general. However, the core insight seems to be a deep reformulation of existing knowledge (lazy training, NTK, infinite-width limits). From this perspective, I think the contribution is limited.
+
+### Questions
+Please see the first point of the Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper offers a nice unified explanation for NTK‑style linearization (weak derivative correlations) and a careful asymptotic calculus to make that explanation precise. It provides some helpful intuition for understanding the driver of the lazy regime vs. feature‑learning regimes.
+
+### Strengths
+- Clear unifying idea. The paper puts forward weak derivative correlations, small correlations at initialisation between the first and higher‑order parameter derivatives, as the underlying mechanism for NTK‑style linearization, with precise definitions $(C_{D,d}$ and two equivalence theorems (Theorems 3.1 and 3.2) tying correlation decay to linearised dynamics and learning‑rate scaling. This gives a compact, testable lens on “lazy training.”
+- Technical framework. Section 2 builds a random‑tensor asymptotics calculus (subordinate tensor norm + stochastic big‑O, uniform bounds), and proves existence/uniqueness of a tight upper bound.
+- Deviation‑over‑time statement. Corollary 4.1 bounds the SGD deviation $F- F_{\text{lin}}$ by $O(1/m(n))$ over (finite) time under an exponential NTK‑phase contraction assumption, making the linearisation guarantee feel more operational.
+- Attempt at architectural breadth. By leaning on tensor‑programs, the authors argue many wide architectures satisfy weak correlations (with rates tied to activation derivatives, Equation 22), offering a route to reason about how architectural choices and learning‑rate reparametrization $\eta \mapsto r(n)\eta$ push systems toward or away from linearisation.
+
+### Weaknesses
+- All experiments use tiny subsets of MNIST, CIFAR‑10, and Fashion‑MNIST; fully connected nets; MSE loss; and NTK‑normalised learning rate with long training (1,000 epochs). These datasets/architectures in this setup typically do not require rich feature learning and are well known to be close to the lazy/NTK regime already. Thus, showing that the relative discrepancy $|f - f_{\text{lin}}|$ shrinks with width (Figure 1) and that estimated 2nd/3rd‑order correlation proxies decrease (Figure 2-3) does not validate the central predictive claim in regimes where feature learning matters. That is - nowhere do we empirically validate that networks that are known to feature learn do not also have weak correlations between the first and higher order derivatives. I appreciate that it is hard to compute the derivatives with large amounts of data (where feature learning typically happens) but there are toy models that show feature learning with relatively small datasets (e.g. sparse parity, multi-index, staircase functions).
+
+### Questions
+1. Main question (feature learning regime). Can you evaluate on feature‑learning regimes (even on small datasets as described in weaknesses), and show that your correlation diagnostics measured at initialisation predict the gap between finite‑width training and NTK?
+2. Learning‑rate scaling predictions. Theorem 3.2 claims reparametrising $\eta \mapsto r(n)\eta$ modulates linearity. Can you add experiments that sweep (r(n)) with width to confirm the predicted $O(r(n)/m(n))$ deviation and the $O((1/\sqrt{m(n)})^d)$ decay of $C_{D,d}$?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

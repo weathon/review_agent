@@ -1,0 +1,197 @@
+# Conditional KRR: Injecting Unpenalized Features into Kernel Methods with Applications to Kernel Thresholding
+
+- Decision: Reject
+- Scores: 4, 6, 2, 6
+
+## Abstract
+Conditionally positive definite (CPD) kernels are defined with respect to a function class $\mathcal{F}$. 
+It is well known that such a kernel $K$ is associated with its native space (defined analogously to an RKHS), which in turn gives rise to a learning method --- called conditional kernel ridge regression (conditional KRR) due to its analogy with KRR --- where the estimated regression function is penalized by the square of its native space norm. This method is of interest because it can be viewed as classical linear regression, with features specified by $\mathcal{F}$, followed by the application of standard KRR to the residual (unexplained) component of the target variable. Methods of this type have recently attracted increasing attention.
+
+We study the statistical properties of this method by reducing its behavior to that of KRR with another fixed kernel, called the residual kernel. Our main theoretical result shows that such a reduction is indeed possible, at the cost of an additional term in the expected test risk, bounded by $\mathcal{O}(1/\sqrt{N})$, where $N$ is the sample size and the hidden constant depends on the class $\mathcal{F}$ and the input distribution. 
+
+This reduction enables us to analyze conditional KRR in the case where $K$ is positive definite and $\mathcal{F}$ is given by the first $k$ principal eigenfunctions in the Mercer decomposition of $K$. We also consider the setting where $\mathcal{F}$ consists of $k$ random features from a random feature representation of $K$. It turns out that these two settings are closely related. Both our theoretical analysis and experiments confirm that conditional KRR outperforms standard KRR in these cases whenever the $\mathcal{F}$-component of the regression function is more pronounced than the residual part.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper discusses conditional positive definite (CPD) kernel. The concept of 'residual kernel' is introduced through the projection of the target function f into a function space spanned by a set of basis functions f_1, ..., f_k. The authors derived connection between two-step procedure (in which the residual kernel model is fitted in the second step) and conditional KRR. Examples using k-principal eigenfunctions and random Gaussian features are shown.
+
+### Strengths
+The paper seemingly provides an interesting discussion of conditional positive definite kernel, whose statistical properties have not been widely studied.
+
+### Weaknesses
+Overall, I found the paper quite difficult to understand. To be honest, I think the readability is far too low. I couldn’t even fully grasp what the practical motivation behind the work is. Although I currently guess it is because insufficient clarification of a premise of the target problem setting, it’s difficult for me to make a definitive judgment. My review had to be an educated guess to some extent.
+
+Experiments are seemingly toy data based verification and for me its significance is unclear.
+
+Minor issues:
+
+Figure 1 is not referred from the main text.
+
+### Questions
+Note that as I have already mentioned, I currently do not fully understand the technical content. I believe that the explanations in the paper are too difficult to understand for anyone who is not already very familiar with this specific context. I would appreciate it if your response could take that into account.
+
+The residual kernel seemingly a central idea of the paper, but I even do not understand what it is for. What situation is this approach required or effective in what sense? A motivation should have been clarified in a clearer way.
+
+Remark 1 shows the equivalence between two-step procedure by the residual kernel and the direct estimation of conditional KRR by (1). What is benefit of this consequence?
+
+What is the definition of the initial kernel K of Theorem 1? 
+
+Is f_|| a true function? Then, in what situation, 'learner has full access to the component f_||' is possible?
+
+Further, I do not understand why (2) is called as 'cost of conditioning'. 
+
+The discussion after Theorem 4 is difficult to follow. I do not understand why and how is the discussion about 'memorizing the noise' and 'benign over-fitting' derived here. These are quite sudden.
+
+What does the constraint \sum_i \alpha_i f(x_i) = 0 imply? I do not have any intuition behind this constraint (in a practical scenario).
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The authors study conditional kernel ridge regression, which consists in linear regression along a set of unpenalized features F, plus KRR  using a residual kernel to estimate the orthogonal component. The authors first rigorously characterize the cost of conditioning, defined as the squared discrepancy between the corresponding estimator and an estimator with oracle knowledge of the component in F. They then apply the result to study thresholding, where the set of eigenmodes containing the target is less penalized, and derive a sufficient condition on the signal strength for conditional KRR to outperform usual KRR. This results in some cases in U-shaped curves for the test error as a function of the number of unpenalized features, which are illustrated in a number of experiments.
+
+### Strengths
+The paper provides a detailed study of the impact of conditioning on KRR. Their study sheds light on a number of interesting facts, notably by determining a sufficient condition (3) for thresholded KRR to outperform standard KRR, leading to interesting non-monotonic curves in the test error, as a function of the number unpenalized features. While I have very limited familiarity with the techniques used, and have not carefully checked the technical derivations, the results seem to the best of my reading sound and novel. I am thus in favor of acceptance; albeit with very low confidence.
+
+### Weaknesses
+While the paper is overall clearly written, a minor criticism is that the current exposition is at points somewhat dense (for example Section 2), and the motivation of studying the problem would gain to be further expounded or reminded throughout technical sections. I would find it for instance helpful if the authors could motivate further applications of conditional KRR in the introduction. I would also think that moving the experiments on real data of Fig. 7 into the main text would strengthen the manuscript, and add an extra helpful illustration to the findings. 
+
+Beside these points, I am listing some questions in the next section.
+
+### Questions
+I have a number of minor questions.
+
+- l.305 "has the expected error of approximately [...]" I am unsure where this statement comes from, could the authors clarify?
+- It could be a confusion from my part, but it is not clear to me why the error of conditional KRR corresponds to the error of KRR with the residual kernel $K_p$ plus the conditioning cost (l.307)? Further discussion would be helpful.
+- "ensuring that conditional KRR outperforms standard KRR without unpenalized features (equivalently, that the expected test error is a U-shaped function of k". I am unsure how the second statement follows from (3), notably the ascending part of the U. Could the authors clarify?
+- To the best of my reading, the authors contrast KRR and conditional KRR with the same regularization $\lambda$. Would there still be a non-monotonicity if the regularization is optimized over for every $k$ ? Or do the authors anticipate the optimal regularizer is the same for conditional and standard KRR?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The authors propose a learning rule they term "conditional kernel ridge regression,"  which essentially consists of two steps: training a linear model on fixed features, and then training a kernel on the resulting residual. The final estimator is the sum of the estimators yielded by each step. They prove that an object called the residual kernel is PSD, and that the second step of CKRR is equivalent to KRR in the residual kernel's RKHS. Finally, they prove that the additional error incurred by using this two-step estimator decays as $1/\sqrt{N}$, though they empirically found a faster rate.
+
+### Strengths
+The two-stage learning rule is interesting, and may connect to other efforts to learn interpretable and transparent estimators. The authors' use of the KRR generalization eigen-framework in the analysis appears new to me.
+
+### Weaknesses
+1) It is not clear to me that this learning rule is relevant to practice. It would be nice to empirically see a relevant setting (or, at least, any setting at all) in which conditional KRR outperforms optimally-regularized KRR. However, I'm not sure that it's possible to guarantee this -- since both learning stages are linear in the target, the cost or benefit of conditioning will depend on the alignment between the target, the residual kernel, and the chosen function class $\mathcal{F}$. (I believe this follows from the eigen-framework for KRR generalization.)
+2) The role of L2 regularization in the first linear regression stage is not treated. 
+3) The proposed quantity "cost of conditioning" seems like a misnomer, and it's not clear how to interpret it. The defined quantity presumes omniscient knowledge of the component of the target in $\mathcal{F}$, even though any learning rule will need to estimate this. I think a more informative quantity (which may deserve the name "cost of conditioning" more) is something like
+$\| \hat f_{KRR} - \hat f_{CKRR; \mathcal{F}} \|$, i.e., the cost (or benefit!) of implementing the first conditional step rather than using KRR for the full estimation. This quantity can be understood in terms of the alignment metrics mentioned in point 1.
+4) I found the experiments unconvincing and unclear. The top row of Fig 2 does not agree with the theoretical bound (the bound is too pessimistic). The bottom row is consistent with standard linear regression theory, and seems like a weak test of Theorem 4. Fig 3 is very confusing to me -- why is the estimator in the middle panel so bad? Usually KRR with optimal regularization is a pretty powerful estimator. The takeaway message for Fig 4 is unclear.
+5) I believe there is an error in line 305 -- the test error should not vanish when the target noise vanishes. There will be leftover estimator variance from the sampling noise.
+
+### Questions
+1) Why is it important to develop a statistical theory of learning for conditional KRR?
+2) Does the first linear regression stage require using no ridge regularization?
+3) Can you clarify the takeaway message regarding the analysis of hard-thresholded vs. soft-thresholded residual kernels?
+4) Double descent (in linear learning rules) is known to be a pathology resulting from badly-chosen regularization. Do you expect the U-shaped curves to vanish if the regularization is chosen well in the second learning stage, or would the first linear regression learning stage interfere?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces and analyzes conditional Kernel Ridge Regression (KRR), an extension of standard KRR that incorporates unpenalized features from a function class $ \mathcal{F} $.
+A conditionally positive definite (CPD) kernel $ K $ with respect to $ \mathcal{F} $ can be used for a two-stage learning process: linear regression on the features in $ \mathcal{F} $, followed by standard KRR on the residuals.
+The paper proposes to construct residual kernel from a CPD kernel and use it to fit the residuals after regressing out the $ \mathcal{F} $-component.
+The authors develop a theoretical framework to understand its statistical properties, reducing it to standard KRR with a "cost of conditioning" term.
+Applications of the result to particular function classes $ \mathcal{F} $ are provided, including top eigenfunctions of the kernel and random features.
+Empirical results are presented to demonstrate the performance of conditional KRR.
+
+### Strengths
+* This paper is well-written and clearly structured, making it easy to follow the main ideas and contributions.
+* The proposed theory on conditional KRR framework is novel. The theoretical analysis is rigorous, providing insights into the statistical properties of conditional KRR and its relationship to standard KRR.
+* The applications to specific function classes, such as top eigenfunctions and random features, demonstrate the versatility of the proposed method.
+* The empirical results partially validate the theoretical findings on the asymptotic behavior of conditional KRR.
+
+### Weaknesses
+* Though a theory of the upper bound is provided, it seems that the upper bound is not very tight, especially when $\lambda$ is small (which is the case for KRR). The "cost of conditioning" term seems to be loose compared $k$-dimensional linear regression plus a standard KRR on the residuals.
+Also, it would be helpful to provide minimax lower bounds.
+* For the applications, it would be much clearer to present illustrative settings for the conditional KRR to outperform standard KRR. Moreover, some heuristic arguments are made in this section, but more rigorous analysis would be preferred.
+
+* More experiments would be helpful to validate the effectiveness of conditional KRR, especially in real-world datasets. Statistical significance of the results should also be reported.
+In addition, a comparison with classical KRR could be provided to demonstrate the advantages of conditional KRR.
+
+### Questions
+1. It seems that all the kernels considered in the examples are already positive definite. Can you provide some examples of conditionally positive definite kernels and discuss how is their performance?
+2. Could you discuss the computational complexity of conditional KRR compared to standard KRR? Are there any additional computational costs associated with incorporating unpenalized features?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

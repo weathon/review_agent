@@ -1,0 +1,191 @@
+# EDINET-Bench: Evaluating LLMs on Complex Financial Tasks using Japanese Financial Statements
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6, 6
+
+## Abstract
+Large Language Models (LLMs) have made remarkable progress, surpassing human performance on several benchmarks in domains such as mathematics and coding. A key driver of this progress has been the development of benchmark datasets. In contrast, the financial domain poses higher entry barriers due to its demand for specialized expertise, and benchmarks remain relatively scarce compared to those in mathematics or coding.
+We introduce EDINET-Bench, an open-source Japanese financial benchmark designed to evaluate LLMs on challenging tasks such as accounting fraud detection, earnings forecasting, and industry classification. EDINET-Bench is constructed from ten years of annual reports filed by Japanese companies. These tasks require models to process entire annual reports and integrate information across multiple tables and textual sections, demanding expert-level reasoning that is challenging even for human professionals.
+Our experiments show that even state-of-the-art LLMs struggle in this domain, performing only marginally better than logistic regression in binary classification tasks such as fraud detection and earnings forecasting. Our results show that simply providing reports to LLMs in a straightforward setting is not enough. This highlights the need for benchmark frameworks that better reflect the environments in which financial professionals operate, with richer scaffolding such as realistic simulations and task-specific reasoning support to enable more effective problem solving.
+We make our dataset and code publicly available to support future research.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces EDINET-Bench, an open-source benchmark designed to evaluate Large Language Models (LLMs) on complex financial tasks using Japanese financial statements. The authors highlight the current gap in financial benchmarks, which often focus on simpler tasks, unlike the specialized expertise required in real-world finance.
+EDINET-Bench comprises three challenging tasks: Accounting Fraud Detection, Earnings Forecasting and Industry Classification.
+The evaluation setup involves testing various closed-source and open-source LLMs in a zero-shot setting, comparing their performance against classical baselines like Logistic Regression and Random Forest. Evaluation metrics include ROC-AUC and MCC for fraud detection and earnings forecasting, and accuracy for industry classification.
+Key findings indicate that even advanced LLMs struggle with these tasks, performing only marginally better than logistic regression in binary classification tasks. The results suggest that simply providing raw annual reports to LLMs is insufficient, underscoring the need for benchmark frameworks that better simulate real-world financial environments with richer scaffolding and task-specific reasoning support.
+
+### Strengths
+1. Authenticity and Challenging Nature of the Dataset: The benchmark is constructed from a large volume of real-world annual reports. The tasks, such as fraud detection and earnings forecasting, are highly challenging and effectively test the capabilities of large language models in complex, expert-level reasoning.
+2. Data Quality and Integrity: The risk of test set contamination was convincingly demonstrated to be low through rigorous analysis, such as company name prediction and temporal performance checks. This significantly enhances the credibility and reliability of the evaluation results.
+3. Commitment to Reproducibility: The authors clearly commit to open-sourcing the complete dataset (including both the EDINET-Corpus and EDINET-Bench) alongside the data construction toolkit (edinet2dataset). This ensures full transparency and greatly facilitates future research and replication of the reported results.
+
+### Weaknesses
+1. Limitations in Task Formulation and Evaluation Setup: The benchmark simplifies all three core tasks into binary classification problems. While this formulation facilitates straightforward evaluation, it may not fully capture the continuous and probabilistic nature of professional financial judgment. In practice, for instance, accounting fraud risk assessment often involves estimating a probability or risk score rather than making a binary determination, and earnings forecasting typically focuses on predicting specific numerical values or the magnitude of change.
+2. The definition of Expert-level reasoning in the paper is not rigorous enough. It is stated that
+"Expert-level reasoning refers to tasks that require integrating information across tables and text, rather than mere extraction or simple computation."
+However, on the one hand, multi-table reasoning datasets already exist in the financial domain, such as FinMath[1]. On the other hand, the authors neither provide a quantitative explanation nor cite any references to clarify what constitutes "simple computation," which undermines the clarity and rigor of the definition.
+3. Incomprehensive Experimental Evaluation: The selection of LLMs for evaluation, both open-source and closed-source, does not represent the most recent or state-of-the-art models available, even when considering the submission timeline of the paper and the inherent time required for experimentation. This limits the scope of the performance analysis and its relevance to the current frontier of LLM capabilities.
+
+[1]Yilun Zhao, Hongjun Liu, Yitao Long, Rui Zhang, Chen Zhao, and Arman Cohan. 2024. FinanceMATH: Knowledge-Intensive Math Reasoning in Finance Domains. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages 12841–12858, Bangkok, Thailand. Association for Computational Linguistics.
+
+### Questions
+1. The authors utilized Claude 3.7 Sonnet to generate labels for the accounting fraud detection task. Could you please elaborate on the rationale behind selecting this specific model over other potentially more powerful alternatives available at the time? Furthermore, as this approach relies on a single model for judgment, could you discuss whether and how this might introduce model-specific biases into the dataset, and what impact this could have on the overall label quality and benchmark reliability?
+2. How to rigorously demonstrate that the questions in proposed dataset genuinely require expert-level reasoning? Is it because models achieve lower accuracy on this dataset compared to existing benchmarks (a comparison notably absent in the paper)? Is it because the questions necessitate more reasoning steps? Or is it due to a requirement for external, specialized knowledge—a claim that likewise lacks supporting case analysis?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+EDINET-Bench is an open, reproducible benchmark built from 10 years of Japanese EDINET annual reports to evaluate LLMs on expert-level financial tasks: accounting fraud detection, earnings direction forecasting, and industry classification. The authors release edinet2dataset and the EDINET-Corpus, construct labels , and test frontier closed/open LLMs in zero-shot across multiple input configurations (tables + text). Results show state-of-the-art LLMs struggle and often only match simple classical baselines, highlighting the need for richer scaffolding and agentic settings to better reflect real-world financial analysis.
+
+### Strengths
+- Real-world, long-context financial documents (tables + text) with open data, code, and tooling for reproducibility.
+- Clear task definitions and splits; systematic evaluation across models and input modalities, plus contamination checks.
+- Practical insights (e.g., text helps fraud detection but not earnings forecasting) that inform future benchmark and agentic framework design.
+
+### Weaknesses
+- The benchmark is limited to the Japanese financial market. But I believe the methodology of the benchmark is applicable to other financial markets. Results may be different and interesting in other markets (I guess the industry prediction task results may vary).
+
+- The industry prediction task, while straightforward to evaluate, does not closely reflect real-world use cases. In practice, industry labels are readily available from official sources, so predicting them from financial statements has limited practical value. As such, its significance for assessing LLM capabilities in realistic financial analysis scenarios is questionable.*
+
+- The earnings forecasting task does not incorporate any macroeconomic, industry-wide, or peer company data, despite earnings being strongly influenced by such factors in real-world scenarios. As a result, the task may undervalue the importance of external context and limit the realism of its predictive setting.
+
+### Questions
+- For each individual sub-task in the paper, how does the work establish novelty? For instance, in the case of fraud detection, there are already existing benchmarks such as:
+  Wang, R., Liu, J., Zhao, W., et al. *AuditBench: A Benchmark for Large Language Models in Financial Statement Auditing* [C] // International Workshop on AI for Transportation. Springer, Singapore, 2025: 59-81.
+
+- Why not evaluate stronger tabular models like XGBoost, LightGBM, or CatBoost to provide a stronger baseline in Table 6?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper presents EDINET-Bench, an open-source benchmark built from ~10 years of Japanese securities (annual) reports from the FSA’s EDINET system to evaluate LLMs on three expert-level financial tasks: accounting fraud detection, next-year earnings direction forecasting, and industry prediction. The authors release a tool (edinet2dataset) to harvest/parse EDINET TSV/PDFs and construct both a large corpus and three task datasets. Zero-shot evaluations of several closed/open LLMs versus classical baselines show that LLMs perform only marginally better than logistic regression and are outperformed by random forests on fraud detection; earnings forecasting is hard for all models; industry prediction is relatively easier from tables+summary. The paper argues that “just feed the report” is insufficient and calls for richer, more realistic scaffolding.
+
+### Strengths
+Clear gap & relevance. Financial NLP benchmarks often emphasize QA/extraction (e.g., FinQA/ConvFinQA/FinanceBench; largely English), whereas this work targets end-to-end expert reasoning over full reports in Japanese—a meaningful and under-served setting. 
+
+Nontrivial tasks and inputs. Whole-report inputs (tables + text) and tasks like fraud detection are practically impactful and distinct from prior QA settings and multimodal finance QA (e.g., FAMMA). 
+
+Open tooling & dataset construction details. The pipeline (EDINET API + TSV parsing via Polars), corpus statistics, class balances, and prompts are described with reasonable transparency.
+
+### Weaknesses
+Fraud labels rely on LLM-assisted screening of amended reports. Although later manually checked, the pipeline first classifies “amended report reasons” with Claude and then claims <5% label errors. This creates potential circularity (LLM both builds and is evaluated on the dataset domain) and possible systematic biases in what counts as fraud (e.g., wording styles of amendments). A larger human validation and inter-rater agreement would strengthen validity.
+
+Definition of “fraud” is ambiguous. Amendments can be due to material misstatements or benign issues (e.g., shareholder counts). The paper filters for fraud phrases but the ground-truth notion of fraud vs. error could be better anchored (e.g., to JICPA/FSA definitions or enforcement actions). See classic fraud detection literature (e.g., Beneish M-Score) for framing and baselines.
+
+Evaluation setting is narrow. The main headline is that “LLMs struggle in zero-shot long-input.” But practitioner pipelines typically use retrieval over filings plus structured features (ratios, trends) and programmatic reasoning. Without strong RAG/agentic or tool-use baselines (tables→ratios→rules, fraud heuristics, or Beneish-style features), the conclusion may over-generalize. (The paper suggests this as future work, but including such baselines would be very informative.)
+
+### Questions
+Label audit: How many fraud-flagged amendments did two independent human annotators review? What was Cohen’s κ? Can you release a gold subset with multi-rater consensus?
+
+Negative controls: Did you try Beneish-M-Score or other ratio-based baselines (or hybrid RF + text signals) for fraud detection as stronger non-LLM baselines?
+
+Tool-use baselines: Could you include RAG over earlier filings + programmatic ratio extraction (few carefully designed tools/skills) to test the “richer scaffolding” claim within this paper?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+1. The manuscript discusses the EDINET-Bench: an Open-source Japanese financial benchmark evaluating LLMs on accounting fraud detection, earnings forecasting, and industry classification.
+
+2. The benchmark is very in depth and built from 10 years of EDINET annual reports (~40K docs). The manuscript is worked very comprehensive and seems like a good work
+
+3. Tasks demand integration of text and tables  which is resulting into expert-level financial reasoning. The financial model is well comprehensive.
+
+4. Even top LLMs barely outperform logistic regression. The regression is also well connected and shows some good work done.
+
+### Strengths
+1. This would be a large-scale Japanese financial benchmark requiring expert reasoning. So the model looks like a good work delivered.
+2. Covers diverse, realistic financial tasks. The real world scenario based tasks being financial in nature would be good. 
+3. Includes reproducible toolkit and dataset which have other applications as well
+
+### Weaknesses
+1. LLMs show limited performance gains over traditional models. SLMs could also be explored in depth for the tasks. Even MCP route with more sophisticated approaches can be taken into consideration
+
+2. Some of the Evaluation limited to zero-shot; no fine-tuning comparisons. Zero shot learnings in some cases can be a good way to go but cannot be relied on all the time.
+
+### Questions
+1. How would fine-tuned domain-specific small language LLMs perform when compared with zero-shot learning?
+2. Could multilingual or cross-market benchmarks improve robustness, that will be good to explore?
+3. What scaffolding or reasoning frameworks could help ?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

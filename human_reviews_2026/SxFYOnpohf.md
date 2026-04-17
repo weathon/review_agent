@@ -1,0 +1,132 @@
+# A Neural Signal Codec with Resource Efficient Encoder for Implantable Brain Machine Interface Systems
+
+- Decision: Reject
+- Scores: 2, 4, 4
+
+## Abstract
+In this paper, we present a neural signal codec (NSC) with a resource-efficient encoder for implantable brain machine interface (iBMI) systems. The proposed codec has a multiplication-free encoder with only 124-bit lightweight parameters, which is suitable for deployment at the edge of an iBMI system. To reduce the parameter size, a dynamic weight generation mechanism for parameter sharing within the window is implemented in the encoder design. On the decoder side of the codec, a conventional multilayer convolutional neural network with a specially designed loss factor – Energy Aware Loss (EAL) is adopted, which adds adaptive attention to the total loss function to improve reconstruction performance by emphasizing the signal energy intensive regions of the input data section. The parameter storage is reduced by 97% on the encoder side, compared to a conventional FC-based autoencoder with INT8-quantized weights. Large-scale evaluations show that NSC is capable of restoring high-fidelity neural signals and preserving the biological features across diverse neural signal datasets, making it a promising data compression approach for high-throughput iBMI systems. Furthermore, preliminary generalization experiments on other biomedical signals such as ECG (MIT-BIH) further demonstrate the potential of NSC as a general resource-efficient compression framework for streaming biosignals.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper presents a Neural Signal Codec (NSC) designed specifically for implantable brain-machine interface (iBMI) systems. The proposed method features a highly resource-efficient encoder with only 124-bit parameters that operates without multiplications, making it suitable for on-chip deployment. The encoder employs a dynamic weight generation mechanism for parameter sharing within windows and uses 4-bit quantization. On the decoder side, a conventional CNN architecture is combined with a novel Energy-Aware Loss (EAL) that emphasizes signal energy-intensive regions. The authors claim a 97% parameter reduction compared to conventional FC-based autoencoders with INT8 quantization. Extensive evaluations across multiple neural signal datasets demonstrate the method's ability to preserve biological features while maintaining high compression ratios (32:1). Additional experiments on ECG signals suggest potential generalization to other biosignal domains.
+
+### Strengths
+Novel and Hardware-Oriented Design:​​ The paper addresses a critical challenge in iBMI systems - extreme resource constraints - with a carefully designed multiplication-free encoder. The dynamic weight generation mechanism and parameter sharing scheme represent innovative approaches to minimize storage requirements while maintaining functionality.
+​​Comprehensive Evaluation:​​ The authors evaluate their method on multiple datasets (QU, GC, hc1, NP) with both synthetic and real neural signals, demonstrating robustness across different recording conditions. The inclusion of downstream clustering analysis provides valuable insights into practical utility.
+​​Strong Resource Efficiency:​​ The 124-bit parameter footprint represents a significant advancement for implantable applications.
+
+### Weaknesses
+Inadequate Related Work Coverage:​​ The paper lacks comparison with learned compression methods from other domains, particularly learned image compression techniques (e.g., VQ-VAE, transform coding models) that share similar encoder-decoder architectures and discrete representation learning concepts. This omission makes it difficult to assess the novelty of the overall framework.
+​​Unclear Experimental Conditions:​​ The description of baseline implementations is insufficient. Equation 7 indicates the NSC produces discrete codes, but it's unclear whether compared methods (especially AE_FP32) also produce discrete representations. If not, the comparison becomes unfair. Additionally, the paper doesn't specify if all methods were compared at equivalent bitrates, which is essential for meaningful compression performance evaluation.
+​​Incomplete Results Interpretation:​​ Table 4 shows significant performance gaps in clustering metrics (F1 score: 0.98 for AE_FP32 vs. 0.72 for NSC), but the paper doesn't adequately discuss whether this level of performance degradation is acceptable for practical neural signal analysis. The biological implications of this reduction need more thorough discussion.
+
+### Questions
+Please address the questions in the weaknesses part.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes a neural signal codec through an encoder-decoder architecture, where the encoding is done on-chip or on another possible edge device. The authors propose a simple mechanism to extract regions of interest that can be decoded through a multilayer CNN trained with a proposed energy aware loss function. The authors compare their method on various datasets, showing their performance on the full signal and specific regions of interest.
+
+Claimed Contributions:
+
+- Proposed an encoder-decoder architecture for signal reconstruction in a constrained resource setting
+- Introduced a new loss for spike reconstruction
+
+### Strengths
+- developed a solution that focuses on efficiency and outperforms other methods in a low-constrained setting.
+- The motivation for their approach is well grounded in theory and experiments
+
+### Weaknesses
+1. Lack of comparison to the relevant literature. Within the relevant work, the authors show some of the more recent work, yet they do not evaluate or do not tie the work to their method. The work introduced in the “On-Chip Neural Signal Compression” section is briefly mentioned, but the direct relevance is not shown.
+2. Poor presentation: The graphics and tables in the paper are barely visible and of low quality. The images have poor resolution, with Figure 3 being impossible to view. Additionally, Tables 4 and 5 are difficult to read, as there is no visual indication of what the reader should focus on, given the plethora of data presented.
+3. The design choices and the algorithm are not motivated well: 
+- a) In the “Ablation Studies”, the authors point out that “The general trend across datasets is that performance improves with larger w”, but later claim that “larger window counts increase storage without consistent gains across datasets”, showing inconsistencies in design choices and reasoning. 
+- b) Moreover, the increase in memory is not quantified. 
+- c) Moreover, some parts of the algorithm are not explained. In the energy-aware loss, the authors mention smoothing e (line 248) and then smoothing it again with Equation 8. 
+4. No ablation nor discussions on the decoder: While I acknowledge the focus of the paper on the encoder architecture, the decoder architecture and the design choices are not documented.
+5. Minor writing mistakes: Some repetition and mistakes that break the flow of the paper. Line 51 with the repetition and Line 313 with the redefinition of the NP channel.
+
+### Questions
+I have one central question: What considerations have been made when it comes to the design of the decoder architecture?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This work presents a compressor for spike-shaped biosignals with an extremely light-weight encoder, which can be deployed into an implantable sensing device, e.g., an implantable brain-machine interface (iBMI). The main innovation lies in the resource-efficient design of the encoder, which only requires 124 bits for storing the parameters and can be implemented with computationally cheap shift and add operations. Together with a new loss function that focuses on the spike reconstructions (EAL), the proposed compressor achieves Pareto-optimality with respect to reconstruction fidelity and number of encoder parameters on a series of datasets.
+
+### Strengths
+While being a tailored solution to the problem of compressing spike signals, the proposed compressor achieves good compression performance while being highly resource efficient on the encoder side. This angle is interesting and relevant for such sensing applications.
+
+### Weaknesses
+My major concern lies in the heavy tailoring of the compressor to spike-shaped biosignals. The compressor is only demonstrated on single, centered, cropped spike signals. From a practical perspective, it then seems quite hard to fully reconstruct the entire signal for analysis (e.g., classification). Obviously, this inductive bias simplifies the encoding, but makes the overall application questionable. Even more, it is not clear how and if the compressor could be applied to different kinds of time signals (even inside the biosignals domain, e.g., scalp EEG).
+
+Minor: 
+
+-	Weak classifier baseline. Using a K-means clustering with class assignments seems rather weak. It would be good to use state-of-the-art classifiers in the domain. 
+-	Different time windows for experiments and hardware emulations. Experiments use a time window of 128, while the hardware emulations in B.2 reduce it to T=32. This makes the justification of the hardware difficult, as no experiments are demonstrated with the small time window.
+
+### Questions
+1.	How does the compressor perform in a more general setting, i.e., without cropping and centering the spikes? It would be good to have a setup with continuous streaming, where also multiple spikes could be contained inside a window. 
+2.	Reporting a stronger classification baseline would be appreciated.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

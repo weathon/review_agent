@@ -1,0 +1,189 @@
+# WiniQ: Accelerating Quantization-Aware Training of LLMs around Saddle Points
+
+- Decision: Reject
+- Scores: 8, 6, 2, 4
+
+## Abstract
+Quantization-aware training is a widely used approach for language model quantization in sub-4-bit precision. This approach works by training full-precision weights to minimize the loss with gradients on the quantized model. Despite its superior performance, the main bottleneck for this quantized training is its slow convergence, which gets worse in lower bit-widths. While this problem has been observed in prior work, its precise cause has not been carefully studied. In this paper, we analyze the convergence by computing the Hessian spectrum of the model loss throughout quantization-aware training. We find the key reason is that the model weights converge to flat surfaces near saddle points with a large fraction of Hessian eigenvalues concentrated around zero, and the magnitude of both positive and negative eigenvalues decreases over training. Additionally, the convergence speed is slower in lower bit-widths with significantly smaller magnitude of loss Hessian eigenvalues. Motivated by these findings, we propose an approach to accelerate quantized training with minimal overhead named WiniQ. The key technique in WiniQ is periodical weight re-initialization by linear interpolation between the full-precision and quantized weights. This interpolation resets the weights to regions with larger (magnitude) Hessian eigenvalues without increasing the loss. We further use noise injection to regularize the Hessian, resulting in an algorithm that is broadly applicable to quantization methods. Extensive experiments show that WiniQ accelerates various quantized training methods by up to **4**$\times$. Under the same training budget as prior training methods, WiniQ improves state-of-the-art sub-4-bit quantization performance by up to **8.8**% relatively. Additionally, WiniQ remains consistently effective across 16 settings of different language models, quantization methods, and bit-widths.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper aims to address the slow convergence problem for QAT in LLMs, especially in low-bit settings. The authors first analyse the reason lies in the weights converging to a flat surface near saddle points. Then they propose a novel weight re-initialization technique and noise injection. The experimenal results show that the proposed method can speed-up the training process and improve the QAT quantized LLMs performance. 
+
+This research is interesting and meaningful for LLM quantization community. I lean to accept this paper.
+
+### Strengths
+Originality:  
+This paper presents a fresh perspective on the challenge of slow convergence in quantization-aware training (QAT). By identifying the flat surface phenomenon, it provides novel insights into the training dynamics of QAT for large language models (LLMs). The proposed WINIQ method effectively accelerates training and enhances model performance.
+
+Quality:  
+The paper is well-written and clearly presented. Its motivation, problem identification, and proposed solution are well-grounded, reasonable, and meaningful.
+
+Clarity:  
+The presentation is coherent and logically organized. Both the motivation and the empirical analysis are clear and persuasive.
+
+Significance:  
+The contributions of WINIQ are of broad significance for both academic research and practical LLM deployment. It substantially improves the efficiency of QAT for LLMs, while the insights into saddle-point behavior open promising avenues for future research.
+
+### Weaknesses
+Main comments:  
+The authors only evaluate their method on 1B–3B language models. While I understand that quantization-aware training is computationally expensive, I am still curious whether this approach can scale to larger models, such as 13B–70B parameters.
+
+Minor comments:  
+1. Line 18: “We find the key reason is that” → should be “We find that the key reason is that.”
+2. Line 281: if i + 1(mod K) is zero → should be if (i + 1) mod K == 0 then.
+
+### Questions
+1.  Could the authors discuss the potential scalability challenges (e.g., memory usage, training stability, or quantization error propagation) and whether any architectural or algorithmic modifications would be needed to extend their method to such scales?
+
+2. Line 18: The phrase “We find the key reason is that” should be revised to “We find that the key reason is that.”
+
+3. Line 281: The expression “if i + 1(mod K) is zero” should be corrected to “if (i + 1) mod K == 0 then.”
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This paper introduces WiniQ, a method designed to accelerate Quantization-Aware Training (QAT). The article provides a detailed analysis of the slow convergence observed in traditional QAT, identifying the core reason: model weights tend to converge towards flat surfaces near saddle points, where a large fraction of the Hessian eigenvalues are concentrated around zero. The paper argues that under the Straight-Through Estimator (STE) approximation, the loss surface is flat along the direction from the quantized weights back to the original (float) weights. Consequently, the Hessian matrix of the loss during training possesses very small eigenvalues, leading to slow convergence. This issue becomes more severe as the quantization bit-width decreases. To address this phenomenon, the authors propose using regular weight interpolation to increase the eigenvalues of the Hessian matrix, complemented by injecting stochastic noise during the optimization process to accelerate training. The authors conduct extensive experiments to demonstrate the effectiveness of the Wini method in accelerating training across various QAT scenarios (primarily weight-only quantization), and also provide comparisons against a range of Post-Training Quantization (PTQ) methods and state-of-the-art (SOTA) QAT approaches.
+
+### Strengths
+1.  The theoretical analysis is comprehensive and novel. The authors' approach primarily focuses on the significant impact of the mathematical properties (magnitude, sign, eigenvalues, etc.) of the Hessian matrix of the loss function during neural network training. They provide a focused analysis on how quantization affects the Hessian matrix, addressing a profound and fundamental theoretical issue in neural networks.
+2.  The logic is clear and well-structured. The paper starts with the premise of accelerating QAT, clearly presents the scenario, analyzes the problem, proposes the solution, and finally demonstrates the experimental results, making the argument easy to follow and convincing.
+3.  The WiniQ method, despite its simplicity, proves highly effective for accelerating QAT, especially showing significant results in the 1-bit weight-only quantization scenario. It can also be readily combined with many existing works focusing on Hadamard transforms. The paper provides sufficient experimental validation. Although experiments are not conducted on very large models or with a vast amount of data, the paper validates the effectiveness of the Wini method across different quantization settings on a smaller scale and performs a series of ablation studies to confirm the effectiveness of its components.
+
+### Weaknesses
+1.  **Lack of Activation Quantization Analysis:** In the QAT domain, there is a general consensus that activations are significantly harder to quantize than weights, and achieving low-bit quantization for both weights and activations is crucial for practical hardware acceleration. While this paper provides comprehensive theoretical analysis, it focuses solely on the behavior of weights and lacks in-depth analysis of activation quantization. The existing experiments primarily use 16-bit and 8-bit activations, which are far from the low-bit regime explored for weights. **Although it is regrettable that the authors did not further explore activation quantization, this does not affect the internal consistency and completeness of the presented work.**
+2.  **Insufficient Experimental Scale:** Although the high GPU resource requirements for training are acknowledged, Figure 5 shows a series of training curves where the compared ParetoQ curve still appears to have significant room for further decrease. While the proposed WiniQ curve shows a large initial drop in loss after interpolation, its subsequent decline rate is very low. This raises questions: As the training scale increases, will WiniQ exhibit further potential for loss reduction, or is its benefit primarily limited to the initial drop achieved through weight interpolation?
+3.  **Universality Concerns Regarding Weight Quantization Bit-width:** Based on the paper's theoretical claims, the WiniQ method is expected to show greater benefits for lower weight quantization bit-widths. However, the paper does not extensively discuss the method's performance when the weight bit-width is higher. Figure 5 also shows that the performance gap between standard QAT and WiniQ diminishes as the weight bit-width increases. The authors should provide results comparing their method with others at higher weight bit-widths. If the gap is minimal for W4/W8 scenarios, this should be explicitly stated.
+4.  **Issues with Writing, Presentation, and Minor Errors:** For example, the abstract and introduction should not simultaneously state that WiniQ can accelerate training by up to 4x *and* improve final performance by up to 8.8%, as acceleration assumes consistent performance, while performance improvement assumes equivalent training effort. Fundamentally, both relate to accelerating model convergence. Regarding presentation, the full-precision bar in Figure 3 and the ablation study in Section 4.3 are recommended to be moved from the appendix into the main text (as they support the paper's soundness), with other parts of the main text potentially shortened accordingly. The data in the "FP Model" rows in Table 1 are clearly incorrect and require correction.
+
+### Questions
+1.  **Definition of the Zero Eigenvalue Threshold:** The paper states, "Numerically, we regard the estimated eigenvalues in a range between -10⁻³ and 10⁻³ as zero eigenvalues." However, I feel this approach might be less robust than defining zero eigenvalues based on a proportion (e.g., relative to the maximum eigenvalue). Could the authors provide further justification or theoretical backing for the chosen threshold of 10⁻³? Specifically, can they demonstrate or argue that singular values smaller than 10⁻³ indeed correspond to directions where the gradient's contribution to weight updates is so negligible that it can be practically ignored?
+
+2.  **Missing W1A16 Curve in Figure 5:** The W1A16 configuration is present in Table 1. Why is its training curve not included in Figure 5? Omitting it makes Figure 5 seem incomplete, especially since W1 (1-bit weight quantization) appears to be a key strength of this work highlighted by the authors.
+
+3.  **Comparison with PTQ in Table 1:** Fundamentally, QAT is expected to outperform PTQ methods. Including PTQ results in the main experimental table (Table 1) might lead to some confusion or could be perceived as a way to emphasize the proposed method's performance gains. Would it be clearer to present QAT methods (including Wini) separately, perhaps only including PTQ comparisons in a dedicated section or a supplementary table?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes a gradient estimator for QAT LLMs.  
+It combines cyclic reinitialization and noise injection.  
+The idea is inspired by the observation of empirical loss Hessian geometry.
+
+### Strengths
++ The idea is clearly presented.  
++ Certain empirical observations are novel and interesting (see below).
+
+### Weaknesses
+- Although the empirical observation of loss Hessian gives some interesting results (Fig. 4), there is very little further analysis to study its generality or underlying mechanisms.  
+- Because of the above limitation, the proposed method, one that combines a zeroth-order noise injection with some pseudo-second-order perturbation by interpolation, still lack adequate theoretic or empirical support to establish either necessity or sufficiency. 
+- Presented ablation is not actually true ablation that establishes each component's necessity, but rather, a hyperparameter tuning of each component independently.  To establish necessity, you should study $\alpha=0$ and $\sigma=0$; to do proper hyperparameter tuning, you should search the joint $(\alpha, \sigma)$ space, not independently.
+
+### Questions
+* I find the non-monotonic behavior of Hessian spectral radius along the segment from $W$ to $Q(W)$ (Fig. 4) rather interesting, is this qualitatively general in all cases?  Is there any quantitative relationship about the location and magnitude of the maximal spectral radius as a function of model and quantization data type?  
+* I still do not have a clear picture of the empirical results that motivated the formulation of the technique.  Could you replot Fig. 4 with 2 joint independent variables, i.e. $(\alpha, \sigma)$?  Also, in addition to the indirect spectral radius of Hessian, could you also plot the expected gradient magnitude as the dependent variable?  
+* Due to the stochasticity from finite batch size, there should be an interaction between batch size and $\sigma$, what is such a relationship?  
+* Two concepts that should be separately studied are at times confused here: the symmetry (saddleness) and magnitude (flatness) of the Hessian eigenspectrum.  The authors characterized the loss landscape of QAT as both high in saddleness and flatness, is this both true?  Looking at Fig. 3, clearly the flatness is much greater in low precision case than in high precision, but I do not see any significant trend in the symmetry of the distribution.  Could you also include a column of full-precision training in Fig. 3?  
+* The cyclic reinitialization introduces the complexity of its schedule, how should the schedule be determined?  In particular, could you do an ablation study, in which you perform Fig. 4 analysis along the course of one training, and branch into different training instances with reinitialization at different times and compare across them on how fast they converge--if the intuition behind your method is correct, training instances that scheduled reinitialization at the most peaky Fig. 4 should win over those with less peaky ones.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper looks at why quantization-aware training (QAT) for large language models experiences significant performance degradation at very low bit-widths. Through Hessian spectrum checks, the authors show that weights get stuck on flat saddle regions, and they offer a simple fix—periodic linear interpolation plus light noise, that speeds things up. Experiments across 1–4-bit settings give modest gains in perplexity and QA accuracy. The key limitation is that only language-model tasks are tested, and the theoretical backing for the fix is thin.
+
+### Strengths
+- Novel Diagnostic Insight: the paper empirically link the slow convergence of sub-4-bit QAT to an increasingly flat Hessian spectrum dominated by near-zero eigenvalues and saddle regions.
+- Simple yet Effective Algorithm: WiniQ adds only periodic linear interpolation plus light Gaussian noise; no second-order optimizer overhead and low compute cost.
+- Clear Ablation: shows both interpolation and noise injection are essential; provides intuitive α and σ sensitivity curves.
+
+### Weaknesses
+- Limited Theoretical Justification: no formal convergence proof or saddle-escape guarantee for the proposed re-initialization schedule; empirical arguments dominate.
+- The periodic linear-interpolation strategy functions more like a regularizer that keeps the optimizer out of local minima, but it lacks strong theoretical guarantees.
+- The paper claims improved “training efficiency”; yet for QAT, the practical value of faster training is marginal—what truly matters to practitioners is inference speed and final accuracy.
+- Limited Scope: results are restricted to Wiki-2 perplexity and QA tasks; no evidence on summarization, coding, or reasoning benchmarks.
+- Incremental Gains: the improvements at some bit-widths reported in Table 1 are modest and incremental rather than breakthrough.
+
+### Questions
+- Could you clarify the exact computational overhead of WiniQ in wall-clock seconds rather than step ratios, including any extra memory traffic from re-initialization?
+- Regarding the periodic re-initialization step: since the interpolation magnitude α is fixed and applied only every K iterations, have you analyzed whether the algorithm could still diverge if the loss surface curvature suddenly becomes sharp again later in training, and if so, what mechanism prevents such instability?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

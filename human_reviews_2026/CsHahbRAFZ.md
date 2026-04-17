@@ -1,0 +1,198 @@
+# HELLoRA: Hot Experts Layer-level Low-Rank Adaptation for MOE Model
+
+- Decision: Reject
+- Scores: 4, 4, 4, 4
+
+## Abstract
+Low-Rank Adaptation (LoRA) has become the dominant paradigm for Parameter-Efficient Fine-Tuning (PEFT) of large language models. However, most prior work focuses on dense architectures. In contrast, Mixture-of-Experts (MoE) models—now a de facto standard—scale parameter counts while keeping per-token compute nearly constant, creating new challenges for LoRA: how to minimize trainable parameters and maximize fine-tuning throughput without sacrificing quality. We propose Hot-Experts Layer-level Low-Rank Adaptation ($\textbf{HELLoRA}$), a simple yet effective scheme that attaches LoRA modules only to the hot experts at each layer, i.e., those most frequently activated. This design sharply reduces the number of trainable parameters and boosts fine-tuning throughput, while, perhaps unexpectedly, improving downstream performance. To stress-test HELLoRA under extreme parameter budgets, we further introduce $\textbf{HELLoRI}$, an orthogonal composition of HELLoRA with the recent LoRA with Reduced Interference (LoRI). Across extensive experiments on code generation, mathematical reasoning, and safety alignment, HELLoRA consistently outperforms strong PEFT baselines. In particular, relative to vanilla LoRA, HELLoRA uses only $\textbf{15.74}$\% of the model parameters, improves accuracy by $\textbf{9.24}$\%, and achieves an $\textbf{88.80}$\% speedup. HELLoRI matches LoRA’s accuracy while training just $\textbf{0.7}$\% of LoRA’s parameters. These results suggest that focusing LoRA capacity on hot experts is a practical path to scaling PEFT for large MoE LLMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces **HELLoRA**, a parameter-efficient fine-tuning approach for Mixture-of-Experts (MoE) models. Noting that only a small subset of experts are frequently activated, the method performs **layer-wise selective adaptation**: LoRA modules are attached only to the top-*k* most frequently activated (“hot”) experts in each MoE layer, substantially reducing trainable parameters and fine-tuning compute.
+
+The procedure has two stages:
+1. A brief warm-up using standard LoRA on a small portion of the target data to profile expert activations and identify hot experts per layer;
+2. Fine-tuning with LoRA placed exclusively on those identified experts.
+
+The authors further present **HELLoRI**, which integrates the LoRI technique into HELLoRA by freezing the up-projection and sparsifying updates to the down-projection for additional efficiency.
+
+Empirical results show that compared to standard LoRA, HELLoRA significantly reduces parameter count while improving performance across tasks such as mathematical reasoning, code generation, and safety alignment. These results support the core hypothesis: focusing adaptation capacity on frequently activated, task-relevant experts offers an effective and efficient fine-tuning strategy for large-scale MoE models.
+
+### Strengths
+1. The paper proposes an architecture-aware parameter-efficient fine-tuning (PEFT) method tailored to Mixture-of-Experts (MoE) models. By selectively attaching adapters only to the most frequently activated (“hot”) experts on a per-layer basis, HELLoRA aligns adaptation with the routing dynamics of MoE. This represents a principled departure from uniform adaptation and concentrates trainable parameters where they are most impactful.
+
+2. The experimental evaluation is comprehensive and persuasive: HELLoRA reduces trainable parameters—often by an order of magnitude relative to full LoRA—while consistently outperforming standard LoRA across diverse, challenging tasks (mathematical reasoning, code generation, and safety alignment). This simultaneous improvement in efficiency and performance underscores the effectiveness of the proposed expert-selection mechanism.
+
+### Weaknesses
+While the empirical results are strong, the methodological contribution feels incremental. The central idea—profiling frequently activated experts in a short warm-up and then selectively placing adapters on those experts—is intuitive and closely aligned with existing practices in MoE training and PEFT. Variants of **adapting a subset of experts** and **routing-guided adaptation** have been explored under different formulations, and *pilot runs to inform adaptation* are also established. As written, HELLoRA risks being read as a practical engineering combination of known components rather than a fundamentally new algorithmic insight.
+
+The paper would benefit from a clearer articulation of what is novel relative to prior expert-specific or routing-aware tuning methods, ideally coupled with ablations that isolate the contribution of each design choice.
+
+### Questions
+1. Hot experts are identified via a short warm-up on a small data slice. How stable is this selection across random seeds, data resamples, or model initializations? Please report (i) overlap of selected experts per layer (e.g., Jaccard/percent overlap) and (ii) downstream performance variance across these runs. If the sets vary notably, does that materially affect final accuracy?
+
+2.  By fully freezing cold experts, is there a risk of regressing capabilities that are primarily encoded in those experts? Please evaluate (i) multi-task or mixed-domain settings and (ii) performance on tasks/capabilities believed to rely on “cold” experts before vs. after fine-tuning. A small ablation with minimal adapters or partial unfreezing on cold experts would help bound this risk.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper proposes HELLoRA, a parameter-efficient fine-tuning method for Mixture-of-Experts models. Its core idea is to apply LoRA adapters only to the most frequently activated "hot experts" in each layer, significantly reducing trainable parameters, improving training throughput, and achieving superior performance over original LoRA across multiple downstream tasks. Furthermore, the authors integrate LoRI to propose HELLoRI, which maintains competitive performance even under extremely low parameter budgets.
+
+### Strengths
+1. The method is specifically designed for the sparse activation characteristics of MoE models, demonstrating clear motivation and innovation.
+
+2. The "hot expert" selection mechanism effectively reduces parameters while accelerating training, offering substantial practical value.
+
+3. The method's effectiveness is validated across multiple tasks including mathematical reasoning, code generation, and safety alignment, supported by thorough ablation studies.
+
+4. Compared to LoRA, HELLoRA reduces parameter count to 15.74% while improving accuracy by 9.24% and training speed by 88.80%, representing highly significant achievements.
+
+### Weaknesses
+1. The overhead and non-end-to-end nature of the warm-up expert identification phase are not thoroughly evaluated.
+
+2. The robustness of the static expert selection under shifting data distributions remains unexplored. 
+
+3.  Comparisons could be strengthened by including a wider range of PEFT baselines beyond the LoRA family. 
+
+4. The paper lacks a deeper theoretical or mechanistic explanation for the surprising performance improvement beyond parameter reduction. 
+
+5.  A sensitivity analysis of the key hyperparameter—the number of hot experts per layer (k)—is missing, which is crucial for practical applications.
+
+### Questions
+1. The most critical factor in HELLoRA's success lies in its synergistic integration of accurately identifying hot experts and strategically avoiding updates to cold experts, with the precise hot expert selection serving as the foundational enabler of this strategy.
+
+2. For researchers or engineers applying HELLoRA to private data and specific MoE models, the most crucial advice is to conduct systematic pilot experiments to empirically determine the optimal number of warm-up steps and the value of k (number of selected experts) based on the model's activation distribution and task characteristics, rather than relying on predefined thresholds.
+3. While HELLoRA demonstrates the effective principle of leveraging activation sparsity to guide update sparsity, its generalization as a universal paradigm for efficient large-scale model fine-tuning requires further validation across diverse architectures and tasks, though it undoubtedly provides a foundational direction for parameter-efficient MoE adaptation.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors propose HELLORA (Hot-Experts Layer-level Low-Rank Adaptation), a parameter-efficient fine-tuning (PEFT) method specifically designed for Mixture-of-Experts (MoE) models. The core idea is to apply LoRA modules only to the 'hot' experts (top-k most frequently activated) at each layer, rather than to all experts. This is motivated by the observation of sparse, layer-specific expert activation patterns in MoEs. The authors test HELLORA on an OlMoE model across mathematical reasoning, code generation, and safety alignment tasks. They show that HELLORA significantly reduces trainable parameters and increases training throughput compared to vanilla LoRA, while maintaining competitive or even improved accuracy. They also propose HELLORI, a combination with LoRI, to further reduce parameter counts.
+
+### Strengths
+The paper addresses a timely and important problem: how to efficiently apply PEFT methods like LoRA to the increasingly popular MoE architecture, which has been underexplored.
+
+The proposed method, HELLORA, is simple, intuitive, and well-motivated by the empirical observation of layer-wise expert activation sparsity (Fig. 1).
+
+The experimental results are strong, demonstrating significant improvements in parameter efficiency (using only \~15.7% of LoRA's parameters) and training throughput (88.8% speedup).
+
+The ablation studies in sections 4.5 (Expert Selection) and 4.6 (Layer Selection) are thorough and provide strong support for the key design choices of HELLORA (i.e., using layer-wise hot experts and including adapters on attention/gate layers).
+
+### Weaknesses
+The paper's main weakness is the lack of ablation on the most critical new hyperparameter introduced: k, the number of hot experts to adapt. The paper sets k=8 (out of 64\) for all experiments without justifying this choice or exploring its sensitivity. The performance and efficiency trade-offs are likely highly dependent on this value.
+
+The "Layerwise Hot-expert Catcher" requires a warm-up pass on a sample (10%) of the target dataset. The computational overhead of this initial step is not discussed. It's unclear if the reported throughput gains account for this, and how this pre-computation step affects the *total* fine-tuning time, which could be relevant for smaller tasks.
+
+The experiments are conducted on a single model family (OlMoE). While OlMoE is a suitable choice, demonstrating the method's effectiveness on other prominent MoE architectures (e.g., Mixtral) would significantly strengthen the paper's claims of generalizability.
+
+### Questions
+1. Could you provide an ablation study or at least a discussion on the sensitivity of HELLORA to the number of hot experts k? How was k=8 chosen? What is the performance/efficiency trade-off if k=4 or k=16?   
+2. Regarding the "Layerwise Hot-expert Catcher": What is the wall-clock overhead of this warm-up pass? Does the reported 88.80% throughput gain (Section 4.3, 5\) represent the main training phase *after* experts are identified, or does it amortize the cost of this initial pass?  
+3. The paper notes that hot experts are task-specific. How stable is the hot-expert set identified from the 10% data sample? Does this set remain consistent with the experts activated during the full training run?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper tackles the problem of applying LoRA fine-tuning to Mixture of Experts models. The authors notice that in fine-tuning, the training samples come from a relatively constrained, specialized distribution. Therefore, some experts are activated significantly more frequently than others. In such case, applying LoRA to all experts would be a waste - since we use this method when we are very constrained in the number of trainable parameters. Therefore, the authors propose a small modification - they first identify the "hot" experts under a given distribution, and then attach the LoRA modules only to those "hot" experts. Based on the performed experiments, the method achieves good results, in some cases even surpassing full fine-tuning (which is clearly unintuitive).
+
+The proposed change in the training framework feels a bit incremental. On the other hand, it is well motivated and the results are positive. Importantly, the authors aim for reproducibility and supplement a code package with scripts to reproduce paper results.
+
+### Strengths
+1. The paper tackles an important problem of adjusting PEFT algorithms to MoE models.
+2. The motivation is clearly stated and strong.
+3. The authors propose a simple but effective way to tackle the stated problem.
+4. The authors detail their full setup and will provide code repository.
+
+### Weaknesses
+1. The proposed change to the baseline training procedure is relatively small. The work would be more complete if some directions from Future Work (Section 5) were also explored.
+2. The experiments are based only on one model (OLMoE-1B-7B) and three tasks, so the evaluation is limited. 
+3. The number of hot experts is the crucial hyperparameter. It is not clear whether this number should be equal across all fine-tuning scenarios. Currently there is little guidance in the paper on how to set this hparam.
+
+### Questions
+1. Did the authors explore how the number of hot experts affects the results and how to set it across different distributions? For example, it is possible than on some narrow distribution there is only a small number of hot experts needed, while in a more complex, we have to set this number to be higher. Here, also exploration of a number of various models and tasks/fine-tuning distributions is crucial.
+2. The result that HeLLoRA performs better than full fine-tuning is counterintuitive. For example, on the SAFE task, HELLoRA achieves 99.06 accuracy, while fine-tuning full parameters achieves only 91.12. Did the authors explore possible reasons for this result? Is the fine-tuning data distribution correctly constructed - for example, is it possible to achieve better accuracy when updating all model parameters if we change the number of epochs/learning rate/add regularization to the baseline fine-tuning?
+3. Could the authors share more histograms illustrating the activation frequency of experts under different tasks? E.g. the same plot as Figure 1 (green), but for layers 0, 4, 8, 12, 15 (every four layers) across each of the considered tasks? I believe this illustration will be a very helpful resource for the community.
+4. In the introduction, there is a sentence about the load balancing loss: "At a global level across the network, experts that share the same index (for example, expert 1 in layer 0 and expert 1 in layer 10) appear balanced in usage as shown in Fig. 1 orange line. However, this loss does not constrain activation within each layer.". In the standard implementation, MoE load balancing loss is implemented as a sum of load balancing losses for each layer. Therefore, the model is penalized if there is imbalance at any given layer. Could the authors clarify this sentence? (I agree that for a specific distribution there can be expert imbalance, I just don't agree with the statement that the load balancing loss does not constrain layer-level balance on any given layer).
+
+I will reconsider my score if the questions and weaknesses mentioned above are addressed by the authors.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

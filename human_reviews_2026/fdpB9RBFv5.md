@@ -1,0 +1,156 @@
+# Probabilistic Bisection Algorithm Provably Achieves Exponential Convergence
+
+- Decision: Reject
+- Scores: 4, 4, 2
+
+## Abstract
+The probabilistic bisection algorithm (PBA) extends the classical binary search to settings with noisy responses, and is a foundational algorithm commonly used in basic problems such as root-finding. Despite its strong empirical success, its theoretical property, particularly the convergence rate, remains unclear. This paper establishes that PBA converges at a geometric rate, providing a rigorous justification for its empirical efficiency. Notably, this rate is optimal in the sense that it matches the performance of classical binary search under noiseless responses. The core of our analysis lies in directly characterizing the dynamics of PBA queries, which had not been examined in the prior literature. We show that the queries oscillate around the truth but steadily draw closer, thus leading to an estimator that rapidly concentrates on the truth. Beyond resolving the long-standing question of PBA’s convergence, our developed techniques offer new tools for analyzing PBA's dynamics, which may be of independent interest.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper analyzed the convergence rate of the Probabilistic Bisection Algorithm that computes the root of a function (framed as a binary classification problem). The algorithm is a natural heuristic that shares the same idea as binary search. In the binary classification formulated as used in the paper, we are given a function $1{x\geq \theta}$ where $\theta \in (0,1)$, and we want to know the value of $\theta$. At every time, we could query whether a point $x\geq \theta$; however, the answer could potentially be flipped with probability $p<1/2$. The PBA algorithm maintains a distribution over the support $[0,1]$: at round $r$, the algorithm samples a value of $x_{r}$ to query, and it gets the answer whether $x_{r} \geq \theta$ (with possible flipping noise). If the answer says $x_{r} \geq \theta$, we update the support by reweighing $f_r(x)=2 \cdot (1-p) \cdot f_{r-1}(x)$ for $x\leq x_{r}$ and $f_r(x)=2 \cdot p \cdot f_{r-1}(x)$ for $x\geq x_{r}$. This is similar to the ``binary search’’ process in the sense that since we’ve overshot, we want the next query to favor a search on the left side, and vice versa.
+
+There have been various versions of analysis to provide theoretical justifications for the practical performances of the algorithm. The main contribution of this paper is a more ``generic’’ analysis for the convergent rate of the PBA algorithm, where the parameter $\theta$ and the final output $x_R$ are allowed to take values from the continuous domain of $[0,1]$. The paper showed that the distance between $x_R$ and $\theta$ decreases exponentially at a rate of $\exp(-\Omega(R))$ for $R$-round algorithms.
+
+The central technique used in the paper is a new way to frame the dynamics of the PB algorithm. In particular, to control the upper tail of $x_R - \theta$, the analysis divides the query domains into $(0, \theta]$ vs. $(\theta, \delta)\cup [\delta, 1)$, and it uses the quantity of $M_r = \Pr(x \in [\delta, 1))/\Pr(x \in (\theta, \delta))$ to control the behavior of the PB algorithm. The paper showed that $M_r$ is a super-martingale, and the $M_{r+1} < M_r$ if the queries between $r$ and $r+1$ cross between $(0, \theta]$ and $(\theta, \delta)\cup [\delta, 1)$. Furthermore, the paper proved that the number of such crossings is at least $\Omega(R)$ for an $R$-round algorithm. Therefore, we can apply martingale concentration to get the desired result.
+
+### Strengths
+**This part contains the strength, the weakness, and my opinion.** I have mixed feelings about this paper. On one hand, this is a cute result of the convergence of the PB algorithm. The techniques are not involved, but they are nevertheless quite neat and not immediately straightforward. Therefore, I appreciate the value of the manuscript overall. 
+
+On the other hand, the setting seems very restrictive. As the paper has discussed, convergence bounds have been known for various versions of the random bisection algorithm, and the main contribution of this paper is the first bound for the continuous version of the algorithm. In other words, this is not the first paper that gives the conceptual message that explains the success of the algorithm in practice. This definitely limits the scope of the contribution.
+
+
+The paper is well-written in general. However, there are a few issues I want to flag:
+- The description (or definition) of the PB algorithm comes too late in the paper. I agree it’s quite an intuitive and simple algorithm; however, the paper spends quite a few passages discussing previous work without letting the readers know the algorithm, which makes it hard to understand.
+- In your proof structure, the proof of proposition 1 was shown before proposition 2, but the proof of proposition 1 relies on proposition 2. The structure was not clear until I read the details on page 7 (which is also a bit too notation-heavy).
+- The paper gave some intuitions of the proofs, but they are only stated as the passage goes. It would be good if the explanations were given earlier in the paper.
+
+In summary, I believe that although the paper does contain some nice ideas, the significance of the results cannot push the paper to the most competitive tier.
+
+### Weaknesses
+See above.
+
+### Questions
+Most of the questions are embedded in the weakness comments. Some lower-order questions and comments (mostly about exposition): 
+- Line 218: The core idea behind the proof of Proposition 1 is to show that $\ln(M_i)$’s form a submartingale ... Here, do you mean supermartingale? Submartingales are the sequences that increase. This does not seem to affect correctness, though.
+- It seems the dependency on p for the number of crossing steps in your Proposition 2 is linear. Is this true? If yes, maybe it’ll be better if you write them out.
+- The entire analysis for high-dimensional data is deferred to the appendix. Can you explain what are the main ideas there?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper studies the Probabilistic Bisection Algorithm (PBA), an extension of classical binary search that handles noisy feedback. The authors prove that PBA converges at a geometric rate, by showing that its queries oscillate around the true value while steadily approaching it.
+
+### Strengths
+1. The paper bridges the gap between PBA’s empirical performance and theoretical understanding by providing rigorous convergence guarantees.
+
+2. It offers new insights into the behavior and dynamics of the Probabilistic Bisection Algorithm.
+
+3. The paper is well-written and clearly organized, making the technical arguments easy to follow.
+
+### Weaknesses
+Although the paper studies a basic and fundamental problem in stochastic optimization and root-finding, it is unclear to me how relevant this topic is to the ICLR community. The work is purely mathematical, with only small-scale experiments serving as a proof of concept, which may limit its appeal to ICLR’s broader audience focused on learning algorithms and applications.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper analyzes the probabilistic bisection algorithm, which is an algorithm similar to bisection except designed for settings where responses are noisy. It analyzes the algorithm in the continuous setting, where the target we are searching for can be anywhere in a compact set.  It presents a new analysis that the article claims generalizes an assumption from a previously-published result by Waeber et al. 2013.
+
+### Strengths
+The paper considers an interesting question and presents a substantial theoretical analysis. If it weren't for the issue raised below under weaknesses, I would say that the paper is very interesting.  The proofs technique do seem to be new, even if the result doesn't seem stronger than the previous result (see below).
+
+### Weaknesses
+My main question about this paper is the difference between its results and those in Waeber et al. 2013.
+
+The submitted paper states (lines 067-068) that
+
+"By modeling the root as a random variable $X^\ast$ uniformly distributed on [0,1], they proved that $E|X^\ast-\hat{X}_n|$ decays geometrically... However this result hinges critically on the assumption that $X^\ast$ is a uniform random variable."
+
+This assumption, that $X^\ast$ is uniformly distributed, seems to be the key distinction that the paper is drawing with Waeber et al. 2013.
+
+But I looked at Waeber et al. 2013 and they *don't* seem to make an assumption that $X^\ast$ is uniform.  Page 2263 of the journal version of the papr states, "we assume it ($X^\ast$) is a realization of an absolutely continuous random variable with density $f_0$. The density $f_0$ has domain [0, 1] and is known." Later in the paper (page 2264) the paper states, "If we have no prior knowledge of $X^\ast$, then a natural choice of $f_0$ is the uniform U[0, 1] distribution, i.e., $f_0(y) = \{y \in [0, 1]\}$." But this appears to just be an example and not an assumption. 
+
+So the only assumption seems to be that it is absolutely continuous and has support in [0,1]. The result seems easy to extend to other supports, e.g., [a, b], just by defining a new $X^\ast$ that is a shifted and scaled version of the original.  The scaling will then show up in the bound on expected L1 error.
+
+Without this key distinction, the results in the paper don't seem stronger than the ones in Waeber et al. 2023.
+
+### Questions
+Some other less important questions:
+
+1. The text near the bottom of page 3 discusses a quantity $M_i = min(A_i, 1-A_i)$ from Waeber et al. 2013.  It states near equation 3 that "their proofs rely on the argument that $M_{i+1} / M_i \le \exp(-C)$." The text then goes on to say in boldface that "improvement is not always guaranteed".
+
+A closer reading of Waeber et al. 2013 would show that actually the arguments there *don't* rely on the argument that $M_{i+1} / M_i \le \exp(-C)$, at least, not on every sample path.
+Instead, $M_i$ is upper bounded by another quantity $S_i$ that is a geometric walk and satisfies the inequality in the sense that $\log S_i$ is a supermartingale, i.e., $E[ \log (S_{i+1} / S_i) ] \le -C$ for some constant C.
+
+This argument is somewhat similar to the argument in the submitted paper --- page 5 shows that the $\log(M_i)$, as defined in the paper, is a submartingale.  If the paper is accepted, this should be clarified.
+
+
+2. It would help to give a more clear high level summary of the differences in proof techniques between the submitted paper and Waeber et al. 2013.  Both seem to use a discretization of the space
+and use a sub/super-martingale argument to show that the mass in incorrect parts of the discretization shrink exponentially fast. But the discretizations chosen are different as are the definitions of the sub/super-martingales.
+
+
+3. When defining $a_i^{(j)}(delta)$ on line 177 of page 4, I recommend dropping the middle term, $P_i(X \in I_j)$, because it is confusing and it isn't equal to the right-hand side.  The middle term is equal to 1 for i=1, since $\theta^\ast$ is always in $I_1$, and is equal to 0 for i=2,3.  The tricky thing here is that we want to compute the posterior probability that $\theta^\ast \in I_j$ without knowing how $I_j$ was defined.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

@@ -1,0 +1,176 @@
+# SPDEBench: An Extensive Benchmark for Learning Regular and Singular Stochastic PDEs
+
+- Decision: Reject
+- Scores: 2, 4, 4, 2
+
+## Abstract
+Stochastic Partial Differential Equations (SPDEs) driven by random noise play a central role in modeling physical processes with rough spatio-temporal dynamics, such as turbulence flows, superconductors and quantum dynamics. To efficiently model these processes and make predictions, machine learning (ML)-based surrogate models are proposed, with spatio-temporal roughness incorporated in the design of their network architectures.
+However, an extensive and unified dataset for SPDE learning is still lacking; in particular, existing datasets do not account for the computational error introduced by noise sampling and the necessary renormalization required for handling singular SPDEs. 
+We thus introduce SPDEBench, aiming to solve typical SPDEs of physical significance on 1D or 2D tori driven by white noise via ML methods. New datasets for singular SPDEs based on the renormalization process, as well as novel ML models achieving the best results to date, have been proposed. {Moreover, we evaluate the sensitivity of ML models to the SPDE data generation setting and the hyperparameters, and investigate the scaling law of ML models with respect to sample and network sizes. Results are benchmarked with ML-based models, including FNO, NSPDE and DLR-Net, etc. By evaluating performance from multiple perspectives, we achieve a comprehensive assessment of the relative strengths and weaknesses of different ML models.} Our SPDEBench ensures full reproducibility of benchmarking across a variety of SPDE datasets while offering the flexibility of incorporating new datasets and machine learning baselines, thus making it a valuable resource for the community.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper introduces SPDEBench, a benchmark suite and dataset collection for machine learning models that approximate stochastic partial differential equations (SPDEs). It includes both nonsingular (e.g., wave, KdV, Navier–Stokes) and singular SPDEs (Φ^4_d, KPZ), with attention to renormalization and noise truncation effects. The benchmark evaluates ML surrogates such as FNO, DeepONet, NSPDE, and DLR-Net, proposing also a modified NSPDE-S model that incorporates renormalization parameters.
+
+### Strengths
+Novelty: First attempt to provide an extensive, unified dataset for SPDEs (especially singular ones with renormalization).
+
+Technical rigor: Correct implementation of noise processes (cylindrical/Q-Wiener), Wick powers, and renormalization constants — mathematically consistent with Hairer’s regularity structures.
+
+Reproducibility: Datasets, hyperparameters, and code organization (PyTorch + Parquet format) are well described.
+
+Evaluation metrics: Goes beyond RMSE — includes Sobolev norms, correlation, and autocorrelation metrics.
+
+### Weaknesses
+Real-world significance concern: While SPDEs are mathematically elegant, the chosen benchmark problems (Φ^4_d, KPZ, KdV) are mostly toy or theoretical models rather than real-world SPDEs encountered in climate, finance, or turbulence modeling. The paper claims “physical significance,” but in practice, most examples (especially Φ^4_d models) are of theoretical physics interest, not directly relevant for engineering or applied simulations. No applied domain (e.g., stochastic fluid flow forecasting, atmospheric modeling) is demonstrated, so the “practical impact” remains unclear.
+
+Benchmark representativeness concern: The included SPDEs cover a limited subset. What is missing are hyperbolic SPDEs, reaction-diffusion systems, and stochastic transport equations, which are more common in applied settings. All experiments are on low-dimensional (1D–2D) toy setups with small grid sizes (e.g., 32×32). This limits generalizability. The authors even admit in §5 that “hyperbolic SPDEs are underrepresented.” So, while “extensive” in mathematical diversity, SPDEBench is not truly representative of real physical or industrial systems.
+
+Compared models concern: FNO and DeepONet are standard. NSPDE and DLR-Net are recent but not yet widely used — effectively internal to a small research niche. The others (e.g., NCDE, NRDE, NCDE-FNO) are from rough path theory literature, rarely used for PDEs. Their inclusion feels inconsistent with mainstream PDE ML practice. No comparison to modern operator-learning baselines like UNet-NO, Graph Neural Operators, or Transformers for PDEs (e.g., Galerkin Transformers).
+
+Experimental concern: Noise levels and truncation degrees are somewhat arbitrary; the benchmark lacks connection to any physical noise statistics. Computation is limited to small sample counts (e.g., 1200–10000), not reflective of large-scale scientific computing setups. Scaling analysis (Table 5) focuses only on small network and dataset sizes; conclusions about scaling laws are weak.
+
+Overall: The paper sometimes overstates its importance (“first extensive benchmark,” “physically significant”) without strong evidence of external adoption or real-world scenarios. It would benefit from clearer positioning as a mathematical or synthetic benchmark rather than an applied one.
+
+### Questions
+See weakness. Please clarify these weak points.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper presents SPDEBench, a large-scale and unified benchmark for learning stochastic partial differential equations (SPDEs) using machine learning models.
+The authors introduce a comprehensive dataset covering both non-singular and singular SPDEs (such as Φ⁴, KPZ, and Navier–Stokes equations), including data generated with renormalization procedures that are essential for handling singular cases. The benchmark provides APIs for dataset generation, multiple evaluation metrics (e.g., RMSE, Sobolev norms, correlation scores), and includes several baseline models such as FNO, DeepONet, NSPDE, and DLR-Net, along with a new variant NSPDE-S that accounts for renormalization constants.
+Extensive experiments demonstrate the effectiveness and scalability of the benchmark, showing that DLR-Net and NSPDE achieve state-of-the-art performance across different noise settings. The work emphasizes reproducibility and offers a standardized framework for comparing ML models on SPDE tasks.
+
+### Strengths
+1. The paper runs extensive experiments and presents results clearly.
+2. The proposed benchmark is well designed。
+
+### Weaknesses
+1. While SPDEBench provides a valuable benchmark for studying stochastic partial differential equations, the work focuses more on system construction and dataset design than on proposing fundamentally new modeling or algorithmic ideas.
+2. The paper devotes substantial space to mathematical background and notation, which can obscure the core methodological message and make the main takeaways harder to follow.
+3. Although the experiments are extensive and well-organized, they remain largely descriptive. The paper would be strengthened by a clearer analysis of why certain models perform better and what the results imply about the underlying learning dynamics.
+
+### Questions
+No questions.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents SPDEBench, a machine learning benchmark on Stochastic Partial Differential Equations (SPDEs). The authors consider a renormalization procedure when generating these datasets. The paper benchmarks several ML models, including FNO, NSPDE, and DLR-Net, and proposes an upgrade of NSPDE-S.
+
+### Strengths
+The paper provides one of the first benchmarks that properly handles singular SPDEs with renormalization. The authors demonstrate that their ML surrogates achieve substantial speedups compared to numerical solvers while maintaining reasonable accuracy.
+
+### Weaknesses
+- The authors said to use metrics beyond RMSE, such as the Sobolev norm, correlation score, and autocorrelation score. However, these metrics are almost entirely absent from the experimental evaluation. The Sobolev norm appears only once in the appendix (Table 21) as a training loss example. The correlation and autocorrelation scores are not reported. 
+- The selection of baseline models is limited. Many tables in the appendix report results for only FNO and NSPDE. The authors are encouraged to borrow more architectures from literature reviews, for example wavelet-based and transformer-based.
+- Overall, the contributions feel limited, as the datasets largely build on prior simulations from works like Neural SPDE and DLR-Net. The new model (NSPDE-S) proposed by the authors is not well-demonstrated and not impressive. Insights provided are also limited.
+
+### Questions
+Many are mentioned in Weaknesses. Plus, a large portion of their results is in the appendix. The findings from these other important PDE families are not discussed. It is encouraged to discuss findings/takeaways on the equations other than $\Phi$.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper introduces SPDEBench, which is a benchmark suite and dataset generator specifically designed to unify and advance machine learning research on SPDE.
+
+### Strengths
+The idea of a unified, extensible benchmark for SPDEs is original in AI for math. Few (if any) other standardized benchmarks exist for this particular domain.
+
+### Weaknesses
+My major concern is stated in Questions.
+
+
+Minor comment:
+Long-term value of SPDEBench will depend on the extensibility and community adoption. This paper could discuss how to introduce new dataset in the benchmark tool
+
+### Questions
+My major question to this paper is what the difference with this neurips paper https://papers.neurips.cc/paper_files/paper/2022/file/0a9747136d411fb83f0cf81820d44afb-Paper-Datasets_and_Benchmarks.pdf 
+
+
+While these papers address different types of problems (PDEs and SPDEs), there is a strong analogy from a machine learning benchmark perspective. In this work, the approaches to dataset structuring, benchmarking, and evaluation appear very similar to those in PDEBench. This raises concerns about the novelty and contribution of SPDEBench, as much of the framework seems adapted from previous work.
+
+
+This is the primary reason I am recommending a reject at this stage. However, if the authors can provide a solid rebuttal that clarify the substantive differences between SPDEBench and PDEBench, and convincingly demonstrates that the contributions of this work are non-trivial and necessary for the SPDE domain, I would be open to reconsidering my rating.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+1

@@ -1,0 +1,181 @@
+# From Values to Tokens: An LLM-Driven Framework for Context-aware Time Series Forecasting via Symbolic Discretization
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 4, 4, 4
+
+## Abstract
+Time series forecasting plays a vital role in supporting decision-making across a wide range of critical applications, including energy, healthcare, and finance. Despite recent advances,  forecasting accuracy remains limited due to the challenge of integrating historical numerical sequences with contextual features, which often comprise unstructured textual data. To address this challenge, we propose TokenCast, a large language model (LLM) driven framework that leverages language-based symbolic representations as a unified intermediary for context-aware time series forecasting. Specifically, TokenCast employs a discrete tokenizer to transform continuous numerical sequences into temporal tokens, enabling structural alignment with language-based inputs. To effectively bridge the semantic gap between modalities, both temporal and contextual tokens are embedded into a shared representation space via a pre-trained LLM, further optimized with autoregressive generative objectives. Building upon this unified semantic space, the aligned LLM is subsequently fine-tuned in a supervised manner to predict future temporal tokens, which are then decoded back into the original numerical space. Extensive experiments are conducted on multiple real-world datasets, whose results reveal the performance of our framework and highlight its potential as a generative framework for multimodal time series forecasting. The code is available for further research at: https://anonymous.4open.science/r/TokenCast-8EFF.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces TokenCast, a novel framework for context-aware time series forecasting via symbolic discretization. By transforming continuous time series data into discrete tokens and embedding them into a semantic space shared with contextual features, TokenCast leverages the generative and reasoning of pre-trained LLM. The proposed approach demonstrates superior performance across various real world datasets and provides a new perspective on integrating time series data with contextual information.
+
+### Strengths
+- The framework is well-motivated and clearly presented.
+- The proposed method is extensively evaluated on various real-world datasets, covering diverse domains such as healthcare, finance, and environmental monitoring. TokenCast consistently outperforms existing baselines.
+
+### Weaknesses
+- The paper claims to leverage the modeling and reasoning capabilities of LLMs, which are generally associated with larger-scale models. However, the experiments primarily rely on a relatively small LLM (Qwen2.5-0.5B). This raises questions about whether the claimed reasoning capabilities are being fully utilized and whether such a small-scale LLM can truly demonstrate the generative and reasoning power the framework aims to exploit. The choice of model size contradicts typical expectations for LLM usage and requires further explanation.
+
+- The multi-stage training process (e.g., symbolic discretization, cross-modal alignment, and generative fine-tuning) introduces significant computational overhead. It seems that each stage requires separate optimization. The training cost and efficiency of this approach compared to existing baselines are not adequately discussed.
+
+- The overall design of the framework lacks novelty. For example, as mentioned in Line 186, normalization is a standard component in many existing models. Additionally, the contextual feature selection is similar to existing TimeLLM.
+
+### Questions
+- In Line 191, there is a T that denotes the number of latent vectors, but there is no explanation of how T is determined or computed. Could the author provide more details of the encoder?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes TokenCast, an LLM-driven framework for context-aware time series forecasting, which consists of three stages: time series tokenizer, modality alignment, and supervised fine-tuning. Experimental results show that TokenCast achieves strong performance.
+
+### Strengths
+1. The paper introduces a novel LLM-driven framework, named TokenCast, for time series forecasting by leveraging LLMs to utilize unstructured contextual information.
+2. The paper is clearly written and well-organized, making it easy to follow the main ideas. The methodology is technically sound and clearly explained.
+
+### Weaknesses
+1. The discussion of related work on contextual information integration could be strengthened. While many existing approaches incorporate numeric contextual signals to enhance forecasting, the integration of unstructured contextual information requires cross-modal alignment strategies. Several recent studies have explored this direction; however, this emerging line of work is not sufficiently discussed or contrasted with TokenCast.
+2. In line 181, the paper states that RevIN may risk leaking future information. However, this claim might not be fully justified, as RevIN typically computes normalization statistics (e.g., mean and standard deviation) based only on the lookback window within the input sequence.
+3. In line 82, the paper states that it is unclear whether time series forecasting can be addressed through autoregressive generation over discrete tokens. However, this direction has been explored in prior work. For example, Chronos and AutoTimes both employ a decoder-only architecture and transform numeric time series into discrete tokens via value-based quantization.
+
+### Questions
+1. I am interested in how the model's performance would change if it only outputs time series tokens, instead of a mixture of time series and textual tokens.
+2. I am confused by the organization of the input tokens. In the text, the paper states that time series tokens are placed in front of textual tokens. However, in Figure 2, the textual tokens appear in front of the time series tokens, which seems inconsistent.
+3. In the stage of the time series tokenizer, TokenCast employs a TCN as a causal encoder. The choice of convolution kernel length is likely to have a significant impact on performance, and it would be helpful to include an ablation study to examine this effect.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper studies context-aware time series forecasting, where the goal is to predict future multivariate trajectories from historical signals together with auxiliary contextual information such as textual event or domain descriptions. The proposed framework, TokenCast, discretizes time series via a VQ-style tokenizer with reversible instance normalization (to avoid future leakage), injects these discrete indices into the shared vocabulary of a frozen large language model through a learned unified embedding layer that aligns time-series tokens and text tokens, and then generatively fine-tunes the model to autoregressively produce future tokens that are decoded back to continuous values. The approach is presented as a unified pipeline that allows an LLM backbone to consume numeric history and contextual signals without altering its core architecture beyond the shared embedding layer. The method is evaluated on six real-world datasets spanning economics, public health/mobility, web traffic, stock markets, and environmental sensing using MSE/MAE across multiple horizons and baselines, and the paper reports lower errors on most datasets plus ablations linking gains to alignment, generative training, and contextual conditioning.
+
+### Strengths
+1. The paper formulates context-aware forecasting as conditional sequence generation by mapping multivariate time series into discrete tokens, aligning them with text tokens in a shared LLM vocabulary, and autoregressively generating future trajectories.  
+2. The method includes reversible instance normalization using only historical context and a shared codebook, encoder-decoder, which keeps the tokenization invertible.  
+3. Experiments span six real-world domains and compare against LLM-based, Transformer-based, linear, and self-supervised forecasting baselines, reporting averaged MSE/MAE over multiple horizons.
+
+### Weaknesses
+1. Dataset descriptions contain internal inconsistencies (e.g.,  the Economic dataset describes as daily in the main text but as monthly macroeconomic data in the appendix), which obscures the exact sampling frequency and temporal structure assumed in training and evaluation.
+2. The reported MSE/MAE averages lack standard deviations, confidence intervals, or significance tests, which limits assessment of robustness when baseline performance is numerically close.
+3. The paper only sketches how contextual features are constructed, temporally aligned, and used at inference time, and this under-specification affects reproducibility and the scope of claims about context-driven forecasting.
+4. Figure/table references are inconsistent. In Section 4.1.1, the panel summarizing domains, frequencies, lengths, and variable counts is captioned as Figure 3 but referred to as Table 3.
+
+### Questions
+1. Can you provide robustness or failure-case analysis, for example, regimes such as market shocks, policy changes, or abrupt environmental shifts where the approach does not reduce error relative to baselines?
+2. The method conditions on contextual features. For identical historical numeric input, can you show how adding and removing specific contextual signals changes the generated forecast and explain how those changes reflect the contextual content?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes TokenCast, an LLM-driven framework for context-aware time series forecasting based on symbolic discretization.
+Instead of processing continuous numerical values directly, the authors convert time-series data into discrete temporal tokens via vector quantization and reversible normalization, enabling the model to operate in the same token space as textual inputs.
+By extending the vocabulary of a pre-trained LLM, the method aligns time-series and text representations within a shared semantic space, allowing joint reasoning through next-token prediction.
+Extensive experiments on six context-rich datasets (economic, health, web, and stock domains) show that TokenCast achieves competitive or superior results compared with strong baselines such as Time-LLM, GPT4TS, and Crossformer.
+Ablation and sensitivity studies confirm the effectiveness of the proposed tokenization and alignment strategies.
+Overall, the paper offers a novel perspective on unifying numerical and textual modalities under the LLM generative paradigm, though the baseline coverage could be broader and the efficiency analysis remains limited.
+
+### Strengths
+- **Proper positioning within current research trends.**  The paper is aligned with the recent movement toward symbolic or token-based time-series modeling, showing that the authors are aware of ongoing developments in the field.
+- **Well-organized framework.** The three-stage pipeline (tokenization, alignment, and generative prediction) is logically structured and easy to follow.  
+- **Readable presentation.** The writing is clear, and figures effectively illustrate the workflow.
+
+### Weaknesses
+- **Lack of novelty relative to existing work.**  
+  The proposed vector quantization and tokenization strategy is highly similar to the approach used in Amazon’s Chronos model, which also discretizes numerical sequences into symbolic tokens for autoregressive forecasting.  Several recent works (e.g., Chronos, Chronos-Bolt, SymbolicTS, and TokenTS) have already explored nearly identical ideas.  The paper does not clearly differentiate itself in methodology or theoretical contribution, making the innovation appear incremental.
+
+- **Lack of clear evidence for multimodal gains.**  
+  Although the paper emphasizes context-aware forecasting, it does not clearly show how textual or non-temporal modalities enhance numerical prediction. Many so-called multimodal datasets contribute little meaningful contextual signal, and in some cases may even introduce data leakage risks.
+
+- **Overreliance on existing LLM architecture.**  
+  The contribution lies primarily in applying tokenization to an existing LLM rather than introducing a new modeling principle or objective.
+
+- **Efficiency and scalability not evaluated.**  
+  Tokenization and vocabulary extension introduce additional computation, but the paper provides no analysis of training or inference cost.
+
+### Questions
+1. Could the authors provide clearer **evidence that multimodal context actually improves forecasting performance**?  
+   For example, are there quantitative comparisons between using and omitting textual/contextual inputs, or analyses showing which modalities contribute the most?  
+2. The vector quantization approach appears similar to that used in **Chronos**. Could you clarify the methodological or empirical differences?  
+3. Are the reported results averaged across **multiple random seeds** for reliability?  
+4. Can you provide **runtime, memory, or parameter comparisons** to support the claimed efficiency?  
+5. How sensitive is performance to the size of the token vocabulary or the choice of LLM backbone?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

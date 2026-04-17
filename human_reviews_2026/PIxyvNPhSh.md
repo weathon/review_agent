@@ -1,0 +1,161 @@
+# Go4RL: Improving the Pre-training Data Mixture of Large Language Models for Enhancing Reinforcement Learning
+
+- Decision: Reject
+- Scores: 2, 4, 6, 4
+
+## Abstract
+The development of reinforcement learning (RL)-trained large language models (LLMs) such as OpenAI-o1 and DeepSeek-R1 has demonstrated notable advancement in solving complex logical tasks involving mathematics and programming. Existing studies, however, show that the reasoning capability of RL-trained LLMs varies across base model families, raising the critical research question: what base model is suitable for augmenting RL's reasoning capabilities? Recent prevailing research shows that 1) the reasoning capacity of the RL-trained model remains bounded by that of its base model and 2) the data mixture used for pre-training has a significant impact on the base model’s performance. Building on these insights, we propose Go4RL, which seeks to answer the above question by investigating how pre-training dataset mixture strategies relate to a viable base model for RL training. Go4RL first defines the measurement of base models’ reasoning capability boundaries as the average perplexity scores of the base LLM on the RL-generated $k$ responses, denoted by avg(k-ppl). Then we formulate finding the optimal pre-training dataset mixing ratios for RL as a regression task, using the proposed avg(k-ppl) as the fitting objective instead of the traditional language modeling loss. Finally, we use the learned regression model to predict the performance of unseen mixtures and apply the best predicted mixture to train a large-scale model that achieves better RL performance. We train both pre-trained and RL-trained proxy models with 1M parameters for regression fitting and then scale up to 1B parameters using various data mixtures to validate Go4RL. The experimental results on both online and offline RL algorithms show that the optimized data mixture predicted by Go4RL yields a better base model for RL training.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+the paper proposes a new way to select pretraining mixture that is beneficial for the model to perform downstream RL. The method uses the avg perplexity scores of the base model on RL generated k-responses as the metric to find the optimal mixing ratio.
+
+### Strengths
+- relevant topic, writing is mostly clear
+
+### Weaknesses
+- The method seems VERY expensive. it needs to train couply proxy models from pretrain to RL to even get a proxy to select data at the end. This could not be imagined to be deployed to large scale jobs such as training the next GPT. 
+- it is also unclear that proxy models can reliably predict the performance of a bigger sized model training on the same data. This is not a trivial transition
+- evaluated benchmarks are very out of date
+
+### Questions
+See weakness
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors tried to find the optimal (in a way) pre-training data mix that makes the base LLM perform better on RL tasks. The authors argue that other papers have mentioned that sometimes the RL performance is bottlenecked by the base LLM and they want to find the right data for training the base LLM. The authors proposed a pipeline where the they sample different data mix and train base model, apply RL and create RL models over the base models, compute average perplexity of the base model using the RL model k responses and fit a regression model to find the right data mix given the average perplexity. On downstream tasks, the authors show the gains using the best data mix suggested by the regression model.
+
+### Strengths
+- The idea is quite interesting to find the best data mix for pre-training that can improve the post-training RL performance. A lot of work has used a base model and then tried to improve the post-training performance by choosing a different data mix and trying with that. The work goes against the norm that pre-training is dead and a lot of effort nowadays is put on the post-training side. 
+- Experimentation is clear with the benchmarks quite relevant for smaller models. Might be too simple for modern LLMs but quite relevant for smaller models. 
+- The paper is also clear and easy to understand.
+
+### Weaknesses
+- The paper compares the pre-training data mix and then RL baselines but I am not sure if simple RL with DPO or GRPO is enough to say that data mix can help in maximizing the RL benefits. What about we don't have to do this at all and comparing with something like Doremi would be beneficial to see if online reweighting is enough to get the same benefits or not. 
+- Assuming the approach is good even when compared with other data mixing approaches, the scalability of this approach is a big concern. This approach requires training a bunch of proxy models, then RL-fine tuning them to calculate the average ppl and that means there is a substantial cost associated with the approach. Scaling this would be a big challenge. 
+- Another experimentation weakness related to scaling  I feel is mentioning that regression loss might be better than RL loss or scaling laws but the spearman drops to 58 when the approach is scaled to 1B. And this is just a 1B model. Scaling this further means this approach might not scale at all. 
+- Finally, I am not sure if I got the justification of the idea right. Minimizing avg ppl based on RL policy distribution encourages the base model distribution to be closed to RL distribution in order to improve the RL performance. I am not sure if that is happening. It might make the model biased in terms of its pre-training data and then that bias is shown in the RL approach too. Getting better outputs in RL samples to get more stable training. This is similar to the cold start problem in RL which can be solved with some warm (usually with some SFT data).
+
+### Questions
+1. I want to know if there is a link between avg ppl and maximizing RL performance which is not because of the pre-training biases created with the data mix. Does avg ppl correlate with higher GAE ? 
+2. Can you shed some light on the training cost of all the proxy models and RL models before the right training mix can be found. Can you plot accuracy gains vs the increase in the cost plot?
+3. Any comments on why spearman value went down to 58 when scaled to 1B parameters? What does it say about scaling the approach to a much larger model?
+4. With the same token / compute budget, can you compare with some post-training data mixing approaches like Doremi ?
+5. What's the upper bound of the approach? Is there a way to find the optimal (best) data mix?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes Go4RL, a novel framework that predicts optimal data mixture compositions for RL finetuning using a regression based approach. The core idea is to introduce avg(k-ppl) to estimate the reasoning potential of the pretrained model. By fitting regression models to map data mixture ratios to avg(k-ppl), Go4RL predicts high-performing mixtures without costly large scale RL runs. Extensive experiments across different model sizes, domains, and RL algorithms validate the effectiveness of the approach. The results reveal a strong correlation between pretraining data mixture and RL outcomes, suggesting that RL performance is fundamentally constrained by the quality of pretraining data composition.
+
+### Strengths
+This paper presents a novel and well motivated perspective on understanding the interplay between pretraining data mixture and reinforcement learning (RL) performance in large language models (LLMs). The proposed Go4RL framework and the introduction of the algorithm-agnostic metric avg(k-ppl) represent a clear conceptual innovation that reframes how researchers evaluate the “RL readiness” of base models. The work demonstrates solid methodological quality, supported by extensive experiments across multiple model scales (1M–1B parameters), domains (math, code, and general), and RL paradigms (DPO and GRPO). The experimental evidence is consistent and credible, highlighting the predictive power of regression based data optimization. The manuscript is clearly written, logically structured, and supported by intuitive figures.
+
+### Weaknesses
+1. The study lacks a systematic analysis of the stability and interpretability of the avg(k-ppl) metric. The paper does not report its variance or robustness under different sampling settings (k values, temperature parameters, generation lengths, or random seeds). If avg(k-ppl) is sensitive to such sampling conditions, its reliability as a regression target for predicting optimal data mixtures could be compromised.
+2. The observed degradation on GSM8K is only attributed to data format differences, without further empirical or theoretical analysis. A deeper examination of domain specific interactions would significantly strengthen the interpretive depth of the results. (such as how mathematical versus general text mixtures affect reasoning transfer)
+
+### Questions
+See Weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This work introduces a pipeline named Go4RL to select the best mixing ratio of pretraining data for training pre-RL models. It utilizes avg(k-ppl) of the small models trained with different data ratio to train a regression model, which can predict a good ratio for larger 1B model pretraining.
+
+### Strengths
+1. Try different pretrain data/RL algorithms, train lot of small models and the regression model can predict the result for larger 1B model. Outcoming with human/ppl/rl-loss baselines. In general, I think the experiments look solid
+2. The analysis of data mixing ratio makes a lot of sense to me. I also find that mixing more coding data in pre/mid-training is helpful to general reasoning. And recent work also shows that well-RL model (like Qwen) always has some coding epoch during RL training, which may imply some code mid-training.
+
+### Weaknesses
+1. L51-53 is kind of confusing, I don't get what's the relation between pass@k and average-k ppl. The first one shows the coverage of k-sampling, but the second one does not. Maybe you could compare with pass@k metric on some math/coding/logic tasks, or entropy metric. I think they are also RL-agnostic and wonder if they are better than average-k ppl, because they are more related to downstream metric compared with ppl. (The performance on GSM8k is weaker with avg-k ppl)
+2. The writing and figure can be improved. Like Fig. 3 does not have a clear Y axis
+3. It seems that when there are new data source, we need to train new regression models, which is very costly. Besides, it's unclear if this method is scalable for larger model, like optimal data mixing ratio of 1M model maybe very different for 32B model, while training a lot of 1B model for regression model is unacceptable. Besides, when number of data source increase, the number for data mixing ratio would increase.
+
+I think the method make sense but may be strongly limited to the generalization problem
+
+### Questions
+1. What's the parameter of LightGBM / random forest / other baseline used in the paper? 
+2. What's cost of training regression model? like in gpu hours.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3

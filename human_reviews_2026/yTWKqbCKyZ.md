@@ -1,0 +1,178 @@
+# Theoretical Constraints on the Expressive Power of RoPE-based Tensor Attention Transformers
+
+- Decision: Reject
+- Scores: 2, 4, 4, 6
+
+## Abstract
+Tensor Attention extends traditional attention mechanisms by capturing high-order correlations across multiple modalities, addressing the limitations of classical matrix-based attention. Meanwhile, Rotary Position Embedding ($\mathsf{RoPE}$) has shown superior performance in encoding positional information in long-context scenarios, significantly enhancing transformer models' expressiveness. Despite these empirical successes, the theoretical limitations of these technologies remain underexplored. In this study, we analyze the circuit complexity of Tensor Attention Transformer and extend to its $\mathsf{RoPE}$-based Tensor Attention variants, showing that with polynomial precision, constant-depth layers, and linear or sublinear hidden dimension, they cannot solve fixed membership problems or $(A_{F,r})^*$ closure problems, under the assumption that $\mathsf{TC}^0 \neq \mathsf{NC}^1$. These findings highlight a gap between the empirical performance and theoretical constraints of Tensor Attention and $\mathsf{RoPE}$-based Tensor Attention Transformers, offering insights that could guide the development of more theoretically grounded approaches to Transformer model design and scaling.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposes a formal analysis of the expressive power of Tensor Attention Transformers (TAT) using Rotary positional embeddings (RoPE). The results presented in this paper can be seen as extending the results in (Chiang, 2024) who showed that transformers belong to DLOGTIME-uniform TC0 in two directions: TAT and RoPE. 
+
+The main results showed in this paper are that (i) TAT w/ and w/o RoPE (poly(n) size, constant depth) are also in DLOGTIME-uniform TC0 (Thm 3.7 and 4.5) and (ii) TAT w/ and w/o RoPE (constant depth) cannot solve the fixed membership problem (Thm 5.6), nor the (A_F,r)* closure problem (Thm 5.7). 
+
+There is no experimental section, the contribution is focused on the theory.
+
+### Strengths
+- Extending the collection of results characterizing the expressiveness of architectures commonly used in ML using circuit complexity is a very fundamental and relevant contribution.
+
+### Weaknesses
+- The main weakness of the paper in my opinion is its lack of clarity. This lack of clarity is due to several factor: 
+
+  - structure of the paper: most of the space is spent on definitions and results taken from other papers. As consequence, not enough time is spent on explaining how the results presented here are novel and non-trivial extension of previous work, as well as why they are relevant. I understand that it is important to introduce the previous results on which your work built upon, and that some definitions are unavoidable to present complex architecture designs such as tensor attention. Still:
+      - some definitions are standard and should be omitted or deferred to appendix (e.g. Def 2.21 defines a rotation matrix, Def 2.20 defines the softmax function) 
+      - some facts should be deferred to the appendix since they are not use in any meaningful way in the main paper as far as I see (e.g. Fact 2.19 is mentioned in Def 2.25 but not needed to state this definition)
+      - I would suggest only keeping the results that are fundamental to understand your contribution in the main paper and moved all the others to the appendix (e..g. I don't think the 4 results in section 2.1 are needed in the main paper). This would allow you to spend more time discussing your contribution. 
+
+ - May of the definitions and lemmas are taken from previous work and have been slightly rephrased / edited in a way that, in my opinion, make them less clear (e.g. Def 2.1). I would suggest using the exact same formulation as in the original papers for definition that are directly borrowed, unless there is a clear reason not to do so. 
+
+ - The paper lacks rigour in some places, some notations are not introduced. E.g. Q_{j_1,*} in Def 2.4, A+ and [P] in Def 5.1, the less or equal sign used in the sup of Def 5.3, ||w|| in Def 5.4.
+
+ - Section 5, presenting the hardness result, is particularly difficult to follow (at least for me). Many notations have not been properly introduced. From the definitions I was not able to understand the definition of the two problems. I wrote my questions related to Def 5.1 and 5.3 below. Regarding Def 5.3. I do not understand why this very abstract definition of the Kleene star is used. My intuition is that the standard definition would be sufficient here (L^* = \cup_{n\geq 0} L^n).
+
+### Questions
+- What were the key technical challenges in proving Thm 4.5? Are the proof techniques a direct adaptation of the ones used in (Chiang, 2024) or were there any specific aspects of RoPE or TAT that made the analysis more challenging? 
+
+- Def 5.1: what does uv^\omega \in [P] means? What is omega here? What does the notation [P] refer to? 
+
+- Def 5.3: Why do you use the def from Kuznetsov for the Kleene star? I find it quite confusing and I believe un-necessary to define the closure problem where the standard definition would suffice.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The authors discuss the circuit complexity of tensor attention along with its RoPE-equipped variants. They show that under polynomial precision, constant-depth, and big O linear hidden dimension, these attention modules still cannot solve the fixed membership problem or the (A_{F,r})^* closure problem. These results highlight the computational limitation of tensor-attention.
+
+### Strengths
+The theoretical results on the limitation of tensor-attention seem solid, though I’m not an expert in the subfield.
+
+### Weaknesses
+It might be better to also run some experiments on the fixed membership problem or the (A_{F,r})^* closure problem using tensor attention with RoPE. Otherwise it’s hard to tell if this is actually a limitation in practice. It’s hard to tell if the theoretical complexity bound is tight or loose and how does it actually manifest in the Transformer model empirically.
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper is an investigation into the computational complexity of Tensor Attention Transformers and their RoPE-based variants using circuit complexity theory. The work builds through individual components to complete multi-layer architectures. The authors analyze circuit depth and size requirements for computing the tensor-attention related operations, and show that this can be simulated by uniform TC0 circuirts with constant depth, size, and precision. The results are extended to RoPE-based tensor attention, and limitations are shown in terms of solving particular classes of problems.
+
+### Strengths
+- Rigorous treatment with detailed proofs, building circuit complexity analysis systematically from basic operations
+- Clear statement of assumptions and conclusions
+- Useful extension of circuit complexity analysis to tensor attention and RoPE which are modern architectures
+- Complexity bounds for all components
+
+### Weaknesses
+- no empirical evaluation at all; no practical validation of key assumptions/conclusions. No ablations
+- no guidance for practitioners. at times, unclear how to use insights for architecture design
+- more discussion in terms of bound tightness and practical implications
+- limited intuition and clarity of key takeaways while the paper is technically very dense
+- The approach extends related work and adapts to tensor attention (somewhat incremental novelty in that respect)
+- results apply only under constraints that may not hold in practice (constant layers etc.). 
+- Additionally (minor) make sure that notation is consistent/clear (e.g. 2.24 vs 2.25 definition)
+
+### Questions
+please see above limitations and weaknesses: e.g., how do constraints/assumptions link with practical transformer implementations, empirical validation, missing link to practitioners, and so on.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+1
+
+### Summary
+This paper analyzes the circuit complexity of the Tensor Attention Transformer and extends it to its RoPE-based Tensor Attention variants. With the analysis, their work provides theoretical understanding of self-attention architectures and computational boundaries. These findings highlight a gap between the empirical performance and theoretical constraints of Tensor Attention and RoPE-based Tensor Attention Transformers, offering insights that could guide the development of more theoretically grounded approaches to Transformer
+model design and scaling.
+
+### Strengths
+1. The results of this paper can provide valuable insights into existing structures.
+
+2. Using circuit complexity theory, this paper analyzes tensor attention and rotary position embedding (RoPE).'
+
+3. The self-attention structure is crucial, and analyzing its expressiveness will exert a profound and long-lasting impact.
+
+4. In my opinion, this work is novel for the related area.
+
+### Weaknesses
+1. It's hard to understand some concepts, such as CIRCUIT COMPLEXITY.
+
+### Questions
+How can this theroy result motivate further improvements to the self-attention structure?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

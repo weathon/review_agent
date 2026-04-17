@@ -1,0 +1,195 @@
+# Unified Continuous Generative Models for Denoising-based Diffusion
+
+- Decision: Reject
+- Scores: 6, 6, 6, 4
+
+## Abstract
+Recent advances in continuous generative models, encompassing multi-step processes such as diffusion and flow matching (typically requiring $8$-$1000$ steps) and few-step methods such as consistency models (typically $1$-$8$ steps), have yielded impressive generative performance.
+    However, existing work often treats these approaches as distinct paradigms, leading to disparate training and sampling methodologies.
+    We propose a unified framework for the training, sampling, and analysis of diffusion, flow matching, and consistency models.
+    Within this framework, we derive a surrogate unified objective that, for the first time, theoretically shows that the few-step objective can be viewed as the multi-step objective plus a regularization term.
+    Building on this framework, we introduce the **U**nified **C**ontinuous **G**enerative **M**odels **T**rainer and **S**ampler (**UCGM**), which enables efficient and stable training of both multi-step and few-step models.
+    Empirically, our framework achieves state-of-the-art results.
+    On ImageNet $256\times256$ with a $675\text{M}$ diffusion transformer, UCGM-T trains a multi-step model achieving $1.30$ FID in $20$ steps, and a few-step model achieving $1.42$ FID in only $2$ steps.
+    Moreover, applying UCGM-S to REPA-E improves its FID from $1.26$ (at $250$ steps) to $1.06$ in only $40$ steps, without additional cost.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper proposes a unified framework for training, sampling, and analysis of diffusion, flow matching, and consistency models. The authors claim novelty in this unification. They introduce a unified trainer called **UCGM-T** and a unified sampler called **UCGM-S**. The sampler is compatible with pretrained diffusion, flow matching, and consistency models. They provide empirical validation of UCGM-{T, S} on ImageNet, as well as of UCGM-S applied to a pretrained REPA-E model, and report that their methods reach or surpass state-of-the-art performance in these evaluations.
+
+### Strengths
+1. In Sec. 3.1, a unifying loss function (Eq. 4) is derived, and the assumptions required to recover the respective diffusion, flow matching, and consistency model instances are explicitly stated. In addition, a surrogate loss function (Eq. 5 / 13) is introduced and its equivalence to the original loss is formally proven in the appendix (though I did not check the proof). The surrogate loss provides additional conceptual insight and appears useful for analytical investigations.
+
+2. The parameter choices by which the diffusion, flow matching, and consistency model instances are obtained are explicitly listed (Tab. 1).
+
+3. In Sec. 3.3, the authors present UCGM-S, a sampler that (as claimed) generates samples for all model types — diffusion, flow matching, and consistency — in a unified algorithmic way. In particular, it is claimed that the underlying model does not need to have been trained with UCGM-T but can come from any existing diffusion, flow matching, or consistency model training data.
+
+4. In Sec. 4, extensive experiments on ImageNet-1K at 256×256 and 512×512 resolutions with various baselines are reported.
+
+### Weaknesses
+1. The introduction of a third, equivalent loss function (Eq. 6) appears abrupt and entirely unmotivated. Simply referring to “previous studies” is insufficient — especially since this creates the impression that those prior works may already have introduced a loss function unifying the same model families considered here, which would render the proposed framework (at least for training) largely obsolete.
+
+2. A convergence or stability analysis of UCGM-S is entirely missing. Theorem 7 (in the appendix) only shows that the extrapolated step is consistent and locally of order $O(h^2)$. A proof of global convergence (and hence correctness) or of the convergence order is absent.
+
+3. Clarity is sometimes lacking. For example, $p$ in Eq. 1 is never defined, and the (experienced) reader must infer that $p(z,x)=p_{\text{prior}}(z)p_{\text{data}}(x)$ is intended. It is not clear — and if it is, it should be explicitly stated — whether $z$ and $x$ are meant to be dependent in the general setting. Moreover, it is mathematically questionable (strictly speaking incorrect) to denote both the data and prior distributions by the same symbol $p$, distinguishing them only by the argument ($x$ vs. $z$).
+
+4. In the experiments, image quality is evaluated solely using FID, computed on only 50k samples. It is well known that FID estimates with this sample size can be far from converged, undermining comparability — especially at the decimal level. It is also unclear whether baseline FIDs were re-evaluated or taken from the corresponding papers; in the latter case, implementation-dependent differences in FID magnitude can further distort comparisons. No additional perceptual or diversity-based metrics are provided, and neither training nor sampling time is reported. The only computational metric considered for sampling cost is NFE.
+
+### Questions
+1. If (Lu & Song, 2024) already introduced the loss function in Eq. 6 and this formulation already encompasses diffusion, flow matching, and consistency models (as the introductory sentence of Sec. 3.2 suggests — though I did not verify this claim), then what additional contribution does the present paper make toward unifying the training of these models?
+
+2. When UCGM-S is applied to a pre-trained model that was *not* trained with UCGM-T but instead obtained from existing diffusion, flow matching, or consistency model training data, is any form of conversion required to ensure compatibility with UCGM-S? Or can UCGM-S truly be used in a plug-and-play fashion? If conversion is necessary, can a clear description or implementation provided to perform it?
+
+3. Further questions arise from the weaknesses listed above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes UCGM, a unified framework for continuous generative models that encompasses diffusion, flow matching, and consistency models under one set of transport coefficients and a unified objective. A key theoretical result derives an equivalent surrogate loss showing that the few-step objective = multi-step objective + a self-alignment regularizer, clarifying why few-step training can become unstable as the consistency ratio λ→1. Built on this, the authors introduce UCGM-T (trainer) and UCGM-S (sampler). UCGM-T smoothly interpolates between multi-step and few-step regimes, while UCGM-S acts as a plug-and-play sampler that can reduce NFEs and sometimes improve FID for existing pre-trained models. Experiments on ImageNet-1K (256² & 512²) with DiT-style backbones and multiple VAEs report SOTA/competitive FIDs in both regimes.
+
+### Strengths
+- A principled formulation that subsumes diffusion, flow matching, and consistency models; provides shared notation, training, and sampling views. 
+- The surrogate objective neatly decomposes few-step training into multi-step + regularization, offering an intuitive explanation of instability at high λ. 
+- UCGM-T tunes one knob (λ) to target many NFE budgets; UCGM-S accelerates existing models without retraining. 
+- Competitive/SOTA FIDs at both 256² and 512² across multiple autoencoders; graceful degradation as steps shrink; broad compatibility with DiT/UNet families.
+
+### Weaknesses
+- Almost all results are on class-conditional ImageNet-1K at 256² and 512²; CIFAR-10 only appears for ablations. There are no text-to-image or multimodal tasks, so it’s unclear how the method behaves with language conditioning or other modalities. The paper itself states the primary datasets are ImageNet-1K (512×512, 256×256) and uses CIFAR-10 (32×32) just for ablations; training is in latent space with specific autoencoders (e.g., SD-VAE, VA-VAE, E2E-VAE at 256²; DC-AE or SD-VAE at 512²). This tight focus limits external validity to broader generative settings.
+- The main comparisons and ablations emphasize FID (and step count/NFEs). Even the “plug-and-play” sampler section frames gains largely as “same or better FID with fewer steps,” and the system-level tables report FID (with occasional IS), but there’s no precision/recall, density/coverage, CLIP-based faithfulness, or calibration/diversity measures. This narrow metric set makes it hard to judge mode coverage and semantic alignment beyond FID.
+
+### Questions
+Most results are on ImageNet with certain VAEs/backbones. It’s unclear if this also works well for text-to-image.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes UCGM, a single theoretical and practical framework that unifieds diffusion, flow matching and consistency models by demonstrating that they are all special cases of one continous-time objective and sampler. The paper also introduced a unified trainer as well as a sampler, enabling one backbone to generate high-fidelity images efficiently
+
+### Strengths
+•	The paper gives one continuous-time formulation (UCGM) that covers diffusion, flow matching, and consistency models, the derivation is clean and non-trivial. 
+
+•	They also gives a single derivation that directly link multi-step diffusion-like training and few-step training by introducing a self-alignment term that forces the model to agree with its own predictions. While this term also provides insights for instability in few step model.
+
+•	The paper provides extensive experiments across models, resolutions, and sampling regimes: they show that a single training formulation (UCGM-T), controlled by a consistency ratio λ, can be used toward either the traditional high-step diffusion / flow-matching regime (small λ) or the ultra-low-step consistency-style regime (large λ), so one can explicitly optimize for different latency/quality tradeoffs without redesigning the whole training algorithm.
+
+### Weaknesses
+•	My major concern came from the claims that provides a single “unified” generative framework covers both multi- and few-step sampling. However, in practice this is not realized as one universally deployable model: the authors actually train multiple separate checkpoints, each with a different value of the consistency ratio λ (they report training three models with λ ∈ {0.0, 0.5, 1.0}), and then show how those different checkpoints behave under different sampling budgets. This means the system is unified at the level of theory and loss design, but not yet unified at the level of a single set of weights that performs optimally across both the high-step and ultra-low-step regimes.
+
+•	It’s a minor concern but it would be better to include more  implementation details. Especially relevant in the λ≈1 few-step regime, where stability depends on undocumented tricks (e.g., second-order estimator, clipping, Beta time sampling), making true reproducibility and stability claims hard to verify.
+
+### Questions
+Please see weakness sections
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This manuscript proposes a shared framework for many-step diffusion models and few-step consistency models. Specifically, starting from a consistency-style high-level objective, the authors demonstrate that this objective is equivalent to a flow matching plus a self-consistency regularization, which can be implemented to be diffusion models, consistency models, or interpolation between them. On top of the framework, the authors also propose a sampling procedure for this framework, as well as advanced training techniques and improvements, such as time distribution, CFG-enhanced score function, and high-performance autoencoders. Experimental results demonstrate that using the proposed pipeline improves the FID on both multi-step and few-step settings with high-resolution ImageNet benchmarks.
+
+### Strengths
+* Training a strong few-step generative model from scratch is an important topic.
+* The writing is easy to follow.
+* The experimental analysis and ablation study are well executed.
+
+### Weaknesses
+**The high-level objective**: 
+I have concerns about the necessity of the proposed high-level objective in Eqn. (4). When beyond the case of $\lambda = 0$ and $\lambda \to 1$, the behavior of the optimal solution of the objective, and how to leverage the learned quantity, remains unclear to me. While the authors discuss this point in a simple case in Appendix F.1.4, it remains unclear to me how to reasonably leverage the learned quantity $\lambda \in (0, 1)$ unless I have missed something. One possible scenario would be to have a closed-form relationship of the conditional expectation (the diffusion model), the pushforward operation (the consistency model), and the learned quantity, but the current presentation did not shed any light on this.
+
+Empirically, according to Table 5, the main results are obtained from the $\lambda = 0$ and $\lambda \to 1$, which further makes the $\lambda \in (0, 1)$ part unclear. If so, then the implementation would boil down to diffusion models and a consistency model (or a finite difference version of sCM [1]).
+
+**The sampling procedure**: The current sampling procedure needs more justification than provided, especially under the $\lambda \to 1$ case (again, unless I have missed something, in that case, this needs to be clarified explicitly *in the main text*). For example, consider the linear coupling case, the "decomposition" and "reconstruction" become one Euler discretization (or equivalently one DDIM step). So it is unclear whether using a pushforward $f_\theta^x(x_t, t)$ could simulate a path that is marginal preserving in this way. A relevant discussion is in IMM [2], where the authors show that one solution of marginal preserving simulation path with DDIM needs the network to condition on two timesteps. Here, the sampling process is achieved by only conditioning on one timestep. This needs more clarification/discussion.
+
+**The comparison for samplers**: The proposed UCGM-S couples (narrow-sense) sampler, timestep selection, CFG scale, and stochasticity together. Could the author elaborate on the baselines used for comparing the sampler and provide insights on which part contributes the most to reducing the confounders?
+
+I am open to revising my rating if the above concerns are addressed.
+
+(Minor)
+* Could the author provide some results for the sampler, as well as the training recipe (may use fine-tuning) on larger-scale text-to-image tasks, preferably examining the hard cases such as detailed text rendering?
+
+## Reference
+[1] Lu, Cheng, and Yang Song. ‘Simplifying, Stabilizing and Scaling Continuous-Time Consistency Models’. (ICLR 2025)
+
+[2] Zhou, Linqi, et al. ‘Inductive Moment Matching’. (ICML 2025)
+
+### Questions
+See weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

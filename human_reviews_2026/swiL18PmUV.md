@@ -1,0 +1,161 @@
+# IGGT: Instance-Grounded Geometry Transformer for Semantic 3D Reconstruction
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 6
+
+## Abstract
+Humans naturally perceive the geometric structure and semantic content of a 3D world as intertwined dimensions, enabling coherent and accurate understanding of complex scenes. However, most prior approaches prioritize training large geometry models for low-level 3D reconstruction and treat high-level spatial understanding in isolation, overlooking the crucial interplay between these two fundamental aspects of 3D-scene analysis, thereby limiting generalization and leading to poor performance in downstream 3D understanding tasks. Recent attempts have mitigated this issue by simply aligning 3D models with specific language models, thus restricting perception to the aligned model's capacity and limiting adaptability to downstream tasks. In this paper, we propose Instance-Grounded Geometry Transformer (IGGT), an end-to-end large unified transformer to unify the knowledge for both spatial reconstruction and instance-level contextual understanding. Specifically, we design a 3D-Consistent Contrastive Learning strategy that guides IGGT to encode a unified representation with geometric structures and instance-grounded clustering through only 2D visual inputs. This representation supports consistent lifting of 2D visual inputs into a coherent 3D scene with explicitly distinct object instances. To facilitate this task, we further construct InsScene-15K, a large-scale dataset with high-quality RGB images, poses, depth maps, and 3D-consistent instance-level mask annotations with a novel data curation pipeline. Unlike previous methods that bound with a specific language model, we introduce an Instance-Grounded Scene Understanding paradigm, where instance masks serve as the bridge connecting our unified representation with diverse Visual Language Models (VLMs) in a plug-and-play manner, substantially expanding downstream understanding capabilities. Extensive experiments on instance multi-view instance matching, open-vocabulary segmentation, and QA scene grounding demonstrate that IGGT outperforms state-of-the-art methods in both quality and consistency for semantic 3D reconstruction.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+The paper presents IGGT, a unified transformer that consumes multi-view RGB and jointly predicts geometry (cameras, depth, point maps) and instance-grounded features suitable for open-vocabulary 2D/3D semantics and downstream multi-modal reasoning. A shared backbone drives two heads (Geometry / Instance). A window-shifted cross-modal fusion injects geometric context into the instance stream, and a 3D-consistent contrastive objective aligns instance identity across views. The authors also curate InsScene-15K, a collection with multi-view images, poses, depths, and multi-view-consistent instance masks assembled via a practical SAM/SAM2-based workflow.
+
+The contribution can be summarized:
+1. A unified transformer with shared tokens and two heads (Geometry / Instance).
+2. A window-shifted cross-modal fusion to inject geometric cues into the instance stream.
+3. A 3D-consistent contrastive loss to keep instance identities aligned across views.
+4. InsScene-15K: practical multi-view data with pose/depth and multi-view-consistent instance masks (SAM/SAM2-based curation).
+5. Competitive results on ScanNet and ScanNet++, plus an easy interface to VLM/LMM tools via instance masks.
+
+### Strengths
+1. The dataset contribution in this 3D understanding community is pretty essential. InsScene-15K is a practical, geometry-aware, multi-view dataset with view-consistent instance IDs that scales via SAM-based curation, supports tracking/OVS/reconstruction in one place, and cleanly interfaces with VLM/LMM grounding, filling a real gap for unified 3D perception. 
+
+2. Following VGGT in the geometry representation, IGGT uses multi-view images encoder to unifythe visual token represeentations. Additionally, it added an instance head to output the dense instance features. A Cross-Modal Fusion Block is used to fulfill this downstream head. 
+
+3. The results are genuinely promising: on ScanNet/ScanNet++ it meets or exceeds strong baselines in instance spatial tracking (T-mIoU/T-SR), open-vocabulary 2D/3D segmentation, and geometric reconstruction, with clean qualitative masks and stable depth. The single-pass design (cameras, depth, point maps, instance features) is practical, and the instance masks plug neatly into VLM/LMM grounding. The reconstruction results could be comparable with VGGT and in some dataset is better, the semantic results are also good.  
+
+4. The idea is simple but efficient and perfroms good. 
+
+5. Overall the paper is well-written and the figures are nice.
+
+### Weaknesses
+1. Some typos:
+(1) line 198: " 3) a 3D consistent supervision to" ? To what? Super curious about the following sentence. 
+(2) In Fig2, I think you are refering to InsScene-15K. But the pie chart and the right column is ScenePart-15K 
+(3) Scannet --> ScanNet ; Scannet++ --> ScanNet++
+2. There are some new baselines in such kind of unified model for semantic understanding. SceneSplat [1,2] trains a large model to take Gaussian Splatting in and open-vocabulary semantic out, and got a great performance on ScanNet and ScanNet++. 
+
+[1] SceneSplat: Gaussian Splatting-based Scene Understanding with Vision-Language Pretraining
+[2] SceneSplat++: A Large Dataset and Comprehensive Benchmark for Language Gaussian Splatting
+
+3. No outdoor/egocentric/fisheye/low-light results. Can you add some results for the out of distribution data?
+
+### Questions
+1. Is your model finetuned from VGGT or trained from scratch? 
+2. A dataset card to detail the strength and uniqueness of InsScene-15K will be good. 
+3. Please fix the typos in the paper. 
+4. I saw that all code and checkpoints will be publicly available, will the data also be public?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes the Instance-Grounded Geometry Transformer (IGGT) that unifies spatial reconstruction and instance-level contextual understanding in a unified transformer. Using only 2D inputs, IGGT can encode a unified representation with geometric structures and instance-grounded clustering. The authors also construct a dataset named InsScene-15K with instance-level mask annotations.
+
+### Strengths
+1. I think paper is about the incremental improvements over VGGT by unifying spatial reconstruction and instance-level contextual understanding, which is interesting.
+2. The writing and presentation are good, and both quantitative and qualitative experiments have been conducted in sufficient detail.
+
+### Weaknesses
+1. The discussion of related work is somewhat insufficient. Several recent and more advanced 3D Multimodal LLMs—such as **Inst3D-LMM (CVPR 2025)** and **Chat-Scene (NeurIPS 2024)**—are not discussed. A more comprehensive review would strengthen the paper.
+2. Do the authors consider evaluating IGGT on more general 3D scene understanding tasks to further demonstrate its effectiveness—for example, 3D visual grounding on ScanRefer or Multi3DRefer, and 3D VQA on ScanQA?
+
+### Questions
+Please open-source the code and dataset as soon as possible to enable community validation. 
+I will also update my assessment after considering feedback and technical insights from other reviewers.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This work proposes a unified framework that jointly performs 3D reconstruction and class-agnostic instance segmentation from multi-view 2D images. The approach is enabled by introducing a new large-scale dataset that includes RGB images, depth maps, camera poses, and 3D-consistent instance masks, facilitating consistent supervision across views. 
+
+To achieve this, the authors design a unified transformer architecture that encodes multi-view RGB images into a shared latent space, from which two task-specific heads decode:
+	1.	a Geometry Head, predicting 3D point or depth maps, and
+	2.	an Instance Head, producing class-agnostic instance segmentation fields.
+
+To guid the training 3D-Consistent Contrastive Learning strategy, which enforces multi-view consistency in both geometry and instance features by contrasting instance representations across different viewpoints of the same scene.
+
+It also introduces InsScene-15K, a new large-scale dataset that combines both synthetic and real-world data, including RGB images, depth maps, camera poses, and 3D-consistent instance segmentation masks.
+
+Experiments on ScanNet validate the method’s improved performance in 3D reconstruction, instance tracking, and open-world segmentation tasks.
+
+### Strengths
+The paper addresses an important and timely problem—jointly performing 3D reconstruction and instance-level scene understanding. This capability is highly relevant for downstream applications in robotics, AR/VR, and general 3D scene analysis, where both geometry and object-level understanding are required.
+
+- Producing instance masks alongside reconstruction is meaningful for many robotic and perception tasks, as most downstream reasoning and manipulation systems operate at the instance level rather than on raw pixels or voxels. The proposed framework aligns well with this need.
+- The authors contribute a well-curated, large-scale dataset (InsScene-15K) that includes RGB images, depth maps, poses, and 3D-consistent instance annotations. This dataset fills an important gap and could serve as a valuable benchmark for future research.
+- The proposed joint learning strategy—where instance-level understanding and geometric reconstruction reinforce each other—is conceptually sound and empirically validated. 
+- The results showing improvements across multiple downstream tasks (spatial tracking, open-vocabulary segmentation, and scene grounding), demonstrating the model’s effectiveness and generality.
+
+### Weaknesses
+- An ablation study on the 3D-Consistent Contrastive Loss is missing. Since this loss is central to the paper’s claim of mutual learning between geometry and instance representation, its explicit contribution should be quantified through targeted ablations.
+- The paper lacks a standard class-agonistic instance segmentation evaluation. Common metrics such as AP, AP50, and AP25 on ground-truth instance labels—widely used in the 3D instance segmentation literature (e.g., SAI3D, SamPart3D, OpenIns3D)—would provide a more rigorous assessment of instance mask quality. Given that instance quality directly impacts downstream tasks such as scene grounding and spatial tracking, this omission weakens the quantitative validation.
+- 3D instances can often be extracted directly from point clouds using clustering or graph-based grouping methods (e.g., VGGT + standard 3D clustering (SuperPoint or Graph Cut). Therefore, evaluating the quality of class-agnostic instance masks against such baselines would strengthen the paper’s claim that joint learning between geometry and instance representation is beneficial.
+- A runtime analysis could be provided.
+
+### Questions
+- The quality of the instance labels obtained from the network is crucial part of the contribution. More information on this aspect would be necessary to confirm the reliability of the results.
+
+- The definition of the Spatial Tracking task is not entirely clear. Spatial trackers typically refer to temporal tracking in dynamic videos, where both scene motion and camera motion coexist. In static multi-view setups, pixel correspondences are largely determined by camera movement. From the visualizations, it appears to refer to instance matching across views? More clarity on this point would be helpful.
+
+- How is the granularity of the instance masks determined? Is this property controllable during inference or training?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

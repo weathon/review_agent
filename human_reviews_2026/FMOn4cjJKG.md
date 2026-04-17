@@ -1,0 +1,168 @@
+# Uni-MDTrack: Prompt Unified Single Object Tracking with Deep Fusion of Memory and Dynamic State
+
+- Decision: Reject
+- Scores: 6, 4, 6, 4
+
+## Abstract
+In this paper, we propose a simple but powerful parameter-efficient fine-tuning (PEFT) framework designed for unified single object trackers. Our framework is built upon two novel components: a Memory-Aware Compression Prompt (MCP) module and Dynamic State Fusion (DSF) modules. MCP effectively compresses memory features into memory-aware prompt tokens, which are deeply interacted with the input sequence throughout the entire backbone, significantly enhancing model performance while maintaining a stable computational load. DSF complements the discrete memory features by capturing the continuous dynamic state of the target, progressively introducing the updated dynamic state features from shallow to deep layers of the tracker, while also preserving high operational efficiency. MCP effectively overcomes the limitations of previous trackers that rely on only a few frames when introducing memory, which significantly increases input length and computational cost. It also addresses the insufficient fusion problem in existing memory-prompting methods. DSF remedies the lack of dynamic feature about continuous target variation in prior PEFT methods. Based on the MCP and DSF modules, we propose Uni-MDTrack, a tracker that supports tracking across five modalities. Experimental results across 10 datasets spanning five modalities demonstrate that Uni-MDTrack achieves state-of-the-art performance, with only 30\% of parameters requiring training. Furthermore, both MCP and DSF exhibit excellent generality, functioning as plug-and-play components that can boost the performance of various trackers. Code will be released for further research.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+This work presents a parameter-efficient fine-tuning (PEFT) framework for unified single-object tracking across multiple modalities (RGB, RGB-T, RGB-D, RGB-E, RGB-Language). The method introduces two novel components: a Memory-Aware Compression Prompt (MCP) module and Dynamic State Fusion (DSF) modules. MCP maintains a fixed set of learnable query tokens that dynamically compress the historical memory bank into a small set of prompt tokens. These tokens are concatenated to the input sequence, acting as additional prompts that inject long-term contextual memory into the backbone in a parameter-efficient way. DSF uses a selective state-space model (SSM) with gating to capture continuous target dynamics across layers. The experiments and ablations confirm efficiency and generalizability.
+
+### Strengths
+1. Novel architecture that merges memory compression and state-space modeling for efficient and unified multimodal tracking across diverse modalities.
+2. Parameter efficiency: The base version (Uni-MDTrack-B) fine-tunes only 30 % of its total parameters while achieving comparable or better accuracy than other full-tuning baselines.
+3. Comprehensive experiments and ablations demonstrating component effectiveness and scalability.
+
+### Weaknesses
+1. Although the paper reports reduced GFLOPs and parameter counts, it does not provide the actual inference speed (FPS). Given that the backbone is HiViT and additional modules (MCP and DSF) involve memory querying and state updates, the real-time performance might be limited.
+2. The DSF module employs an SSM formulation that is similar to the Mamba architecture, including the gating and state update mechanisms. While this integration into a tracking framework is reasonable, the design itself does not introduce substantial architectural novelty.
+
+### Questions
+1. Could the authors provide the inference time (FPS) and runtime complexity comparisons with existing baselines (e.g., SUTrack, HIPTrack)? This would better substantiate the efficiency claims of Uni-MDTrack.
+2. The DSF module seems structurally similar to Mamba’s selective state-space formulation. Could the authors clarify what specific modifications or adaptations were made beyond directly applying the Mamba equations?
+3. The paper already covers various benchmarks (LaSOT, LasHeR, VisEvent, DepthTrack). Could the authors further discuss or analyze how Uni-MDTrack behaves in long-term tracking situations (e.g., target reappearance, heavy occlusion) to demonstrate temporal robustness?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces Uni-MDTrack, a parameter-efficient fine-tuning (PEFT) framework for single object tracking, focusing on the trending unified trackers. The core of the method lies in two novel, lightweight modules designed to enhance a frozen foundation model:
+1. Memory-Aware Compression Prompt (MCP): Efficiently compresses a long-term memory bank into a few prompt tokens using trainable queries. These tokens are prepended to the input sequence, enabling deep interaction with image features throughout the backbone.
+2. Dynamic State Fusion (DSF): Uses a State-Space Model (SSM) to capture the target's continuous motion dynamics. The resulting state features are fused at multiple levels of the backbone.
+
+By fine-tuning only these modules and the prediction head (~30% of parameters), the model achieves state-of-the-art performance across 10 multi-modal tracking datasets.
+
+### Strengths
+-Design: MCP offers a good way to integrate long-term memory without the high cost of long sequences. DSF's use of an SSM to model dynamics is modern and its multi-level fusion is effective.
+-Performance: The results are very good. The method sets a new SOTA on a wide range of challenging benchmarks (LaSOT, TrackingNet, TNL2K, etc.), with significant gains over a very strong baseline (SUTrack).
+-Evaluation: The ablation studies are comprehensive and convincingly validate the design choices behind both modules. The authors clearly demonstrate the individual contributions of MCP and DSF and justify their architectural decisions.
+-Generalizability: The modules are shown to be plug-and-play, boosting the performance of another tracker (DropTrack) and outperforming competing PEFT methods. This highlights their general utility.
+
+### Weaknesses
+-Limited Mathematical Analysis: The level of mathematical grounding of the ideas in the paper is somewhat below ICLR standards. Although the equations provided description of the proposed modules, the ICLR standards assume theoretical mathematical analysis of “why” these modules work, in addition to the empirical evidence. See previous closely related tracking papers in ICLR2024 and 2024. 
+-No Inference Speed (FPS): The paper reports FLOPS but omits FPS, which is a critical metric for any tracker. Without it, the practical performance-efficiency trade-off is unclear.
+-Limited Failure Analysis: While successes are shown, a discussion of the method's failure cases would provide more complete insight into its limitations.
+- Relies on a Strong Baseline: The method is built on the powerful SUTrack model. While the gains are clear, the remarkable performance is a combination of the strong baseline and the proposed modules. A practical reform for this problem is to plug into other trackers (e.g., OSTrack, ODTrack, …) that have a more vanilla flavour of pure transformers.
+
+### Questions
+see above in weeknesses
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes Uni-MDTrack, a parameter-efficient way to upgrade an existing unified multimodal tracker (like SUTrack) without full retraining. It adds two modules: MCP, which turns a long history of frames into a small set of memory tokens and feeds them through all backbone layers, and DSF, which uses an SSM to update the target’s state from current search features and inject it at multiple depths.
+
+### Strengths
+Overall, the method is well aligned with current unified-tracking practice and gives a concrete, efficiency-oriented recipe.
+
+- i) The problem setting is realistic: starting from an already unified tracke, how to add history and dynamics without full retraining is a reasonable answer to that question.  
+
+ii)  Unlike temporal-propagation tokens that tend to look back at the template, DSF updates state only from search features and injects it at 4 depth levels, which is a good design for capturing short-term pose changes the memory can’t see. Using an SSM here is technically neat and, as the authors claim, uncommon in PEFT tracking.
+
+### Weaknesses
+- i) MCP uses ALiBi and caps memory at 50 frames by uniform sampling, but we don’t see an analysis of how sensitive performance is to memory length or to distractors
+
+- ii) The paper claims DSF captures “continuous target variation,” but there is no figure/table showing SSM hidden-state evolution vs. scale change / fast motion, so right now we have to trust the ablation. A small visualization would make the SSM choice more convincing.
+
+### Questions
+i) Can you specify the per-modality sampling ratios during the 100k-sequence epochs? E.g., what percentage is RGB-only vs. RGB-T vs. RGB-D vs. RGB-E vs. RGB-Language? 
+
+ii) DSF updates only from search tokens to avoid template distraction — did you try an alternative that also conditions on the current template crop? If so, did the SSM start to “forget” dynamics, as you suggest earlier in the paper?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a parameter-efficient fine-tuning framework for unified single-object tracking built around two modules: Memory-Aware Compression Prompt (MCP), which compresses memory features into prompt tokens that interact with the backbone, and Dynamic State Fusion (DSF), which progressively injects continuous target dynamics from shallow to deep layers. Combined into Uni-MDTrack, the approach maintains low computational cost, trains only ~30% of parameters, supports five modalities, and achieves state-of-the-art results across multiple datasets, while the MCP and DSF modules are plug-and-play and broadly applicable.
+
+### Strengths
+- The paper is clearly written and very easy to understand, with a detailed experimental setup. 
+- The experimental results are strong, outperforming existing methods on multiple datasets.
+
+### Weaknesses
+- I sense very limited novelty and contribution to the field, and may not meet the bar for ICLR. The partial fusion of SSM with a Transformer backbone and the use of memory tokens have already been explored in many prior works. Moreover, Table 6's ablation results suggest MCP and DSF do not provide substantial gains—those improvements could likely be achieved by hyperparameter tuning. It's also unclear whether replacing DSF with a simpler module would yield similar effects without introducing an SSM. 
+- The tracking community largely overlooks the impact of large multi-modal models and still compares methods within a small circle. This hinders progress, and the paper should at least compare with or pay more attention to large-model-based tracking approaches.
+
+### Questions
+see weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

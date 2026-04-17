@@ -1,0 +1,212 @@
+# Generalization Bound for GNNs on Transductive Node Classification: A View from Optimal Transport
+
+- Decision: Reject
+- Scores: 4, 4, 2, 4
+
+## Abstract
+The generalization ability of graph neural networks (GNNs) remains insufficiently understood, especially for node classification where node embeddings are inherently dependent on the entire graph structure. In this work, we establish new generalization error bounds for GNNs in the transductive node classification setting. Building on distribution-free transductive learning theory, we derive global and class-wise bounds expressed in terms of the Wasserstein distance of node features' distribution. Our analysis reveals how the GNN aggregation process transforms representation distributions and enables rigorous control of the generalization gap. We further specialize our results to the case of Simple Graph Convolution, providing explicit spectral characterizations of the bound. Empirical evaluations across homophilic and heterophilic benchmark datasets confirm that the proposed bounds accurately capture generalization behavior. These results advance the theoretical understanding of GNNs by providing the first Wasserstein-based generalization guarantees tailored to node classification.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper targets transductive node classification and derives two 1-Wasserstein–based generalization bounds: a global bound that upper-bounds test 0–1 error by the training $\gamma$-margin loss plus the $W_1$ distance between train/test embedding distributions, and a class-wise bound that decomposes the generalization gap into class-proportion mismatch and within-class concentration terms with a high-probability statement. For SGC, the paper also presents an upper bound with a depth-decaying additive term governed by the nontrivial spectral radius, and evaluates rank correlations between the proposed quantities and empirical generalization across 5 GNNs and 9 datasets, alongside an RC baseline.
+
+### Strengths
+- The theory is constructed directly in the transductive setting, with the bound formed by $W_1$ between train/test embedding distributions and margin terms, aligning assumptions with the task and aiding interpretability and applicability.
+- For SGC, the paper provides an upper bound with a depth-decaying additive term governed by the nontrivial spectral radius, offering a quantitative expectation of depth effects without relying on hard-to-obtain global Lipschitz constants.
+- The empirical study covers SGC, GCN, GCNII, GAT, and GraphSAGE on nine datasets, and reports rank correlations alongside an RC baseline, enabling side-by-side comparison and interpretation.
+
+### Weaknesses
+- The evaluation focuses on rank correlation; the paper does not provide numerical calibration/coverage plots or statistics, making it hard to assess bound tightness.
+- In the main experiments for Theorem 4.1, the 0.9-quantile of $M(f,\varphi)$ is used instead of the theoretical maximum; this deviates from the theorem, and its impact is not quantified in the main text.
+- Baselines are limited (primarily RC), constraining breadth; while correlations are positive in many settings, they are not positive in all (model × dataset) combinations, and analyzing negative cases would be informative.
+
+### Questions
+- Could the main text include side-by-side results or a sensitivity analysis for using the 0.9-quantile of $M(f,\varphi)$ versus the theoretical maximum, to assess the consequences of deviating from the theorem?
+- Could you add scatter plots of “bound value” vs. “test error” and coverage statistics to evaluate numerical calibration and tightness?
+- For the class-wise approx bound and $W_1$ estimation, could you summarize key steps and computational costs to clarify the accuracy–efficiency trade-off and aid reproducibility?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper extends the generalization error bounds established in arxiv:2106.03314 to the setting of transductive node classification. It derives two bounds expressed in terms of the Wasserstein distance. The first one (Theorem 4.1) demonstrates that the generalization error is small when the distance between the training and test encoded feature distributions is small. The second bound (Theorem 4.2) shows the generalization error is small when the distance between the training and test feature distributions within each class is small (which is analog to the results of Theorem 2 of arxiv:2106.03314) and when the difference in class proportions between the training and test sets across all classes is small. Finally, the paper analyzes the effect of depth on the generalization of GNNs. This section provides the only insight specific to GNNs, showing that the concentration and separation of node features play a crucial role in their generalization behavior.
+
+### Strengths
+1) The analysis is for node classification task which is not common in the literature. While there are existing bounds for node classification, many of them have limited practical utility and only hold for some architectures and training procedures. The bound here applies to a broader class of GNN architectures, and it is advantageous that it can be computed easily.
+ 
+2) The provided bounds can be directly computed from the GNN embeddings, making them straightforward to apply in experiments.
+
+### Weaknesses
+1) Theorem 4.1 and 4.2 do not provide any GNN-specific insight; they lift the results from arxiv:2106.03314 to the transductive setting without yielding a deeper understanding of architectural behavior. Also see questions below.
+
+2)  Theorem 6.1 is the only result that offers architectural insight, but it only applies to Simple Graph Convolution (i.e., a linear GNN). The restriction to linear GNNs should be stated clearly in the introduction, together with an explanation of why results obtained in this simplified setting still carry relevance for practice.
+
+
+Comments regarding the structure
+- typo in line 175: classidfier
+- Dimension of the features: in line 138 X has dimension NxF, in line 183 Nxd
+- Possible typo in Theorem 4.1: y should not have index i
+- Vague reference in line 251: there are two terms with expectation in the bound, it is not clear which one referenced in the first sentence.
+- Missing defination in line 267: Lip(ρf(·,c)) is not defined. It relies on the definition provided in arxiv:2106.03314, but this should be stated explicitly for clarity.
+
+### Questions
+1) What is the main challenge in extending the results of arxiv:2106.03314 to the transductive setting, and in what ways does the presented proof differ from those in arxiv:2106.03314? 
+
+2) The introduction claims that the Wasserstein-based bounds provide new theoretical insights (line 84). However, the conditions stated for reducing the generalization gap are all well established, including large margin of the classifier (arxiv:2106.03314), small distance of features within each class (arxiv:2106.03314) and the Lipschitz constant of f being small (arxiv:1706.08498). The insight regarding the oversmoothing is also not new since the same insight is discussed in arxiv:2205.12156, though examined using different tools.
+What, concretely, is the new theoretical insight gained from the Wasserstein-based bound?
+
+3) Contribution of the weights to the defination of the encoder: In line 376, the encoder is defined as 
+
+$\phi^{(l)}(x_i;X,A)=(A^l X)_{I}$
+ 
+whereas in the description of the general setup (in lines 172-174), the encoder $\phi$ said to map to the embedding space which should be 
+
+$\phi^{(l)}(x_i;X,A)=(\sigma(AX^{(l)}W^{(l)}))_{I}$
+
+ (lines 147-147) for a general GNN. The contribution of the weight could only be gathered in the classifier when considering a SGC. This raises the question of whether Theorems 4.1 and 4.2 are in fact derived only for a linear GNNs. If that is not the case, it is unclear where the contribution of the weights is captured in the analysis.
+
+4) Which GNNs can be considered within this framework? 
+
+5) In the experiments the bound is only compared to the bounds in arxiv:2112.03968 (line 314) for GCN. The justification given is that other bounds are derived for specific architectures. However, GCN is already one of the simplest GNN architectures, and even the paper cited as arxiv:1905.10947 (in line 318) uses GCN. Could the authors clarify why the bound cannot be compared to these other results?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper studies the generalization of GNNs in the transductive setting from an optimal transport view. In my view, the paper uses an interesting perspective, but it cannot be considered generalization bound given that it does not have the equation form that generalization considers.
+
+### Strengths
+The paper studies a very relevant topic, and does it from an interesting perspective. The paper is well written and the ideas well presented.
+
+### Weaknesses
+- The work overlooks a lot of recent work on this topic such as:
+A Manifold Perspective on the Statistical Generalization of
+Graph Neural Networks 
+Wang et al. 
+
+Covered Forest: Fine-grained generalization analysis of graph neural networks
+Vasileiu et at. 
+
+And more works than can be found in the previous two works. 
+
+- I do not think that this framework is a relevant one to study generalization. Theorem 4.1 needs a better justification of why this problem is akin to a Supremum over the space of functions. In particular, the bound does not have a clear dependency upon the class of functions being considered. 
+
+- This work is more focused on changes on the label distribution than a generalization analysis. I believe the authors should make a better case comparing their solution to the generalization problem presented by Vapnik.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces two generalization error bounds for the transductive node classification setting based on the Wasserstein distance. The global one ties the generalization bound to the Wasserstein distance between node feature distributions of the training and test sets, while the local one focuses on the intra-class Wasserstein distance between these sets.  
+Besides, the study theoretically and empirically analyzes the impacts of graph topology and propagation depth.
+In the experimental section, the proposed two bounds are verified to be correlated with the empirical error gap on different GNN architectures for homophilic and heterophilic datasets. 
+In summary, this paper is logically coherent with a sound experimental design. 
+I think it would be more impactful if additional analysis were included on how the proposed bounds can guide GNNs toward achieving better performance.
+
+### Strengths
+1). The paper is logically coherent, proposing two generalization error bounds that link the bound magnitude to node feature distributions. Specifically, the bounds are associated with the Wasserstein distance between training and test sets, which offers a novel perspective.
+
+2). Experiments validate the correlation between the two proposed generalization error bounds and the empirical error gap on both homophilic and heterophilic datasets, demonstrating the effectiveness and performance.
+
+3.) Experiments  analyze and visualize the impacts of GNN layers and graph topology on the Wasserstein distance, which supports the rationality of the proposed bounds.
+
+### Weaknesses
+1). The notation definitions are redundant and cumbersome. For instance, the definitions of training and test datasets in Line 128 and Line 184 overlap, and the description of GNN’s aggregation of neighboring nodes is repeated. It is recommended to streamline the notation and definitions.
+
+2). The paper lacks clarity in certain aspects: the model’s loss function is not explicitly specified, and additional analysis should be provided on how the proposed generalization error bounds can guide model improvement.
+
+3). Additional weaknesses are provided in the Questions.
+
+### Questions
+1). How is $\pi'$ selected in Equation 2? How many times is it sampled in experiments?
+
+2). Regarding the calculations of $\mathcal{I}_{\text{test},c}^{(\pi')}$ and $m_c^{(\pi')}$ in Theorem 4.2, does the computation of $\mathcal{W}_1$ involve test label leakage for oracle method? 
+
+3). What does $c'$ denote in Line 263? It is used without prior definition.
+
+4). Why is the magnitude difference between oracle and approx values small in some datasets but large in others? For example, in Roman-empire with SAGE, both values are 0.68; in Computers with GAT, the oracle, approx, and global values are all 0.70. However, significant discrepancies exist in other datasets, such as Squirrel with GCN (0.42 vs. 0.38). Could you explain this phenomenon across different datasets and GNN models?
+
+5). What is the loss function used in the experiments? How can Theorem 4.1 and Theorem 4.2 guide the design of the loss function?
+
+6). From the experimental results, the global bound outperforms the oracle bound. Is there a magnitude relationship between the bounds in Theorem 4.1 and Theorem 4.2? Can it be derived that the bound in Theorem 4.1 is smaller than that in Theorem 4.2?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

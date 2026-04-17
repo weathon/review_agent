@@ -1,0 +1,193 @@
+# JanusVLN: Decoupling Semantics and Spatiality with Dual Implicit Memory for Vision-Language Navigation
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 6, 6
+
+## Abstract
+Vision-and-Language Navigation (VLN) requires an embodied agent to navigate through unseen environments, guided by natural language instructions and a continuous video stream. Recent advances in VLN have been driven by the powerful semantic understanding of Multimodal Large Language Models (MLLMs). However, these methods typically rely on explicit semantic memory, such as building textual cognitive maps or storing historical visual frames. This type of method suffers from spatial information loss, computational redundancy, and memory bloat, which impede efficient navigation. Inspired by the implicit scene representation in human navigation, analogous to the left brain's semantic understanding and the right brain's spatial cognition, we propose JanusVLN, a novel VLN framework featuring a dual implicit neural memory that models spatial-geometric and visual-semantic memory as separate, compact, and fixed-size neural representations. This framework first extends the MLLM to incorporate 3D prior knowledge from the spatial-geometric encoder, thereby enhancing the spatial reasoning capabilities of models based solely on RGB input. Then, the historical key-value (KV) caches from the spatial-geometric and visual-semantic encoders are constructed into a dual implicit memory. By retaining only the KVs of tokens in the initial and sliding window, redundant computation is avoided, enabling efficient incremental updates. Extensive experiments demonstrate that JanusVLN outperforms over 20 recent methods to achieve SOTA performance. For example, the success rate improves by 10.5-35.5 compared to methods using multiple data types as input and by 3.6-10.8 compared to methods using more RGB training data. This indicates that the proposed dual implicit neural memory, as a novel paradigm, explores promising new directions for future VLN research.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper introduces JanusVLN, a novel framework for Vision-and-Language Navigation (VLN) that proposes a dual implicit memory system—one for visual semantics and another for spatial geometry. The authors decouple semantic and spatial processing using two separate encoders: a semantic encoder (ViT of Qwen2.5VL) and a pretrained geometric encoder (VGGT). The model use cached key-value (KV) memory from both encoders, updated incrementally via an initial and sliding window strategy, to avoid recomputation and reduce inference overhead. JanusVLN achieves state-of-the-art performance on VLN-CE benchmarks using RGB input alone, surpassing previous methods in both Success Rate (SR) and Success-weighted Path Length (SPL).
+
+### Strengths
+- **Writing Clarity and Problem Framing**: The paper is generally well-written, with a clear logical flow and a well-motivated problem statement. The limitations of prior work are articulated effectively.
+- **Enhanced Spatial Reasoning via Pretrained 3D Geometry Model**: The use of VGGT for feature extraction, trained on pixel-to-point cloud pairs, enables the agent to infer 3D spatial structure from RGB-only input. The approach enhance the capabilitiy of the model to understand 3D environments, and produces improved peformance (shown in ) compared with naive vision encoder of tranditional MLLMs.
+- **Efficient Inference**: The KV caching strategy reduces redundant computation, which is quite crucial to enable real-time deployment on physical robots.
+- **Strong Empirical Results**: JanusVLN achieves SOTA performance across multiple VLN-CE benchmarks, even outperforming methods that use depth, panoramic views, or odometry.
+- **Good Ablation Studies**: The authors provide detailed experiments isolating the impact of spatial memory, semantic memory, and fusion strategies, as well hyper-parameter configurations.
+
+### Weaknesses
+1.  **KV Cache Contribution Overstated**: While the paper presents KV caching as a core innovation, this technique has been widely used in LLM inference and has been applied in previous VLN approach (e.g., StreamVLN, which also uses KV cache and sliding window for acceleration). The novelty lies more in its integration than in the mechanism itself.
+2.  **Architectural Clarity**: Several components lack sufficient explanation: 
+
+    - The **attention fusion module** is under-described, and Figure 2 does not clearly illustrate its structure.
+    - It is unclear which modules’ KVs are cached—semantic encoder, spatial encoder, or fusion layers?  Specific concerns include:
+        - There are no autoregressive attention between frames in the Qwen2.5-VL’s ViT processing process , so caching may not yield meaningful savings.
+        - VGGT uses non-causal attention, which typically does not support KV caching. If VGGT is frozen during training, how is its computation reduced during inference? 
+        - If KV caching is applied only to the fusion module, and that module is lightweight, the overall computational savings may be marginal—especially considering that VGGT is the dominant cost.
+
+3.  **The analysis on the effectiveness of gemetric tokens are insufficient**: The paper does not provide visualization or interpretability analysis of the geometric tokens. This limits understanding of how spatial priors contribute to reasoning.
+
+4.  **Presentation Gaps**: Some figures and descriptions (e.g., memory update mechanism, fusion strategy) could be more precise and better annotated.
+
+### Questions
+1. Detailed mechnisim of the approach: Please refer to Weakness 2 for concerns regarding the architectural clarity and the caching mechanism. A more thorough explanation of the model components and their interactions is necessary to fully assess the technical soundness of the proposed method.
+2. Can the authors provide visualizations or interpretability analysis of geometric tokens to demonstrate their impact on spatial reasoning? It would be beneficial to include qualitative examples or attention maps that illustrate how these tokens contribute to decision-making during navigation, especially in complex spatial scenarios.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a new framework for VLN designed to address the inefficiency of methods that rely on explicit memory. 
+
+The authors propose a dual implicit neural memory inspired by the division of labor in the human brain for semantic and spatial processing. This framework decouples visual semantics from spatial geometry, representing each as a compact, fixed-size memory. Technically, this is achieved by caching the key-value (KV) pairs from two separate encoders: a semantic visual encoder from a Multimodal Large Language Model (MLLM) and a 3D visual geometry encoder (VGGT) that infers spatial priors from RGB input alone. 
+
+This implicit memory is updated efficiently using an initial window + sliding window strategy, which avoids recomputing features for the entire history at each step. The framework reaches SOTA.
+
+### Strengths
+(1) I think the way JanusVLN incorporates 3D geometric priors from a model like VGGT, using only RGB video as input, is a major strength. It enhances the agent's spatial awareness without requiring specialized hardware like depth sensors. The community is waiting a better engineering solution that applies VGGT to VLN tasks.
+
+(2) The method achieves SOTA results on challenging benchmarks, including those methods that use additional data types or more training data.
+
+(3) The authors have done an excellent job of dissecting their model and validating each component. The ablations on the dual memory, 3D priors, and memory size are all well-designed and provide strong support for the final architecture.
+
+### Weaknesses
+My main concern is about the paper's claim on its title: Decoupling Semantics and Spatiality.  Of course the paper indeed successfully argues that both semantic and spatial information are important (as shown by the ablation in Table 3 where removing either hurts performance) . However, it fails to provide a compelling argument for **why** these two types of information must be or had better be decoupled into separate processing streams. 
+
+The paper repeatedly draws an analogy to the human brain's hemispheric specialization. While this is an elegant and intuitive starting point, it cannot substitute for a rigorous technical argument. The paper just provides an experimental result which is certainly great. But for the VLN community nowadays, SOTA is indeed good but it is not that improtance or convincing to this specific question. To the best of my knowledge, there is few evidence or analysis to suggest that a standard, unified Transformer architecture would struggle to learn and represent both semantic and spatial features concurrently, or that their deeper fusion would be detrimental. This makes the central claim that **decoupling is necessary or vital** feel more like an assertion than a proven technical need.
+
+### Questions
+1.My main conceptual question is about the necessity of decoupling. The paper shows that both semantic and spatial information are important. However, could the authors provide a more rigorous technical justification for why these information streams must be processed by separate encoders and fused late, rather than being learned jointly within a single, deeper architecture? Is there any evidence to suggest that a standard Transformer struggles to learn the complex interplay between semantics and spatial geometry, making this explicit separation necessary? I think a clear answer (either theoretical or experimental) to this would significantly strengthen the paper's conceptual contribution, perhaps even more so than the SOTA results.
+
+2.Following on from the fusion mechanism, I'd be very interested to know the authors' thoughts on why the simple addition fusion outperformed Cross-Attention. Do you have any hypotheses that go beyond what's presented? Could it be that the two feature streams are already well-aligned by the powerful encoders, making complex interactions unnecessary or even noisy?
+
+3.I'm curious about the generalizability of the spatial priors. VGGT is pre-trained on pixel-3D point cloud pairs. I wonder how robust the system would be if deployed in environments with architectural or visual styles that differ significantly from VGGT's pre-training data. Have you considered this potential domain gap?
+
+These main points are based on the improvement and insights that can benefit the community. If I do have any misunderstanding welcome to point me out.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces a novel semantic-spatial dual-memory mechanism for visual language navigation tasks. The semantic and spatial memories are stored as KV caches extracted from VLM visual encoder and VGGT representation, respectively. It demonstrates superior performance compared to SOTA baselines in R2R/RxR-CE datasets, with lower computational overhead. Overall the proposed method is novel and effective. The experimental setup and research methodology are sound. My main concern is the lack of open-sourced implementation of the method, which impedes full verification of the results and reproducibility.
+
+### Strengths
+1. This work addresses a critical task that remains highly challenging for current embodied systems. Furthermore, the selection of baselines is comprehensive, incorporating all recent state-of-the-art advancements.
+
+2. The proposed semantic-spatial dual-memory mechanism is both novel and highly effective, demonstrating superior performance over all baselines on both the R2R and RxR-CE datasets.
+
+3. The proposed method has been successfully deployed on a real robot platform. Qualitative results are provided.
+
+4. The ablation studies are thorough and complete, evaluating the impact of critical design choices, including geometric prior selection and memory size.
+
+### Weaknesses
+1. The lack of open source code for the proposed method impedes full verification of its reproducibility.
+
+### Questions
+1. NaVILA and StreamVLN are the two strongest baselines shown in Table 1 and 2. However, they are both trained with different datasets. Comparison to these two approaches trained on the same 10.6k extra data used by JanusVLN will rule out the impact of training data. Could you run such experiments?
+
+2. Any plan to open-source the proposed method?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes a novel approach for Vision-and-Language Navigation (VLN) by introducing a framework that effectively decouples semantic and spatial-ity information using a Dual Implicit Memory mechanism. The paper presents a logically sound architecture that aims to overcome the limitations of explicit semantic memory in VLN agents. The empirical results demonstrate that the proposed method significantly advances the state-of-the-art performance across several established VLN benchmarks.
+
+### Strengths
+1. The paper is well-structured and clearly written. The core ideas, particularly the decoupling mechanism and the design of the dual implicit memory, are logically presented, making the methodology straightforward to understand.
+
+2. The empirical results are highly compelling. The proposed method achieves excellent performance and reports SOTA results on the evaluated, well-known VLN benchmarks. This suggests a notable improvement in the agent's navigation and generalization capabilities.
+
+### Weaknesses
+1. The primary performance evaluation heavily relies on relatively older and more indoor/limited benchmarks. While the paper includes some results on real-world scenarios, these are unfortunately only qualitative results, completely lacking quantitative metrics. The submission would be significantly stronger if it included quantitative validation on real-world data and performance on more recent, challenging, and diverse VLN benchmarks from the past 3 years.
+
+2. A critical concern is that the proposed method appears to be highly dependent on the capability of the underlying VGGT model. This dependency raises questions about the independent contribution of the novel framework components versus the inherent power of the advanced backbone itself. This requires clearer justification and comparative analysis.
+
+3. The experimental analysis of the overall framework's effectiveness and validity is not deep enough. The ablation studies provided are basic. There is a lack of detailed analysis on: (a) the specific scenarios where the proposed method successfully outperforms others, and (b) a systematic investigation of the current failure modes of the agent. A comprehensive analysis of successful vs. failing cases is crucial for the community to understand the method's limits and aid future improvements.
+
+### Questions
+1. Given the goal of generalizable navigation, the lack of quantitative real-world validation is a significant drawback. Could the authors provide quantitative results for the real-world scenarios presented? Additionally, please elaborate on the practical and operational details of the real-world experiments, such as sensor configuration, map representations used (if any), and any specific data preprocessing required for deployment.
+
+2. Regarding the dependency on the VGGT model (Weakness 2), please offer a more extensive explanation and stronger comparative evidence to clarify the unique contribution of the decoupling mechanism and the Dual Implicit Memory structure. Specifically, how does this memory module provide a benefit that a simpler, standard memory module would not, when both are paired with the exact same VGGT backbone?
+
+3. To improve the analytical depth (Weakness 3), please strengthen the experimental validity analysis. This should include providing more detailed examples and, ideally, a systematic statistical analysis of the agent's behavior (e.g., analysis of error types, performance on various instruction lengths/complexity, or specific semantic grounding success rates) to better guide and inspire related future research.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

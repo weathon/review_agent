@@ -1,0 +1,128 @@
+# Ego-VGA: A Compact Multimodal Assistant for Egocentric Video–Grounded Reasoning
+
+- Decision: Reject
+- Scores: 6, 4, 6
+
+## Abstract
+Egocentric AI assistants have emerged as a promising paradigm for real-world human–AI interaction, yet existing approaches face a critical trade-off: large language models provide strong reasoning but are too resource-intensive for mobile deployment, while lightweight models remain text-centric and lack interactive visual grounding. We introduce Ego-VGA, a lightweight multimodal assistant that delivers goal-oriented visual guidance with high efficiency. Ego-VGA incorporates a novel multimodal fusion layer, where region fusion supports fine-grained vision–language grounding and vision fusion distills temporal cues from egocentric video streams for context-aware reasoning. A lightweight projection module and a compact LLM further enhance efficiency, enabling deployment on mobile and wearable devices. To foster research in intent modeling, we construct Ego-IntentBench, a challenging benchmark with fine-grained procedural annotations. Extensive experiments validate our approach: Ego-VGA achieves +8.7\% recall@1 on AssistQ, +17.2 BLEU-1 / +7.6 METEOR on YouCook2, and ~20\% mean top-5 recall improvement on MECCANO (RGB-only). On Ego-IntentBench, where strong baselines such as Qwen2.5-VL and MiniCPM-V4 degrade substantially, Ego-VGA consistently outperforms them, demonstrating state-of-the-art generalization and adaptability in complex, goal-directed reasoning under visual guidance.The code and dataset are available at https://anonymous.4open.science/r/Ego-VGA-05CC
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper tackles a key trade-off in egocentric AI: large models are too resource-intensive for on-device deployment, while lightweight models lack robust visual grounding. The authors propose Ego-VGA, a lightweight multimodal assistant designed for efficient, goal-oriented visual guidance.
+Core innovations include a novel Multimodal Fusion Layer—using Region Fusion for fine-grained grounding and Vision Fusion for temporal reasoning—and a lightweight CompactNorm Projector for stable, efficient multimodal alignment.
+The authors also contribute Ego-IntentBench, a new, challenging benchmark derived from Ego4D for complex procedural tasks. 
+Experimental results show Ego-VGA achieves state-of-the-art performance on multiple benchmarks while being significantly more computationally efficient than comparable models like Qwen2.5-VL and MiniCPM-V4.
+
+### Strengths
+1. The paper exhibits an outstanding emphasis on computational efficiency. In particular, the proposed Ego-VGA model achieves competitive or superior accuracy compared to existing 3B–4B vision-language models, while drastically reducing computational cost (about one-seventh of Qwen2.5-VL in training FLOPs). 
+
+2. The introduction of Ego-IntentBench is a clear contribution. The authors address a genuine gap in current benchmarks by emphasizing long-horizon, complex egocentric tasks with detailed annotations. I believe this dataset will be a valuable asset for future research in egocentric intent understanding.
+
+### Weaknesses
+1. A limitation of the new benchmark (Ego-IntentBench) is its narrow scope. By focusing only on cooking, it lacks diversity and cannot fully test how well a model generalizes to other goal-oriented tasks. Adding other daily activities, like repairing or cleaning, would make it a more comprehensive and valuable benchmark.
+
+2. The paper claims that the model is suitable for complex scenarios requiring long-horizon task understanding (e.g., Ego-IntentBench). However, its training paradigm (Section 3.4) appears to adopt a teacher-forcing strategy. As shown in Equation (6), for steps where j>1, the model takes the ground-truth previous steps XP[1:j−1] as input. This training method hides a critical issue in real-world settings — error accumulation. In deployment, the model does not have access to the true previous actions; it must rely on its own (potentially incorrect) predictions as inputs for subsequent steps. The paper provides no experiments demonstrating the robustness of Ego-VGA under such a more realistic auto-regressive inference setup.
+
+### Questions
+1.Where is the Pobj in the Multimodal Fusion Layer coming from? If Pobj is sourced from an external object detector, then its significant computational cost appears to be omitted from the efficiency analysis in Table 7, potentially undermining the argument for mobile deployment.
+
+2.The comparison on Ego-IntentBench (Table 6) seems potentially unfair, as generative models like Qwen2.5-VL are evaluated on a discriminative multiple-choice task. How were these generative baselines adapted for this setting? Were they fine-tuned on the Ego-IntentBench training set like Ego-VGA? Clarifying this is crucial to determine whether Ego-VGA’s advantage reflects stronger reasoning or just task-specific adaptation.
+
+3.The description of the Region Fusion mechanism in Section 3.2 seems inconsistent. The text mentions that the method “replaces object placeholders in the answer tokens HA,” while Formula (2) defines the process as Concat(HA,Hobj,Hpos). Since replacement and concatenation represent fundamentally different operations, could you clarify the exact integration mechanism of object (Hobj) and position (Hpos​) tokens into the answer sequence (HA)? Specifically, are these tokens concatenated to the sequence end, or inserted/replaced at the corresponding placeholder positions?
+
+4.Could you provide more architectural details on the cross-attention module used in the "Vision Fusion" stage? For instance, how many attention layers and heads does it contain, and is it followed by feed-forward networks?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces Ego-VGA, a lightweight and efficient multimodal assistant designed for egocentric video-grounded reasoning on mobile devices. It addresses the critical trade-off between large, high-performance models that are too resource-intensive and compact models that lack strong visual grounding. The core of Ego-VGA is a novel multimodal fusion layer, which performs Region Fusion to ground textual instructions with specific objects in the user's view and Vision Fusion to distill relevant temporal cues from noisy video streams. To further enhance efficiency, the model uses a CompactNorm projector for stable modality alignment and a compact LLM (MobileLLaMA) for reasoning. The authors also introduce Ego-IntentBench, a new challenging benchmark for complex, goal-oriented cooking tasks. Experiments show that Ego-VGA achieves state-of-the-art results on multiple datasets, including AssistQ, YouCook2, and MECCANO , and outperforms larger models on the new Ego-IntentBench , all while demonstrating superior computational efficiency.
+
+### Strengths
+1. The paper tackles a well-defined and significant problem: the need for a practical, efficient, and high-performing egocentric assistant.
+2. The two-pronged Multimodal Fusion Layer is a key strength. The Region Fusion module's approach of directly injecting grounded object and position tokens into answer placeholders  is an explicit and effective method for fine-grained vision-language grounding. The Vision Fusion module is an intelligent solution for handling noisy video streams by using the current user view as a cross-attention query to filter temporal context.
+3. The introduction of Ego-IntentBench is a significant contribution.
+
+### Weaknesses
+1. As the authors acknowledge in their limitations , Ego-IntentBench is currently focused *exclusively* on cooking scenarios. While this is a complex domain, it is not representative of all goal-oriented egocentric tasks. The clip number of Ego-IntentBench is also small.
+2. The "Vision Fusion" component, while effective, is a single cross-attention layer  that primarily filters video frames based on the current user view. This mechanism may be insufficient for tasks requiring deep temporal reasoning, memory of non-visible object states, or understanding complex causal relationships across long time gaps.
+
+### Questions
+Please refer to the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper focuses on the problem that current egocentric VLMs are either resource consuming or weak in vision capabilities. It proposes Ego-VGA, a lightweight framework that is more efficient in training/inference compared to models with the same size. To further evaluate the model, the paper introduced Ego-IntentBench, a benchmark evaluates long-horizon understanding.
+
+### Strengths
+1. the design of Ego-VGA successfully achieves a much lower FLOPs compared to Qwen2.5-VL-3B and MiniCPM-V4-4B
+2. Ego-VGA achieves the best performance in the reported results
+
+### Weaknesses
+1. The real-world application contains extreme environments such as low light, occlusion, and dynamic interference. It is better to evaluate the model's robustness in these environments.
+2. Lacking of experiments on multi-term interaction.
+3. There should be more baseline models to show the strength of proposed model.
+
+### Questions
+N/A
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,180 @@
+# ContextVLA: Vision-Language-Action Model with Amortized Multi-Frame Context
+
+- Decision: Reject
+- Scores: 2, 4, 4, 6
+
+## Abstract
+Leveraging temporal context is crucial for success in partially observable robotic tasks. However, prior work in behavior cloning has demonstrated inconsistent performance gains when using multi-frame observations. In this paper, we introduce ContextVLA, a policy model that robustly improves robotic task performance by effectively leveraging multi-frame observations. Our approach is motivated by the key observation that Vision-Language-Action models (VLA), i.e., policy models built upon a Vision-Language Model (VLM), more effectively utilize multi-frame observations for action generation. This suggests that VLMs’ inherent temporal understanding capability enables them to extract more meaningful context from multi-frame observations. However, the high dimensionality of video inputs introduces significant computational overhead, making VLA training and inference inefficient. To address this, ContextVLA compresses past observations into a single context token, allowing the policy to efficiently leverage temporal context for action generation. Our experiments show that ContextVLA consistently improves over single-frame VLAs and achieves the benefits of full multi-frame training but with reduced training and inference times.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This work enables the usage of multi-frame visual observations for action generation in VLAs, while mitigating common problems that come with history-conditioned policies such as causal confusion. The proposed approach is additionally computationally efficient.
+
+### Strengths
+The paper attempts to address an important problem that has been studied extensively. The proposed approach seems simple yet effective, and is applied to a good variety of open-source VLAs as well as benchmarks. The empirical performances seem decent, and the ablation studies are done well.
+
+### Weaknesses
+This paper addresses the problem of leveraging multi-frame visual observation history for making model predictions. This is a widely studied problem under many names, such as causal confusion, copycat problem, shortcut learning, etc. There needs to be better citations of this line of work, such as the early works of [1] that and the more recent instantiation in [2].
+
+While the reported mean success rates seem impressive, the lack of any statistical significance or uncertainty quantification severely weakens the results. I would recommend the authors to add standard deviations / errors to the figures and the tables. 
+
+Finally, while it's shown that the method improves policy performance in non-Markovian tasks across the 3 benchmarks.. There should be 1) an explainer on the tasks themselves and how they exhibit non-Markovian properties and 2) that there should be some evidence that the method does not hurt performance in Markovian tasks. 
+
+I would be willing to raise my score if the concerns here are addressed.
+
+[1] https://papers.nips.cc/paper_files/paper/2005/hash/fdf1bc5669e8ff5ba45d02fded729feb-Abstract.html
+[2] https://ieeexplore.ieee.org/document/9009463
+
+### Questions
+See section on weaknesses.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper introduces ContextVLA, a Vision-Language-Action model that effectively leverages multi-frame observations to improve robotic task performance. 
+The core contribution of this paper is a mechanism to compress past observations into a single context token at first n blocks in the VLM. For the remaining N-n blocks, the current observation just attends the single context token instead of the long raw observation tokens to realize efficient training and inference. 
+The authors conduct experiments on diverse benchmarks to show the effectiveness of the proposed method.
+
+### Strengths
+1. The method is simple and easy to follow.
+2. The writing is clear. 
+3. SOTA performance on diverse benchmarks.
+
+### Weaknesses
+I am not an expert in this field, so I tend to see other reviewers' comments as well as the rebuttal to make my final decisions. Below are the weaknesses of this paper from my perspective:
+
+1. **The effectiveness of ContextVLA is unclear.** 
+Since video LLMs generally require a huge amount of pre-training data to achieve training convergence **under long context scenarios**, e.g., LLaVA-video and Qwen2.5-VL, fine-tuning single-frame-based $\pi_0$ on extremely small-scale downstream tasks is hard to reach convergence. Instead, overfitting is very likely to happen, which may be the reason $\pi_0$ with 8 frames lags behind ContextVLA. 
+And this can be evidenced by the counterintuitive results in Table 4, where $\pi_0$ finetuned with 8 frames has nearly no gains. 
+Since ContextVLA is claimed as a generalized approach, applying it to other multi-frame based methods, e.g., Octo and RoboVLMs, should make this method more pronounced. 
+
+2. **Lack of robustness evaluation.**
+The authors should report the performance where the inference frames differ from the training setting to verify if ContextVLA truly learned to summarize the context, or just overfit to the 8 frames-to-1 token paradigm. For instance, what would happen if we use 2 frames or 32 frames during inference?
+
+3. **Lack of sufficient ablation studies.**
+The results show a consistent improvement from 1 frame to 8 frames. I wonder if this rule holds for longer frames? For instance, does ContextVLA work for 32, 64, or 110 frames? If not, does it mean leveraging multi-frames is not always beneficial?
+
+### Questions
+Please refer to "Weakness" for details.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposes ContextVLA, a Vision-Language-Action (VLA) model that aims to efficiently incorporate temporal context from multiple video frames without incurring heavy computational cost. Instead of directly feeding multi-frame sequences into the model, ContextVLA adopts a two-stage amortized design: it first compresses a short history of past observations into a single context token by pooling hidden states from the VLM backbone, and then uses this token to condition downstream policy prediction. This design achieves a balance between temporal understanding and computational efficiency, allowing multi-frame reasoning at almost the same cost as single-frame inference. Experiments on multiple simulation and real-world robot benchmarks show the effectiveness of ContextVLA.
+
+### Strengths
+The paper targets an important problem of  VLAs — how to efficiently and effectively model temporal context. The proposed amortized multi-frame context mechanism is simple yet effective. It integrates seamlessly with existing architectures (π0, GR00T-N1, Pi0-FAST, etc.) and substantially reduces both memory footprint and inference time.
+
+### Weaknesses
+The paper try to tackle an important question — how to introduce history understanding into VLA models in an efficient and low-cost manner. However, the core contribution mainly lies in introducing a two-stage compression strategy that aggregates multi-frame context into a single token. While effective, this design space is rather limited and could be approached in many other ways. The proposed method is essentially a form of context compression, and alternative formulations (e.g., state-space models such as Mamba, video-representation encoders, temporal adapters, or attention pooling) could also be applied. The paper does not discuss why pooling hidden states directly from the VLM backbone is particularly advantageous over these alternatives. 
+
+Additionally, the benefit of “context tokenization” is primarily demonstrated empirically; the paper lacks deeper analysis of what temporal or semantic information is actually preserved after pooling. On several tasks, the performance gap to the base model is relatively small—might within the standard deviation range. This weakens the claim that the approach yields consistently better temporal reasoning.
+
+### Questions
+Please refer to the weakness part.
+
+1. A few visualization-based analyses (e.g., token similarity, entropy, temporal variance, or per-layer contribution) could provide much stronger insight into why it works.
+2. The work could also be strengthened by including ablations on Number of frames, Pooling method and number of history tokens
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The paper proposes to compress the multi-frame visual observations for VLA models into single context token. The single context token is created by average pooling the hidden states from past observations and action decoder generates action based on this context token concatenated with the current visual observation features. The paper discusses results on simulated and real world tabletop tasks showing how having eight frames in context window instead of single observation helps improve the task success rate.
+
+### Strengths
+The paper uses a simple general mechanism of summarizing multi-frame visual observation into single context and using KV cache to reduce latency. Instead of prior regression reported with BC policies trained from scratch, the paper shows that VLM-backbone prevents this and performs at par if not better than single observation based policy baselines.
+The performance improvement delta across real robotic tasks, which need previous history to succeed, is promising. 
+The paper shares key insight that VLM initialization enables use of multi-frame inputs as compared to BC policies trained from scratch.
+
+### Weaknesses
+The paper proposes very simple compression (AvgPool) and doesn't compare to learned pooling (like in Flamingo, Vid2Robot) or other attention summarizers (like Spatio-temporal attentional pooling in BLIP-3-Video).
+
+The evaluation suite of tasks are quite short horizon and seems to favor fixed insertion depth of 2. 
+
+The real world eval is limited to tabletop tasks with 50 demos each, unclear if the benefits would transfer where the viewpoint changes significantly between frames, like tasks requiring mobile manipulation, and bimanual dexterity (that often cause occlusion and requires history).
+
+### Questions
+Can you report the variance and confidence scores along with the success rates? Libero benchmark seems saturated and unclear if the improvement is statistically significant. 
+Can you highlight why heterogeneous fine-tuning protocols, for example with pi-0 and GR00T N1.5?
+While the ablations show more frames help, it is important to note failure cases. Is the policy sensitive to when the context summary is created per task.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

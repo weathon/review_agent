@@ -1,0 +1,147 @@
+# StateX: Enhancing RNN Recall via Post-training State Expansion
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 4, 4, 2
+
+## Abstract
+While Transformer-based models have demonstrated remarkable language modeling performance, their high complexities result in high costs when processing long contexts. In contrast, recurrent neural networks (RNNs) such as linear attention and state space models have gained popularity due to their constant per-token complexities. However, these recurrent models struggle with tasks that require accurate recall of contextual information from long contexts, because all contextual information is compressed into a constant-size recurrent state. Previous works have shown that recall ability is positively correlated with the recurrent state size, yet directly training RNNs with larger recurrent states results in high training costs. In this paper, we introduce StateX, a training pipeline for efficiently expanding the states of pre-trained RNNs through post-training. For two popular classes of RNNs, linear attention and state space models, we design post-training architectural modifications to scale up the state size with no or negligible increase in model parameters. Experiments on models up to 1.3B parameters demonstrate that StateX efficiently enhances the recall and in-context learning ability of RNNs without incurring high post-training costs or compromising other capabilities.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper explores a method for expanding the state size of linear attention mechanisms, which is characterized as follows:
+- (1) Keeping the state size unchanged during the pre-training phase and just expanding it before post-training, which partially reduces training costs compared to expanding the state size throughout the entire process. 
+- (2) The approach belongs to a common dense state expansion method: For GLA, multiple attention heads are merged into one; For Mamba2, the state dimension and the corresponding projection parameters are directly expanded. 
+- (3) Two approaches for handling parameters after state expansion, namely parameter inheritance and re-parameterization, are investigated.
+- (4) The authors have also explored how to selectively expand the size of a portion of the layers.  
+
+In terms of experimental setup, this paper mainly conducts the following studies:
+- (1) Post-training is performed on both standard GLA and GLA after state expansion, comparing their language modeling, zero-shot common-sense reasoning, in-context learning, and retrieval abilities. 
+- (2) For the two methods of parameter inheritance and re-parameterization after state expansion, their retrieval capabilities are compared. 
+- (3) Ablation experiments are conducted on the number of attention heads and the number of layers where state expansion is applied. Compared with models without state expansion, the post-trained models with state expansion achieve varying degrees of performance improvement on various benchmarks.
+
+### Strengths
+(1) Compared with expanding the state size throughout the entire training process, selectively expanding the state size of certain layers during the post-training stage can effectively reduce the overall state size and the computational cost during training.
+
+(2) The re-parameterization technique after state expansion have been shown to be effective to a certain extent.
+
+### Weaknesses
+The paper lacks comparisons with other state expansion approaches. Previous works (MoM[1], SSE[2]) have already explored sparse expansion methods (e.g., increasing hidden state size by 16 times but only increasing activated state size by 2–4 times), and have investigated and interpreted the functional roles of various sparsely activated hidden state units. Comparisons with these baselines would make the proposed method more convincing.
+
+**References:**  
+[1] https://arxiv.org/abs/2502.13685  
+[2] https://arxiv.org/abs/2507.16577
+
+### Questions
+See the weaknesses part.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper introduces StateX, a novel training pipeline designed to enhance the long-context recall abilities of Recurrent Neural Networks (RNNs), specifically Gated Linear Attention (GLA) and State Space Models (SSMs). The core idea is to expand the recurrent state size of pre-trained RNNs through a post-training architectural modification step, which is performed before long-context post-training (LPT). The authors propose two state expansion methods for GLA and Mamba2, aiming to scale up state size with minimal or negligible increases in model parameters and training costs. Experiments on 1.3B parameter models demonstrate that StateX significantly improves recall and in-context learning, particularly in long-context scenarios, without compromising performance on common-sense reasoning tasks.
+
+### Strengths
+1. The paper introduces a novel concept of "state expansion" via post-training, which is a significant departure from previous methods that typically require training larger state RNNs from scratch. This approach promises lower training costs and easier integration into existing pre-trained models.
+2. StateX directly addresses a known weakness of RNNs—their limited long-context recall capability due to fixed-size recurrent states. By efficiently expanding the state size, the method effectively improves performance on recall-intensive tasks and in-context learning.
+3. The proposed methods are designed for two popular and distinct classes of RNNs: linear attention models (GLA) and state space models (Mamba2). This demonstrates the versatility and generalizability of the StateX pipeline.
+4. The paper provides strong empirical evidence, with experiments on 1.3B parameter models, showing consistent improvements across various benchmarks, including recall-intensive tasks, in-context learning, and needle-in-a-haystack (NIAH) tasks.
+
+### Weaknesses
+1. "MoM: Linear Sequence Modeling with Mixture-of-Memories" is a good work also focus on expanding RNN memory states, but this paper did not compare with it. I recommend the authors to compare their algorithm difference and experimental performance.
+2. While covering GLA and Mamba2, the paper doesn't discuss the applicability or potential challenges of StateX to other prominent RNN variants (e.g., RWKV, traditional LSTMs/GRUs). Expanding the analysis to a broader range of RNNs would strengthen the claim of a general solution.
+3. While Figure 2 illustrates the concept, a more detailed explanation of the specific architectural changes and how they are implemented for both GLA and Mamba2 would be beneficial. For instance, how "merging multiple heads into one larger head" is architecturally realized in GLA could be elaborated.
+4. The paper mentions that StateX is post-trained on "much less data than pre-training." While this is a strength in terms of efficiency, the exact relationship between the amount of post-training data, the magnitude of state expansion, and final performance could be further investigated.
+5. The "Vanilla RNNs (small states)" are marked with 'X' for performance and '✓' for efficient training. However, the abstract and introduction claim that RNNs struggle with recall. Clarifying the baseline "Vanilla RNNs" and their typical state sizes relative to the models evaluated (e.g., Mamba2-2.8B and GLA-1.3B) would provide better context.
+6. The meaning of "?" for "Novel architectures with large states" under "Easy Adoption" is a bit vague ("yet to be extensively tested at scale"). Providing more concrete reasons or examples would be helpful.
+7. While the training configuration for LPT is described, more specific details about how the long-context corpus differs from the pre-training corpus, beyond just context length, could be useful.
+8. While the paper mentions that "blindly increasing the state size can lead to high training and inference costs," it mainly focuses on training costs and parameters. A more explicit discussion or analysis of how StateX impacts inference costs (e.g., memory usage or latency) compared to traditional LPT or even Transformers would be valuable.
+
+### Questions
+see Weaknesses
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper proposes **StateX**, a post-training “state expansion” recipe for RNN LLMs (GLA and Mamba2). For GLA, it **merges all heads into one larger head** (increasing effective state without adding parameters); for Mamba2, it **expands the key/query state dimension** with <1% parameter growth. Authors reinitialize token-mixing parameters while keeping embeddings/FFNs, and expand only a subset of layers. On 1.3B-parameter checkpoints with 10B post-training tokens and 64K context, StateX improves recall/ICL metrics while roughly preserving common-sense reasoning.
+
+### Strengths
+* **Simple, drop-in architectural tweak** with clear recipe (head-merge for GLA; dk upscaling for Mamba2), applied before long-context post-training. Results show consistent gains on recall/ICL at the same data budget, e.g., GLA recall average +1.47 points (41.42→45.18) with unchanged parameter count and larger total state (12.48M→18.72M).
+
+### Weaknesses
+1. **Long-context retrieval is still near-zero at large lengths; claims feel overstated.**
+   Despite improvements at 4–32K, performance collapses by 64K (GLA passkey: 0.01; Mamba2 NIAH-Single-2: 0.00). This undermines the central claim of *enhanced long-context recall* “without compromising other capabilities.” The absolute ability at the longest contexts remains effectively absent. 
+
+2. **Efficiency claims lack compute evidence.**
+   The paper asserts “no or negligible increase” in parameters and *efficiency* via post-training, but provides **no wall-clock, throughput, memory, or latency** measurements. Given Section 3.4 explicitly notes token-mixing cost **scales linearly with state size**, an empirical compute table is needed to support the efficiency narrative.  
+
+3. **Novelty claim vs. prior/concurrent state-expansion work is under-substantiated.**
+   The paper positions itself as “the first” to expand RNN states *via post-training*, yet concurrently cites MoM/LaCT/low-rank expansion efforts and does not implement **direct baselines** under the same training budget. The empirical comparison is therefore incomplete, and the novelty statement feels strong relative to coverage.
+
+### Questions
+* **Grammar:** “We **will be released** the model checkpoints…” → “We **will release** the model checkpoints…” (Reproducibility). 
+* **Duplication:** “we **evaluate also evaluate** with different number of in-context demonstrations” → remove duplicate “evaluate” and fix plural (“numbers”). 
+* **Equation indexing bug (A.1):** second line should use (Y'^{(l)}), not (Y'^{(l-1)}):
+  Current: $(Y^{(l)}= \mathrm{FFN}^{(l)}(Y'^{(l-1)}) + Y'^{(l-1)})$
+  Expected: $(Y^{(l)}= \mathrm{FFN}^{(l)}(Y'^{(l)}) + Y'^{(l)})$. 
+* Common-sense averages slightly **decrease** vs. original models (GLA: 46.74→46.37; Mamba2: 52.93→52.33), so “without compromising” is not universally true. 
+* No variance/error bars or multi-seed runs; improvements are modest and could be within noise on some tasks.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2

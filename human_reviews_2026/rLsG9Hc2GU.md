@@ -1,0 +1,192 @@
+# With Great Power Comes Great Adaptation: Message Tuning Outshines Prompt Tuning for Graph Foundation Models
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 6, 2, 4, 2
+
+## Abstract
+Graph foundation models (GFMs), built upon the “Pre-training and Adaptation” paradigm, have emerged as a promising path toward artificial general intelligence on graphs. Despite the remarkable potential of large language models, most existing GFMs still adopt Graph Neural Networks as their backbone. For such GNN-based GFMs, prompt tuning has become the prevailing adaptation method for downstream tasks. However, while recent theoretical research has revealed why graph prompt tuning works, how to measure its adaptation capacity remains an open problem. In this paper, we propose Prismatic Space Theory (PS-Theory) to quantify the capacity of adaptation approaches and establish the upper bound for the adaptation capacity of prompt tuning. Inspired by prefix-tuning, we introduce Message Tuning for GFMs (MTG), a lightweight approach that injects a small set of learnable message prototypes into each layer of the GNN backbone to adaptively guide message fusion without updating the frozen pre-trained weights. Through our PS-Theory, we rigorously prove that MTG has greater adaptation capacity than prompt tuning. Extensive experiments demonstrate that MTG consistently outperforms prompt tuning baselines across diverse benchmarks, validating our theoretical findings. Our code is available at https://anonymous.4open.science/r/MTG.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper addresses the challenge of adapting pre-trained Graph Foundation Models (GFMs) to downstream tasks. The authors make two primary contributions.
+
+First, they introduce Prismatic Space Theory (PS-Theory), a novel theoretical framework to quantify the adaptation capacity of methods like Prompt Tuning and Message Tuning. By modeling GFM layers as piecewise linear refractive transformations, PS-Theory leverages geometric measure theory to establish a upper bound on the efficacy of prompt tuning, attributing its limitations to irreversible information loss via spectral contraction and dimensionality collapse.
+
+Second, the authors propose Message Tuning for GFMs (MTG), a new lightweight adaptation method. MTG injects a small set of learnable message prototypes into each layer of a frozen GNN backbone. These prototypes dynamically guide the message fusion process, allowing for more expressive adaptation without updating the pre-trained weights. The authors theoretically prove, using their PS-Theory, that MTG possesses a greater adaptation capacity than prompt tuning.
+
+Extensive experiments across different datasets and different pre-training strategies, and multiple GNN backbones, empirically validate the theoretical claims.
+
+### Strengths
+- PS Theory is noval, which can quantify the adaptation capacity of tuning methods like Prompt Tuning and Message Tuning. 
+- The design of MTG is elegant, lightweight, and efficient. The results clearly demonstrate its high effectiveness. 
+- The paper is backed by comprehensive experiments and includes complete code for reproducibility.
+
+### Weaknesses
+- The presentation and proofs in the theory section currently seem somewhat opaque, which can hinder a smooth reading experience. The main text is dense with formal definitions, and corollaries. It might be more effective to move these detailed components to the appendix. The main body could then focus more on clearly articulating the high-level idea, the intuition behind why the theory holds, and the value of each component in achieving the paper's stated goals.
+
+- While the core idea behind the theory appears novel and is well-motivated in conjunction with Section 4, its formalization seems quite intricate. The theory relies on complex quantities like the Jacobian and operator norms, which can be difficult to estimate or control in practice. This leads me to question the practical significance and tightness of the derived bounds in real-world scenarios.
+
+- Novelty of the MTG Method: The proposed MTG method bears a notable resemblance to established Parameter-Efficient Fine-Tuning (PEFT) methods that have gained wide consensus in the Large Language Model (LLM) domain. While translating this paradigm to the GNN space is an interesting endeavor, the direct adaptation might be perceived as having a somewhat limited novelty, as it doesn't introduce a fundamentally new mechanism distinct from its LLM counterparts.
+
+- Limited Connection Between Theory and Experiments: There appears to be a disconnect between the theoretical analysis and the empirical evaluation. Although the paper provides extensive benchmark comparisons to demonstrate the effectiveness of MTG, the experiments do not seem to directly validate or analyze the claims made by the theory itself. For instance, there are no experiments that attempt to measure or illustrate the theoretical quantities discussed. The theory itself could also benefit from more intuitive, illustrative examples.
+
+### Questions
+1. Could the proposed theory be applied to a practical scenario to analyze the upper bounds of existing frameworks like GPF or GPPT? Moving beyond the abstract description, a concrete analysis of specific methods would provide a more tangible demonstration of your theory's utility and offer more direct guidance for future research in this area.
+
+2. Is your theory a specific analysis tailored exclusively to prompt-based methods, or is it just an application of a more general, established theoretical framework? Clarifying its scope and origins would be helpful for me to understand your contribution.
+
+3. From a formulation standpoint, MTG seems to operate by aggregating learnable message prototypes with the feature matrix before each layer. How does this approach fundamentally differ from an Adapter-based method, which typically inserts a small MLP with a residual connection between layers? 
+
+4. Could you provide benchmark comparisons of MTG against other popular PEFT methods such as LoRA and OFT? 
+
+5. Drawing an analogy from prefix-learning in LLMs, which hypothesizes that learned prefixes can be transferable, does MTG exhibit similar properties? For instance, if an MTG module is trained on one pre-trained model, can it be inserted into a new pre-trained model and still perform effectively?
+
+I believe that addressing these points, perhaps with additional ablations and discussion, would significantly strengthen your paper. Your responses to these questions would greatly help increase my confidence in the work's contributions and positively influence my evaluation. Thank you.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper proposes a graph prompt module to enhance the graph self-supervised learning (on the same dataset). A prism theory is incorporated to support its effectiveness.
+
+### Strengths
+Most presentations are clear.
+
+### Weaknesses
+Major:
+1. In the introduction, graph prompt has achieved remarkable performance. I don't agree with this claim. I think the whole graph prompt domain doesn't make significant breakthroughs. In most related papers and also this one, it's just an adapter module for the graph self-supervised learning. Moreover, the model is generally pretrained and evaluated on the same dataset. This makes their potential and capability far behind foundation models in other domains like tabular, CV, or LLMs. The baseline isn't well selected. For example, as shown in this paper [1], vanilla graph prompt with LLM embeddings can already deliver very strong baseline performance (in the transferring setting). 
+2. For section, authors directly go to the theoretical part, which is weird. Moreover, no introduction about prism is presented at the beginning. This affects the readability.
+3. The whole theoretical part seems generated by some large language models. I don't see the merits using some advanced geometric measure theory here. The bound is basically built upon controlling the spectral gap. Moreover, the whole bound doesn't involve any graph-level components. So, I don't see how it can help explain the design in this paper. 
+4. As discussed above, the whole experiment is based on pre-training and evaluating on the same dataset. I don't see the value of adopting such a setting. Moreover, some numbers for baselines are ridiculous. For example, 11% accuracy for arxiv and the variance is only ~3. I personally think sticking to some problematic settings won't help the advancements of the whole graph domain. 
+
+Minor:
+1. In the abstract, the third line's motivation is weird. If LLM has remarkable potential, then why studying the GNN pipeline here?
+2. 165: need->need to
+3. Most alphas in the theory part use a weird mathcal syntax, making it hard to read 
+4. line 213, why go back to proposition 1 again, what's the role of corollary 1 in coming to this conclusion? 
+
+[1] Song Y, Mao H, Xiao J, et al. A pure transformer pretraining framework on text-attributed graphs[J]. arXiv preprint arXiv:2406.13873, 2024.
+
+### Questions
+Please see weakness above
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+1
+
+### Summary
+The paper proposes Prismatic Space Theory (PS-Theory) to measure the capacity of adaption and found the upper bound of adaptation capacity for prompt tuning. The author proposes a new tuning approach - Message Turning for GFMs (MTG) that can inject a set of learnable message into each layer of GNN to guide message passing without changing model weights. The authors prove both theoretically and experimentally that MTG adapts better than traditional prompt tuning.
+
+### Strengths
+- This paper proposes Prismatic Space Theory (PS-Theory), which provides a formal way to quantify adaptation capacity, while SOTA methods could not quantify adaptation capacity for GNN.
+- They use their proposed Prismatic Space Theory (PS-Theory) to derive a new adaptation method (MTG), and prove mathematically that MTG has greater adaptation capacity than prompt tuning.
+- the proposed MTG does not require fine-tuning the entire model. It simply adds only small learnable message prototypes, can be integrated easily into the GNN message-passing pipeline
+- the authors have tested in several GNN tasks (node classification and graph classification) on a large set of benchmarks.
+
+### Weaknesses
+- the literature review is too general, the authors did not outline the concrete and practical problems that they want to solve
+- the authors did not elaborate how their proposed methods PS-theory and MTG can be applied to solve real-world problems and did not provide concrete example, rather than just node classification and graph classification on benchmarks
+- It is unclear how the quantified adaptation capability can be used in real-world scenarios that graphs have noise and errors.
+
+### Questions
+- please provide one concrete real world example that your proposed PS-Theory and MTG can be used to solve practical issues. 
+- How your methods deal with graph with noise or errors?
+- besides node classification and graph classifications, what are other real world applications your methods can contribute and outperform STOA.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+The paper introduces Prismatic Space Theory (PS-Theory) to analyze how graph foundation models (GFMs) adapt under prompt tuning.
+It argues that prompt tuning is limited by geometric contraction in these “prismatic spaces,” and proposes Message Tuning for GFMs (MTG) by adding small learnable message prototypes at each GNN layer. Theory claims MTG has higher adaptation capacity, and experiments on the ProG benchmark show consistent few-shot gains over prior prompt-tuning methods.
+
+### Strengths
+* the paper introduces a fresh geometric perspective (*Prismatic Space Theory*) on adaptation in graph models.
+* it proposes Message Tuning (MTG), a simple, parameter-efficient method applicable across GNN architectures.
+* it demonstrates consistent empirical gains over prompt-tuning baselines on diverse benchmarks.
+
+### Weaknesses
+* Theoretical claims rest on strong assumptions that are not empirically checked (Definition 2)
+* Ablations on prototype count, fusion design, and computational cost are limited, making it hard to judge robustness.
+* Writing and notation are dense; a simpler exposition or visual intuition for key concepts would strengthen clarity.
+
+### Questions
+1. How does *Prismatic Space Theory* fundamentally differ from prior analyses of Jacobian contraction or representation collapse?
+2. How sensitive is Message Tuning (MTG) to the number of prototypes, fusion design, and choice of layers?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

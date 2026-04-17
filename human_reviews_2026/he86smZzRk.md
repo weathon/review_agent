@@ -1,0 +1,172 @@
+# VLBiMan: Vision-Language Anchored One-Shot Demonstration Enables Generalizable Bimanual Robotic Manipulation
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 6, 4
+
+## Abstract
+Achieving generalizable bimanual manipulation requires systems that can learn efficiently from minimal human input while adapting to real-world uncertainties and diverse embodiments. Existing approaches face a dilemma: imitation policy learning demands extensive demonstrations to cover task variations, while modular methods often lack flexibility in dynamic scenes. We introduce VLBiMan, a framework that derives reusable skills from a single human example through task-aware decomposition, preserving invariant primitives as anchors while dynamically adapting adjustable components via vision-language grounding. This adaptation mechanism resolves scene ambiguities caused by background changes, object repositioning, or visual clutter without policy retraining, leveraging semantic parsing and geometric feasibility constraints. Moreover, the system inherits human-like hybrid control capabilities, enabling mixed synchronous and asynchronous use of both arms. Extensive experiments validate VLBiMan across tool-use and multi-object tasks, demonstrating: (1) a drastic reduction in demonstration requirements compared to imitation baselines, (2) compositional generalization through atomic skill splicing for long-horizon tasks, (3) robustness to novel but semantically similar objects and external disturbances, and (4) strong cross-embodiment transfer, showing that skills learned from human demonstrations can be instantiated on different robotic platforms without retraining. By bridging human priors with vision-language anchored adaptation, our work takes a step toward practical and versatile dual-arm manipulation in unstructured settings.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces VLBiMan, a framework for generalizable bimanual robotic manipulation using only a single human demonstration. The method decomposes the demonstration into reusable motion primitives and adapts them to novel objects or environments through vision-language models (VLMs) and geometric reasoning. Unlike imitation learning approaches that rely on large datasets, VLBiMan leverages semantic grounding and geometric anchors to perform new tasks without retraining. The authors demonstrate strong results on 10 real-world bimanual manipulation tasks including tool use and long-horizon skill compositions, achieving significantly higher success rates than baselines.
+
+### Strengths
+- Modular design: The decomposition–adaptation–composition pipeline is intuitive and well-grounded, allowing for task-aware reuse of motion primitives.
+- One-shot generalization: Demonstrating adaptation to new objects, poses, and even robotic embodiments is impressive.
+- Comprehensive empirical evaluation: Ten tasks, multiple baselines, both static and dynamic settings, and thorough ablations (Table 3) provide convincing evidence.
+- Clarity and presentation: Figures clearly illustrate both conceptual flow and empirical outcomes. The writing is clear and professional.
+
+### Weaknesses
+- Limited novelty in underlying modules: While the integration is well-engineered, the components are largely standard.
+- Dependence on heuristics and manual refinement: The segmentation step requires human-in-the-loop refinement, which undermines full automation and scalability.
+- Lack of comparison with recent closed-loop VLA policies: The baselines focus on modular imitation systems (ReKep, Robot-ABC), but not large VLA models.
+
+### Questions
+- How sensitive is VLBiMan to segmentation quality in the one-shot demonstration?
+- Can the approach scale to more abstract task descriptions beyond manipulation verbs?
+- Could the authors provide computational efficiency details?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+VLBiMan can be directly deployed in a new environment without the need for further training, simply by using RGB images from a single human dual-arm demonstration, 6Dof poses of the robotic arm, gripper switch states, and natural language task descriptions. The method performed approximately 4,200 real robot rollouts on 10 self-built dual-arm tasks, with an average success rate of 78% (ID) / 59% (OOD), significantly outperforming 5 strong baselines, and demonstrated robustness across embodiment migration, lighting, and continuous disturbances. However, the paper has some missing details in the implementation of the method. At the same time, it does not conduct further discussion and analysis on failed cases, nor does it carry out statistical analysis such as confidence level on the main experimental results. There is room for further improvement.
+
+### Strengths
+1. There is no need to re-collect data or fine-tune the model for new objects or new robots, and sufficient experimental verification has been conducted at the same time.
+2. Through the modular design concept, the "unchanging skills" and the "variables to be adapted" are explicitly separated. Combined with VLM for semantic segmentation and geometric offset calculation, a lightweight and interpretable process has been achieved.
+3. A progressive inverse kinematics solution and proximal - vertical collision compensation method were proposed, effectively alleviating conflicts in time and space, supporting synchronous/asynchronous hybrid execution, and achieving coordination of dual-arm operations.
+4. The same demonstration can be directly deployed to the opposed dual-arm platform and the humanoid dual-arm platform. The success rate of the experimental test still remains at around 70%, proving the universality of the method on different robot platforms.
+5. Under conditions such as illumination changes and continuous external dynamic disturbances, it still maintained a high success rate. The experimental evaluation was comprehensive, demonstrating the robustness of VLBiMan.
+
+### Weaknesses
+1. The experimental analysis lacks a thorough examination of key hyperparameters, including the geometric equivalence threshold ε_g, the stability window ε, and the interpolation density n=6. These parameters directly influence the quality of decomposition and trajectory generation; however, the manuscript does not provide justification for their selected values or the rationale behind the search ranges explored.
+2. The criteria for selecting representative points remain ambiguous. Specifically, the paper fails to clarify under what conditions the mask centroid is chosen versus planar contact points, and it does not detail the procedure for identifying planar contact points. This lack of transparency may hinder the method’s reproducibility and limit its practical utility in engineering applications.
+3. The proposed method may face challenges in accurately estimating the orientation of symmetric objects. For example, Algorithm 1 relies primarily on the principal axis derived from the second moment, which introduces a 0°–180° rotational ambiguity for rotationally symmetric or near-circular objects. The paper does not address whether this ambiguity could lead to functional failure, nor does it incorporate strategies—such as leveraging vision-language model (VLM) semantics—to resolve such ambiguities.
+4.Language is used only to generate object prompts, without incorporating a language-action alignment loss or conducting ablation studies on the influence of different linguistic formulations on segmentation performance. As a result, the integration of the language modality appears superficial, and the potential benefits of multimodal reasoning within the framework are not fully realized or demonstrated.
+5. All reported results are presented solely as average success rates, without accompanying measures of statistical variability such as standard deviations, confidence intervals, or significance testing. Given the limited number of trials (e.g., 20), differences such as a 78% versus 70% success rate may not be statistically significant. Furthermore, the absence of detailed failure case analyses prevents a comprehensive understanding of critical issues such as spatio-temporal conflicts.
+
+### Questions
+1. With regard to the sensitivity of key hyperparameters, could you please provide sensitivity analysis curves or ablation study tables for critical parameters such as ε_g, ε, and n? Additionally, could you clarify whether these hyperparameters are consistently set across different tasks?
+2. Concerning the potential limitations in estimating orientations for symmetric objects, particularly rotationally symmetric ones such as bottle caps and cup rims, could orientation ambiguity lead to task failure? If so, what proportion of failures can be attributed to this issue, and are there any proposed solutions to mitigate such failures?
+3. Regarding the lack of clarity in explaining the strategy for selecting representative points, could you offer further elaboration on the criteria used to determine when to employ the center of gravity versus planar contact points?
+4. With respect to the insufficient analysis of failure cases, in scenarios involving spatio-temporal conflicts during bimanual operations, how is collision detected in real time? Were any statistical analyses performed on the observed failure cases? If available, could you provide quantitative data on the frequency and types of failures encountered in the experiments?
+5. Regarding the design of ablation studies, is there a plan to conduct ablation experiments concerning language inputs in future work? Specifically, if attribute descriptors (e.g., color, shape) in the task instructions are removed or altered, how would this affect the VLM segmentation recall rate and the overall task success rate?
+6. Concerning the absence of statistical significance testing, could you please include 95% confidence intervals or bootstrap confidence intervals in the main results table? Furthermore, could a paired two-sample statistical test be applied to assess whether the performance differences between VLBiMan and other baseline methods are statistically significant (p < 0.05)?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces VLBiMan, a framework for generalizable bimanual manipulation that learns reusable skills from a single human demonstration by decomposing tasks into invariant primitives and dynamically adapting variable components via vision-language grounding. This approach eliminates the need for extensive demonstration datasets and policy retraining, enabling robust adaptation to scene ambiguities, novel objects, and disturbances. The system achieves compositional generalization by splicing atomic skills for long-horizon tasks and demonstrates strong cross-embodiment transfer, allowing skills learned from human demo to be directly deployed on different robotic platforms, thereby advancing versatile dual-arm manipulation in unstructured environments.
+
+### Strengths
+1. This paper achieves remarkable data efficiency and generalization by learning reusable skills from a single demonstration through task-aware decomposition and vision-language adaptation.
+2. The experiments conduct detailed analysis on the modular system design and system robustness, including ablations on different modules and breakdowns of failure cases. 
+3. The paper is well-written, presenting a complex technical system with conceptual clarity and a logical narrative that is easy to follow.
+
+### Weaknesses
+1. The scenes involved in the paper are clean. The paper does not show the cases where some distracted objects are placed in cluttered scenarios, which may pose some challenges to the capabilities of the visual-language anchored adaptation modules.
+
+### Questions
+1. How much human efforts are required in the "human-in-the-loop refinement" in the Spatiotemporal Segmentation? 
+2. I'm wondering how your pose estimation method (proposed in 3.2) compares to off-the-shelf 6D pose estimation methods, especially for some symmetrical objects.
+3. How do you deal with potential collision during each motion besides grasp approach?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents VLBiMan, a framework for bimanual robotic manipulation that learns from a single human demonstration and adapts to new objects and scenes using VLMs for semantic and geometric anchoring. The system decomposes demonstrations into reusable motion primitives, enabling generalization across tasks, object categories, and robot embodiments. The method is demonstrated on ten real-world tasks.
+
+### Strengths
+- The approach is demonstrated on ten real-world tasks.
+- The method shows improvements over recent baselines, like ReKep.
+- The supplementary shows the cross-embodiment transferability of the proposed approach.
+
+### Weaknesses
+- The algorithm requires human-in-the-loop refinement for the spatio-temporal segmentation. This aspect is mentioned only briefly (Line 237) but should be stated more explicitly, as it directly affects the level of automation of the pipeline. It is also unclear whether this refinement requires expert intervention.
+- The reliance on mask centroids and contact points is a simplistic heuristic that may fail under occlusion or complex object geometries. This limitation requires a more detailed discussion of failure cases.
+- The dynamic collision compensation introduces several design choices that appear brittle and may not generalize well.
+
+### Questions
+- How much manual intervention is needed during the human-in-the-loop segmentation refinement, and could this step be automated?
+- How does the system handle ambiguous or incorrect segmentation results from the vision-language models, especially in cluttered scenes?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

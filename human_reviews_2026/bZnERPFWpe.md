@@ -1,0 +1,163 @@
+# VBA: Vector Bundle Attention for Intrinsically Geometry-Aware Learning
+
+- Decision: Reject
+- Scores: 4, 4, 6
+
+## Abstract
+Learning from geometrically structured data is fundamental in biology, physics, and computer vision. Graph Neural Networks capture local structure but are limited by message passing, while Transformers model global dependencies yet often neglect geometry. We introduce the Vector Bundle Attention Transformer (VBA-Transformer), a framework that redefines attention as an intrinsic geometric operator. Each token couples a base manifold coordinate with a fiber feature vector, following vector bundle theory. A principled parallel transport mechanism aligns fiber features before similarity is computed, embedding geometry directly into the attention operation. Unlike prior models that inject geometry as an external bias, VBA integrates it natively. On challenging single-cell RNA sequencing benchmarks, our model achieves state-of-the-art accuracy, with significant gains over Transformer-based baselines (over 3%-5%). In spatial transcriptomics task, it demonstrates superior clustering performance. On 3D point clouds, VBA achieves competitive accuracy, validating its broad generalization capabilities. Beyond empirical gains, VBA provides theoretical analyses (invariance of the ideal operator and perturbation bounds), and empirical evidence of stability for the practical implementation, establishing geometric disentanglement as a powerful new principle for a versatile architecture poised for broad impact.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a vector bundle attention transformer designed for learning representations from geometrically structured data across various fields, including biology, physics, and computer vision. A key innovation of this work is the redefinition of attention as an intrinsic geometric operator. Extensive experiments conducted on multiple benchmark datasets demonstrate the effectiveness of the proposed method.
+
+### Strengths
+1. This paper proposes a Vector Bundle Attention mechanism that operates attention on a learned geometric manifold.
+
+2. The paper presents several theoretical analyses of the induced vector bundle attention.
+
+3. A series of experiments are conducted on various datasets to demonstrate the superiority of the method across three different fields.
+
+### Weaknesses
+1. The main differences between the proposed attention mechanism and previous works are not clearly articulated in the current version.
+
+2. The connections between the introduced theory and the proposed attention mechanism are somewhat unclear.
+
+3. The notation and mathematical formulations could be significantly improved to help readers better understand the primary ideas presented in the paper.
+
+### Questions
+Apart from the identified weaknesses, I have the following questions that need to be addressed by the authors:
+
+1. What is the main reason for introducing Curvature Correction in this paper? The authors are encouraged to provide a detailed explanation.
+
+2. The total computational complexity of the method is related to the number of points $N$, with a complexity of $\mathcal{O}(N^2d)$. This raises concerns about the method's applicability to large-scale datasets. I suggest that the authors present some strategies to mitigate this limitation.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper proposes Vector Bundle Attention (VBA) a Transformer attention operator defined on a learned vector bundle with a learned connection/parallel transport. Each token ($x_i$) is projected into a base coordinate ($b_i$) and a fiber feature vector ($f_i$); attention is computed in fiber space after transporting keys/values ($T_{j\to i}\in \mathrm{SO}(d_f)$) determined by the base coordinates. A curvature-inspired correction modulates fiber features using invariants of a constructed PSD operator ($S$) (and an optional directional term), yielding an effective modulation ($R_{\text{eff}}$) with stated base-rotation invariance guarantees.
+
+### Strengths
+1. A principled geometric reformulation of attention on vector bundles with learnable orthogonal transport, clearly connecting base/fiber decomposition to the attention mechanism.
+2. Well-articulated invariance claims (e.g., base-rotation invariance of the curvature-based modulation) that ground the design in geometric reasoning.
+3. Useful ablations that separate the impact of curvature terms, transport, and fiber/base dimensions, enabling insight into where the gains come from.
+4. Writing is generally clear with helpful figures and notation, making the geometric constructs and their role in attention accessible to a broad ML audience.
+5. The framework suggests a path toward unifying geometric inductive biases with Transformer-style modeling, which is timely and potentially impactful beyond the evaluated tasks.
+
+### Weaknesses
+1. No explicit SO(3) robustness evaluation (e.g., random test-time rotations) on point clouds (similar to ones in vector neuron); theory suggests invariances but there’s no empirical confirmation.
+2. Scope of applications skips molecular property prediction (e.g., QM9), a canonical geometric ML domain where the method’s inductive biases should shine.
+3. Limited sensitivity analyses: guidance on choosing base/fiber dimensions and stability regimes is thin, making it hard to deploy on new datasets.
+4. Ablations isolate some components, but a more systematic study (e.g., cost–benefit curves for curvature terms vs. transport fidelity) would clarify where gains originate.
+
+### Questions
+1. Can you add more recent baselines on ModelNet40 to substantiate the generality claims?
+2. Can you evaluate SO(3) robustness by applying random test-time rotations and reporting the resulting accuracy changes?
+3. Can you release full, end-to-end training scripts and configs (including seeds and data preprocessing) to enable reproduction during review?
+4. Can you clarify how your stated invariance/equivariance properties manifest empirically in the reported results?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper defines a bundle-style Transformer attention that works directly on a learned vector bundle: each token is mapped to a base-manifold coordinate (geometry) and a fiber vector (signal), a learnable endpoint-conditioned isometric transport aligns the fiber of one token to another, and attention is then computed in the aligned fiber space. The idea is to make attention “align-then-compare” instead of “compare-then-add-geometry”. Experiments on spatial transcriptomics (12 DLPFC slices), scRNA-seq (with and without HCL SSL pretraining), and ModelNet40 show strong scRNA results and competitive performance on the other tasks.
+
+### Strengths
+1. The main contribution is clear and nontrivial: it moves from geometry injected as an external bias (as in Graphormer/GBT-style encodings) to geometry built into the attention operator itself, by first transporting features to a common fiber and only then computing similarity.
+
+2. The transport construction is geometrically sensible: for each pair of base coordinates ((b_i, b_j)) the model predicts a skew-symmetric matrix and applies a matrix exponential to obtain an operator in (SO(d_f)), so transported features are length-preserving.
+
+3. The model is not limited to flat geometries; it includes an explicit, learnable curvature correction to cope with the non-Euclidean structure that spatial tissues and single-cell manifolds typically have.
+
+4. The method is evaluated on three quite different regimes—explicit spatial geometry (ST), implicit biological geometry (scRNA-seq), and 3D point clouds—with one unified architectural idea, which supports the claim that this is more than a task-specific trick.
+
+5. The appendix contains detailed component-level ablations on ModelNet40 (removing curvature, removing connection/transport, reducing to standard MHA) and even reports per-epoch time, which shows the authors have checked that individual components do matter.
+
+6. The scRNA-seq results are solid: the model is already competitive without SSL and becomes clearly better with HCL pretraining, which indicates the proposed attention is compatible with current large-scale single-cell pretraining practices.
+
+7. The writing is overall clear, the order of definitions (base → fiber → connection → transport → attention) matches the implementation, and the claims in the main text are consistent with what is shown in the appendix.
+
+### Weaknesses
+1. The ST evidence is narrow: all spatial experiments are on the 12 LIBD DLPFC slices, and the gains over strong recent ST baselines are modest (average ARI about 0.498 vs about 0.495 for DiffusionST/BASS). This supports the claim that the method is consistently competitive, but it does not yet establish a decisive advantage on spatial data.
+
+2. The transport is an endpoint-conditioned, practical surrogate for true path-dependent parallel transport; the paper acknowledges this in Sec. 3.1 and the appendix, but it does not quantify how large the resulting inconsistency is (e.g. that (T_{k\to i} \circ T_{j\to k}) may differ from (T_{j\to i})). Since the core idea is “transport-then-attend”, even a small triplet consistency check would make the geometric story tighter.
+
+3. The fine-grained ablations that isolate curvature and connection are currently shown only in the appendix and only on ModelNet40. In the main text we mainly see architecture-level comparisons (VBA vs GBT vs MQA/GQA). It would be stronger to surface at least one of these component ablations for a biological task (ST or PBMC) to show that curvature/transport also matter when geometry is noisy.
+
+4. The computational analysis is still incomplete for the bio settings. The paper reports params/FLOPs and gives a complexity discussion, and Table 3 already shows that the point-cloud version is heavier than several baselines, but there is no side-by-side wall-clock and peak memory comparison with the Transformer/GBT baselines used in the ST/scRNA experiments on the same hardware and input size. Given the added pairwise transport and curvature, this practical comparison would help readers judge feasibility.
+
+5. The claim of being a broadly generalizable geometric model is so far supported by a single 3D classification benchmark (ModelNet40). The experiment is useful and the paper clearly says it does not aim for 3D SOTA, but adding one more 3D or scene-style task would make the generality claim more convincing.
+
+6. In the scRNA-seq SSL setting, VBA-SC is pretrained on HCL, while baselines (scBERT, scGPT) use their official released weights, likely trained on different data. This makes the comparison realistic but not fully controlled; it would help to comment on what the gap would look like if the baselines were also pretrained on the same HCL subset.
+
+### Questions
+1. Because the transport is endpoint-conditioned, can you provide an empirical consistency test on random triplets ((i, j, k)), e.g. reporting (|T_{k\to i}(T_{j\to k} f_j) - T_{j\to i} f_j|)? This would quantify how far the surrogate is from a composition-preserving transport.
+
+2. Appendix A.11 shows that removing curvature or the learned connection hurts ModelNet40 and reduces time per epoch. Can you report at least one such ablation on ST or scRNA-seq to demonstrate that these components are also useful in biological settings?
+
+3. For one representative dataset (e.g. PBMC), can you give wall-clock time per epoch and peak GPU memory for VBA, vanilla Transformer, and GBT on the same hardware? This would make the extra cost of transport/curvature explicit.
+
+4. Is there any dataset-level obstacle (other than compute) to adding a second ST dataset (different tissue or technology)? Even a small-scale run would strengthen the ST story beyond DLPFC.
+
+5. For the SSL comparison: if a public scGPT/scBERT is pretrained on exactly the HCL subset you used, do you expect VBA-SC to still lead by a similar margin? A short discussion of this “same data” scenario would clarify attribution.
+
+6. You briefly mention bundle/gauge-style message-passing work. Can you clarify in the final version what is specifically gained by placing the geometric alignment inside attention (before similarity) rather than in the message/update stage?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

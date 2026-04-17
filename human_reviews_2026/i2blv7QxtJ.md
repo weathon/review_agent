@@ -1,0 +1,200 @@
+# Goal-Oriented Sequential Bayesian Experimental Design for Causal Learning
+
+- Decision: Reject
+- Scores: 6, 4, 6, 4
+
+## Abstract
+We present GO-CBED, a goal-oriented Bayesian framework for sequential causal experimental design. Unlike conventional approaches that select interventions aimed at inferring the full causal model, GO-CBED directly maximizes the expected information gain (EIG) on user-specified causal quantities of interest, enabling more targeted and efficient experimentation. The framework is both non-myopic, optimizing over entire intervention sequences, and goal-oriented, targeting only model aspects relevant to the causal query. To address the intractability of exact EIG computation, we introduce a variational lower bound estimator, optimized jointly through a transformer-based policy network and normalizing flow-based variational posteriors. The resulting policy enables real-time decision-making via an amortized network. We demonstrate that GO-CBED consistently outperforms existing baselines across various causal reasoning and discovery tasks---including synthetic structural causal models and semi-synthetic gene regulatory networks---particularly in settings with limited experimental budgets and complex causal mechanisms. Our results highlight the benefits of aligning experimental design objectives with specific research goals and of forward-looking sequential planning.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes GO-CBED, a goal-oriented, non-myopic Bayesian framework for sequential causal experimental design. Instead of maximizing information about the entire causal model, GO-CBED directly maximizes expected information gain (EIG) on user-specified causal quantities of interest (QoIs) (e.g., a particular interventional effect). The authors (i) cast sequential design as an RL policy that plans full intervention sequences; (ii) derive a variational lower bound on the EIG and learn it jointly with the policy; and (iii) instantiate an amortized transformer policy (permutation-aware) together with normalizing-flow posteriors for flexible QoIs. Empirically, GO-CBED outperforms baselines on synthetic SCMs and semi-synthetic gene-regulatory networks, with the largest gains when budgets are tight and mechanisms are nonlinear.
+
+### Strengths
+Originality. The paper presents a clear shift from model-centric to goal-centric BOED in causal settings. Whereas prior work either targeted full-model learning or was myopic, this paper unifies goal-orientation with non-myopic planning via RL. The variational EIG bound specialized to causal QoIs and combined with amortized policies is a fresh, well-motivated combination. 
+
+Theory & method. The EIG variational lower bound is clean and justified with the KL gap derivation, giving a tractable training objective while remaining faithful to the goal quantity. The use of normalizing flows to capture potentially multi-modal posteriors over effects is methodologically apt for structural uncertainty. The policy architecture respects permutation symmetries and handles discrete targets/continuous values (Gumbel-softmax head), which is thoughtful design for SCM variables. 
+
+Empirical significance. The manuscript delivers strong and consistent gains on causal reasoning under nonlinear mechanisms and on semi-synthetic GRNs, which are settings that mirror real experimental constraints. Notably, policies trained for structure learning underperform when the evaluation is a targeted effect, underscoring the value of aligning design with downstream goals. 
+
+Presentation clarity. Problem setup (SCMs, interventions, goal-oriented posterior over QoIs), objective (Eq. (4)), and training loop (Algorithm 1) are presented in a reader-friendly flow. Figures juxtapose “full-model” vs “goal-oriented” choices effectively (Fig. 1, Fig. 2–6).
+
+### Weaknesses
+Limited real-data validation. The results are synthetic or semi-synthetic (DREAM). While this is appropriate for a first step, I would recommend having a small real experimental case study (e.g., a wet-lab perturbation subset or an A/B platform with interventional logs) to materially strengthen the paper’s practical impact. Even a retrospective off-policy evaluation using logged interventions would be valuable.
+
+Lack of ablation studies. The gains of the proposed method may stem from different sources (a) non-myopia, (b) goal-orientation, and (c) posterior flexibility. It would be helpful to include factorized ablations: (a) myopic vs non-myopic (same QoI objective), (b) goal-oriented vs model-oriented (same planner), and (c) flows vs simpler posteriors (e.g., Gaussian/mixture). To provide actionable insights on how the proposed framework could be effectively implemented, I recommend the authors additionally report sensitivity to the policy network depth, attention alternation, and Gumbel-softmax temperature.
+
+Bound tightness. Theorem 4.1 ensures a lower bound, but the gap between $R_T$ and $R_{T;L}$ is not quantified. The authors may consider simple controlled settings (small DAGs with analytic posteriors) to measure bound tightness, beyond the linear fixed-graph toy in Section 5.1, and report how training correlates with true EIG. 
+
+Computational scalability. The method simulates many environments per step and trains both policy and posterior nets. It is useful to include wall-clock, GPU hours, and memory vs $d$, $T$, and per-stage intervention budget. Also, provide a throughput metric for the promised real-time deployment (ms per decision). Without such analyses, “constant complexity at deployment” risks sounding primarily qualitative. 
+
+Assumptions & robustness. Experiments primarily assume causal sufficiency and correct model class. Please probe robustness to misspecified priors, latent confounding, mechanism shift (beyond observation-noise shift), and heterogeneous intervention costs, all of which are common in practice. Even if some are left to future work, a compact stress test would be informative. 
+
+General QoIs & multi-target interventions. Most experiments focus on interventional effects and ($z=G$). Since the framework is billed as general, I suggest add at least one counterfactual or policy value QoI example, and a small demonstration of multi-target or soft interventions
+
+### Questions
+1.	Can you provide quantitative bound-gap measurements (true EIG vs variational bound) on small DAGs where posteriors are tractable, across training? Does tighter $q_{\lambda}$ (e.g., more flow layers) reliably improve policy quality?
+2.	Could you add a controlled comparison where the only change is replacing the non-myopic policy with a greedy/myopic planner but keeping the same QoI objective and posterior family, to isolate the planning benefit?
+3.	How sensitive is GO-CBED to prior over graphs and mechanisms? Any evidence or theory on graceful degradation if the prior is biased (e.g., wrong sparsity or mechanism class)?
+4.	Many labs face heterogeneous costs per target and per perturbation magnitude. How would you incorporate cost-penalized EIG or budget constraints into the objective and policy?
+5.	What are the largest $d$ and $T$ you trained successfully? Please report compute (GPU hours), RAM, and training curves vs problem size; also share inference latency (forward-pass ms) to substantiate the real-time claim. 
+6.	Any preliminary results for counterfactual QoIs or policy value estimation QoIs? If not, what modifications to $q_\lambda(z|\cdot)$ are needed?
+7.	Why RealNVP over, say, MAF/Glow or neural spline flows? Did you observe training instabilities or mode-dropping with certain flow depths/widths? 
+8.	Since many labs adjust their budgets mid-campaign, how brittle is a policy trained for $T$ if deployed at $T'\neq T$? Any empirical robustness or simple re-planning heuristic?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+The paper proposes a new algorithm for goal conditioning for causal experimental design. This has potentially important applications in scientific domains such as biological research. 
+More concretely, the paper builds on CBED proposed in [1] and the proposed GO-CBED is a goal conditioned version of that algorithm.
+
+Overall the paper is easy to read and has a lot of additional and interesting experiments in the appendix for which there was no space in the main text. 
+
+[1] Tigas, Panagiotis, et al. "Interventions, where and how? experimental design for causal models at scale." Advances in neural information processing systems 35 (2022): 24130-24143.
+
+### Strengths
+It is addressing and important problem and generally it makes sense to use targeted approaches in practice. It is just not clear if that is then evaluated fairly.
+
+### Weaknesses
+Where are results on the Sergio environment [1] similarly to [2]. The dream datasets has significant issues and is mostly used because it is very well established and thus has a form of legacy status where new papers need to compare too but in order to have some meaningful statements you need to provide results with a simulator e.g. Sergio. 
+
+General statements sometimes seem not to be correct e.g. "GO-CBED outperforms existing methods" It would be better to have more nuanced statements. i.e. at least say in which tasks or in which settings since  in all its generality this statement is probably wrong. 
+
+"directly targeting causal queries is particularly advantageous compared to targeting the full causal graph. " This is an apple to pear comparison. It is likewise known in other disciplines that if you do not care about the causal structure then you are better of only learning the causal features e.g [3] but there are many more papers and this should not be surprising that the full graph fulfils a different purpose and should not be compared to approaches which are specialized and then compared a universal approach on the specialization task. 
+
+
+
+[1] Payam Dibaeinia and Saurabh Sinha. Sergio: a single-cell expression simulator guided by gene
+regulatory networks. Cell systems, 2020.
+[2] Annadani, Yashas, et al. "Amortized active causal induction with deep reinforcement learning." Advances in Neural Information Processing Systems 37 (2024). 
+[3] Kim, Jang-Hyun, et al. "Large-Scale Targeted Cause Discovery via Learning from Simulated Data." Transactions on Machine Learning Research.
+
+### Questions
+Can you state what the specific causal queries were you used for training in each experiment? I actually could not find this specification for any of the experiments but I might have overlooked it. Where is it clearly stated? 
+
+Can you compare and provide experiments with the Sergio Simulator?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes a new method for Bayesian experimental design. The method is the first to integrate goal-oriented reasoning with a non-myopic decision-making framework..The approach relies on amortized learning. The authors propose to jointly learn the amortized variational posterior of the objective and the amortized policy. GO-CBED presents favorable performance when compared to baselines on a set of synthetic and semi-synthetic problems of varying sizes.
+
+### Strengths
+1. The paper tackles the important problem of efficient experimental design, optimizing the full sequence of interventions with respect to the query of interest rather than using a greedy strategy, and presents a novel solution.
+2. The paper is well-executed, the descriptions are extensive, and the details provided allow reproducibility to a high extent.
+3. The paper is mostly clear and well-written.
+4. Experiments are clearly presented.
+
+### Weaknesses
+1. The experimental setup is unclear. I could not find information on what priors over graphs and mechanisms were used for network training.
+2. It seems to me that the method is only evaluated in an in-distribution setting. Lack of discussion and experimental evaluation for out-of-distribution/real-world examples severely limits the potential impact of the work and its significance.
+3. The method dropped the acyclicity constraint used by other causal methods, without discussion. This could affect the effectiveness of rejection sampling of DAGS from the posterior and reduce the practical utility of the approach for large graphs. How does the number of samples required to obtain a DAG change with the size of the graph?
+4. The description of the method is unclear. How is the variational posterior of z trained in the causal reasoning setup? How is query z encoded? Is there a need to train a separate posterior model for each query and graph size?
+
+### Questions
+1. Is it possible to ablate the influence of non-myopticity from other components of your method? I.e., is it possible to train a greedy policy using the proposed approach with minimal changes?
+2. Line 458 “biologically-inspired networks demonstrate GO-CBED’s ability to handle the complex dependencies and noise typically encountered in gene regulatory systems” — Does the evaluation use a biologically inspired mechanisms? This is unclear even after reading the appendix.
+3. How many different models (pretraining runs)  were required to provide results from the experimental section? How much data is required for training, and how long does it take?
+4. What is the difference between GO-CBED-\theta and GO-CBED-G? Is the structure in section 5.1 known?
+5. Can a trained model generalize to different graph sizes?
+6. The Authors mention that the method enables “real-time decision-making”. Is it really a practical benefit? Could the Authors provide an example of the experimental design problem that is time-sensitive? 
+7. Why has the lower bound objective been used to compare methods in Figure 2? Could the Authors provide a comparison between methods in terms of the  Wasserstein Distance?
+8. How is experimentation horizon T affecting the effectiveness of the method? Which performs better, the model trained with horizon t0 or the model trained with a longer horizon stopped at intervention t0?
+9. There seems to be an error in line 1095: "T=1500 when d=30"
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes an algorithm GO-CBED for sequential experimental design. Experiments are selected to be informative in terms of certain causal targets, quantities of interest (QoIs), as opposed to, for example, estimating a full causal model. This setting has been studied before, but previously been addressed using greedy selection algorithms. The paper presents an approach, GO-CBED, which amortizes a non-myopic experimental design policy. A variational lower bound on the expected information gain is derived, which is utilized as training objective. Experiments on synthetic simulations (in one case a semi-synthetic example inspired by gene regulatory networks) provide evidence of the algorithms’ performance.
+
+### Strengths
+- The considered experimental design setting is practically relevant and (while not new) not yet extensively studied.
+- Amortization of a policy can provide computational speedups at deployment time.
+
+### Weaknesses
+- All the major components (targeting experimental design for causal objectives setting; computing variational bounds on mutual information; policy amortization for active learning / experimental design) have already been quite well explored; the main contribution of the paper is to put them together.
+- Experiments are mostly on synthetic settings (the only exception is the semi-synthetic GRN example).
+
+### Questions
+- I assume the synthetic graphs / mechanisms are sampled from a different distribution than what is used as a prior in the Bayesian model. Can you please confirm? If not, what happens if the prior is misspecified?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

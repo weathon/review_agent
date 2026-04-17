@@ -1,0 +1,192 @@
+# MultiMat: Multimodal Program Synthesis for Procedural Materials using Large Multimodal Models
+
+- Decision: Accept (Poster)
+- Scores: 2, 6, 4, 6
+
+## Abstract
+Material node graphs are programs that generate the 2D channels of procedural materials, including geometry such as roughness and displacement maps, and reflectance such as albedo and conductivity maps. They are essential in computer graphics for representing the appearance of virtual 3D objects parametrically and at arbitrary resolution. In particular, their directed acyclic graph structure and intermediate states enable a modular, interpretable workflow for interactive appearance modeling. However, creating such graphs remains challenging and typically requires professional training. While recent neural program synthesis approaches attempt to simplify this process, they solely represent graphs as textual programs, failing to capture the inherently visual-spatial nature of node graphs that makes them accessible to humans. To address this gap, we present MultiMat, a multimodal program synthesis framework that leverages large multimodal models to process both visual and textual graph representations for improved generation of procedural material graphs. We train our models on a new dataset of production-quality procedural materials and combine them with a constrained tree search inference algorithm that ensures static correctness while efficiently navigating the program space. Our experimental results show that our multimodal program synthesis method is more efficient in both unconditional and conditional graph synthesis with higher visual quality and fidelity than text-only baselines, establishing new state-of-the-art performance.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+2
+
+### Summary
+This paper introduces MultiMat, a multimodal program synthesis framework that generates procedural material node graphs using large multimodal models. Unlike previous text-only approaches, MultiMat incorporates visual feedback by processing both textual representations and visualizations of intermediate graph states. The authors propose two conditioning methods (mixed and graph-based) and implement a constrained tree search algorithm for efficient inference. Experiments on a dataset of 6,878 production-quality Adobe Substance Designer materials demonstrate superior performance over text-only baselines in both unconditional and conditional (inverse rendering) generation tasks.
+
+### Strengths
+1: The key insight of treating procedural material graphs as visual-spatial programs is intuitive and well-motivated, aligning with how human artists interact with these tools.
+
+2: The collection of 6,878 materials with complete feature set support represents a significant improvement over previous datasets.
+
+### Weaknesses
+1: The authors acknowledge that MultiMat requires "several days" on 8×A100 GPUs compared to "a few hours" for text-only baselines. This ~10-20× difference in training time is a significant practical limitation that deserves more discussion about potential optimizations.
+
+2:  All training and testing use the same material engine (Substance Designer). How would the approach transfer to other procedural material systems like Blender's shader nodes?
+
+3: Lack of ablation study. What is the contribution of each component (visual feedback, tree search, error repair)? Ablation experiments would strengthen the paper.
+
+### Questions
+The paper relies entirely on automatic metrics. Given that visual quality is subjective, human evaluation comparing outputs from different methods would be valuable.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper proposes MultiMat, a multimodal framework for synthesizing procedural material node graphs. Unlike prior text-only methods, MultiMat leverages both textual and visual representations during generation, integrating visual feedback to better mimic human material design workflows. It introduces (1) a multimodal feedback loop using intermediate graph visualizations, (2) an incremental tree search with automatic error repair for valid program generation, and (3) a new dataset of production-quality materials from Adobe Substance Designer.
+
+### Strengths
+1. Novel multimodal approach combining visual and textual cues for program synthesis.
+2. Strong empirical results, showing clear gains in KID, CLIP, and DreamSim metrics.
+3. Creation of a large, comprehensive dataset supporting full Substance Designer features.
+
+### Weaknesses
+1. Training inefficiency: requires per-node multimodal context updates, leading to much longer training times.
+2. Evaluation primarily limited to one domain (Substance Designer), with generalization to other systems unclear.
+
+### Questions
+1. How well does MultiMat generalize to unseen node types or non-Designer graph systems?
+2. Could the incremental tree search approach be applied to other program synthesis domains (e.g., 3D modeling or animation)?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper presents MultiMat, a framework for synthesizing procedural material graphs using large multimodal models on both visual and textual data. Arguing that material creation is an inherently visual-spatial task, the authors show that incorporating visual intermediate states improves results over text-only methods. The system is validated on a new dataset from Adobe Substance Designer through extensive experiments, including unconditional and image-guided synthesis, ablations, and comparisons to recent text-only and multimodal baselines.
+
+### Strengths
+1. The paper's central contribution is a multimodal synthesis paradigm that incorporates visual feedback of intermediate states during graph generation. This method addresses a key limitation in text-only approaches by more closely aligning with human creative workflows.
+
+2. A new, comprehensive dataset of production-level procedural materials is collected and used for evaluation. The experiments are rigorous, benchmarking against strong baselines on both unconditional and conditional synthesis tasks and demonstrating superior performance over text-only models across multiple metrics.
+
+3. The work includes systematic ablation studies and an analysis of failure cases, which add credibility by clarifying the model's capabilities and current limitations. The paper also presents practical error recovery strategies, such as incremental tree search and automatic repair.
+
+4. The exposition is clear and well-supported by figures that effectively visualize the model architecture, workflows, and experimental results. The inclusion of concrete output examples, such as visual graphs and code listings, helps to illustrate the system's real-world performance.
+
+### Weaknesses
+- The paper's contextualization is limited by its failure to engage with recent, directly relevant literature. The Related Work section omits several key advances in multimodal program synthesis (e.g., [1], [2], [3] ) and recent visual programming benchmarks.
+
+- The methodology lacks mathematical formalism, which hinders reproducibility and theoretical interpretation. Crucial elements like the multimodal training objective, loss functions, negative sampling strategy, and the method for combining image and text embeddings are not precisely specified. Algorithmic descriptions, such as the backtracking process, also lack the clarity of formal pseudocode.
+
+- Missing citations to several directly relevant works: As detailed below, the references omit numerous recent multimodal and vision-language approaches to program synthesis and visual programming benchmarks [4][5].
+
+- The experimental analysis is not sufficiently thorough. The ablation studies are limited and do not provide quantitative evidence for the impact of individual components like automatic error repair. The paper also needs a clearer discussion on the fairness of baseline comparisons, a deeper analysis of the trade-off between efficiency and accuracy, and more comprehensive qualitative comparisons.
+Please provide some rendered videos.
+
+- Claims of the method's generality are conjectural, as the entire pipeline and dataset are specific to Substance Designer. The paper provides no experimental evidence or case studies to demonstrate the framework's adaptability to other graph-based creative environments.
+
+[1]. Optimal Neural Program Synthesis from Multimodal Specifications
+
+[2].  Synthesis of Programs from Multimodal Datasets
+
+[3]. Program Synthesis Benchmark for Visual Programming
+
+[4]. JarvisArt: Liberating Human Artistic Creativity via an Intelligent Photo Retouching Agent
+
+[5]. Visual Planning: Let's Think Only with Images
+
+### Questions
+- Could you offer a more formal definition of the multimodal objective function, with equations showing how image and text data are fused during generation? It would be helpful to know if attention is shared and whether the loss is contrastive or generative.
+
+- Since the evaluation is confined to Substance Designer, could a case study on a different visual programming language be provided to substantiate the claims of generality, even if the experiment is on a smaller scale?
+
+- For the retrained baselines like VLMaterial and MatFormer, please clarify which features were omitted or unsupported. How might these omissions impact the fairness of the performance comparisons?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces MultiMat, which is a multimodal VLM trained for the accurate, efficient synthesis of 2D procedural material graphs (PMGs). MultiMat is the first procedural material approach that explicitly leverages both the textual and visual graph representations of PMGs to improve generation quality. The textual representation used in MultiMat is a new, simplified YAML-based description for PMGs, which is more readable and considerably (~80%) shorter than the native XML descriptions used by the underlying generation software (here, Adobe Substance Designer). During generation, MultiMat enforces an iterative, topologically-sorted generation procedure that verifies the graph after each node output, to ensure validity and allow efficient backtracking through constrained tree search. MultiMat also contributes a new PMG dataset based on the Substance Designer Assets Repository; this dataset is larger in size and scope than its predecessors.
+
+### Strengths
+This paper achieves SOTA performance across a variety of metrics on a challenging and impactful problem in computer graphics. Moreover, the paper achieves this by capitalizing on a remarkably simple observation about a piece of affiliate data that has traditionally been overlooked in PMG generation: the visual graph representation is crucial for human interaction with PMGs, so why shouldn't it be beneficial for VLMs as well? 
+Other domains beyond PMGs are likely to benefit from the notions in this work, such as reframing their data or adopting the iterative, verifiable graph generation with backtracking and error correction.
+The paper is generally well written, including a substantive description of the domain, the related work and several comparisons to relevant baselines.
+
+### Weaknesses
+1. The paper does not specify details about the data format or the algorithms used to train the QWen model for MultiMat realization.
+2. The baseline setup in 6.1 is unclear -- is VLMaterial embedded within the current paper's pipeline, as an exchange for the MultiMat block? I assumed that it was evaluated as a standalone VLMaterial model with full-graph generation, albeit trained over a different dataset. I was surprised, then, to read l. 412 describing the degradation of the NER score for VLMaterial(SBS) when tree search was turned off, since I never expected it to be on. A clearer description of the baseline setup would be very helpful.
+3. Did you perform any ablation studies to test the efficacy/impact of your components? For example, does the fragmented node generation procedure affect the model's global reasoning ability over PMGs? This might be observable under the conditional generation task: is MultiMat is able to reproduce the desired target image equally well using iterative node generation vs single-shot graph generation?
+
+### Questions
+1. Why was it necessary/desirable to flatten hierarchical structures in the professional PMGs, and what (if any) are the ramifications of having done so? Do the substructures conflict with the tree search and/or the YAML representation? I ask because hierarchical subgroups are very useful for human designers, as they merge complex blocks into higher-level concepts whose internal details can be abstracted away once implemented; by the logic posited in this paper, I imagine that this would be similarly useful for the model once the graphs reach sufficient complexity (which is certainly possible within 128 nodes).
+2. Rather than 1 node at a time, would it be possible for each iteration to generate a set of nodes all residing at the same topological sort depth? What would the potential advantages or challenges of such an approach be, relative to a single node?
+3. Were the error patterns of Section 4.3 identified once (or a few times) through manual intervention, then hardcoded into the pipeline? Would there be any room to integrate feedback, such as online identification of failure modes and/or potential workarounds for them? 
+4. To my understanding, the iterative generation scheme provides information about the (partial) graph's validity and state visualization/description; however, it does not evaluated or provide feedback on e.g., whether the generated image is likely to lead to the target image under conditional generation. It seems like that would be an interesting extension though; would it be possible to evaluate and/or include any such information to shape the trajectory of the generation procedure? Do there exist any heuristics to judge the suitability of a partial solution for this domain?
+
+-- Minor Comments --
+Fig 1. The graph shown here emphasizes the possible complexity of professional PMGs, but does not illustrate the "intuitive" nature of these visualizations as you claim in e.g. l.68; it may be worth selecting a different graph here to make your point.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

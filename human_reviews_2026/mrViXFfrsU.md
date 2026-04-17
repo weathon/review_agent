@@ -1,0 +1,150 @@
+# Divid: Disentangled Spatial-Temporal Modeling within LLMs for Temporally Grounded Video Understanding
+
+- Decision: Accept (Poster)
+- Scores: 6, 2, 6
+
+## Abstract
+Recent advances in Video LLMs have improved video understanding performance, but temporally grounded understanding in long-form videos remains challenging. Most models encode video frames into a flat sequence of visual tokens, which are then processed together with textual input by the LLM. While effective for short videos, this approach becomes inefficient for long-form videos due to lengthy token sequences that exceed context limits and incur high computational costs. Slow-Fast architectures partially address this by separating temporal and spatial features during encoding, but these features are still processed jointly within the LLM, lacking true spatio-temporal disentanglement. Moreover, spatial features are typically sampled in a query-agnostic manner, risking the loss of task-relevant content. To address these limitations, we propose Divid, a novel dual-branch framework that explicitly disentangles spatial and temporal modeling within the LLM decoder. Specifically, the temporal branch processes densely sampled, low-resolution frames to effectively capture long-range motion dynamics, while the spatial branch selects a sparse set of high-resolution keyframes guided by temporal attention. To unify the two branches, we design a lightweight spatio-temporal soft-router that adaptively fuses temporal and spatial cues at the token level, conditioned on the input query. This disentangled architecture not only improves temporal alignment accuracy but also leads to computational savings by minimizing redundant visual processing. Furthermore, we introduce TempGCap, a large-scale dataset consisting of 559K timestamp-grounded video-text pairs, providing rich temporal supervision. Extensive experiments on temporal grounding and grounded videoQA benchmarks demonstrate the superior performance and efficiency of our proposed Divid.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces Divid, a dual-branch framework for video understanding that explicitly disentangles spatial and temporal modeling within the Large Language Model (LLM) decoder to improve temporally grounded tasks in long-form videos. The architecture features a temporal branch that processes dense, low-resolution frames to capture global motion dynamics, which in turn guides a spatial branch in selecting a sparse set of high-resolution keyframes relevant to the query. A lightweight spatio-temporal soft-router is proposed to adaptively fuse the information from these two branches at the token level for the final prediction. To support this model, the authors also constructed a large-scale dataset, TempGCap, containing 559K timestamp-grounded video-text pairs to provide rich temporal supervision. Experiments conducted on several temporal grounding and grounded VideoQA benchmarks show the effectiveness of Divid compared to existing methods.
+
+### Strengths
+* The core contribution is the dual-branch structure that disentangles spatio-temporal information within the LLM decoder. The idea of using dense, low-resolution frames for temporal modeling to guide the selection of sparse, high-resolution keyframes for spatial modeling is intuitive and sound. Combined with the token-level soft-router for adaptive fusion, this approach effectively addresses the challenges of high computational cost and spatio-temporal entanglement in long video processing.
+
+* The paper identifies the shortcomings of existing instruction-tuning datasets in temporal precision and diversity and builds a high-quality dataset of 559K samples using three complementary strategies (manual annotation, recovering untrimmed contexts, and synthesizing pseudo-long videos). This will be highly valuable for future research in the community.
+
+### Weaknesses
+* Although the appendix shows a significant reduction in computational cost (TFLOPs), the reported latency is slightly higher than the slow-fast baseline. The authors acknowledge this is due to the extra keyframe selection step and suggest it can be improved with engineering optimizations, but it remains a minor weakness where the theoretical efficiency gains do not fully translate to practical inference speedup.
+
+* The construction of the TempGCap dataset partially relies on other models (e.g., using the Tarsier model to generate captions), which could introduce model-specific biases or errors into the dataset. While this is a practical approach for large-scale data creation, a more in-depth analysis of the potential noise introduced by this semi-automated process would have further strengthened the claims about dataset quality.
+
+*  The core temporal-guided keyframe selection mechanism (Temporal Attention Scores -> Top-K Selection) is conceptually similar to other attention-based filtering methods [1, 2, 3]. The paper could better contextualize its approach by comparing it more directly with prior work in frame sampling or token pruning to highlight its uniqueness in the context of Video LLMs.
+
+[1] MIST: Multi-modal Iterative Spatial-Temporal Transformer for Long-form Video Question Answering
+
+[2] Discovering Spatio-Temporal Rationales for Video Question Answering
+
+[3] Weakly Supervised Gaussian Contrastive Grounding with Large Multimodal Models for Video Question Answering
+
+### Questions
+Please see Weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces DIVID, a dual-branch architecture for temporally grounded video understanding using video–language models. The framework explicitly disentangles spatial and temporal modeling within the LLM decoder by employing a temporal branch for dense, low-resolution motion dynamics, and a spatial branch for sparse, high-resolution keyframes guided by temporal attention. The two branches are fused with a query-conditioned spatio-temporal soft-router. In support, the work presents TempGCap, a large-scale dataset of 559k timestamp-grounded video-text pairs. Experiments show strong empirical performance and efficiency gains on several temporal grounding and video QA benchmarks.
+
+### Strengths
+1. The explicit separation of spatial and temporal processing within the LLM decoder is a clear departure from prior art, which typically performs disentanglement only at the feature extraction or encoder stage. This is well articulated in Figure 1, highlighting the dual-branch structure and adaptive soft-router fusion, which advances the clarity and interpretability of model components.
+
+2. The method's use of temporal attention to guide high-res spatial sampling (rather than uniform or query-agnostic strategies) is empirically backed (Table 6, Figure 1) and brings notable computational and performance improvements, confirmed in ablation studies (Table 5).
+
+3. TempGCap is a substantial new resource, constructed via multiple strategies (manual annotation, recovery, synthesis) for more precise temporally grounded supervisory signals (see Figure 2, Tables 13–14 in the appendix). Dataset quality is assessed in Table 8, showing marked value over prior moment-captioning datasets.
+
+### Weaknesses
+1. Empirical claims about "state-of-the-art" are largely constrained to the benchmarks provided (Charades-STA, ReXTime, CG-Bench, NExT-GQA). Generalization is briefly touched upon (Table 11), but with limited context; in particular, the extent to which DIVID's improvements generalize to non-temporally grounded or more challenging open-ended video reasoning scenarios is only lightly probed and not explored in depth. Moreover, although some key baselines are included, there are missing baseline comparisons to models adopting more advanced spatio-temporal or cross-modal alignment, as well as absent or only shallow error/mislocalization analysis.
+
+
+2. The design of the dual-branch decoder and the token-level router is presented in a relatively engineering-driven fashion, with little attempt at formalizing why or under what conditions disentangled decoder branches + soft dynamic fusion should yield better temporal localization or reduce hallucination. There is no theoretical analysis of capacity, representation expressivity, or inductive bias gains. The discussion about why fusion at the token level (rather than head-level, block-level, or post-attention fusion) is beneficial is thin and left to ablations.
+
+
+3. The TempGCap construction process involves multiple automated and manual annotation stages (as in Figure 2), but more detail should be provided about inter-annotator agreement, filtering criteria, and possible biases introduced (e.g., via pseudo-untrimmed synthesis). Even though Table 13 breaks out annotation strategies, the risk of subtle domain leakage or noise propagation is underexplored.
+
+
+4. Minor Issues in Exposition:
+- There are a few places where notation is not adequately defined or is overloaded (see Section 3.2, Page 4-5).
+- Typographical issues, e.g., "the the selected spatial features" (Page 5).
+- Some results tables (Table 1, Table 2) reproduce highly dense comparisons, but occasionally lack scale clarity (e.g., 1.5B vs 7B), and the presentation would benefit from clearer highlighting to aid comparison.
+
+### Questions
+1. Can the authors provide an explicit composite training loss equation, including all task-specific loss terms and weighting, as actually used in implementation (e.g., for temporal localization vs. QA)? How are thresholds, negative sampling, and class imbalance handled during optimization?
+
+2. What is the rationale for choosing a token-level softmax on projected text features for branch fusion? Did the authors experiment with deeper gating modules, or alternative fusion placements (e.g., block, head, or output level)?
+
+3. Do the temporal and spatial branches demonstrably specialize in the types of reasoning intended (e.g., is the spatial branch consistently responsible for frame-level details, or do branches collapse under certain queries)? Would the authors consider adding qualitative analyses or illustrative attention maps?
+
+4. Given the mixture of manual, pseudo, and synthesized captions in TempGCap, how is data leakage prevented on evaluation sets, and have any systematic biases been observed during annotation or curation phases?
+
+5. The most important is, I noticed that the comparative methods adopted by the authors lag behind the latest state-of-the-art research. Recently proposed models such as Qwen2.5-VL, VideoChat-R1, and TimeZero (introduced about six months ago) have achieved strong performance across various temporal localization and general video question answering benchmarks. What are the advantages of the authors’ proposed method compared with these approaches?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents DIVID, a novel dual-branch framework designed to disentangle spatial and temporal modeling within the LLM decoder for temporally grounded video understanding, with key innovations including: (1) a temporal branch that processes low-resolution, densely sampled frames to capture long-range dynamics; (2) a spatial branch that selects high-resolution keyframes via temporal attention for fine-grained visual reasoning; and (3) a token-level spatio-temporal soft-router that adaptively fuses features conditioned on the input query. To support training, the authors introduce TempGCap, a large-scale instruction-tuning dataset containing 559K timestamp-grounded video-text pairs with high temporal precision and diverse video coverage. Experiments on Charades-STA, CG-Bench, NExT-GQA, and ReXTime benchmarks demonstrate that DIVID achieves state-of-the-art performance in both temporal grounding and grounded video QA tasks while significantly reducing computational costs, establishing a new efficiency-accuracy trade-off for video understanding architectures.
+
+### Strengths
+1. The idea of disentangling spatial and temporal modeling inside the LLM decoder is novel and well-motivated. The soft-router mechanism is lightweight yet effective, enabling adaptive fusion at the token level.
+2. DIVID outperforms many strong baselines, including larger models (e.g., 72B Qwen2-VL), especially in temporal grounding tasks. The 1.5B model already surpasses several 7B models, showing excellent parameter efficiency.
+3. TempGCap is a valuable contribution to the community. It combines manual and automatic annotations, covers diverse video domains, and provides fine-grained temporal supervision, filling a gap in existing datasets.
+4. The paper includes extensive ablations, efficiency analysis, and generalization studies. The authors carefully analyze the impact of each component (e.g., keyframe selection, soft-router, dataset quality), which strengthens the credibility of the results.
+
+### Weaknesses
+1. While the disentanglement is well-executed, the contributions are mostly at the module level, lacking a more fundamental architectural breakthrough.
+2. The soft-router is effective but lacks interpretability. There is no analysis of how the gating weights vary across query types or whether the router learns semantically meaningful fusion strategies.
+
+### Questions
+1. DIVID performs well on grounding tasks but shows limited gains on general VideoQA (e.g., MSRVTT-QA). What do you think limits its generalization to non-grounding tasks?
+2. Should the visual encoder (ViT-G/14) be fine-tuned during training to improve fine-grained temporal grounding?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

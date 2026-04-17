@@ -1,0 +1,195 @@
+# Stratified GRPO: Handling Structural Heterogeneity in Reinforcement Learning of LLM Search Agents
+
+- Decision: Reject
+- Scores: 4, 4, 4, 8
+
+## Abstract
+Large language model (LLM) agents increasingly rely on external tools such as search engines to solve complex, multi-step problems, and reinforcement learning (RL) has become a key paradigm for training them. However, the trajectories of search agents are structurally heterogeneous, where variations in the number, placement, and outcomes of search calls lead to fundamentally different answer directions and reward distributions. Standard policy gradient methods, which use a single global baseline, suffer from what we identify and formalize as cross-stratum bias—an ``apples-to-oranges" comparison of heterogeneous trajectories. This cross-stratum bias distorts credit assignment and hinders exploration of complex, multi-step search strategies. To address this, we propose Stratified GRPO, whose central component, Stratified Advantage Normalization (SAN), partitions trajectories into homogeneous strata based on their structural properties and computes advantages locally within each stratum. This ensures that trajectories are evaluated only against their true peers. Our analysis proves that SAN eliminates cross-stratum bias, yields conditionally unbiased unit-variance estimates inside each stratum, and retains the global unbiasedness and unit-variance properties enjoyed by standard normalization, resulting in a more pure and scale-stable learning signal. To improve practical stability under finite-sample regimes, we further linearly blend SAN with the global estimator. Extensive experiments on diverse factual QA and deep-research agent benchmarks demonstrate that Stratified GRPO consistently and substantially outperforms GRPO by up to 12.6 points, achieving higher training rewards, greater training stability, and more effective search policies. These results establish stratification as a principled remedy for structural heterogeneity in RL for LLM search agents.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+This paper addresses a critical yet often overlooked challenge in training large language model (LLM) search agents with reinforcement learning: structural heterogeneity in trajectories—where differences in the number, placement, or outcomes of search calls lead to fundamentally distinct behavior patterns and reward distributions. The authors show that standard policy gradient methods like GRPO, which rely on a single global baseline to compute advantages, suffer from cross-stratum bias: an “apples-to-oranges” comparison across structurally incomparable trajectories that distorts credit assignment and hinders exploration of complex, multi-hop search strategies. To resolve this, they propose Stratified GRPO, centered on Stratified Advantage Normalization (SAN), which partitions trajectories into homogeneous strata based on structural features (e.g., search count) and computes normalized advantages within each stratum. Theoretical analysis proves that SAN eliminates cross-stratum bias, yielding conditionally unbiased, unit-variance advantages per stratum while preserving global unbiasedness and unit variance. For improved stability in finite-sample settings, they further introduce Blended Advantage, a linear combination of SAN and global normalization (GN). Experiments across seven question-answering benchmarks—spanning both single-hop and multi-hop tasks—show that Stratified GRPO outperforms GRPO by up to 11.3 EM points on average, with especially strong gains on multi-hop problems, along with higher training rewards, greater stability, and more effective search policies that actively issue multiple queries.
+
+### Strengths
+- **Precise and practically relevant problem identification**: The paper is the first to formally identify and define *cross-stratum bias*—a pervasive structural flaw in LLM tool-use scenarios—thereby filling a critical theoretical gap in reinforcement learning for LLM agents.  
+- **Simple yet principled method**: Stratified Advantage Normalization (SAN) is grounded in classical stratification from statistics. It requires no changes to the policy architecture or additional models; the core issue is resolved solely through a refined normalization of the advantage function.
+
+### Weaknesses
+- **overemphasizes “theoretical”**:   I argue that the paper overemphasizes “theoretical” while the experimental evidence lacks sufficient persuasiveness. For instance, Theorem 1 claims that Stratified GRPO reduces variance—but do the experiments actually support this theoretical conclusion? The authors should provide direct empirical evidence of more stable training, such as smoother gradient norm (grad-norm) curves, more stable KL divergence trajectories, or comparative plots showing reduced within-stratum variance of advantage estimates over training. 
+Moreover, Proposition 2 (Invariance to Positive Affine Reward Transforms) is a property shared by all GRPO-based methods that use reward normalization—it is not unique to Stratified GRPO. Highlighting it as a distinctive advantage is therefore misleading and inflates the perceived novelty of the method.
+
+- **Unconvincing experiments**:  The reward curves shown in Figure 1 are highly counterintuitive—the Instruct model performs significantly worse than the Base model during training. This strongly suggests a potential engineering issue, such as suboptimal hyperparameter settings or implementation details. Given that the authors have not released their code and the reported experimental details are insufficient, I believe the current reward curves alone cannot convincingly demonstrate a methodological advantage of Stratified GRPO. Instead, they appear more like the outcome of an inadequately tuned baseline (e.g., GRPO on the Instruct model).   
+Reinforcement learning training is inherently high-variance and prone to instability. To substantiate their claims, the authors should report the variance across multiple random seeds and provide training curves averaged over several independent runs—not just a single trajectory. Without such evidence, it is difficult to distinguish genuine algorithmic improvement from favorable random fluctuations or inconsistent tuning.
+
+- **Stratification relies on handcrafted heuristics**: The current approach partitions trajectories by "number of search calls," which is heuristic and task-specific. The paper does not explore more general or automated stratification mechanisms (e.g., clustering based on behavioral embeddings). If the true source of structural heterogeneity lies in query semantics or retrieval quality, this simple partitioning may be insufficient.
+
+- **Experiments are limited to question-answering tasks**: All evaluations are conducted on Wikipedia-based retrieval QA benchmarks. The method’s generalizability to other tool-augmented settings—such as code generation, API calling, or multi-tool coordination—remains unverified.
+
+- **Lack of comparison with structure-aware critic baselines**: For instance, a PPO variant using a conditional value function like \(V(s, \text{search\_count})\) might similarly mitigate cross-stratum bias. Without such comparisons, it is difficult to claim that SAN is the only—or optimal—solution to the problem.
+
+### Questions
+The authors are encouraged to provide results from multiple independent runs, along with hyperparameter sensitivity analyses. Additionally, more training curves and diagnostic metrics should be included to strengthen the empirical support for the proposed method. These curves may include, but are not limited to:  
+- Policy entropy over time,  
+- Gradient norm dynamics,  
+- Variance of importance weights,  
+- Distribution or average of rollout lengths,  
+- Variance of advantage estimates (both overall and within each stratum),  
+- KL divergence between the current and reference policies.  
+
+For all reported metrics, both the mean and variance across random seeds should be presented. Crucially, any experimental evidence that directly validates the theoretical claims—such as reduced within-stratum advantage variance or more stable credit assignment—should be explicitly highlighted. Providing this comprehensive set of analyses would establish a tight **theory–experiment feedback loop**, significantly enhancing the credibility and persuasiveness of the theoretical contributions.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces the Stratified Advantage Normalization (SAN) technique, which aims to eliminate the cross-stratum bias in the GRPO algorithm. By combining SAN with the vanilla Global Normalized (GN) technique through weighted average, the authors propose the Stratified GRPO algorithm. They further provide detailed theoretical analyses and demonstrate performance improvements on several question-answering benchmarks. Overall, I don’t find this paper appealing.
+
+### Strengths
+- The paper has a clear motivation and is well structured.
+- The proposed algorithm shows empirical improvements (and also looks strong).
+
+### Weaknesses
+- The theoretical analysis is trivial, I believe even a high school student could understand it.
+- The authors devote nearly five pages to discussing a rather trivial theoretical analysis, which feels somewhat redundant.
+- The baseline algorithms are limited.
+- Lacks sensitivity analysis of $\alpha\in[0,1]$.
+
+### Questions
+- The theoretical analysis is overly redundant, and the results are trivial. In contrast, the experimental section appears insufficient. I suggest balancing the length between the theoretical analysis and the experimental section.
+- The main part of the experiments consists of Table 1 (main experiments) and Table 2 (ablation studies). I believe additional discussion on the sensitivity of the important hyperparameter $\alpha$ (beyond just zero and one) is needed to enrich the experimental section. In the Appendix D.1, the $\alpha$ value for the Qwen 2.5 3B Base model is set to $0.6$, which is already close to taking the average of SAN and GN.
+- The authors divide different strata based on search count. I believe they should add an additional baseline where the strata are randomly assigned, in order to rigorously demonstrate the effectiveness of the proposed algorithm. I think this experiment is important and encourage the authors to include it.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper introduces Stratified GRPO, whose key innovation is Stratified Advantage Normalization (SAN). SAN partitions trajectories into homogeneous strata based on structural properties and computes advantages locally within each stratum, ensuring fairer and more stable credit assignment. Experiments on multiple single-hop and multi-hop question answering benchmarks demonstrate consistent and significant improvements over standard GRPO (up to +11.3 points), as well as enhanced reward, stability, and policy quality.
+
+### Strengths
+1. Principled algorithmic design. The proposed Stratified Advantage Normalization (SAN) is simple, elegant, and theoretically grounded. The proofs of conditional unbiasedness and variance preservation are both rigorous and intuitive.
+2. Empirical validation and robustness. Experiments are comprehensive and show consistent, significant improvements in both performance and training stability across diverse benchmarks.
+
+### Weaknesses
+1. Additive rather than integrative extensions. The “blended advantage” component, while useful in practice, feels more like an empirical stabilization trick rather than a deeply integrated conceptual innovation.
+2. Lack of broader application tests. All experiments focus on QA-style search agents. It remains to be seen whether the proposed approach extends effectively to other multi-step or tool-augmented domains (e.g., code generation, planning, or dialogue systems).
+
+### Questions
+1. Have you tested Stratified GRPO in settings beyond search-based QA (e.g., tool-use agents, code synthesis, or reasoning benchmarks)?
+2. Can you offer the hyperparameters for training, e.g. #rollouts? When trajectory distributions are highly imbalanced, how do you ensure stable variance estimates?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+The work proposes a variant of GRPO that is applicable when items in a batch are very heterogeneous, for example when RL training agentic behaviour.
+
+The main idea is to partition each batch into similar trajectories, for example group several roll-out for the same prompt and with the same number of steps. They do, what I understand would be the typical computations for GRPO on that batch partition which they call a strata.
+
+The benefit is that items within the strata are similar and thus the mean reward is more meaningful and thus the advantage is more meaningful. They correctly argue that in regular global normalization trajectories compete with others that might have fewer steps or different prompts and only those above the mean are reinforced which might fail to boost trajectories for harder examples.
+
+The downside is that advantages are taken from a smaller sample and thus might be noisy, so they interpolate the stratified advantages with regular global advantages.
+
+The authors prove a couple of fairly straightforward properties of their normalization method which formalizes the difference between the stratified and global normalizations.
+
+The proposed approach is simple to implement, has no computation overhead, doesn't need too many hyperparameters and seems to do well empirically
+
+### Strengths
+Addresses a real problem that is becoming more evident as training switches to agents
+
+Method is simple and sound, implementation is easy
+
+Theoretical results look correct
+
+Paper is well written, easy to read and doesn't overstate contributions
+
+Nit: Good formatting for the result tables
+
+### Weaknesses
+Related work section was moved to Appendix. I feel this violates the length requirement.
+
+### Questions
+In Table 1: Are the large differences between Qwen-Base vs Qwen-instruct for NQ and Banboogle expected?
+
+Improvements:
+
+The core proposal is to partition the batches by some heuristic but the used heuristic is not mentioned in the experiments section. Please add.
+
+In line 350 say "a linear combination" instead of "a convex combination"
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3

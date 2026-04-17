@@ -1,0 +1,193 @@
+# DASH: Deterministic Attention Scheduling for High-throughput Reproducible LLM Training
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6, 8
+
+## Abstract
+Determinism is indispensable for reproducibility in large language model (LLM) training, yet it often exacts a steep performance cost. In widely used attention implementations such as FlashAttention-3, the deterministic backward pass can incur up to a 37.9% throughput reduction relative to its non‑deterministic counterpart, primarily because gradient accumulation operations must be serialized to guarantee numerical consistency. This performance loss stems from suboptimal scheduling of compute and gradient‑reduction phases, leading to significant hardware underutilization.
+
+To address this challenge, we formulate the backward pass of deterministic attention as a scheduling problem on a Directed Acyclic Graph (DAG) and derive schedules that minimize the critical path length. Building on this formulation, we present DASH (Deterministic Attention Scheduling for High-Throughput), which encapsulates two complementary scheduling strategies: (i) Descending Q‑Tile Iteration, a reversed query‑block traversal that shrinks pipeline stalls in causal attention, and (ii) Shift Scheduling, a theoretically optimal schedule within our DAG model that reduces pipeline stalls for both full and causal masks.
+
+Our empirical evaluations on NVIDIA H800 GPUs demonstrate that DASH narrows the performance gap of deterministic attention. The proposed strategies improve the throughput of the attention backward pass by up to 1.28$\times$ compared to the baseline, significantly advancing the efficiency of reproducible LLM training.
+
+Our code is open-sourced at https://github.com/SJTU-Liquid/deterministic-FA3.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper focuses on improving the efficiency of the deterministic version of Flash-Attention (Backward). In FA, the backward involves an AtomicAdd operator to accumulate the dQ tensor. To make the kernel deterministic, it requires making the accumulation conducted in a fixed order. Existing methods introduce too many bubbles when handling this. The authors reframe this as a DAG scheduling problem and introduce DASH, a framework with two new scheduling strategies. Their methods improve throughput by up to 1.28x over the deterministic FlashAttention baseline by minimizing pipeline stalls and optimizing task execution order.
+
+### Strengths
+1. The presentation is clear and intuitive. 1.28x speedup is also quite practical.
+2. The proposed method, Shift Scheduling, is clear to understand and can be easily proved to be optimal.
+
+### Weaknesses
+1. "Optimal" Method is Sub-Optimal for Most State-of-the-Art Models: The paper's core theoretical contribution, the "Symmetric Shift Scheduling," is shown to be less performant than the simple baseline when headdim>=128 (Figure 9b), a degradation attributed to register pressure. This is not a minor edge case: it is the standard configuration for a vast majority of today's most influential and widely used large language models, such as Llama 3, Qwen 3, Mixtral 8x7B, and DeepSeek, all of which use a head dimension >= 128. This severely limits the practical applicability of what is presented as a key contribution of the work.
+2. Scalability to Long-Context Scenarios is Questionable: the "Shift Scheduling" method's performance advantage diminishes with sequence length, and it ultimately becomes slower than the baseline at the maximum tested length of 16,384 tokens.
+
+### Questions
+See weakness.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+DASH is a kernel implementation for attention that allows deterministic backward passes with less overhead, compared to the default non-reproducible kernels. To achieve determinism reduction operations are ordered, which incurs overhead. To reduce them, DASH employs two techniques. First, it fills the pipeline bubbles caused by the irregular ordering pattern of causal attention with the next attention heads ordered in reverse. Second, it formalizes reduction operations through a DAG of operations, and reorders the deterministic order so the critical path is minimized. DASH is tested on an H800 GPU and compared to a deterministic version of Flash-Attention 3, and achieves higher throughput on a variety of sequence lengths.
+
+### Strengths
+Thank you for submitting your work.
+- I'd like to praise the authors for their presentation. This was a pleasure to read. I was astonished how such a dense topic was explained so well in the text.
+- FlashAttention 3 is a strong baseline, and the NVIDIA H800 GPU serves as a typical setup.
+- The ideas are sound and the reason they occur is intuitive, though less so for shift scheduling.
+
+### Weaknesses
+- Though a minor point, I think there is merit to discussing the effect of determinism in other operations of the transformer. Matrix multiplications include reductions as well, correct? Does determinism reduce performance there as well?
+- I think the paper should include a table that shows what the end-to-end relative benefit is for **a whole transformer block**, not just the attention part. While there is value in making attention faster, it is hard to put these gains in perspective without seeing the whole picture. For the transformer block configuration, pick a popular LLM, e.g., Llama3.
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces DASH (Deterministic Attention Scheduling for High-Throughput), a framework addressing the performance loss in deterministic backward passes of attention mechanisms, particularly FlashAttention-3. Determinism ensures reproducibility in LLM training but enforces sequential gradient accumulation, limiting GPU utilization.
+
+DASH formalizes the backward pass as a DAG scheduling problem, minimizing critical path length. Two strategies are proposed:
+
+- Descending Q-Tile Iteration (DQTI): reverses query-tile traversal to reduce pipeline bubbles in causal attention.
+
+- Shift Scheduling: a theoretically optimal schedule ensuring conflict-free accumulation, extended as Symmetric Shift Scheduling for causal masks.
+
+Experiments on NVIDIA H800 GPUs show up to 1.28× speedup over deterministic FlashAttention-3. However, for long sequences or large head dimensions, inter-SM communication latency and register pressure diminish the theoretical gains.
+
+### Strengths
+- Novel kernel implementation for an important operation in deterministic Transformer training
+- Clear and novel DAG-based formalization of deterministic backward scheduling.
+- The two scheduling strategies are well-motivated, combining theory and practicality.
+- Empirical validation on modern GPUs with thorough analysis of full vs. causal masks.
+- Addresses an important reproducibility issue in large-scale deterministic training.
+
+### Weaknesses
+- There is performance degradation for long sequence length with full attention mask (Figure 8)
+
+- The theoretical model ignores some of the GPU implementation considerations, such as inter-SM communication overhead and register requirements (as mentioned in sections 4.2 and 4.3)
+
+- Focuses solely on the backward pass; potential extensions to the forward path are not explored.
+
+- Symmetric Shift Scheduling introduces significant register pressure, limiting practical benefits.
+
+### Questions
+- Do we really need sequential accumulation to ensure reproducibility? Can we do some sort of parallel reduction like in the binary tree to achieve better efficiency with determinism?
+
+- Are there similar challenges for the forward operation of attention?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+1. The paper builds on identifying the cause of nondeterminism in Flash Attention to be the atomicAdd for the dQ reduction, and identifies pipeline bubbles caused by the default ordering of processing the reduction, showing that it is specially prevalant in the case of causal attention because of the dependency order enforced by the causal mask. 
+
+2. The authors propose a simple heuristic of reversing the order of the query blocks on the SMs and interleaving the processing of different heads to reduce the pipeline bubbles. 
+
+3. The authors then model the scheduling problem as a critical path identification problem on a DAG, with within SM computations and reductions forming an isomorphic chain, and data dependencies across SMs (dQ transfer) as zero weight dependencies, and using that to inform the schedule to minimize critical path, thereby demonstrating strong gains over baseline deterministic variant of FA3.
+
+### Strengths
+1. The paper addresses an important area of deterministic training that has been gaining a lot of traction especially with large model training, bridging the gap between the non deterministic and the deterministic version of the attention kernel, which serves as one of the fundamental pieces in the commonly used transformer architectures.
+
+2. I especially like the in-depth analysis of when the theoretical model deviates from the on hardware execution results: both for scenarios with long context length for no mask scenario where the inter-SM communication latency starts becoming the bottleneck, and for the large head size analysis with the causal mask.
+
+### Weaknesses
+My only concern is that given the motivating backward's schedule analysis presented in Section 3.2, I would have expected the deterministic attention baseline to have been more competitive with shift scheduling for the non causal mask scenario. 
+
+Similarly, I would have expected the descending schedule to have been much better compared to baseline for the causal mask case with head size 64. That does not seem to be the case. Would it be possible for the authors to specify what might be the cause of it, since without that, it's a bit difficult to verify the correctness of the theoretical model, which is the underpinning of the proposed approach.
+
+### Questions
+Besides my primary concern above, I had two other questions:
+
+1. The main issue for why we are unable to capture the long sequence length issue in the scheduling for the non causal mask setup seems to be the assumption of the zero weighted edge. Is that not something that can be factored in (eg: a cost reduction optimization on the DAG with weighted edges ?)
+
+2. [Minor] Given the popularity of FP8, would it be possible to also compare against FA3 on the a similar setup, just get get more confidance on the algorithm's applicability for lower precision training ?
+
+Minor Presentation Nits:
+
+The authors go from representing a compute reduction blocks in the Gantt chart as a function of (kV index, query index) in Figure 2 to a (query index) representation in Figure 3. It is a bit confusing, so would be good to be consistent.
+
+It would be good to include the exact algorithm (similar to how it's presented in FA3) for the proposed backward pass
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

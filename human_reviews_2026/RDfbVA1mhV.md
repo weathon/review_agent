@@ -1,0 +1,239 @@
+# Blade: A Derivative-free Bayesian Inversion Method using Diffusion Prior
+
+- Decision: Reject
+- Scores: 4, 6, 8, 2
+
+## Abstract
+Derivative-free Bayesian inversion is an important task in many science and engineering applications, particularly when computing the forward model derivative is computationally and practically challenging. 
+In this paper, we introduce Blade, which can produce accurate and well-calibrated posteriors for Bayesian inversion using an ensemble of interacting particles.  Blade leverages powerful data-driven priors based on diffusion models, and can handle nonlinear forward models that permit only black-box access (i.e., derivative-free).
+Theoretically, we establish a non-asymptotic convergence analysis to characterize the effects of forward model and prior estimation errors. Empirically, Blade achieves superior performance compared to existing derivative-free Bayesian inversion methods on various inverse problems, including challenging highly nonlinear fluid dynamics.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces Blade, a derivative-free Bayesian inversion method that uses a pretrained diffusion model as a data-driven prior. It builds on the split Gibbs sampler, alternating between (i) a derivative-free likelihood step realized via an ensemble-based statistical linearization of the black-box forward model, and (ii) a prior step implemented as the reverse denoising diffusion process. The authors provide non-asymptotic convergence/error bounds that separate the contributions of the forward-model linearization and the diffusion-prior score approximation. Empirically, Blade is evaluated on linear–Gaussian (and Gaussian-mixture) settings and on a challenging Navier–Stokes fluid-dynamics inverse problem
+
+### Strengths
+Diffusion models continue to gain popularity, yet conditional sampling with diffusion priors remains a challenging and important problem, especially when they are used as prior distributions in Bayesian inference. This paper addresses that gap by proposing an ensemble-based particle sampling approach that effectively combines two active research directions: particle-based Bayesian inference and diffusion-model priors.
+
+While prior work on diffusion-based split Gibbs sampling has primarily focused on improving the prior step, the authors make a novel contribution by developing a more efficient and theoretically grounded likelihood step. They further strengthen their proposal by quantifying the effects of key approximation errors, those arising from statistical linearization of the forward model and score approximation in the diffusion prior.
+
+Finally, the paper offers an extensive empirical evaluation across both controlled and complex nonlinear inverse problems, providing convincing evidence for the effectiveness and robustness of the proposed algorithm.
+
+### Weaknesses
+- My main concern lies with the error bound in Theorem 2. The authors bound the discrepancy between systems (9) and (6), but both are assumed to share the same sample covariance $C_t$ computed from the particles of system (9). This assumption greatly simplifies the analysis and, strictly speaking, does not capture the true approximation error between the two dynamics. Instead, it effectively introduces an auxiliary process (6.5) that depends on $C_t$ from (9). The setup is further confusing because system (6) is initialized from its stationary distribution, while (9) is not. A more rigorous comparison would require analyzing how the respective covariance matrices evolve over time.
+
+- The convergence proofs offer only limited novelty and appear to be incremental extensions of known results. Lemma 1 reproduces existing results (as acknowledged), Theorem 1 follows standard arguments under the assumption that $C_t$ remains strictly positive definite, and Lemma 2 closely mirrors Lemma A.4 from Wu et al. (2024). Similarly, the proof structure of Theorem 2 largely parallels Theorem 3.1 in Wu et al. (2024). Lemma 3 is again adapted from previous work. Overall, while the analysis is sound, its theoretical originality is limited.
+
+- The assumptions underlying Theorem 2 are not adequately discussed in the main text, and the appendix treatment is brief. In particular, Assumption 3 is not mentioned outside the appendix, and Assumption 2 seems quite restrictive. Typically, the linearization error can be bounded at a fixed time via a Taylor expansion, yielding an error term dependent on the ensemble covariance norm. However, it is unclear whether such a bound remains uniformly valid over time. A more detailed justification, or an explicit derivation for the proposed algorithm, would strengthen the theoretical section considerably.
+
+- The paper does not include a comparison to the EKS or ALDI variants that incorporate localization (see, e.g., Fokker-Planck Particle Systems for Bayesian Inference: Computational Approaches, Reich & Weissmann, 2021). Localization has been shown to substantially improve the performance of EKS/ALDI in multimodal settings, and it can be implemented efficiently using particle clustering (see, e.g., The Ensemble Kalman Filter for Rare Event Estimation, Wagner et al., 2022). Including such comparisons would be important, especially since EKS appears to outperform Blade in the linear–Gaussian case (Table 4) while also having a lower runtime.
+
+### Questions
+Below I list my questions and suggestions for the authors:
+
+- How does Blade perform compared to advanced variants of ALDI or EKS that use localized covariance preconditioners?
+- How exactly are ALDI and EKS implemented when incorporating diffusion priors? Are you using the estimated score from the diffusion model as an approximation of the gradient of $g$?
+- In the evaluation, the paper reports only statistics from the final iteration. How does performance evolve over the number of iterations? How do you assess convergence?
+- I recommend discussing Assumptions 1-3 directly in the main text rather than deferring them entirely to the appendix.
+- The discussion of theoretical novelty (e.g., in Remark 2) could be expanded. While similarities to prior work are acknowledged, the current phrasing is somewhat vague. Please clarify the specific conceptual or technical differences relative to earlier analyses (e.g., Wu et al., 2024).
+- Line 48: Derivative-free or zeroth-order gradient approximations also tend to scale poorly in high dimensions. Do you have theoretical or empirical evidence suggesting that statistical linearization scales more favorably?
+- Line 321: Doesn’t the convergence bound require the assumption that both $\lambda^\ast$ and $\delta$ are strictly positive?
+- Figure 11: It is somewhat surprising that increasing the ensemble size beyond a certain point does not improve performance. Are other error sources dominating at that stage? Would the observed plateau decrease if you retuned hyperparameters (e.g., step size, noise level) for larger ensembles?
+
+Typos and minor comments:
+
+- Line 138: we follow[] 
+- Line 209: distributio[n] 
+- Line 231: to run [the] algorithm
+- Line 333: strictly speaking the statistical linearization error would be avoidable by computing derivatives (if available). 
+- Line 332: Theorem 1 show[s]
+- Line 345: This statement is a bit vague, whether the posterior distribution yields a good solution for the ill-posed inverse problem depends on multiple choices. I think it is clear, that you evaluate your algorithm Blade on statistics of the posterior samples since you are working in a Bayesian setup. 
+- Line 475: descent should be decent
+- Section 4.2: U-Net vs UNet
+- Line 1013: „… on on …“ 
+- Line 1020: „…, [a]s shown in…“
+- Line 1107: Missing space „…performance. []We denote…“
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper proposes Blade, a method for Bayesian inversion based on Diffusion Split Gibbs Sampling and statistical linearization.
+Blade comes in two variants: main and diag with different estimations of the covariance. The authors give a convergence analysis with explicit error bounds. 
+Blade is evaluated on several benchmark tasks; in the main paper on Gaussian/Gaussian mixture models, and a Navier-Stokes problem; 
+and compared to both optimization-based and other ensemble methods.
+
+### Strengths
+- The paper is very well written and easy to follow. 
+- The statistical linearization step is well motivated and a sample-efficient solution for non-differentiable forward models. 
+- Explicit error bound that includes both errors from the diffusion and forward model derivative approximation
+- Both variants diag and main are well motivated and target different scenarios (point-estimation vs. callibrated posterior). This is shown convincingly in the Navier Stokes experiment
+- Comprehensive set of experiments and ablations in the appendix
+
+### Weaknesses
+- Incremental improvement to the diffusion-based split Gibbs sampling
+- No comparisons to sequential MCMC approaches; e.g., Feynman-Kac diffusion steering [1,2] which are also based on interacting particles. This would strengthen the results.
+- I am not really convinced the CDM model is implemented in the most optimal way; just concatenating the observation as an additional channel is simpler and likely to give improved results. 
+- One downside of the likelihood step is that the forward model is evaluated on noisy samples. If the forward model is robust to noise this still works, but many applications have highly non-linear forward models where the statistical linearization might not work very well. 
+
+Minor typos:
+- L1020 ", As shown"
+- L209 "distributio"
+
+
+[1] https://arxiv.org/pdf/2409.09650v1
+
+[2] https://arxiv.org/pdf/2501.06848
+
+### Questions
+- If the forward model G was differentiable, can we use the gradient information directly in eq (6)? How does the statistical linearization compare in this case? Are inference times comparable?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The authors established a non-asymptotic convergence analysis to characterize the impact of forward modeling and prior estimation errors. Experimental results show that Blade outperforms existing derivative-free Bayesian inversion methods on various inverse problems, including highly challenging highly nonlinear hydrodynamic problems.
+
+### Strengths
+Both the theoretical and experimental parts are excellent.
+
+### Weaknesses
+I think the experiment could be more thorough.
+
+### Questions
+Are you considering experiments on a larger scale?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+- The authors present a method for posterior sampling that leverages denoising diffusion models as priors.
+- The proposed framework addresses settings where only pointwise evaluations of the likelihood are available.
+- For that, the authors introduce a Split-Gibbs sampling scheme that alternates between sampling from the diffusion prior and a likelihood update.
+- To circumvent the need for likelihood gradients, they employ a covariance-preconditioned Langevin Dynamics approach, in which the drift term is approximated via statistical linearization using an ensemble of particles.
+- The proposed method is validated on a range of inverse problems, including both synthetic and real setup
+
+### Strengths
+- Introducing a method that combines statistical linearization and Split-Gibbs sampling to solve inverse problems with diffusion priors without requiring a gradient of the likelihood
+
+### Weaknesses
+**Motivation of the method**
+The introduction of the covariance-preconditioned Langevin Dynamics appears somewhat arbitrary and insufficiently justified. Its use seems primarily motivated by convenience to avoid directly inverting the covariance matrix $C_t$, rather than by a clear theoretical or empirical rationale.
+
+On the other hand, equation (9) involves the square root of $C_t$, which as such is difficulty to handle in practice, and the proposed method to handle it is ambiguous (see the point below on Correctness).
+
+
+**Evaluation of the method**
+The experimental validation is limited and does not support the method’s intended use case.
+The approach is motivated by scenarios where the likelihood gradient is unavailable or costly to compute, yet all considered experiments (toy problems, Navier–Stokes, and black hole imaging) involve forward models for which gradients can be readily obtained; see [1] for Navier–Stokes and [2] for black hole imaging.
+Consequently, the evaluation does not demonstrate the method’s effectiveness in the truly derivative-free regime.
+Furthermore, the reported runtime in Table 14 is very computationally heavy (around 1 hour per reconstruction )and as such the method does not offer clear performance benefits over gradient-based alternatives.
+
+**Correctness**
+The use of the square-root covariance matrix approximation in Line 269 is incorrect, the approximation has shape $n \times$ the number of particles $J$, but is intended to condition the noise $dw_t \in \mathbb{R}^n$. In particular, for the single-particle case, $\sqrt{C_t}$ becomes a column matrix, making the matrix–vector product undefined.
+
+**Typos and minor issues**
+* Equation (2) introduces a nonstandard $\beta(t)$ coefficient that does not align with conventional diffusion model formulations, and I cannot find it in the cited reference [5]
+* Line 86: replace "sampling for posterior inference" ---> “or sampling for inference.”
+* Line 209: "distributio" ---> "distribution"
+* In Theorem 1 and 2 the term "horizon" is ambiguous
+
+**Missing references and related work**
+- The statement in Lines 90–91 overlooks prior sampling-based approaches that handle nonlinear setups, such as [3].
+- The discussion on Gibbs sampling and diffusion priors should cite [4], which provides a relevant treatment of Gibbs-sampling and inverse problems with diffusion models.
+
+
+---
+
+... [1] Rozet, François, and Gilles Louppe. "Score-based data assimilation." Advances in Neural Information Processing Systems 36 (2023): 40521-40541.
+
+... [2] Wu, Zihui, et al. "Principled probabilistic imaging using diffusion models as plug-and-play priors." Advances in Neural Information Processing Systems 37 (2024): 118389-118427.
+
+... [3] Achituve, Idan, et al. "Inverse problem sampling in latent space using sequential Monte Carlo." arXiv preprint arXiv:2502.05908 (2025).
+
+... [4] Janati, Yazid, et al. "A Mixture-Based Framework for Guiding Diffusion Models." Forty-second International Conference on Machine Learning. 2025.
+
+... [5] Qinsheng Zhang and Yongxin Chen. Fast sampling of diffusion models with exponential integrator. arXiv preprint arXiv:2204.13902, 2022.
+
+### Questions
+- Figure 1: can the authors clarify how the sample are being generated? Namely, is it one run of the algorithm and what is being plotted are the ensemble of particles?
+- Lines 234–236: The claim that each particle in Blade has its own associated target distribution is unclear. Why would this not also apply to other ensemble-based samplers such as EKS or ALDI?
+- Figure 3: How is the maximum rank defined in this context? What explains the apparent linear relationship between the rank and the step size? The figure caption mentions "accumulated rank" but its purpose and interpretation are unclear; what insight does plotting the accumulated rank provide about the algorithm’s behavior?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1

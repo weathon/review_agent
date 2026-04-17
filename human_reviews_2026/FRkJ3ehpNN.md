@@ -1,0 +1,173 @@
+# Robust Test-time Video-Text Retrieval: Benchmarking and Adapting for Query Shifts
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 6, 6
+
+## Abstract
+Modern video-text retrieval (VTR) models excel on in-distribution benchmarks but are highly vulnerable to real-world *query shifts*, where the distribution of query data deviates from the training domain, leading to a sharp performance drop. Existing image-focused robustness solutions are inadequate to handle this vulnerability in video, as they fail to address the complex spatio-temporal dynamics inherent in these shifts. To systematically evaluate this vulnerability, we first introduce a comprehensive benchmark featuring 12 distinct types of video perturbations across five severity degrees. Analysis on this benchmark reveals that query shifts amplify the *hubness phenomenon*, where a few gallery items become dominant "hubs" that attract a disproportionate number of queries. To mitigate this, we then propose HAT-VTR (Hubness Alleviation for Test-time Video-Text Retrieval), as our baseline test-time adaptation framework designed to directly counteract hubness in VTR. It leverages two key components: a *Hubness Suppression Memory* to refine similarity scores, and *multi-granular losses* to enforce temporal feature consistency. Extensive experiments demonstrate that HAT-VTR substantially improves robustness, consistently outperforming prior methods across diverse query shift scenarios, and enhancing model reliability for real-world applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The authors point out that existing video-text retrieval models exhibit performance degradation when the distribution of query data behaves differently from the training domain. While some solutions have been introduced, they are mainly focused on the image applications, and not applicable for videos due to the complex spatio-temporal dynamics. To systematically evaluate the vulnerability, the authors have introduced their own benchmark revealing the vulnerability arises from a phenomenon called hubness phenomenon. This phenomenon appears when few gallery items become dominant behaving as a hub. To tackle this, the authors introduce a test-time adaptation framework which consists of two key components. First, a hubness suppression memory refines the similarity scores. Second, the multi-granular loss is designed to keep the temporal feature consistent. HAT-VTR is evaluated on four main datasets, which exhibit strong performances.
+
+### Strengths
+- Problem is well driven with clear motivations. The authors have used their own benchmark to uncover where the vulnerability comes from. The analysis becomes a clear evidence of hubness phenomenon. 
+- The proposed model has been directly derived from the analysis with the benchmark. The framework is straightforward and is based upon two main purposes. 
+- Extensive experimental results supports the efficacy of HAT-VTR.
+
+### Weaknesses
+- Some claims are controversial. For instance, the candidate component barely contributes to final performance (see Table 6). Adding candidate (row 2 and row 4) affects minimal compared to Rerank. This is unexpected as ‘candidate selection’ associates extensive computations.   
+- Too many temperature parameters: $\tau$ $\alpha$, $\beta$, t in Eq 7 and 8 requires extensive tuning/searching. Still, there are more hyperparameters including those specified as hyperparameters and those not specified (e.g., fraction r) . It is unclear how the proposed model is sensitive to these combinations unless reported. Some of the methods are based on heuristics. 
+- HAT-VTR requires some computational cost, which only has been reported in Appendix.
+
+### Questions
+Q1. What is the rationale behind using the first B rows in line 256? 
+
+Q2. Any details on posterior reranking? Isn’t the reranking based on some heuristic? How do you *demote* hubs?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The paper studies robust video–text retrieval (VTR) under query shift and contributes (i) MLVP, a benchmark with 12 video perturbation types × 5 severities spanning low/mid/high-level spatio-temporal corruptions, and (ii) HAT-VTR, a test-time adaptation (TTA) baseline that counters hubness via a Hubness Suppression Memory (HSM) and multi-granular losses for temporal consistency (with a Reliable Memory for stability). Experiments report consistent gains across query-shift settings, including scenarios where both queries and gallery drift.
+
+### Strengths
+The paper offers a clear diagnosis linking robustness failures under perturbations to amplified hubness (illustrated via k-occurrence distributions), introduces a well-scoped MLVP benchmark spanning 12 perturbation types × 5 severities that moves beyond image-only corruptions to video dynamics, proposes a simple plug-in TTA—HAT-VTR with Hubness Suppression Memory and multi-granular (global/frame) losses—that integrates cleanly with dual-encoder VTR, and demonstrates broad, consistent improvements over prior TTA methods under both query-shift and query+gallery-shift scenarios.
+
+### Weaknesses
+1.	End-to-end cost of the interactive TTA loop (HSM updates + multi-granular adaptation) is not characterized; please report per-round latency, peak memory, and wall-clock on a commodity GPU and CPU, and discuss amortized cost over sequence length.
+2.	Comparisons to classical retrieval debiasing / hubness-reduction baselines are missing; adding such baselines would better isolate HSM’s contribution.
+3.	The effect of online adaptation on in-distribution retrieval is unclear; include a no-shift control row to quantify any degradation and implement a switch to disable TTA when drift is not detected.
+4.	Hyperparameter sensitivity is under-analyzed—queue size K, mixture weights/temperatures, and stability–plasticity controls likely govern convergence and variance; provide ablations, convergence diagnostics, and seed variance.
+
+### Questions
+1. What is the per-batch adaptation time and memory for HAT-VTR vs. TCR on a single 3090/A10?
+2. Does adaptation degrade R@K on clean test data? Any drift detector to gate adaptation?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This work studies the domain shift of the text-video retrieval by investigating the spatial-temporal axises. Accordingly, this work proposes a   new benchmark that performs video perturbation from low/mid/high-levels. Also a new method is proposed to enhance the test-time adaptation. Both the benchmark and the method admit the necessity of improving the generalization ability of text-video retrieval methods.
+
+### Strengths
+* Studying the generalization and robustness of the text-video retrieval is meaningful and urgent. The proposed method introduces a valuable benchmark. I'd like to support this work if the benchmark could be properly released to the academic communities. 
+
+* The proposed method studies different levels of the perturbation when devising the dataset, which is inspiring. 
+
+* The proposed benchmark and method are well-motivated.
+
+### Weaknesses
+* There might be some logical issues at presentation. This work starts from the query shift but operates on the video side, which is confusing. Are there any rationales that might be missing to bridge the two? 
+
+* It seems that there is no discussion on the query generalization method applied when devising the benchmark. 
+
+* It seems that the proposed benchmark is applied on very limited methods and datasets, which might lack generalizability. 
+
+* There lacks the discussion of the generaliability for existing foundation models on the proposed perturbations.
+
+### Questions
+* What might be the efficiency cost of the proposed method, such as the memory usage and the latency cost. 
+
+* Is that possible to provide some empirical evidence to show that the improvement on the hubness phenomenon.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+Modern Video-Text Retrieval (VTR) models demonstrate strong performance on standard benchmarks but are highly vulnerable to real-world distribution shifts in query data, which cause a significant performance drop and amplify the "hubness" phenomenon where a few gallery items become dominant hubs for an disproportionate number of queries. To systematically evaluate this robustness issue, this paper first introduces a comprehensive benchmark with 12 types of video perturbations across five severity levels. In response, the authors propose HAT-VTR, a test-time adaptation framework designed to directly mitigate hubness. This framework leverages a Hubness Suppression Memory to refine similarity scores and a Multi-Granularity Loss to enhance temporal feature consistency. Extensive experiments show that HAT-VTR significantly improves robustness, consistently outperforming prior methods across diverse query shift scenarios and thereby increasing model reliability for practical applications. Overall, the paper presents an interesting and valuable contribution, and the reviewer expresses a willingness to raise their score pending satisfactory responses to their questions and concerns
+
+### Strengths
+1.   The authors have clearly identified and articulated a critical issue in video-text retrieval: the problem of overcoming the query gap between training data and real-world application scenarios. They provide a fairly detailed introduction to related work and effectively contrast their approach with TCR techniques from image-text retrieval, highlighting the distinctions of applying such technology in the video domain.
+
+ 2.    The authors' idea of designing a Hubness Suppression Memory module to identify and mitigate the influence of hub points in the embedding space is both intuitive and sound.
+
+3.    The authors present their work through a well-structured and clearly organized writing flow, which enhances the readability and coherence of the paper.
+
+### Weaknesses
+1.     While addressing the query gap between training data and real-world scenarios is indeed a critical issue in video-text retrieval, the authors have overlooked relevant works in their related work section. For instance, approaches like FreestyleRet, which attempt to construct multi-style queries in a data-driven manner to address this task, represent an alternative direction beyond Test-Time Adaptation and should be discussed for a more comprehensive literature review.
+
+ 2.   Although the authors have constructed a robustness benchmark with three levels of perturbations for the video modality, it would be interesting to explore whether similar robustness constructions can be applied from the perspective of the text modality. Specifically, I am curious if the authors have considered or could incorporate various types of noise and perturbations into the textual queries to further enhance model resilience.
+
+3.    While the authors clearly explain the weak transferability of TCR (Test-Time Contamination Remediation) techniques to video domains, it is notable that their triplet-based loss functions are inherited directly from the TCR framework. A more in-depth analysis would be beneficial to clarify which specific improvements or modifications in the TCR components contribute most significantly to the performance gains observed in the video-text retrieval task.
+
+### Questions
+None
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

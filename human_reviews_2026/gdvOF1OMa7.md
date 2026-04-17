@@ -1,0 +1,170 @@
+# Localizing Task Recognition and Task Learning in In-Context Learning via Attention Head Analysis
+
+- Decision: Accept (Poster)
+- Scores: 8, 4, 6, 8
+
+## Abstract
+We investigate the mechanistic underpinnings of in-context learning (ICL) in large language models by reconciling two dominant perspectives: the component-level analysis of attention heads and the holistic decomposition of ICL into Task Recognition (TR) and Task Learning (TL). We propose a novel framework based on Task Subspace Logit Attribution (TSLA) to identify attention heads specialized in TR and TL, and demonstrate their distinct yet complementary roles. Through correlation analysis, ablation studies, and input perturbations, we demonstrate that the identified TR and TL heads independently and effectively capture the TR and TL components of ICL. Via steering experiments with a focus on the geometric analysis of hidden states, we reveal that TR heads promote task recognition through aligning hidden states with the task subspace, while TL heads perform rotations to the hidden states within the subspace towards the correct label to facilitate the correct prediction. We also demonstrate how previous findings in various aspects of ICL's mechanism can be reconciled with our attention-head-level analysis of the TR-TL decomposition of ICL, including induction heads, task vectors, and more. Our framework thus provides a unified and interpretable account of how LLMs execute ICL across diverse tasks and settings.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This work investigates in-context learning (ICL) through attention-head analysis. It introduces Task Subspace Logit Attribution (TSLA), a framework for identifying Task Learning (TL) and Task Recognition (TR) heads, addressing limitations of prior methods such as Direct Logit Attribution (DLA) and Lieberum et al. (2023). The authors report TR and TL heads across multiple ICL datasets and models. Ablations show that randomizing the outputs of TR or TL heads alters both accuracy and Task Recognition Score, suggesting TR and TL heads operate independently. Steering experiments and geometric analysis indicate that zero-shot ICL failures are largely attributable to task recognition. The authors conclude that TR heads map the logit vector into a task-label subspace, while TL heads rotate it toward the correct label. Overall, the paper offers a comprehensive head-level analysis that reconciles findings across prior work.
+
+### Strengths
+1. The motivation for TSLA is clear and compelling. In Appendix C, the overlap analysis with induction heads (IH) demonstrates how TSLA addresses limitations of prior approaches; the method seems broadly useful for future head analyses.
+
+2. The experimental suite (steering, ablations, semantic scoring) is well motivated and yields rich findings. In particular, the “task-type dependence of steering effectiveness” experiment (Figure 8) supports the claim that TL heads contribute to parsing the semantic coherence of labels.
+
+### Weaknesses
+1. The analysis focuses on attention-head outputs; it is unclear how other components (e.g., MLPs) contribute to ICL or how attention patterns differ beyond heads.
+
+2. The scope of ICL considered is narrow, and labels of datasets are mostly binary or few-class. ICL often involves larger label sets or more open-ended tasks (e.g., domain-knowledge QA), which are not covered.
+
+3. While the paper presents many interesting points, some connections to prior work feel scattered. Readers without substantial background may struggle to pinpoint the novel contributions and how the results reconcile earlier findings.
+
+### Questions
+\textbf{1. Head-level contribution granularity.} As I understand it, ablations and task-vector analyses are applied to the full sets of TR and TL heads selected by a threshold (e.g., 3% or 10%). What are the contributions of individual heads within these sets? Do they contribute equally, additively, or with varying importance? Such analysis could clarify how identified heads work collectively and speak to the robustness of the head identification.
+
+ \textbf{2.Scalability to larger label spaces / open-ended tasks. Can you demonstrate TSLA’s efficacy on tasks with many candidate labels (e.g., math/code proofs, program synthesis with many valid programs) or comparable large-output-space settings?
+
+ \textbf{3.Figure 6 baseline.} In the binary semantic classification setup (positive/negative), random guessing would yield 0.5 accuracy. Why is ICL accuracy without TL below 0.5 in Figure 6?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper investigates the mechanisms behind in-context learning (ICL) in large language models by bridging the gap between component-level analysis (focusing on attention heads) and the holistic view that decomposes ICL into Task Recognition (TR) and Task Learning (TL). The authors propose a novel method, Task Subspace Logit Attribution (TSLA), to identify specific attention heads responsible for TR and TL. Through various experiments including ablation, steering, and geometric analysis of hidden states, they demonstrate that TR heads primarily function to align model representations with the subspace defined by potential task labels , facilitating recognition of the valid output space, while TL heads operate within this subspace, rotating representations towards the correct specific label for accurate prediction. This framework successfully localizes the distinct TR and TL functions to specialized attention heads and reconciles previous findings on mechanisms like induction heads (identified mainly as TR contributors) and task vectors.
+
+### Strengths
+- The paper introduces Task Subspace Logit Attribution, a novel set of metrics designed to identify attention heads specialized for TR and TL components of in-context learning, offering a more geometrically grounded approach than prior methods 
+- The effectiveness and independence of the identified TR and TL heads are thoroughly validated through a comprehensive suite of experiments, including correlation analyses, ablation studies under various input perturbations, steering experiments, and geometric analyses of hidden states. This extensive validation across multiple models and datasets lends strong support to the proposed framework.
+
+### Weaknesses
+- While the specific TSLA metrics are new and the experimental validation is extensive, the core conceptual approach, i.e.,localizing distinct cognitive functions (TR/TL) to specific attention heads, builds significantly upon prior work that also attributes ICL functions to heads
+
+### Questions
+- The paper motivates the use of projection onto the task subspace by stating that demonstration labels might be arbitrary and not capture full task semantics. Could the authors elaborate on how projecting onto this specific subspace addresses this issue? Does this implicitly assume that unembeddings of semantically related tokens (e.g., "positive", "favourable", "good") lie close together or within this subspace? If so, could this assumption be further validated, perhaps experimentally, to strengthen the justification for the TR score metric?
+- The core proposal involves the TSLA metrics for identifying TR and TL heads. Could the authors further highlight the primary novel contributions of this work beyond the introduction of these specific metrics?
+- Could the authors provide a more detailed comparative analysis or specific examples demonstrating how TSLA overcomes the limitations of DLA, such as sensitivity to demonstration label choice and better isolation of true Task Learning effects?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper investigates the mechanistic underpinnings of ICL by identifying and analyzing specific types of attention heads associated with the Task Recognition (TR) and Task Learning (TL) functions of ICL described by previous work. The authors propose a novel method, Task Subspace Logit Attribution (TSLA), to identify attention heads specialized for TR and TL. Through a series of ablation, steering, and representational analyses analyses, the paper argues for a clear functional dissociation, where TR heads are shown to align hidden states with the "task subspace" (enabling the model to recognize the set of possible answers) and TL heads are shown to rotate representations within the task subspace to align the hidden state with the correct label's unembedding (in effect, "learning" the specific text-label mapping for the query). The authors then show that TR heads are strongly correlated with induction heads and are largely task-invariant, while TL heads are highly task specific. The framework provides a unified account of ICL, positioning prior findings on induction heads and task vectors as primarily implementing the TR component of ICL.
+
+### Strengths
+1. *Novel Method:* The paper introduces Task Subspace Logit Attribution (TSLA), a robust method for identifying specialized heads. Unlike prior approaches, TSLA defines the task via a subspace spanned by label unembeddings. This makes it less sensitive to the specific surface forms of labels (e.g., "positive" vs. "favorable").
+2. *Clearly dissociates ICL mechanisms into TR and TL:* The primary strength is the clean dissociation of ICL into TR and TL components and the localization of these functions to distinct, relatively non-overlapping attention heads. The introduction of the "TR Ratio" as an evaluation metric allows the ablation experiments to cleanly separate a failure of label-space recognition from a failure of text-label mapping.
+3. *Task-Dependent Steering:* The steering experiments in Section 4.3 demonstrate that TR heads are key for restoring zero-shot classification (where label space recognition is the bottleneck), while TL heads are more effective for generation tasks (which depend on learning a mapping to an open-ended, rather than fixed, label space).
+4. *Unifying Framework:* The paper successfully situates prior work on induction heads (IHs) and task vectors within this framework, hypothesizing that they are primarily mechanisms for Task Recognition.
+
+### Weaknesses
+1. *Clarity and Flow:* The paper's primary weakness is its clarity of presentation. It reads as a collection of distinct analyses (e.g., TSLA definitions, correlation analysis, ablation, steering, geometric verification) rather than a single, cohesive narrative. The transition between the TSLA identification section (Section 3.2) and the geometric verification analysis (Section 4.3) is particularly abrupt. While these analyses are related, the connection could be drawn more clearly to show how the identification method logically predicts the subsequent geometric effects.
+2. *Theoretical Justification:* While theorem 1 is interesting, it feels disconnected from the main mechanistic argument around TR heads. The paper would benefit from a more intuitive explanation in the main text of why this probabilistic guarantee for the TR score is important, rather than presenting it as a standalone theoretical result.
+3. *Limited Scope of TL Mechanism:* The paper successfully identifies TL heads but provides less detail on how these heads compute the text-label mapping, beyond saying that they "rotate" the hidden state. This is, of course, a difficult research question given the variability of TL heads across tasks, but the mechanism for TL heads are comparatively less specified than TR heads.
+
+### Questions
+1. *Elaborating the TL Head Computation*: The paper identifies TL heads as task-specific mechanisms that perform an "in-subspace rotation". However, the computation that determines the direction and magnitude of this rotation remains unspecified. Given that TL heads are more task-specific than TR heads, did the authors investigate what these heads attend to in order to compute this mapping? For example, do they consistently attend to specific demonstration examples (e.g., the most recent one, or one semantically similar to the query)? Any initial analysis or speculation here would significantly strengthen the paper's mechanistic account of TL heads.
+
+2. *Reconciling with "Just-in-Time" Task Representations*: Recent work on composite and longer-generation tasks (e.g., Li et al., 2025 https://arxiv.org/abs/2509.04466) suggests that task representations are not monolithic. Instead, they are computed "just-in-time" for minimal task scopes, and their effect fades over multiple generation steps. How might this finding be integrated into the TR/TL framework? Is this "fading" effect best understood as a stable TR mechanism but a fleeting TL mechanism that must be recomputed for each new subtask? This seems like a great way to test whether these ideas presented in the author's paper can provide insight into cases where the traditional task vectors account falls short.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper proposes a new method called TSL to identify and localize attention heads that are specialized in Task Recognition (TR) vs. Task Learning (TL). TSL accounts for the label subspace, not just specific tokens, and the logit gap between correct / incorrect labels, which makes it more robust that prior methods in identifying important heads. They discover that TR and TL are handled by distinct heads, and also find that induction heads are largely a subset of TR heads, while task vectors primarily work by injecting the missing TR signal.
+
+### Strengths
+This paper elegantly provides a mechanistic understanding of ICL properties by providing an attention heads-level explanation to higher-level ICL mechanisms of task recognition and learning.
+The TSL method is a clever improvement to find head attributions that are not brittle to the exact choice of label words.
+The paper provides thorough empirical evidence to validate the effects of TR and TL heads.
+The paper also provides an interesting discussion of the implications of results with prior literature on induction heads and task vectors, that have been widely discussed.
+
+### Weaknesses
+The analyses are primarily on classification tasks with small label spaces, so it is unclear how this TR/TL decomposition applies to more complex, real-world tasks. However, this critique does not prevent me from positively recommending the paper, as prior works on ICL understanding have used similar families of tasks.
+
+I'd like to see more explanation on how robust the task subspaces are to the demonstration labels used to discover the subspace, perhaps a follow up analysis to test the robustness of TSL by using synonymous but different label sets in the demonstrations and test query.
+
+### Questions
+Minor: the use of bold text is a bit unusual and excessive, I suggest being more selective in bolding text.
+
+Q: TR heads appearing deeper than TL feels surprising to me intuitively. Out of curiosity, do you have hypotheses why that may be the case, that recognizing the task comes after learning it?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

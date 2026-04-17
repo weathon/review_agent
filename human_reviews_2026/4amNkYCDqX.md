@@ -1,0 +1,184 @@
+# Data-Centric Lessons To Improve Speech-Language Pretraining
+
+- Decision: Accept (Poster)
+- Scores: 4, 4, 4, 8
+
+## Abstract
+Spoken Question-Answering (SQA) is a core capability for useful and interactive artificial intelligence systems. Recently, several speech-language models (SpeechLMs) have been released with a specific focus on improving their SQA performance. However, a lack of controlled ablations of pretraining data processing and curation makes it challenging to understand what factors account for performance, despite substantial gains from similar studies in other data modalities. In this work, we address this gap by conducting a data-centric exploration for pretraining SpeechLMs. We focus on three questions fundamental to speech-language pretraining data: (1) how to process raw web-crawled audio content for speech-text pretraining, (2) how to construct synthetic datasets to augment web-crawled data and (3) how to interleave (text, audio) segments into training sequences. We apply the insights from our controlled data-centric ablations to pretrain a 3.8B-parameter SpeechLM, called SpeLangy, that outperforms models that are up to 3x larger by 10.2% absolute performance. We hope our findings highlight the impact of effective data curation and guide future data-centric exploration in SpeechLMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents a systematic data-centric study on improving speech-language pretraining for spoken question answering (SQA). The authors focus on how data processing and curation affect performance, exploring three key questions: how to process raw web audio, how to construct synthetic speech-text data, and how to interleave modalities during training. Through controlled experiments, they show that fine-grained interleaving, synthetic datasets generated via LLM rewriting and text-to-speech synthesis, and deterministic speech-text sampling each yield performance gains. Integrating these insights, their 3.8B-parameter model SpeLangy surpasses models in SQA accuracy, underscoring that careful data design is crucial for advancing SpeechLMs.
+
+### Strengths
+1. The paper raises a critical point about pretraining Speech-Language Models (SLMs): although prior works mention the importance of data quality, few have conducted controlled ablations to determine which data factors drive performance. This study fills that gap with systematic and well-designed analyses.
+2. The paper is clearly structured and easy to follow. Each data-centric question is introduced with clear motivation, supported by quantitative results that highlight the impact of each design choice.
+3. Building on the insights from the proposed data interventions, the authors present **SpeLangy**, a 3.8B SpeechLM that consistently outperforms much larger baselines. This demonstrates the practical significance and scalability of their data-centric approach.
+
+### Weaknesses
+1. While SQA is a suitable benchmark for evaluating multimodal alignment, the scope of evaluation could be expanded. Including open-ended spoken reasoning or dialogue tasks would better demonstrate the generalizability of the proposed data curation strategies beyond structured QA.
+2. The empirical benefits of some interventions are relatively modest. For example, as shown in Table 2, gains from incorporating *Krist* are minor, and the difference between stochastic and deterministic modality sampling (Table 3) is small. A deeper analysis of why certain methods contribute less or under which conditions they are more effective would strengthen the overall conclusions.
+
+### Questions
+1. Several supporting materials, such as **Figure 8** and **Table 11**, are placed far from the sections where they are first referenced. Could the authors consider moving or cross-referencing them more clearly to improve readability and flow?
+2. Have the authors examined whether the proposed data-centric methods (e.g., fine-grained interleaving, deterministic sampling) interact synergistically, or whether their gains are largely independent? Clarifying this would help readers understand which factors are most crucial for reproducing the improvements.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This work explores three key issues regarding data construction and usage in building large speech models. The authors find that: 1) Fine-grained mixing of speech and text tokens helps improve cross-modal learning; 2) Training speech LLMs with synthesized data collected from websites is beneficial; 3) Deterministic sampling for mixing speech and text data yields better results than random sampling. Based on these findings, the authors trained a 3.8B parameter model and evaluated it on a spoken question answering task, achieving performance comparable to other larger open-source models.
+
+### Strengths
+The article is clearly structured and easy to follow. It provides an analysis of the construction details of speech data in large speech models, a topic that has not been extensively explored in existing works.
+
+### Weaknesses
+1. Overall, this work remains largely analytical, and the answers to several questions are relatively straightforward. For instance, the conclusion that "fine-grained interleaved tokens are better than coarse-grained" is not particularly surprising, as mainstream approaches in speech-to-speech LLMs already employ word-level interleaved strategies, which are inherently fine-grained. Therefore, this finding does not significantly impact the development of large speech models, and its contribution is limited. This paper might be more suitable for workshops or conferences focused on data engineering.
+
+2. There is a lack of comparison between the proposed foundation model and other text-based models to determine whether its performance is competitive. Furthermore, the evaluation is limited to a spoken question-answering task, which is not comprehensive enough to be fully convincing.
+
+3. The experimental comparisons are not entirely fair. The proposed "SpeLang" model is designed for speech-to-text tasks, while the compared models (e.g., GLM-4-Voice, Kimi Audio) are primarily for speech-to-speech. For Qwen2 Audio, the model is designed for a broader range of inputs (speech, sound, and music). Therefore, the comparison is not conducted on a level playing field.
+
+### Questions
+1. Since you are investigating a speech-to-text model, what is its performance on traditional tasks such as Automatic Speech Recognition (e.g., on LibriSpeech) and Speech Translation (e.g., on CoVoST)? How does this performance compare to other specialized models?
+
+2. In Line 292, what is the "audio-loss-masked" setting? This concept lacks a detailed description in the paper.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper conducts comprehensive empirical study in order to find optimal solutions for 3 design choices in speech-LLM pretraining:
+1. how to process web-crawled audio content for speech-text pretraining
+2. how to construct synthetic datasets to augment web-crawled data
+3. how to interleave speech and text modality for pretraining.
+The optimization goal is to improve the performance on spoken QA(SQA) task while remaining the the similar text understanding capability after speech-text pretraining. From the empirical study the authors induct the answers for all three questions and deliver a scalable and effective speech-text pretraining recipe. With these insights, they pretrain a 3.8B-parameter SpeechLM, SpeLangy, that outperforms the larger model on SQA task.
+
+### Strengths
+Quality:
+1. The paper presents a well-controlled ablation study, 1 example is the study on different granularity of chunking and interleaving, deterministic vs stochastic sampling schemes.
+2. The paper presents data-driven diagnostics and analysis, for example: modality alignment analysis by KL divergence; topic-coverage analysis; contamination checks with n-gram matching. Such analysis provides deep insights that go beyond the benchmark comparison.
+
+Clarity:
+The paper employs proper diagram to explain the steps of data pipeline, offers clear schematics for analysis, highlights key conclusions of each ablation study. The paper is clear and easy to follow.
+
+Significance:
+The ablation study on data processing and training schema brings sufficient value provides data-driven and practical insights on how to conduct effective speech-text pre-training.
+
+### Weaknesses
+1. Task scope. This paper limits the evaluation target in Spoken QA (plus text understanding) while positioning the goal of the proposed method as optimizing speech-text pretraining. There could be doubt whether solely SQA is representative. The author need to somewhat prove that correlation between SQA performance and speech-text pretraining quality.
+Author discusses about this in Addendum K:
+> One caveat preventing us from a direct comparison on such tasks is that we do not employ any task-specific training, unlike other SpeechLMs that explicitly add in a task-specific component into their training mixture (e.g., ASR-specific training datasets).
+
+    However, the fact that the author evaluates on SQA task contradicts their own point.
+
+2. There's a lack of some significant details that would affect the reproducibility, please find more in Questions section.
+3. Baselines are missing from some of the ablation study, please find more in Questions section.
+
+### Questions
+1. Please provide more details about the backbone LM, has it gone through post-training (SFT, RLHF, etc) or just pre-training? Does the LM support speech tokens natively? Or do you have to extend the vocabulary to support speech tokens?
+2. Please provide more details about the speech tokenizer. Does it support multi-lingual input?
+3. Please provide baseline in Table 2: the base LM performance on text understanding without any training.
+4. Isn't training on Quest dataset effectively SQA task-specific finetuning, when the training sample is organized and constructed in the same format as SQA task? Is it fair to compare SpeLangy with other "base" SpeechLLM on SQA task while other models are not instruction-tuned which gives some advantages to SpeLangy? To answer this question and the first point I made in the last section, I think the author needs to give a clear definition of *speech-text pretraining*. Starting from there, we might need to revisit the entire story.
+
+Given these I am rating this paper 4 and would be happy to discuss more with the authors.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper studies the design decisions applicable to text-audio interleaved pretraining. First, they study the granularity of interleaving that should occur given aligned text and audio and find that fine grained interleaving is superior. Second, they study the usage of synthetically aligned text-audio using TTS and existing text corpora and find the addition of synthetic data offers advantages due to topical biases in existing natural audio data. Finally, they study the method for sampling chunks of data given a possible interleaved sequence at a given chunk granularity. Finally, they combine their best decisions to adapt a text-backbone model into a competitive pretrained text-audio LLM.
+
+### Strengths
+- The work does well designed low-level ablations that lead to clear suggestions about the design space of Speech-Language Pretraining. This type of non-glamorous but important study seems extremely likely to be valuable to other practitioners in the space and enables the authors to train a strong model themselves!
+- The paper goes above and beyond most works of any form in terms of experimental rigor, including running contamination analysis.
+- The synthetic data study in addition to the domain analysis of speech Pretraining data offers valuable insights for speech training even beyond the specific modeling paradigm studied in the rest of the work, which feels likely to remain a useful finding for some time.
+
+### Weaknesses
+- The work primarily focuses on evaluations in which the model must generate text, but does not evaluate how these decisions impact the models ability to generate speech in either S->S settings or in TTS usage.
+- The works evaluations of the whole system does not compare to the simplest baseline of pipelining the text-init with a common ASR system such as Whisper.
+- For a data centric work, the work doesn't actually provide much in the way of details of what the original source 10M hours of audio data is. This makes it inherently unreproducible.
+
+### Questions
+- What is the source of the original 10M hours of raw audio?
+- How is inference operationalized given the interleaved pretraining? Is each chunk surrounded by a special token to indicate the modality which should be generated? Or is logit masking performed in order to generate only tokens of one modality at inference time?
+- Does training on synthetic data collapse the ability of the model to generate voices beyond those generated in the synthetic data? Does it have any negative impacts on held out validation data from the speech domain? 
+- This model should in theory be able to generate speech right? If so, is there any reason why you didn't benchmark on tasks such as sBlimp?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

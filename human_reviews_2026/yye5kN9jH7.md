@@ -1,0 +1,169 @@
+# Active Learning of 3D Gaussian Splatting with Consistent Region Partition and Robust Pose Estimation
+
+- Decision: Accept (Poster)
+- Scores: 4, 6, 6
+
+## Abstract
+Radiance fields have been successful in reconstructing 3D assets for scenes presented in Virtual Reality and Augmented Reality (VR/AR). The general workflow of scanning objects with radiance field representation involves a heavy workload of capturing images depicting the object empirically by the user, and lacks feedback for the image collection stage. This would lead to potential repeated or deficient gathering of information, affecting the efficiency of the reconstruction workflow. In this paper, we therefore present an active learning algorithm for 3D Gaussian Splatting that guides the image capturing by estimating the pose of the most informative image. Specifically, our method first partitions the consistent regions in the model by analyzing the Gaussian attributes and visibility features. Then, we determine the informative region to explore by estimating the semantic feature variance of each Gaussian, which evaluates the quality of the Gaussian cloud from the semantic level features. Furthermore, we tackle the practical problem of noise in the pose of the collected image via a robust pose optimization method. Extensive experimental results on both synthetic and real-world scenes demonstrate the remarkable performance of our algorithm in active learning of the radiance field under both accurate and noisy pose conditions.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes an *active learning* framework for 3D Gaussian Splatting (3DGS) that jointly performs image acquisition and model training based on the following key findings.
+
+- Consistent Region Partition: the 3DGS is clustered into local visibility-consistent regions using K-Means on a combined feature of position, color, rotation, and visibility.
+- Semantic Feature Variance Score: the region are estimated via variance in Point-MAE semantic features across samples, guiding next-view selection.
+- Pose Optimization: a robust photometric pose refinement desired best capture poses and actual capture poses in real-world.
+
+Experiments on NeRF-Synthetic, real-world handheld captures, and Objaverse show quantitative improvement and demonstrate robustness to pose noise.
+
+### Strengths
+- Idea for online 3DGS training and the capture loop is well motivated and demonstrated via real-world experiment
+- Utilizing point-wise metrics for active learning seems novel compared to demonstrated existing works using image-based metrics.
+- Comprehensive evaluation on synthetic and real data demonstrates robustness to pose noise.
+
+### Weaknesses
+1. **Overlap with prior sampling methods.**
+    
+    The von Mises-Fisher camera sampling still relies on probabilistic view selection similar to random hemisphere sampling; a clear distinction from ActiveNeRF or FisherRF seems missing.
+    
+2. **Heuristic semantic variance metric.**
+    
+    The use of dropout variance from Point-MAE features is empirical. An analysis of dropout ratio or random sampling rate effects would be great (Table 4 only partially covers this).
+    
+    Moreover, testing other point-cloud encoders[1][2] could clarify whether improvements generalize beyond Point-MAE.
+    
+3. **Pose optimization noise propagation.**
+    
+    Because $\mathcal{L}_{pose}$ in Eq.(7) uses rendered images for photometric alignment, any render artifact can bias pose updates. An experiment quantifying pose error after refinement would clarify robustness.
+    
+4. **Lack of qualitative comparison on NeRF-Synthetic dataset**
+    
+    Additonal qualitative comparison on NeRF-Synthetic would strengthen claims of better inconsistent-region handling.
+    
+5. **Re-initialization strategy unclear.**
+    
+    The active loop re-initializes the 3DGS every 300 steps, but it is unclear how densification and opacity reset interact with semantic variance tracking. Ablation on this would be helpful.
+
+[1] Zhao, Hengshuang, et al. "Point transformer." *Proceedings of the IEEE/CVF international conference on computer vision*. 2021.
+
+[2] Park, Chunghyun, et al. "Fast point transformer." *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*. 2022.
+
+### Questions
+Please see the suggestions and comments from the Weaknesses section above.
+
+Additionally:
+
+- In Figure 4, could you explicitly mark the newly added views at each iteration to help visualize coverage progression?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper tackles active view selection for 3D scene reconstruction with 3DGS, addressing how current radiance field workflows capture many images empirically without guidance, causing redundant or insufficient coverage. The authors propose a bottom-up active learning algorithm that partitions the scene's Gaussian point cloud into spatially coherent regions based on attributes and visibility, then estimates semantic feature variance per Gaussian to identify the most informative regions to explore next. This semantic variance acts as a high-level uncertainty measure revealing model incompleteness. The method also incorporates robust pose optimization to refine noisy camera poses from sources like SLAM or AR sensors. Extensive experiments on synthetic and real-world datasets show the approach achieves faster, higher-quality reconstruction than existing methods, contributing a novel region-based selection framework, a semantic-level uncertainty metric for 3DGS, and improved pose noise robustness that collectively enhance radiance field acquisition efficiency.
+
+### Strengths
+- A hard-but-important problem tackled with a clean, region-wise idea: cluster Gaussians by visibility to get consistent parts, then use semantic feature variance to pinpoint what’s under-reconstructed—more direct than image-space heuristics and easy to plug into 3DGS. 
+- The pose-refinement loop makes handheld/AR capture practical rather than brittle. Results on NeRF-Synthetic are strong in low-view regimes, and ablations show each module matters. 
+- Reproducibility is treated seriously: the authors provide NeRF-Synthetic results and partition meshes (colored by region) so readers can inspect the visibility-based separation, and they commit to open-sourcing the full code, which is great for the community.
+
+### Weaknesses
+- Although plausible, the semantic-feature variance remains a heuristic; it’s not rigorously tied to reconstruction error nor carefully pitted against simpler 3DGS-native cues (*e.g.*, RGB/opacity variance or Fisher information). 
+- Region partitioning introduces knobs (cluster count/thresholds) whose stability is only lightly explored; a small robustness sweep and an adaptive stopping rule would usefully de-risk it. 
+- The pipeline is heavy—visibility sampling, multiple feature passes, clustering, then pose refinement—yet there’s no wall-clock or memory breakdown per NBV iteration, so speed/latency remains unclear for both human-in-the-loop capture and embodied agents (*e.g.*, AR round-trip, pose-refinement iterations, and how N/T/K trade time vs. quality). 
+- The design is tailored to 3DGS; portability to NeRF/voxel backbones without explicit splats is non-obvious. 
+- Pose refinement’s convergence basin and failure modes (large drift, low-texture regions) are not quantified, leaving robustness bounds somewhat ambiguous. 
+- To ensure a fair evaluation of performance, the results for the 12 objects from the Objaverse dataset should be reported. It would also be helpful for the authors to provide a video showing the method's performance across 3 to 20 views, along with comparisons to other methods.
+- Minor: Line 75 "e.g." should be italicized, meaning it should appear as *e.g.* . Some descriptions are ambiguous, making them hard to understand. For instance, Line 230-234. The cite of Alpha shape should be placed on Line 267 rather than Line 292.
+
+### Questions
+1. Figure 3 shows the local consistent region determination, and I wonder about the input view distribution of this demo.
+2. I have noticed that “The image acquisition is performed every 300 steps, after which the model is reinitialized as random points.” Why is this design? Why not continue training?
+3. After collecting all the images, the model undergoes further training for 10,000 steps. Do other models follow the same process, considering that 3DGS is sensitive to the number of training iterations?
+4. What specific “semantic-level features” are used to compute the Gaussian feature variance, and how robust are they across different scenes?
+5. Additionally, the initialization pose is an important consideration. Since this paper focuses on practical applications, the initial pose should be addressed. In sparse settings, where acquiring an accurate pose is challenging, many methods utilize neural matching approaches like VGGT, MASt3R, or DUSt3R. It would be interesting to explore whether these methods can be integrated into the pipeline, similar to GaussianObject. These methods should also be cited.
+6. The authors claim that "The mesh with after consistent region partition can be found in folder 'partition_results'. ", but none of this folder is provided. 
+7. How is the consistent region partition determined in practice, and how sensitive is the method to this partitioning?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper presents a novel active learning framework for 3D Gaussian Splatting (3DGS) that guides view acquisition during reconstruction. The proposed method introduces a bottom-up strategy that partitions the model into locally consistent regions based on Gaussian attributes and visibility features, identifies noisy or under-reconstructed areas via a semantic feature variance metric, and generates the next best views accordingly. To further enhance robustness in real-world capture scenarios, the authors incorporate a pose optimization module that refines noisy camera poses using reprojection constraints. Extensive experiments on both synthetic and real-world datasets demonstrate that the approach achieves state-of-the-art reconstruction quality under both accurate and noisy pose settings, validated through comprehensive quantitative comparisons and ablation studies.
+
+### Strengths
+Quality and Clarity: The paper is clearly written and well-structured, with a logical flow from motivation to methodology and experiments. The technical explanations are concise yet sufficiently detailed, making the method easy to follow. Figures effectively illustrate key components such as consistent region partitioning and pose optimization, which enhances overall readability and technical transparency.
+
+Significance: The experimental results demonstrate state-of-the-art performance across both synthetic and real-world datasets, validating the robustness and effectiveness of the proposed method. The paper’s combination of semantic feature variance for uncertainty estimation and robust pose refinement addresses important limitations of prior active reconstruction approaches, showing strong potential impact for practical 3DGS-based active learning systems in robotics and AR/VR applications.
+
+### Weaknesses
+Incomplete coverage of recent literature: While the paper provides a solid overview of classical active reconstruction and next-best-view methods, it omits several recent and highly relevant works such as Naruto: Neural Active Reconstruction from Uncertain Target Observations, ActiveGAMER: Active Gaussian Mapping through Efficient Rendering, and Understanding while Exploring: Semantics-driven Active Mapping. These methods also explore uncertainty-driven or semantic-guided active mapping. A comparative discussion or experimental inclusion of these approaches would better contextualize the paper’s contributions and clarify its novelty.
+
+Lack of empirical validation for efficiency claims: The paper repeatedly highlights the proposed bottom-up strategy’s efficiency in generating informative views without candidate sampling, yet no quantitative results support this claim. Metrics such as runtime per iteration, total reconstruction time, or convergence rate compared with baselines like FisherRF or ActiveNeRF would be valuable for substantiating the claimed computational advantage.
+
+Absence of discussion on limitations and failure cases: The paper does not provide any analysis of scenarios where the method might fail or underperform, such as highly transparent or reflective surfaces, cluttered environments, or extreme pose noise. A brief reflection on these limitations—along with potential directions for improvement—would enhance the paper’s credibility and balance.
+
+### Questions
+1. Appendix A.2.2 says K-Means uses “number of clusters equals 10,” yet Table 3 states “5 (Default)” and also reports results for 3/5/7 clusters. Which value was used for the main results, and how sensitive are gains to this choice?
+
+2. You define \hat{x} = x_j/J as “the center of points,” which seems incorrect dimensionally—should this be \hat{x} = $\frac{1}{J}\sum_{j=1}^{J} x_j$?
+
+3. You “first capture three initial images uniformly.” Do all baselines start from exactly the same three initial views and total budget (including those three)
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

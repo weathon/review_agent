@@ -1,0 +1,193 @@
+# Nondeterministic Polynomial-time Problem Challenge: An Ever-Scaling Reasoning Benchmark for LLMs
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 4, 4, 2
+
+## Abstract
+Reasoning is the fundamental capability of large language models (LLMs).
+Due to the rapid progress of LLMs, there are two main issues of current benchmarks: i) these benchmarks can be *crushed* in a short time (less than 1 year), and ii) these benchmarks may be easily *hacked*. To handle these issues, we propose the **ever-scalingness** for building the benchmarks which are scaling over complexity, instance, oversight and coverage. This paper presents Nondeterministic Polynomial-time Problem Challenge (**NPPC**) , an ever-scaling reasoning benchmark for LLMs. Specifically, the **NPPC** has three main modules: i) *npgym*,
+which provides a unified interface of 25 well-known NP-complete problems and can generate any number of instances with any levels of complexities, ii) *npsolver*, which provides a unified interface to evaluate the problem instances with both online and offline models via APIs and local deployments, respectively, and iii) *npeval*, which provides the comprehensive and ready-to-use tools to analyze the performances of LLMs over different problems, the number of tokens, the aha moments, the reasoning errors and the solution errors. Extensive experiments over widely-used LLMs demonstrate: i) **NPPC** can successfully decrease the performances of advanced LLMs to below 10%, demonstrating that **NPPC** is not crushed by current models, ii) DeepSeek-R1, Claude-3.7-Sonnet, and o1/o3-mini are the most powerful LLMs, where DeepSeek-R1 can outperform Claude-3.7-Sonnet and o1/o3-mini in most NP-complete problems considered, and iii) the numbers of tokens, aha moments in the advanced LLMs, e.g., Claude-3.7-Sonnet and DeepSeek-R1, are observed first to increase and then decrease when the problem instances become more and more difficult. Through continuously scaling analysis, **NPPC** can provide critical insights into LLMs' reasoning capabilities, exposing fundamental limitations and suggesting future directions for further improvements.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The authors have proposed a new benchmark namely **NPCC** which consists of 25 problems from NP complete complexity class with instance generator for each problem domain which scale in terms of problem "hardness". Experiments show that all reasoning models show significant drop in performance of LRM's as the difficult of the instances increases.
+
+### Strengths
+The paper is generally well written and easy to follow.
+
+### Weaknesses
+There are multiple fundamental weaknesses in the paper:
+1. The paper is errily similar to [1] which has very similar motivation, and I am curious to know why the authors would miss referring a paper  so close to their work
+2. Extremely few baseline evaluations, multiple prompting/agentic based mechnasims such as program aided language models [2] are a more natural base line comparision to direct prompting which has been established by various works in the literature including one of the works that the authors have cited i.e, [3]
+3. For solving SAT based problems, various logic based prompting mechanisms have been problem, authors have not included any such evaluations in their baselines and comparisions
+
+
+
+[1]: FCoReBench: Can Large Language Models Solve Challenging First-Order Combinatorial Reasoning Problems?
+
+[2]: PAL: Program-aided Language Models
+
+[3]: Logic-LM: Empowering Large Language Models with Symbolic Solvers for Faithful Logical Reasoning
+
+[3]: NPHardEval: Dynamic benchmark on reasoning ability of large language models via complexity classes
+
+### Questions
+Please address the weakness listed above
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+In this paper, the authors introduce the Non-deterministic Polynomial-time Problem Challenge (NPPC), a set of new reasoning test sets and utilites for probing the reasoning abilities of LLMs based on a comprehensive set of classic NP-complete problems (see Table 2). As clearly articulated in the introduction, their framework aims to 1) facilitate generating reasoning problems of increasing complexity (*scaling over complexity*) to avoid saturation, 2) be capable of generating infinite numbers of instances (*scaling over instance*), 3) be easy to reliably verify for correctness (*scaling over insight*) 4) and should cover problems that are *highly reelvant to real-world problems. rather than puzzles or rare problems* (Given the lack of explicit examples in the main text, and the fact that the NP-complete problems they cover all seem like *puzzle* problems, I'm particular confused about this last point, as well as some of the comparison they report in Table 1 with existing benchmarks; see questions and discussion below).
+
+In Section 3, familiar notions about complexity and the class NP are covered, which the authors might consider truncating and using to provide more concrete examples (it would  specifically helpful to have a concrete example in Figure 4). In Section 4,  the main details of the task set up and benchmark are provided. Importantly, problems are rendered not in terms of classical decision problems that require yes-no answers from LLMs, but in terms of problems that require explicit solutions that are then checked for correctness (the authors might note that this setting, as far as I know, is consistent with some of the other benchmarks they compare against, such as ZebraLogic). As mentioned above, they cover a rather impressive set of problems listed in Table 2, which are coupled with a set of generation and evaluation utilities. They also detail how problems can be generated at different **difficulty levels**, however the details of this are very unclear, especially when they say that "this hybrid methodology" (what methodology this is exactly is not make precise) "ensures difficult levels reflect both theortical computation complexity [Q: isn't the theoretical complexity fixed throughout to  to be NP-complete?] and observed LLM capabilities" (further details are provided in A.5, see more discussion about this below).  Section 4.2 covers details of how prompt templates are provided (again, a concrete example here would be helpful, since this is very hard to follow) and details of the utilities for collecting responses from models). Section 4.3 details their experimental set up (e.g., they devise a clever evaluation strategy, detailed starting on line 292, for how to effectively and efficiently sample a diverse set of instances). 
+
+Section 5 covers their main experimental results. On the methodological side, Figure 5 shows that their strategy for generating difficult examples is highly correlated with decreasining model performance (which gives credence to the idea that the benchmark can be made to be continiously harder). They find that while all models struggle at high difficulty levels, DeepSeek-R1 in particular shows the highest robustness across virtually all problem categories.  Some interesting analysis is provided about the  the relative effectiveness of reasoning models, along with example failure cases.
+
+### Strengths
+-- A new set of reasoning challenges based on a **comprehensive** set of classic NP-complete problems. To my knowledge, this is the most comprehensive set of such reasoning tasks to date. I could imagine such a benchmark being adopted by others working on LLM reasoning.  
+
+-- A **new methodology for generating problems of different difficulty levels**, which allows for updating the dataset. I think the authors make a strong case that this is useful for continuously making their benchmark harder and less suspectible to saturation (I note some issues with this below). 
+
+-- A **new set of utilities for building** on their datasets and constructing new hard reasoning problems.
+
+### Weaknesses
+-- Virtually **no concrete example problem inputs** are provided in both the main text and the appendix (this can be easily fixed). This in particular makes it very difficult to verify the claim that their benchmark covers problems that are *highly relevant to real-world problems*. It is further unclear how any of the problems listed in Table 2 are more relevant to real-world problems than (or fundamentally different in structure to) the problems in the datasets they list in Table 1. 
+
+-- Relatedly, it's unclear **why such a diverse set of NP-complete problems are needed**, especially given that all such problems have exactly the same theoretical complexity. I'm specifically left wondering: does the comprehensiveness of the benchmark really buy us much in terms of better understanding model behavior? (it doesn't appear so given the trends appear to be roughly the same in Figure 5).  I could imagine the comprehensiveness of problems being more of a bug (e.g., requiring more experimentation, overhead, problem specific knowledge) than a feature of their benchmark.  
+
+-- The notion of **problem difficulty** is very unclear and not particularly well motivated (even though it does seem highly grounded in LLM behavior), which makes me question the generality of their  generation methodology. The related work section gives the impression that using hard combinatorial problems to probe LLM reasoning abilities is a new area since no work is cited before 2024, however, there has quite some work on generating hard reasoning problems for LMs (see the papers below and citations within), including work on exploiting phase-transitions and known hard problem distributions. It's unclear, in particular, why phase transitions weren't used (perhaps building on some of the papers below) as a more principled and systematic way to create difficult instances (I would like to see the authors directly address this).  
+
+see related work in Hazra et al.
+
+[Selsam et al.] 2019. Learning a SAT Solver fomr SIngle-bit supervision. ICLR. 
+
+[Sinha et al.] 2019. CLUTRR: A Diagnostic Benchmark for Inductive Reasoning from Text. EMNLP
+
+[Dziri , et al.] 2023. Faith and fate. NeurIPS
+
+[T Madusanka, et al.] 2024.  Natural Language Satisfiability: Exploring the problem distribution and evaluation transformer-based 
+language models. ACL 
+
+[Richardson and Sabharwal] 2022. Pushing the limits of rule reasoning in transformers through natural language satisfiability. AAAI
+
+### Questions
+-- What tools are used for verifying the solutions? Presumeably this relies on some standard SAT solvers? (I may have missed the details here). 
+
+-- In what sense does ZebraLogic not satisfy *instance scaling* in Table 1?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces NPPC, a benchmark designed to evaluate LLMs’ reasoning capabilities on NP(C) problems. The benchmark focuses on tasks such as the Traveling Salesman Problem, Boolean Satisfiability, and Graph Coloring, which are automatically generated and progressively scaled to test problem-solving accuracy and computational efficiency. The authors argue that existing reasoning benchmarks can be “hacked” through memorization, and propose scalable instance generation as a solution. Experiments across multiple LLMs (e.g., GPT-4, Claude, Qwen2, and LLaMA3) demonstrate that while scaling increases difficulty, it also reveals reasoning limitations under computational constraints.
+
+### Strengths
+1. The presentation of the paper is clear and well-organized. The figures and examples make the benchmark’s structure easy to follow.
+2. I appreciate the logical flow and clarity of writing; the results are presented in a well-structured and interpretable manner.
+3. The focus on systematically scaling NP(C) problems to evaluate reasoning robustness is comprehensive and relevant, including the assessment of most problems in this field as well as popular LLMs.
+
+### Weaknesses
+1. While the benchmark is valuable for evaluating reasoning on NP-hard or optimization problems, its applicability to other domains (e.g., healthcare or computational social science) seems limited. Many real-world problems in those fields depend on high-quality ground-truth data that require domain expertise and cannot be easily generated automatically.
+2. The paper claims novelty in automatically generating NP-hard questions, but question generation at scale is already well-supported by existing tools such as Google OR-Tools. It would help to clarify what specific innovation NPPC introduces beyond instance generation.
+3. I am not fully convinced that “over-scaling” the problems is an effective defense against benchmark hacking. While it may prevent memorization, it can also make tasks unrealistically difficult, reducing comparability across models. The paper could better justify why scaling itself constitutes a methodological contribution, as scaling NP-hard problem parameters is relatively straightforward with existing solvers.
+4. The evaluation focuses on reasoning performance but I don’t see much discussion about what types of reasoning failures occur as problem size increases, such as qualitative or error-type analysis could strengthen the insights drawn from the results.
+
+### Questions
+1. If I understand correctly, the benchmark automates the generation of NP-hard or NP-complete problem instances. What advantages does NPPC offer compared to existing frameworks like Google OR-tools?
+2. The study argues that current benchmarks can be “hacked” and that scaling provides a countermeasure. How do the authors determine an appropriate scaling schedule like when and how to scale the problems?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces NPPC which is an "ever-scaling" reasoning benchmark for LLMs that uses 25 NP-complete problems with procedurally generated instances of increasing difficulty, accompanied by three modules with npgym, npsolver, npeval for problem generation, model evaluation, and comprehensive analysis.
+
+### Strengths
+this paper provides 25 np complete questions as a benchmark, which is more than all existent benchmarks for now
+extensive experiments and nice visualization
+detailed error analysis
+
+### Weaknesses
+this paper's main idea is super similar to NPHardEval, and NPHardEval also provides the data generation pipeline where dynamic new questions can be automatically created
+
+### Questions
+N/A
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1

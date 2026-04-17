@@ -1,0 +1,171 @@
+# Towards Multimodal Time Series Anomaly Detection with Semantic Alignment and Condensed Interaction
+
+- Decision: Accept (Poster)
+- Scores: 6, 4, 6, 6
+
+## Abstract
+Time series anomaly detection plays a critical role in many dynamic systems. Despite its importance, previous approaches have primarily relied on unimodal numerical data, overlooking the importance of complementary information from other modalities. In this paper, we propose a novel multimodal time series anomaly detection model (MindTS) that focuses on addressing two key challenges: (1) how to achieve semantically consistent alignment across heterogeneous multimodal data, and (2) how to filter out redundant modality information to enhance cross-modal interaction effectively. To address the first challenge, we propose Fine-grained Time-text Semantic Alignment. It integrates exogenous and endogenous text information through cross-view text fusion and a multimodal alignment mechanism, achieving semantically consistent alignment between time and text modalities. For the second challenge, we introduce Content Condenser Reconstruction, which filters redundant information within the aligned text modality and performs cross-modal reconstruction to enable interaction. Extensive experiments on six real-world multimodal datasets demonstrate that the proposed MindTS achieves competitive or superior results compared to existing methods. The code is available at: https://github.com/decisionintelligence/MindTS.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper presents MindTS, a novel framework for multimodal time series anomaly detection that effectively integrates numerical and textual data. Traditional methods rely solely on unimodal numerical signals, neglecting the complementary semantic information in text. MindTS addresses two main challenges: achieving semantic alignment between heterogeneous modalities and filtering redundant textual content to enhance cross-modal interaction. To this end, the model introduces a Fine-grained Time–Text Semantic Alignment module, which fuses endogenous and exogenous text through multi-view integration to ensure consistent semantic representation, and a Content Condenser Reconstruction mechanism that removes redundant information and enables cross-modal reconstruction for improved interaction. Extensive experiments on six real-world multimodal datasets demonstrate that MindTS consistently achieves competitive or superior performance over existing methods, validating its capability to accurately capture semantic dependencies between modalities and detect anomalies more effectively than prior unimodal or naïve multimodal approaches.
+
+### Strengths
+1. The paper introduces a well-designed multimodal framework that effectively integrates both time-series and textual information for anomaly detection. Its dual-perspective modeling—using endogenous and exogenous texts—captures complementary semantics that unimodal models overlook. This fine-grained alignment significantly enhances contextual understanding, allowing the model to detect anomalies grounded in both temporal dynamics and semantic context.
+2. The proposed Content Condenser Reconstruction module is an innovative mechanism for filtering redundant textual information while preserving meaningful semantics. By minimizing mutual information and enabling cross-modal reconstruction, it not only improves model interpretability but also strengthens the interaction between modalities. This leads to more compact, semantically relevant representations and improved robustness against noisy or irrelevant text inputs.
+3. Extensive experiments on six real-world multimodal datasets validate the generality and effectiveness of MindTS. The model consistently achieves state-of-the-art or highly competitive results across multiple evaluation metrics, demonstrating its robustness, scalability, and strong cross-domain applicability. The paper’s comprehensive comparisons and ablation studies provide clear empirical evidence supporting the model’s advantages and technical soundness.
+
+### Weaknesses
+1. The paper lacks a detailed exploration of computational efficiency and scalability. While MindTS integrates multiple components, such as fine-grained semantic alignment and content condensation, the training cost and inference latency on large-scale or streaming time series remain unclear. Without such analysis, its practicality in real-time or resource-constrained applications may be limited.
+
+2. Although MindTS achieves impressive performance, its interpretability could be improved. The model’s multiple fusion and reconstruction layers make it challenging to understand how specific textual cues influence anomaly decisions. More qualitative case studies or explainable AI techniques would help clarify how the semantic alignment contributes to detection outcomes.
+
+3. The experiments, while comprehensive, are primarily limited to datasets with well-structured external text. The model’s robustness against noisy, incomplete, or domain-shifted text sources remains underexplored. This limits confidence in its generalization to real-world multimodal environments where textual information is often inconsistent or less reliable.
+
+### Questions
+See weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes MSH-LLM (Multi-Scale Hypergraph aligned Large Language Models), which aims to address the problem of multi-scale semantic misalignment when applying large language models (LLMs) to time series analysis. The framework combines multi-scale temporal and textual representations through several well-designed modules, including a multi-scale extraction unit, a learnable hyperedge mechanism for cross-scale interactions, a cross-modal alignment module based on multi-head attention, and a hybrid prompting strategy that enhances the LLM’s temporal reasoning ability. I think the design appears technically sound and could potentially inspire further research on cross-modal temporal understanding with LLMs.
+
+### Strengths
+1. The paper identifies multi-scale semantic discrepancy as a key blind spot in existing LLM-for-time-series (LLM4TS) approaches. The proposed hyperedge mechanism effectively models group-level interactions through learnable hyperedges, which I think could reduce noise compared to traditional patch-based methods such as PatchTST.
+2. The experimental validation appears thorough and convincing.
+3. The framework demonstrates compatibility with advanced LLMs such as LLaMA-3.1-8B and Qwen2.5-7B, which should provide practical flexibility for different application scenarios.
+
+### Weaknesses
+1. The hyperedging mechanism lacks interpretability. Although experiments show it improves semantic density, it remains unclear how specific hyperedges correspond to concrete multi-scale temporal patterns (e.g., daily vs. weekly cycles). The choice of the Top-K threshold (η = 4) also seems purely empirical, with limited discussion on why this value is optimal or how sensitive performance is to η.
+2. The necessity of some MoP components is uncertain. The emotional manipulation prompts (e.g., “That’s really important for me”) are not individually validated, so their contribution is ambiguous. Likewise, the benefit of data-correlated prompts such as statistical summaries (max/min) is not analyzed across different task types, making it unclear whether these prompts provide consistent gains.
+
+### Questions
+1. What is the justification for using a plain average in the hyperedge feature computation? Why not adopt attention-weighted aggregation or other pooling strategies?
+2. The paper claims that the hypergraph structure is learned in a data-driven manner, but it does not provide evidence of convergence or stability. Could you report how the incidence matrix $H^s$ evolves during training, such as changes in sparsity or spectral distribution? It would also be useful to provide a theoretical discussion linking the sparsity of $H^s$ to the model’s generalization ability.
+3. Do affective prompts contribute differently across tasks? For example, are they more effective in zero-shot transfer scenarios such as M4 to M3 compared to few-shot classification? A targeted ablation that removes only the affective prompt could help clarify its role in performance.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces MindTS, a multimodal time-series anomaly detection framework that integrates numerical signals with textual information from both endogenous (LLM-generated from time segments) and exogenous (external documents or reports) sources. The model addresses two main challenges: achieving semantic alignment between heterogeneous modalities and filtering redundant textual content. It proposes a Fine-grained Time-Text Semantic Alignment module for cross-view fusion and alignment, and a Content Condenser Reconstruction mechanism that minimizes mutual information to distill informative text for cross-modal reconstruction.
+Experiments on six real-world multimodal datasets show that MindTS consistently outperforms baselines, demonstrating the effectiveness and robustness of the proposed approach for multimodal anomaly detection.
+
+### Strengths
+1. The paper proposes a well-designed dual-view text alignment strategy that fuses endogenous and exogenous text to achieve precise semantic alignment between time and text modalities, effectively addressing heterogeneous data alignment issues.
+
+2. The proposed Content Condenser, inspired by the Information Bottleneck principle, provides a principled solution to mitigate textual redundancy and noise in multimodal fusion, improving the efficiency of cross-modal interaction.
+
+3. The cross-modal reconstruction task that reconstructs masked time series from condensed text is particularly innovative, encouraging the model to capture truly time-relevant textual information and enabling deeper cross-modal interaction.
+
+4. The paper is clearly written and logically organized, with a coherent flow that makes the motivation well understood.
+
+### Weaknesses
+1. The paper claims to be multimodal, mentioning images and videos, but the proposed MindTS framework is actually limited to time-series–text fusion. Its core mechanisms are difficult to extend to other modalities. The authors should clarify this scope in the paper.
+2. The paper lacks sufficient ablation on the design of endogenous prompts. Since the construction of these prompts (e.g., template formulation, choice of statistical descriptors, and temporal granularity) may strongly affect model performance, more experiments would help clarify their robustness and justify the design choices.
+
+### Questions
+1. More details on how the endogenous prompts are constructed and how sensitive the model is to their design would help strengthen the paper’s clarity and reproducibility.
+2. Could the authors elaborate on the extensibility of MindTS? In particular, how might the proposed framework generalize to other multimodal time-series applications beyond anomaly detection?
+3. Would it be possible to include an experiment that skips endogenous text generation and directly uses $H_{time}$ as the query for fusing exogenous text? This would clarify the actual benefit of the endogenous text generation step.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces model for multimodal time series anomaly detection that integrates both numerical and textual modalities. MindTS seeks to capture richer contextual and semantic information by aligning time series data with exogenous (external) and endogenous textual descriptions. The method consists of two key innovations: (1) Fine-grained Time-Text Semantic Alignment, which uses cross-view fusion and contrastive learning to ensure semantic consistency between time series and text; and (2) Content Condenser Reconstruction, which filters redundant textual information using mutual information minimization and reconstructs masked time series data to enhance cross-modal interaction. Experiments on six real-world datasets demonstrate that MindTS outperforms or matches SOTA methods across multiple evaluation metrics.
+
+### Strengths
+1. Addresses a novel and underexplored problem: multimodal time series anomaly detection.
+2. Introduces a well-motivated novel dual-text approach  for semantic alignment.
+3. Extensive experiments with multiple datasets and a strong set of 17+ baselines.
+4. Comprehensive ablation and sensitivity analyses that validate the contribution of each component.
+
+### Weaknesses
+1. Dependence on the quality and availability of exogenous text may reduce generalizability to domains lacking rich textual context.
+2. The discussion could benefit from more qualitative examples showing how textual alignment improves anomaly detection decisions.
+3. Computational cost and inference time are not reported.
+
+### Questions
+1. How is exogenous text collected or preprocessed for each dataset, and what ensures its semantic relevance to time segments? How do you make sure the text doesn't leak future ground truth information?
+2. How does MindTS perform when textual data are missing or random or very noisy?
+3. Could the authors provide runtime or complexity comparisons with other multimodal baselines?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

@@ -1,0 +1,180 @@
+# Reducing Contextual Stochastic Bilevel Optimization via Structured Function Approximation
+
+- Decision: Accept (Poster)
+- Scores: 2, 6, 6, 4
+
+## Abstract
+Contextual Stochastic Bilevel Optimization (CSBO) extends standard stochastic bilevel optimization (SBO) by incorporating context-dependent lower-level problems. CSBO problems are generally intractable since existing methods require solving a distinct lower-level problem for each sampled context, resulting in prohibitive sample and computational complexity, in addition to relying on impractical conditional sampling oracles. We propose a reduction framework that approximates the lower-level solutions using expressive basis functions, thereby decoupling the lower-level dependence on context and transforming CSBO into a standard SBO problem solvable using only joint samples from the context and noise distribution. First, we show that this reduction preserves hypergradient accuracy and yields an $\epsilon$-stationary solution to CSBO. Then, we relate the sample complexity of the reduced problem to simple metrics of the basis. This establishes sufficient criteria for a basis to yield $\epsilon$-stationary solutions with a near-optimal complexity of $\widetilde{\mathcal{O}}(\epsilon^{-3})$, matching the best-known rate for standard SBO up to logarithmic factors. Moreover, we show that Chebyshev polynomials provide a concrete and efficient choice of basis that satisfies these criteria for a broad class of problems. Empirical results on inverse and hyperparameter optimization demonstrate that our approach outperforms CSBO baselines in convergence, sample efficiency, and memory usage.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper reduces the contextual stochastic bilevel optimization (CSBO) to standard stochastic bilevel optimization (SBO) via a function approximation characterized as a linear combination of basis functions. Under certain conditions, the CSBO and SBO have the same complexity of finding small hypergradient. Numerical experiments on inverse optimization and hyperparameter optimization seem to show the effectiveness of the proposed algorithm.
+
+### Strengths
+1. The idea of reduction from CSBO to SBO is novel. To the best of my knowledge, this aspect is new in the literature.
+2. The presentation of the paper is clear.
+
+### Weaknesses
+1. The conditions required in Theorem 4.5 (c.1, c.2, c.3) are too strong. For example, as the authors described in line 68-line 69, the approach of Guo et al. 2021 is not amenable to settings where $\xi$ is continuous. However the condition c.1 also requires $\xi$ is discrete with finite cardinality. Therefore, it is unclear how this paper improves over Guo et al. 2021. Since these conditions are crucial to keep the complexity of CSBO the same as the SBO, this is a significant weakness. I suggest the authors to include a table to have a comprehensive comparison of this paper versus other baselines.
+
+2. It is unclear the relevance of the results in machine learning community. Are there any practical machine learning examples satisfying conditions (c.1, c.2, c.3), and using this paper's algorithm can provably improve state-of-the-art bilevel optimization baselines? In addition, what if these conditions do not hold? It may significantly increase the complexity of the algorithm.
+
+3. The experimental results are very weak. It is only tested on toy problems at small scale (e.g., MNIST dataset). In addition, the only baseline the paper considered was stocBiO, but there are lots of other bilevel optimization baselines which are missed.
+
+4. The formulation used in the task of hyperparameter optimization (Section 5.2) is not necessarily relevant in machine learning. For example, there are many formulations for the hyperparameter optimization tasks in the literature which use SBO instead of CSBO. Why the CSBO formula (5) is better?
+
+5. Using fixed basis function is not necessarily good. The authors do not consider learned basis functions, which may yield stronger approximation guarantees.
+
+### Questions
+See the weakness section.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper focuses on Contextual Stochastic Bilevel Optimization (CSBO) and proposes a reduction framework that approximates lower-level solutions with expressive basis functions, thereby decoupling the lower-level dependence on context. It formalizes the relationship between CSBO and standard SBO and makes it possible to achieve $\(\epsilon\)$-stationarity with near-optimal sample complexity 
+$\(\tilde{\mathcal{O}}(\epsilon^{-3})\)$. Experiments on inverse problems and hyperparameter tuning demonstrate the effectiveness of the method.
+
+### Strengths
+1. The paper proposes a reduction framework for CSBO that leverages the efficiency of existing SBO algorithms and rigorously establishes the relationship between CSBO and SBO.
+
+2. The presentation is clear and well structured.
+
+### Weaknesses
+1. The theoretical analysis hinges on a $\mu$-strongly convex lower-level problem. 
+
+2. The treatment of high-dimensional scenarios and alternative basis functions(e.g., neural networks) is limited.
+
+### Questions
+1. Although the paper achieves the near-optimal sample complexity $\tilde{\mathcal{O}}(\epsilon^{-3})$, “Drawback 1” noted around line 80 appears unresolved. Please clarify what gap remains, whether it is fundamental or technical, and how the reduction might be extended to close it. 
+
+2. The experiments compare primarily against \textsc{StocBiO}. Why were other SBO algorithms excluded? Is it straightforward to plug your reduction into alternative SBO solvers (e.g., variance-reduced or momentum-based methods)? A minimal example illustrating such integration would be helpful.
+
+3. A minor suggestion: please use \citet{} and \citep{} appropriately to improve readability.
+
+4. See Weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper studied the contextual stochastic bilevel optimization and proposed a novel method by approximating the lower-level solution using expressive basis functions. In this way, the contextual stochastic bilevel optimization problem is transferred back to standard stochastic bilevel optimization problem and can be solved by standard bilevel methods with enhanced convergence rate. This paper provided the sufficient conditions to make the approximation errors from the basis expression small and demonstrated the Chebyshev polynomial satisfies those conditions. Numerical experiments verify the effectiveness of the proposed methods.
+
+### Strengths
+1. Using an expressive basis to represent the context space is novel and effective, especially when the space is finite, as in predominate contextual stochastic optimization applications like meta-learning. 
+2. This paper also offers two effective basis: Chebyshev and Fourier polynomial, which has been studied in approximation theory but have not be leveraged into bilevel optimization. The strategy has also been proved effective in experiments. 
+3. The representation improves the convergence rate of existing literature on contextual bilevel optimization and matches that of stochastic bilevel optimization.
+
+### Weaknesses
+1. The proposed expressive basis seems only effective when the dimension of contextual variable is finite or has bounded support with non-vanishing density. But the authors also claim that meta-learning and distributionally robust optimization on the compact sets satisfy these conditions. 
+2. It would be valuable to quantify the error introduced by vanishing densities that violate the assumption, to indicate how sensitive the method is on general contextual bilevel problems. 
+3. In theory, how should $N_\Phi$ scale with $\epsilon$? The analysis suggests $N_\Phi$ should be large. But in practice, $N=3$ gives a satisfactory result. Does that mean the analysis is not tight for problems with special structures? Could you comment on what determines $N$ and when theory predicts that small $N$ is enough?
+
+### Questions
+1. In Line 281, I don’t see why a small minimum eigenvalue implies a low-dimensional subspace. Shouldn’t the effective dimension be driven by the number of large eigenvalues instead? 
+2. Numerical complexity of calculating the basis weight matrix when dimension is high. 
+3. Missing references on first-order and variance reduction based bilevel methods: 
+
+[1] On penalty-based bilevel gradient descent method. H Shen, T Chen. ICML 2023.
+ 
+[2] A framework for bilevel optimization that enables stochastic and global variance reduction algorithms. Mathieu Dagréou, Pierre Ablin, Samuel Vaiter, Thomas Moreau. NeurIPS 2022. 
+
+[3] Provably Faster Algorithms for Bilevel Optimization. Junjie Yang, Kaiyi Ji, Yingbin Liang. NeurIPS 2021.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies a contextual stochastic bilevel optimization (SBO) problem, where the lower-level objective depends on both a random context and the upper-level variable. Compared to standard SBO, the main challenge lies in estimating the hypergradient: a naive approach requires solving multiple lower-level problems and sampling from a conditional distribution for arbitrary contexts. To address these challenges, the authors map the context to a feature space via Chebyshev polynomial bases, and parametrize the lower-level solution as a linear function of the resulting feature vector. This reformulation converts the contextual SBO into a standard SBO that avoids the need for conditional sampling. The paper further identifies conditions under which the transformed problem retains the regularity of the original one and demonstrates how to construct an approximate solution to the contextual SBO from the standard SBO solution.
+
+### Strengths
+- **Originality**: This paper introduces tools from approximation theory to tackle contextual SBO. To the best of my knowledge, this has not been explored in the existing literature. 
+- **Significance**: The proposed method yields a simple reformulation of the original problem and eliminates the need for a conditional sampling oracle. Under suitable assumptions, it also improves the sample complexity for finding a stationary solution of the context SBO from the previously known $\tilde{O}(\epsilon^{-4})$ to $\tilde{O}(\epsilon^{-3})$.
+
+### Weaknesses
+- A central question for the proposed approach is how accurately the reformulated SBO problem approximates the original contextual SBO. In my view, this point is not clearly articulated in the paper; instead, much of the technical complexity is deferred to the notion of an expressive basis (Definition 3.4). Specifically, Definition 3.4 assumes that the approximation error can be made arbitrarily small by increasing the number of basis functions, but it is unclear to me whether this is always achievable in practice. Intuitively, to parametrize the lower-level solution $y^*(x,\xi)$ as a linear map of the context features, some structural assumptions on the lower-level objective are needed, yet such assumptions are not explicitly discussed in the paper. 
+- Another concern is that, after reformulation, the dimensionality of the lower-level subproblem increases from $d_y$ to $d_y \times N_{\Phi}(\epsilon)$. To achieve a faithful approximation of the original contextual problem, $N_{\Phi}(\epsilon)$ may need to be large, potentially leading to significant computational overhead. In such cases, the reformulated approach may not offer a clear advantage over directly solving multiple lower-level subproblems.
+
+### Questions
+In light of the weaknesses discussed above, I have the following clarifying questions: 
+- The authors suggest that the assumptions in Theorem 4.5 ensure the Cheyshev polynomial basis is expressive. In particular, they assume the function $G(x,y,\xi)$ is analytic in $(y, \xi)$. Could the authors elaborate on how restrictive this assumption is? For instance, in my understanding, an analytic function is typically defined for continuous variables, so this assumption will not hold when the context space $\Xi$ is discrete. 
+- Could the authors provide a more quantitative estimate of the feature-space dimension $N_{\Phi}(\epsilon)$? Specifically, how does it scale with other problem parameters?
+- I also find the definitions of feature map and expressive basis in Definitions 3.3 and 3.4 somewhat dense. To improve readability, it would be helpful to include concrete examples that illustrate these definitions.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3

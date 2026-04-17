@@ -1,0 +1,160 @@
+# Multi-Layer Diffusion Strategy for Multi-IP Interaction-Aware Human Erasing
+
+- Decision: Reject
+- Scores: 4, 6, 6
+
+## Abstract
+Recent years have witnessed the success of diffusion models in image customization tasks. However, existing mask-guided human erasing methods still struggle in complex scenarios such as human–human occlusion, human–object entanglement, and human–background interference, mainly due to the lack of large-scale multi-instance datasets and effective spatial decoupling to separate foreground from background. To bridge these gaps, we curate the MILD dataset capturing diverse poses, occlusions, and complex multi-instance interactions. We then define the Cross-Domain Attention Gap (CAG), an attention-gap metric to quantify semantic leakage. On top of these, we propose Multi-Layer Diffusion (MILD), which decomposes the generation process into independent denoising pathways, enabling separate reconstruction of each foreground instance and the background. To enhance human-centric understanding, we introduce Human Morphology Guidance, a plug-and-play module that incorporates pose, parsing, and spatial relationships into the diffusion process to improve structural awareness and restoration quality. Additionally, we present Spatially-Modulated Attention, an adaptive mechanism that leverages spatial mask priors to modulate attention across semantic regions, further widening the CAG to effectively minimize boundary artifacts and mitigate semantic leakage. Experiments show that MILD significantly outperforms existing methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper presents **MILD**, a diffusion-based framework for mask-guided human erasing that handles complex scenarios such as occlusion and human–object entanglement. 
+
+It introduces the **MILD dataset**, the **Cross-Domain Attention Gap (CAG)** metric, and a multi-layer diffusion approach with **Human Morphology Guidance** and **Spatially-Modulated Attention** to improve structural awareness and reduce artifacts. 
+
+Experiments show that MILD outperforms existing methods in reconstruction quality and effectively manages multi-instance scenes.
+
+### Strengths
+1. Introduces a well-curated **MILD dataset** covering diverse poses, occlusions, and multi-instance interactions.
+2. Proposes novel modules — **Human Morphology Guidance** and **Spatially-Modulated Attention** — that enhance structural consistency and reduce semantic leakage.
+3. Provides clear quantitative and qualitative improvements over existing human erasing methods, supported by public dataset and code release.
+
+### Weaknesses
+1. The novelty appears limited, as the paper mainly introduces a curated human-centric dataset and a few additional modules trained specifically on it. The comparison with baselines not trained on this dataset may lead to unfair conclusions. A more convincing evaluation would involve training both the proposed model and baselines on the same dataset to verify whether the proposed modules truly contribute to the performance gain.
+
+2. The inclusion of auxiliary signals such as pose or parsing maps (Figure 4) could introduce instability—if pose estimation or parsing fails (when occluded or in hard cases), it may negatively impact editing results and potentially increase overfitting risk.
+
+3. **Clarity issues:**
+   (a) Lines 66–67: The phrase “standard LDM” is unclear in Figure 2; the corresponding method should be explicitly identified.
+   (b) Figure 3: It is not clear which components (SMA, HMG, CA) are trainable and how they interact (only one SMA and LoRA block is put with a fire icon for trainable weight).
+   (c) Figure 3: The point where noise is injected is ambiguous and should be clearly illustrated.
+
+4. The qualitative results (e.g., Figure 7 and examples on the project page) reveal severe facial distortions and identity loss, even though the model is trained specifically on a human-focused dataset. This fundamental issue should be addressed before introducing a more complex framework, especially since the scope is narrow compared to general inpainting models that handle diverse objects.
+
+### Questions
+See weaknesses
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper presents MILD (Multi-Layer Diffusion), a novel diffusion-based framework for human erasing in complex multi-person or multi-object interaction scenes. Unlike prior mask-guided inpainting or object removal methods that process all targets jointly, MILD reformulates the task as a layered diffusion process, where each foreground instance and the background are modeled by independent denoising pathways. Additionally, the paper curates a 10K-image MILD dataset featuring diverse poses, occlusions, and multi-person interactions for training and evaluation. Experiments on both the proposed MILD dataset and OpenImages show that MILD achieves state-of-the-art results across multiple perceptual and semantic metrics (FID, LPIPS, CLIP, DINO), as well as human preference scores.
+
+### Strengths
+1. The paper introduces a principled disentanglement strategy for diffusion-based inpainting, backed by the theoretical formulation of the Cross-Domain Attention Gap (CAG).
+
+2. The idea of multi-layer diffusion for independent foreground–background reconstruction is elegant and well-motivated, addressing a long-standing issue of semantic leakage in diffusion-based editing.
+
+3. Ablation studies (Table 2, Fig. 7) clearly demonstrate the non-redundant contributions of each component (HMG, SMA, backbone).
+
+4. Extensive comparisons against diverse baselines (SDXL Inpainting, LaMa, PowerPaint, CLIPAway, RoRem, etc.) show consistent gains in both quantitative and perceptual evaluations. 
+
+5. The paper is clearly written, with structured motivation and visual illustrations (Fig. 1–4) aiding understanding.
+
+6. The newly released dataset fills a gap for multi-instance human removal tasks and supports reproducibility.
+
+### Weaknesses
+1. While the CAG metric is theoretically motivated, its empirical quantification and correlation to perceptual leakage are not extensively validated (only conceptually shown in Fig. 2). Providing quantitative CAG analysis across models would strengthen the theoretical claims.
+
+2. Some proofs (e.g., Theorem 2) are mentioned to be in the appendix but are not summarized or intuitively explained in the main text.
+
+3. Although the MILD dataset is diverse, its size (10K pairs) may limit generalization to broader real-world cases. Additional evaluation on other public benchmarks (e.g., COCO, ADE20K) would reinforce generalization claims.
+
+4. Runtime efficiency and computational overhead from multi-layer inference are not discussed, which could be a concern for real-world deployment.
+
+5. While MILD is presented as a new “multi-layer” strategy, the individual modules (HMG, SMA) are reminiscent of existing pose-guided or attention-biased designs. A clearer positioning relative to prior modular improvements (e.g., Attentive Eraser, Erase Diffusion) would make the novelty boundaries sharper.
+
+[1] Liu, Yi, et al. "Erase Diffusion: Empowering Object Removal Through Calibrating Diffusion Pathways." Proceedings of the Computer Vision and Pattern Recognition Conference. 2025.
+
+[2] Sun, Wenhao, et al. "Attentive eraser: Unleashing diffusion model’s object removal potential via self-attention redirection guidance." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 39. No. 19. 2025.
+
+### Questions
+1. Can the authors provide a quantitative analysis showing how the Cross-Domain Attention Gap evolves during training or differs across models?
+
+2. What is the inference overhead of MILD compared to a single-branch diffusion model (e.g., SDXL Inpaint)? Are there techniques to merge branches or reuse background features for speed-up?
+
+3. Have the authors tested MILD on non-human multi-object scenarios (e.g., animals, furniture)? The OpenImages results show promise—more visual examples would help verify generalization.
+
+4. For HMG, how does performance vary if only pose, only parsing, or neither is used? This would clarify the necessity of each morphological prior.
+
+5. How were the AI and human perceptual success rates (Fig. 6) measured? Was there inter-rater consistency validation or a MOS-style scoring scheme?
+
+6. Could the authors include qualitative examples of challenging cases where MILD still fails (e.g., partial occlusions, heavy motion blur) to illustrate current limitations?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes MILD, a multi-layer diffusion framework for human-centric object removal and scene editing. The central challenge addressed is that standard inpainting or diffusion-based editing methods often either blur or distort surrounding context, and may remove structure crucial to body and scene coherence, or hallucination.
+
+### Strengths
+1. clear motivation, the oject removal, inpainting still remains under developped especial in the case of people involved or contain articulated bodies.
+2. Good performance, this method have outperformed the previous methods on MILD and Open Image in most of the case.
+3. Despite adding complex architecture, inference time remains comparable to SDXL inpainting due to shared backbone and lightweight LoRA tuning.
+
+### Weaknesses
+1. The dataset created is only human-centered, the generalization to non-human structured object is less estabilished, which made this model's performance on OpenImage is not that as good as MILD.
+2. As acknowledged in the limitation, this model tends to be conservative in severe occlusion cases, sometimes under-restoring background logic.
+3. This method involved a dual branch generation for the multi-ip foreground and a background then composite, which may leads some artifacts or mis alignment between the fg and bg, considering to use a unified model to output the composited ouput would be better than output both then composite (my personal opinion, you do not need do that.)
+
+### Questions
+see weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

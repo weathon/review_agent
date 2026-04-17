@@ -1,0 +1,200 @@
+# Rethinking Graph-Based Document Classification: Learning Data-Driven Structures Beyond Heuristic Approaches
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 2, 2, 2, 2
+
+## Abstract
+In document classification, graph-based models effectively capture document structure and overcome sequence length limitations, enhancing contextual understanding. 
+However, existing graph document representations often rely on heuristics, domain-specific rules, or expert knowledge. 
+We propose a novel method to learn data-driven graph structures, eliminating the need for manual design and reducing domain dependence. Our approach constructs homogeneous weighted graphs with sentences as nodes, while edges are learned via a self-attention model that identifies dependencies between sentence pairs. A statistical filtering strategy retains only strongly correlated sentences, improving graph quality while reducing the graph size. 
+Experiments on three datasets show that learned graphs consistently outperform heuristic-based baselines and recent small language models, achieving higher accuracy and $F_1$ score. Furthermore, our study demonstrates the effectiveness of the statistical filtering in improving classification robustness, highlighting the potential of automatic graph generation over traditional heuristic approaches and opening new directions for broader applications in NLP.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper aims to introduce a graph-attention framework for automatically constructing a homogenous graph by leveraging self-attention between sentence representations with bounding methods. Overall, the porposed method lack of novelty and in-depth analysis.
+
+### Strengths
+1. This paper pointed out some limitations of existing works on text classification, especially graph-based frameworks. 
+2. The proposed framework could achieve better performance on document classification tasks on selected benchmark dataset.
+
+### Weaknesses
+- Lack of Novelty:
+The proposed framework applies self-attention to model correlations between sentences within a document, which is a well-established approach. Moreover, the handling of repeated sentences ignores contextual information, and the method treats sentence order in a bag-of-words manner without modeling reading sequence.
+
+- Limited Evaluation:
+The experimental validation is insufficient. The framework is only tested on limited text classification settings. Broader evaluation is expected across diverse tasks, including mono-label/multi-label classification, sequence-level and word-level classification, and natural language inference (NLI).
+
+- Insufficient Analysis:
+The paper lacks in-depth analysis demonstrating how sentence correlations are captured. Additional analysis is needed to validate whether the proposed method effectively models inter-sentence relationships.
+
+### Questions
+Have you tested the framework on more diverse tasks (e.g., multi-label or NLI) to demonstrate generality?
+Can you provide visualizations or attention maps showing how sentence correlations are captured?
+Why was the decision made to process identical sentences in isolation without leveraging surrounding context?
+Could modeling positional or sequential sentence information improve performance or interpretability?
+
+### Soundness
+1
+
+### Presentation
+2
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+In the submitted manuscript, the authors propose to sparsify the attention matrix (summed over the heads) of a pretrained self-attention model for document classification. The sparsified attention matrices are then fed to a Graph Neural Network to improve document classification performance. The proposed method is evaluated on three benchmark datasets and compared to several heuristic graph constructions and a variety of transformer baselines.
+
+### Strengths
+- The proposed graph inference method is indeed more adaptable to different datasets than the different heuristic graph constructions that are listed by the authors. 
+
+- The overview Figure 2 provides a good understanding of the approach.
+
+### Weaknesses
+- Evaluating on only three datasets is not a lot and the transformer baselines you use change for each dataset. I think the empirical evidence in favour of your method should be extended for the method to really be of proven practical relevance. 
+
+- I am not convinced that the methodological contribution or the empirical work offer sufficient novelty to warrant publication at the ICLR conference. 
+
+- You say that heterogeneous graphs are "not comparable" to your homogenous construction and are therefore not included as baselines. I am not convinced by this. I do not see why the performance of these methods is not compared. In fact, it seems to me that too few of the recent graph-based approaches to document classification are included as baselines. 
+
+- The results in Table 2 seem to indicate that the proposed graph construction is rather memory intensive.
+
+### Questions
+1] It is unclear to me how the multi-head self attention layers, that give rise to your graph construction, are trained. Are these also trained on the document classification task? And do you sum over the attention matrices of all layers or do you use the attention matrices of a particular layer of your self-attention model?
+
+2] What is the intuition of using the standard deviation term in your sparsifying mechanisms in Equations (1) and (2), i.e., why would you like to distinguish rows with high or low variance attention scores in the attention matrices in your sparsifying mechanism?
+
+3] Concerning your experiments, I have the following questions: 
+
+3.1] It is unclear to me why the Transformer baselines change for each dataset. Could you please include the performance of each of these transformers on the datasets? I furthermore want to encourage you to include the performance of state-of-the-art transformers, i.e., the best known performance of language models on these datasets. 
+
+3.2] I think seemingly arbitrarily fixing the window size to 3 for the window-based co-occurrence graph constructions may not result in a fair comparison. Did you also evaluate the performance of models based on these graph constructions for larger window sizes?
+
+3.3.1] I am not sure whether the models in your experiments have converged. Training the self-attention model for 20 epochs and the GAT model for 50 epochs seems insufficient to me. Could you include the loss curves of some of your experiments in the appendix to evidence that this amount of training is sufficient? 
+
+3.3.2] I am in particular wondering whether your results in Table 3 still look similar if your self-attention mechanism is trained for more epochs? If the sparse attention pattern that you produce with your filtering is an optimal message passing template, should the attention mechanism not learn it if trained to convergence?
+
+3.4] For conclusive results it would be better if the depth and embedding dimensions of your GAT model were the result of a grid search instead of fixed as in Line 403.
+
+4] Minor Comments:
+
+4.1] In Line 164-5 you state the Graph Structure Learning methods "often yield incomplete or task-misaligned topologies". Could you provide a reference or empirical results to substantiate this claim? 
+
+4.2] In Line 202 you define the edge set to be a set of scalars. This is rather uncommon. Usually edge sets are defined to be sets of node tuples. 
+
+4.3] In Line 248 you mention that "self-loops are explicitly removed" in your graph construction. It is rather uncommon to fit GNNs without self-loops. Is it true that you add self-loops back into the graphs in order to run your GNN classifiers on them?
+
+4.4] In Line 392 you mention that you use average pooling in your GAT model. Often in graph-level classification tasks, one observes sum pooling to yield better-performing models. I am not sure whether you experimented with this pooling operator as well? 
+
+4.5] Did you ablate the impact of aggregating your attention matrices across heads? In other words, does the performance of your method change if only individual heads are used in the GNN?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper presents a data-driven graph structure learning approach for document classification, aiming to replace traditional heuristic graph constructions (e.g., window-based co-occurrence, sequential order, semantic similarity). Experiments on BBC News, Hyperpartisan News Detection (HND), and arXiv datasets show improvements of up to 4.3 F1 points over heuristic graphs and moderate gains over small LLM baselines.
+
+### Strengths
+- Simplicity and generality.
+- Empirical evidence.
+
+### Weaknesses
+- Limited task scope.
+- Weak theoretical justification.
+
+### Questions
+1. How does this approach differ from a joint GAT + attention-based GSL baseline?
+2. The mean- and max-bound thresholds (Eq. 1–2) reintroduce heuristics, contradicting the claim of “no heuristic design.” Threshold $\delta$ is a manually tuned hyperparameter (Table 3), and its behavior differs across datasets.
+3. No direct comparison to models using the same Sentence Transformer embeddings without graph construction.
+4. While inspired by attention mechanisms, the authors provide no theoretical grounding for why attention-derived edges approximate semantic or functional dependencies.
+5. Traditional GSL senarios often compensate for weak semantic features by learning graph structures. However, this paper aims to build semantically rich document graphs. In this context, is explicit GSL still necessary? A pretrained LLM may already capture the same relational semantics more effectively.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper constructs homogeneous weighted graphs with sentences as nodes, while edges are learned via a self-attention model
+that identifies dependencies between sentence pairs.
+
+### Strengths
+1. This paper introduces a self-attention-based approach that eliminates the dependency on heuristics and domain expertise.
+
+2. Experiment results have verified the   the effectiveness of proposed model.
+
+### Weaknesses
+1. The novelty is not enough as only applying graph attention neural networks to document graph tasks.
+
+### Questions
+1. what is the differnce among your mehtod compared with graph attention neural network.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1

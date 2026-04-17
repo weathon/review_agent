@@ -1,0 +1,127 @@
+# FedGraph: Defending Federated Large Language Model Fine-Tuning Against Backdoor Attacks via Graph-Based Aggregation
+
+- Decision: Reject
+- Scores: 6, 4, 2
+
+## Abstract
+Federated fine-tuning of large language models (LLMs) enables collaborative training without sharing raw data, offering a promising solution to data scarcity and privacy concerns. However, this setting is highly vulnerable to backdoor attacks, where adversaries inject malicious updates that preserve normal performance on benign inputs but induce targeted responses when triggered. We first demonstrate that backdoor attacks remain effective in the federated LoRA fine-tuning scenario, exposing a critical security risk. We further show that existing federated learning defenses are inadequate, as the high dimensionality and entanglement of LLM updates undermine anomaly detection methods. To overcome these challenges, we introduce \textit{FedGraph}, a graph-based aggregation framework. FedGraph represents client updates as nodes in a dynamic graph, extracts topological features including Degree, Betweenness, and Closeness centrality, and uses these to construct low-dimensional fingerprints of client behavior. An unsupervised clustering process then separates malicious from benign participants. Extensive experiments confirm that FedGraph achieve state-of-the-art defense against LLM backdoor attacks, reducing the attack success rate to below 10\%, while delivering high detection accuracy (95.5\% on average) and low false positives (2.33\%), significantly outperforming existing defenses.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper first demonstrate that backdoor attacks remain effective in the federated LoRA fine-tuning scenario with existing defenses inadequate. FedGraph is then proposed to separate benign and malicious parameter updates using unsupervised clustering basing on extracted topological features including Degree, Betweenness, and Closeness. These low-dimensional fingerprints help the identification of the malicious patterns and therefore results in a better defense.
+
+### Strengths
+1.	Multiple backdoor attacks have been evaluated covering a wide range of types. And the defense effect of the proposed FedGraph is good compared to baseline.
+2.	Extensive ablation on the 3 fingerprints components clearly demonstrates the contribution of each.
+
+### Weaknesses
+1.	Graph construction requires O(n^2) computation; for large federations (hundreds or thousands of clients), this might be a bottleneck. Could you provide any computational comparison with FedAvg to demonstrate the computation overhead?
+2.	Why do you choose these 3 attributes as the fingerprints but not others? Are there any other possibilities?
+
+### Questions
+1.	The bottom margin of each page is excessively larger than other papers. There might be an issue with the usage of the latex template.
+2.	Why not include the accuracy for the main task since FPR and TPR can both be computed?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces a backdoor defense for federated LLMs by computing similarities between clients, building a topology graph to represent their relationships, and extracting three graph-based quantifiers—degree (number of neighbors), betweenness (how often a client lies on shortest paths), and closeness (average proximity to others). These three metrics are then fed into HDBSCAN, where clients marked as outliers are considered potentially malicious. The method is evaluated against several mainstream attacks in federated LLMs and compared with FLAME and FedFreq, showing the highest TPR and lowest ASR across multiple settings.
+
+### Strengths
+(+) The paper is clearly written, and the method is easy to follow.  
+(+) The topic is important for improving the security of federated learning with LLMs.  
+(+) Experimental results show consistent improvements (higher TPR, lower ASR).
+
+### Weaknesses
+(-) While the main novelty lies in representing client relationships as a graph, the presentation of these graphs is limited (only Figure 3). The similarity metric is cosine similarity between updates, which is widely used in prior works; other metrics are not explored. Given the high dimensionality of updates, it remains unclear whether a simpler method, such as dimensionality reduction combined with clustering, could yield comparable performance.  
+(-) The three graph-based factors in the 10-client setup are not clearly illustrated. Since they are integer/scalar values, presenting a small quantitative table would help readers interpret the results.  
+(-) Relying on HDBSCAN’s outlier label (−1) to identify malicious clients raises stability concerns. If malicious clients are similar to each other, why wouldn’t they be grouped into a cluster (with labels different from −1)? Clarification on this behavior and the stability of detection is needed.  
+(-) Robust aggregator baselines such as RFA, RLR, or DP-based defenses are not compared against.  
+(-) The impact on model utility (e.g., accuracy or convergence) is not reported, leaving uncertainty about potential trade-offs.  
+(-) Results for random client selection are missing, and the assumption of 40% malicious clients is quite strong and unrealistic in most federated settings.
+
+Overall, the paper addresses an important problem and shows promising results, but the evaluation is limited, and the robustness of the method is not fully justified. Including comparisons with robust aggregators, reporting utility trade-offs, clarifying assumptions on client sampling, and analyzing clustering stability would significantly strengthen the paper.
+
+### Questions
+1. In Table 1, why is the ASR "without trigger" larger than the “with trigger” case? Do the authors mean mean $\text{ASR}_{\text{w/o}}$ corresponds to the "without trigger" scenario? Please clarify.  
+2. What does it mean when the Dirichlet parameter $\alpha > 1$? How does this affect the data heterogeneity across clients?  
+3. How are the datasets distributed heterogeneously across clients—using Dirichlet splits, shard-based partitions, or other schemes? Please specify parameters for reproducibility.  
+4. How sensitive is the method to HDBSCAN hyperparameters (`min_cluster_size`, `min_samples`) and the choice of similarity metric?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This manuscript propose FedGraph, a method try to mitigate the backdoor attack in federated fine-tuning of LLM. FedGraph represents each client updates as nodes in a dynamic graph, and extracts topological feature for anomaly detection. Experimental results shows that the method seems outperform then existing SoTA.
+
+### Strengths
+1. The manuscript proposed FedGraph, which is attack data-free.
+2. The manuscript provide sufficient evaluation on the effectiveness of FedGraph
+
+### Weaknesses
+1. some typos: the caption of the Figure 2, "... detection a1nd aggregation ...". The author should carefully revise these typos and other grammer errors.
+2. FedGraph is based on the assumption that the benign updates are mutually similar, and malicious updates deviate from these benign clusters. However, the assumption might not hold in some extend. 1) For non-IID distribution, the optimization objective is related to the data, so the degree of non-IID data affects the optimization objectives of different clients. That is to say, the greater the degree of non-IID, the greater the difference in the optimization objectives. In experimental settings, the $\alpha$ set to 0.9 is too large and not representative. 2）For backdoor attack, most of existing methods require the stealthness of the attack, that is, the submited malicious models might be similar with the global model or benign models.
+3. The details of how to extract the graph fingerprint should be provided.
+
+### Questions
+1.How the graph fingerprint extraction process work, please provide the psedu-code or equations.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

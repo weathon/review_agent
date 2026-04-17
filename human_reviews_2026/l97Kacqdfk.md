@@ -1,0 +1,204 @@
+# Graph-based Nearest Neighbors with Dynamic Updates via Random Walks
+
+- Decision: Accept (Poster)
+- Scores: 8, 2, 6, 4
+
+## Abstract
+Approximate nearest neighbor search (ANN) is a common way to retrieve relevant search results, especially now in the context of large language models and retrieval augmented generation. One of the most widely used algorithms for ANN is based on constructing a multi-layer graph over the dataset, called the Hierarchical Navigable Small World (HNSW). While this algorithm supports insertion of new data, it does not support deletion of existing data. Moreover, deletion algorithms described by prior work come at the cost of increased query latency, decreased recall, or prolonged deletion time. In this paper, we propose a new theoretical framework for graph-based ANN based on random walks. We then utilize this framework to analyze a randomized deletion approach that preserves hitting time statistics compared to the graph before deleting the point. We then turn this theoretical framework into a \emph{deterministic} deletion algorithm, and show that it provides better tradeoff between query latency, recall, deletion time, and memory usage through an extensive collection of experiments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+This paper focuses on approximate nearest neighbor search problem. Based on the existing Hierarchical Navigable Small World (HNSW) data structure, this paper proposes SPatch, a novel random walk-based approach to support deletion of existing data. The experimental results on various datasets in massive deletion settings show the proposed method provides better tradeoff between query latency, recall, deletion time and memory usage.
+
+### Strengths
+1. This paper proposes a novel deletion algorithm for HNSW, a widely adopted data structure in vector search.
+2. This paper provides both theoretical and practical analyses on the proposed algorithm. 
+3. The proposed algorithm achieves good tradeoff between four key metrics.
+
+### Weaknesses
+1. As mentioned in the paper, deletion procedure involves more complicated operations. I wonder if it is possible to provide time and space complexity analyses on the deletion algorithms. 
+2. The experimental setting of this paper seems to be different from previous works, such as FreshDiskANN and SPFresh. They simulate the scenario for both insertion and deletion, which are more closed to the real world.
+
+### Questions
+See weaknesses above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+The paper presents a theoretical framework for graph-based approximate nearest neighbor (ANN) search grounded in random walk analysis. Using this framework, the authors analyze a randomized deletion strategy that maintains hitting time statistics comparable to those of the original graph. They further leverage the theoretical insights to develop a deterministic deletion algorithm and experimentally compare it with other deletion algorithms.
+
+### Strengths
+S1: Deletion is important operation for dynamic similarity graphs, and any related research is welcome. 
+
+S2: The theoretical analysis of deletion in similarity graphs seems reasonable.
+
+### Weaknesses
+W1. A highly related work, DEG [a], is missing. In [a], the authors also proposed a similarity graph capable of handling all updates, including deletions. It is recommended that the proposed approach, Spatch, be compared with [a] thoroughly in terms of both design and performance.
+
+W2. The authors use rebuild as the baseline. However, a recently proposed approach [b] can rebuild the HNSW index much faster without impairing search performance. The authors are recommended to implement rebuild according to the method in [b] for the performance comparison.
+
+W3. Some explanations are confusing. On line 425, the authors claim that, compared with rebuild, the query speed of Spatch is much faster and memory usage decreases as more points are deleted. However, from the results in Fig. 2, in many cases Spatch requires more distance computations than rebuild. How should the statement that Spatch is faster be interpreted? Additionally, where are the experimental results on memory usage?
+
+W4. (Minor) I feel this paper is more suited to conferences on databases or data mining, where handling updates is a primary focus.
+
+[a] Dynamic exploration graph: a novel approach for efficient nearest neighbor search in evolving multimedia datasets. International Conference on Multimedia Modeling 2025.
+
+[b] Revisiting the Index Construction of Proximity Graph-Based Approximate Nearest Neighbor Search. VLDB 2024
+
+### Questions
+Please see the weaknesses and address the concerns mentioned there.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+5
+
+### Summary
+The paper studies the problem of deletions of base points in the context of Approximate Nearest Neighbor (ANN) search. It proposes a theoretically grounded procedure that efficiently updates the ANN data structure upon deletions. The proposed approach achieves better recall, along with good query performance, efficient deletion update time, and reasonable memory usage.
+
+Conclusion: Although the results presented in the paper are interesting, there are lot of missing pieces. I am leaning in the middle, I don't mind either a accept or reject for this paper.
+
+### Strengths
+I see two main strengths in this paper:
+
+The first is the novel perspective of interpreting the greedy walk through the lens of a softmax walk. This conceptual shift provides valuable intuition and a unifying view of the search process.
+
+Building on this softmax interpretation, the paper proposes a graph sparsification approach, where handling deletions efficiently naturally corresponds to sparsifying a complete weighted graph.
+
+These viewpoints together lead to a practical and effective deletion procedure that performs well empirically.
+
+### Weaknesses
+1) I feel there is a little disconnect between theory and its relation to guarantees achieved by the ANN procedure. For instance, I would have loved to see a theorem statement of the kind, for any query q, if greedy walk on G achieves alpha approx or recall, then softmax walk also achieves same approx or recall with high prob. Also, greedy walk or softmax walk on sparsified G' also achieves similar approximation factors. 
+
+2) Most of the theorem statements are simple. I am not so impressed with the proofs except this viewpoint of seeing greedy walk through the lens of softmax walk.
+
+3) Also the softmax walk was defined with respect to query point q, but SPatch algorithm uses distances between base points to sparsify the graph. There was no explanation given on why this is okay. I am aware that queries are not given to us, somehow an explanation is needed on why sparsifying graph based on distances between base points is okay. When inserting a base point v into the graph, usually these graphs are constructed assuming query is v itself, and this assumption is used to decide the incoming and outgoing edges of v. It would have been nice to see some explanation of SPatch algorithm with respect to this assumption of viewing base points as query points.
+
+### Questions
+1) You keep using the word "twin formulation", what does twin refers to?
+2) Theorem 4.3 implies a bound in Theorem 4.5, can you please also add some comments on what the bounds in Theorem 4.5 would look like if you had approximations in terms of spectral norms than the Forbenius norm in Theorem 4.3. Also, talk about the the sparsity bounds for the spectral norm from prior work.
+3)  Please explain beam search version of softmax clearly in your paper. I am assuming that, during search, at each hop, suppose you have your current list L of size t and you expand a node v in L. Then you look at L \cup N(v) and sample top t edges based on their softmax probabilities? Also, what is the stopping criterion for the softmax search, that is, when will the search stop?
+4) In Table 2, though there is a recall drop, but the number of distance comparisons done by softmax walk is also lower. To have better clarity, for each dataset, can you create a plot with recall@10 numbers (y-axis) for different beam sizes (x-axis)? 
+5) Also in Figure 2, can you generate different plots, where x-axis is distance comparisons and y-axis is recall@10? The number of distance comparisons can vary by varying the beam size.
+6) Clearly mention in the introduction itself when is your procedure good by looking at Figure 2. For instance, your procedure is good when deletion batch size is higher because of blah reason. It would be nice to add some conclusions drawn from experiments in the introduction itself.
+7) Handle weakness 3.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+### Paper Summary
+
+This paper addresses the critical update problem in graph-based ANN search, focusing on efficient deletion. The core contribution is a new deletion algorithm, SPatch, derived from random walk theory. The problem of removing a node is reformulated as preserving the random walk transition probabilities among the deleted node’s neighbors. Extensive experiments show that SPatch achieves a well-balanced trade-off across four key metrics: high recall, fast query speed, low deletion time, and memory efficiency.
+
+### Strengths
+### Paper Strengths
+
+S1. Efficient, high-recall dynamic deletion is one of the most significant unsolved challenges for graph-based ANN indexes in production. The paper’s motivation is strong and highly relevant.
+
+S2. The idea of modeling a graph’s greedy search as a “softmax walk” is clever, bridging a heuristic algorithm with formal random walk theory.
+
+S3. The paper includes comparisons against mainstream baselines and demonstrates competitive performance across recall, query speed, deletion time, and memory usage.
+
+### Weaknesses
+### Paper Weaknesses
+
+W1. The paper’s theoretical foundation is built on undirected graphs, whereas mainstream implementations use directed graphs, leaving a gap that the paper does not justify. (See D1, D2)
+
+W2. The algorithm does not clearly describe how it handles in-neighbors of a deleted node. (See D3)
+
+W3. The algorithm is only validated on HNSW, and its robustness on other graph indexes (e.g., NSG, DiskANN) is unknown. (See D4)
+
+W4. The algorithm section includes excessive theoretical formulas, making it difficult to follow. (See D5)
+
+### Detailed Comments
+
+D1. The theoretical foundation (including Laplacians, spectral graph theory, hitting times, and the star–mesh transform) is based on undirected graphs. However, most high-performance graph implementations employ directed graphs. The paper does not explain how the undirected theoretical framework applies to a directed implementation, which raises questions about its validity.
+
+D2. Following D1, the paper is ambiguous about whether the HNSW used in Section 5 is directed or undirected, which is crucial for correctly interpreting the results. For example, Figure 2 reports Deletion Time values near zero for SPatch, Local, and NoPatch, which is implausible for realistic directed graphs. This inconsistency suggests the experiments might have been conducted on an undirected structure, contradicting common high-performance settings.
+
+D3. The proposed method does not specify how in-neighbors of the deleted node are handled. Algorithm 1 and Section 5.1 only describe patching out-neighbors, which could leave dangling in-edges and harm graph navigability. Prior research has shown that proper in-neighbor management is essential for maintaining both performance and structural integrity [1]. This point should be clearly addressed.
+
+D4. The algorithm is evaluated only on HNSW. Its effectiveness and generality on other graph-based indexes (e.g., NSG, Vamana, or $\tau$-MNG) remain to be demonstrated.
+
+D5. The algorithm description contains extensive theory and definitions but lacks clear procedural steps, illustrative figures, and simple examples. This makes it difficult for readers to grasp the main idea and follow the technical flow efficiently.
+
+### Questions
+Please refer to the weakness and detailed comments.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

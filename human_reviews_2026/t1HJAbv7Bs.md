@@ -1,0 +1,233 @@
+# Exploring Nonlinear Pathway in Parameter Space for Machine Unlearning
+
+- Decision: Reject
+- Scores: 6, 6, 6, 4
+
+## Abstract
+Machine Unlearning (MU) aims to remove the information of specific training data from a trained model, ensuring compliance with privacy regulations and user requests. While one line of existing MU methods relies on linear parameter updates via task arithmetic, they suffer from weight entanglement. In this work, we propose a novel MU framework called Mode Connectivity Unlearning (MCU) that leverages mode connectivity to find an unlearning pathway in a nonlinear manner. To further enhance performance and efficiency, we introduce a parameter mask strategy that not only improves unlearning effectiveness but also reduces computational overhead. Moreover, we propose an adaptive adjustment strategy for our unlearning penalty coefficient to adaptively balance forgetting quality and predictive performance during training, eliminating the need for empirical hyperparameter tuning. Unlike traditional MU methods that identify only a single unlearning model, MCU uncovers a spectrum of unlearning models along the pathway. Overall, MCU serves as a plug-and-play framework that seamlessly integrates with any existing MU methods, consistently improving unlearning efficacy. Extensive experiments on the image classification task demonstrate that MCU achieves superior performance. The codes are available at https://anonymous.4open.science/r/MCU-1E36.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes an unlearning refinement algorithm that leverages mode connectivity between a pre-unlearned model and the original model to achieve a better balance between the forget and retain datasets. The method needs training a control model that satisfies a Bézier curve constraint, enabling smooth interpolation between model parameters to guide the unlearning process. Additionally, the authors introduce a simple masking heuristic to reduce the search space of the control model, improving efficiency. Experimental results on benchmark datasets and models demonstrate that the proposed approach produces unlearned models whose behavior closely matches that of models retrained from scratch.
+
+### Strengths
+1. The paper is fairly well written with detailed description of the proposed method and necessary background literature
+2. The proposed method is quite novel and interesting, while its design lack evidence to support. Speaking about the mode connectivity, why is it important in the proposed approach? can we simply train a scalar as ratio to interpolate original model and unlearned model?
+3. Experiments seems quite comprehensive where the control flexibility of the proposed method is well demonstrated.
+
+### Weaknesses
+1. The proposed method rely on a pre-unlearned model (or could be a retrained model). But if one has already have the unlearned model, why would they need the proposed approach. What if the pre-unlearned model is not good? The paper should provide more evidence to show how sensitive the proposed method conditioned on the selection of pre-unlearned model. Indeed, in practice, existing unlearning algorithms often struggle on producing consistent unlearning quality.
+2. While the introduction of mode connectivity is an interesting idea, the paper does not clearly justify why this framework is necessary. It appears that similar interpolation behavior could be achieved through a simpler linear combination, e.g., 
+$$\alpha \times \theta_{o} + (1-\alpha)\times \theta_{p}$$ where $\alpha$ is a learnable scalar. The added complexity of training a control model along a Bézier curve requires stronger motivation or empirical evidence to demonstrate clear advantages. Without such justification, the connection to mode connectivity feels more like an interpretive framing than a necessary component of the method.
+
+### Questions
+My questions are included in the above comments.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper proposes MU framework based on the model connectivity to find the unlearning pathway. The idea is from exploiting the arithmetic negation to linearly subtract the parameters of the task vectors corresponding to the forgetting data. The paper mentioned that the linear task arithmetic suffers from weight entanglement and the. so the authors investigated the idea of mode connectivity to obtain the unlearned parameters by constructing a pathway from the original model to pre unlearned model using the quadratic Bezier curve.
+
+### Strengths
+The paper is well written. The idea is clearly stated and the background on the topic is well discussed. 
+The motivation of the paper based on the weight entanglement is comprehensively discussed in the appendix. 
+The paper has a comprehensive experimental evaluation.
+
+### Weaknesses
+The reliance of method on the on a pre-unlearned (specially using the unlearning approximation methods for obtaining the ) model would bound the performance of the model. For example, the GradAscent is notorious for showing high variance and causing damage to the model's parameters, this can cause the pre-defined model to be underperforming and model's utility to be severed damaged. 
+
+Also the choice of Accuracy for adjusting the coefficient of unlearning may not be reliable. For example, in the cases that model's prediction confidence on samples of the forget set very drops significantly and the predictive confidence looks similar to the uniform, but the prediction of the model on the original class remains slightly higher other than the rest of classes. Therefore the accuracy on the forget set remains 100%. This is just an example that the accuracy may not be reliable metric for finding the best coefficient.
+
+### Questions
+line 146 // Inspired by... :
+
+I encourage authors to provide the motivation on choosing the quadratic Berizer Curve for exploiting the non-linear pathway between the original model and the pre-unlearned model. They said that the work is inspired with the Garipov work but the motivation for choosing this method is unclear.
+
+Line 155 // it represents: 
+
+Why we would be interested in a spectrum of potential unlearning models? what would be the advantage over a single unlearned model that performs well?
+
+line 231 // we preliminary.. :
+
+since masking reduces the number of parameters it was expected to reduce the time complexity of backprop, but the issue that arises is why those parameters that are more sensitive to the forget data are those ones that should be considered more influential in the prediction of the model for the forget set? How you can be sure that your heuristic for the back-propagated gradient is the best one to choose the most effective weights for the prediction of forget and retain set?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The goal of machine unlearning is to remove a subset of data from a pretrained model, while preserving performance on the remaining data. This paper proposes Mode Connectivity Unlearning (MCU), a plug-and-play framework designed to address the weight entanglement problem in existing linear unlearning approaches. This method aims to find a nonlinear pathway between the original and the pre-unlearning model using mode connectivity. The authors introduce a masking strategy to improve efficiency and performance, and further propose an adaptive mechanism for hyperparameter tuning. Experiments on image classification tasks shows improvement over multiple baselines with the proposed method.
+
+### Strengths
+* The paper is written clearly and is well-structured. The authors propose a novel method to explore nonlinearity and mode connectivity in machine unlearning, which remains unexplored in the literature. 
+* The experimental and ablation sections are extensive, including multiple datasets, architectures, and unlearning baselines. The addition of MCU consistently improves performance across different settings.
+
+### Weaknesses
+* One of the paper’s main motivations is to “identify a spectrum of effective MU models”. It is mentioned that the priorities could change over time, such as samples becoming higher-risk over time. However, the paper does not present a practical use case where this ability would be useful.
+* Based on the RTE metric, MCU causes some runtime overhead compared to some of the baseline models, which is a trade-off with performance improvement. 
+* All experiments are done on image classification, so it is unclear how MCU would perform on other modalities such as language models.
+
+Minor issues: The tables can be difficult to interpret. It would help to use arrows to represent which metric should ideally be higher or lower.
+
+### Questions
+Can this method be extended to other domains such as language models?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+The paper proposes Mode Connectivity Unlearning (MCU), a plug-and-play framework that searches a nonlinear Bezier path in parameter space between the original model and a pre-unlearning model. By optimizing only a single control model, MCU yields a continuum of candidate models along the path, enabling selection to balance forgetting and utility. The method adds (i) a parameter-masking strategy at the tensor level to improve speed/targeting and (ii) an adaptive penalty \beta that adjusts forgetting pressure batch-wise based on calibration targets for retaining/forgetting sets. On image-classification tasks (CIFAR-10, Tiny-ImageNet, ImageNet-100; ResNet/ViT/VGG), MCU and MCU-\beta outperform several baselines (Retrain, Finetune, Random Label, Gradient Ascent, NegGrad+, SFRon, SalUn, NegTV) on aggregate gaps to a retrain reference, and expose an "effective region" of strong candidates along the curve
+
+### Strengths
+1. Conceptual novelty: Moving beyond linear "task arithmetic", the paper makes a clear case that nonlinear pathways can mitigate weight entanglement and provide a spectrum of solutions rather than a single point. 
+
+2. Simple optimization: Optimizing only is elegant and makes path search computationally tractable; sampling, t~U(0,1) keeps the procedure lightweight. 
+
+3. Plug-and-play with baselines: MCU wraps around strong/weak pre-unlearning models (e.g., RL, GA, NegGrad+) and consistently improves them, including both under- and over-forgetting regimes. 
+
+4. Parameter-masking at tensor level: The two-stage mask (retain-filter + forget-reserve) is pragmatic; authors show ~75% epoch-time speedup at 10% mask in a CIFAR-10 setting while preserving accuracy better than a random mask. 
+
+5. Effective-region selection: Empirical evidence that many points on the path outperform provides practical flexibility for utility vs. forgetting trade-offs
+
+### Weaknesses
+1. Assumption on endpoints: MCU’s success critically depends on the quality of is poorly chosen or adversarially brittle, the curve might inherit those flaws; the paper does not explore how to construct/validate robust endpoints beyond standard baselines. 
+
+2. Forgetting metric and objectives: The work largely operationalizes "unlearning" via accuracy on D_f (UA) and "gap to retrain" plus an MIA score alignment to RT. This is not a guarantee of removal nor robust to adaptive attacks; the paper does not evaluate certified removal or causality-based tests (e.g., data influence measures) beyond Fisher-style references. 
+
+3. Security/privacy framing: The argument that matching RT on MIA is desirable is plausible, but insufficient - one can match RT on summary privacy metrics yet still memorize or leak shards of D_f. No evaluation with stronger attacks (e.g., calibrated confidence extraction, influence-function-guided MIAs) is shown. 
+
+4. Theory clarity: Theorem 1 (impossibility of a single model to optimally unlearn all points, requiring an astronomical number of models) is informal in the main text; assumptions, randomness model, and notion of "optimal unlearning" are not crisply stated. The result risks over-claiming without clear operational meaning for practitioners. 
+
+5. Scalability scope: Experiments cover vision classification with moderate-scale models/datasets. There is no evidence for LLMs, multimodal systems, or class-imbalanced/continual scenarios where path geometry may differ. 
+
+6. Heuristic choices:
+
+6.1 Adaptive \beta relies on piecewise thresholds and calibration targets (e.g., Cal(D_f) = 0 for class-wise forgetting). This is reasonable but ad hoc; stability under noise/domain shift is unclear.
+
+6.2 t-sampling is uniform; curvature-aware or loss-aware sampling might be more efficient, yet not explored. 
+
+7. Runtime trade-offs: Although the mask speeds epochs, total RTE is sometimes higher than simple baselines due to path training/inference sweeps; a wall-clock cost-benefit analysis (vs. a well-tuned single-point method) is not fully quantified.
+
+8. Cost and practical overheads:
+
+8.1 Extra training phase (control-point optimization). MCU adds a dedicated optimization of the control weights on top of whatever pre-unlearning you already did to obtain. Even with masking, this is a non-trivial number of epochs and can rival or exceed a well-tuned single-point unlearning run.
+
+8.2 Quadratic Bezier path requires more curvature and cost to fit. A quadratic curve (vs. a linear interpolation) can better navigate loss valleys, but it also increases the burden on optimization to “shape” the curve so that many sampled points behave well. You often need more path samples (larger K) during training/validation to ensure the curve is genuinely useful across t \in [0, 1].
+
+8.3 Path-sweep selection cost.
+In practice, you don’t deploy the whole curve - you sweep multiple t values to pick an operating point that balances forgetting and utility. That means repeated evaluation on retain/forget/RT sets (and sometimes MIA audits), which adds wall-clock time and evaluation compute. If you re-select t per deployment/domain shift, you pay this cost repeatedly.
+
+8.4 Memory and checkpoint management.
+
+If you cache candidates along the path, you either store multiple checkpoints or re-materialize them on the fly. The former consumes storage; the latter adds latency and requires synchronized versioning of \theta_o, \theta_p, \theta_c.
+
+8.5 Masked training is not free
+
+Tensor-level masking reduces per-step FLOPs, but it introduces implementation complexity, potential instability (mask schedule, layer sensitivity), and can require careful tuning to avoid accuracy collapse—especially on larger/backbone-heavy models.
+
+8.6 Sensitivity to endpoint quality.
+
+Poor \theta_p forces the curve to "work harder", often increasing both epochs and samples K needed to find a satisfactory region. That compounds overall cost and can narrow the effective region, reducing the payoff from the path.
+
+8.7 Comparative value vs. strong single-point baselines.
+
+A well-engineered single-point method (e.g., with regularization, early stopping, and privacy-attack tuning) can be much cheaper end-to-end. MCU must clear that cost bar after adding control-point training and t-sweep selection to justify its complexity.
+
+9. Missing reference.
+
+A closely related work is not mentioned. The paper should compare to this work (https://arxiv.org/abs/2504.06407):
+
+Understanding Machine Unlearning Through the Lens of Mode Connectivity, Cheng and Amiri, 2025
+
+### Questions
+1. Endpoint construction & robustness: How sensitive are outcomes to the choice of \theta_p? Have you tried multiple pre-unlearning procedures per dataset and measured variance in the effective region’s width/position? 
+
+2. Adversarial privacy tests: Can you evaluate MCU against adaptive MIAs, extraction attacks, and counterfactual tests that condition on access to \theta_o, \theta_p and points along the path? How does the effective region hold up? 
+
+3. Certified perspectives: Could MCU be combined with certified removal (e.g., DP-based or audit-based certificates) to bound residual influence of D_f along the curve? 
+
+4. Path geometry & sampling: Why uniform t? Would loss-aware sampling or Bezier-surface control (not just a single control point) improve efficiency or robustness? Any negative results worth sharing? 
+
+5. Generalization beyond vision: What breaks (or changes) when moving to text/LLMs (catastrophic interference, optimizer states, longer pretraining)? Any preliminary signs MCU scales? 
+
+6. Masking granularity: Tensor-level masking is efficient; do you observe layer-type patterns (e.g., attention projections vs. MLPs) that systematically contribute to forgetting vs. retention? Could a structured mask (heads, channels) help? 
+
+7. Selection at inference: The heuristic that the optimum lies in t \in [0.75,1] is empirical. How often is it violated? Could a small active search over t with early stopping outperform cubic interpolation?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2

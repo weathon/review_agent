@@ -1,0 +1,170 @@
+# SPIKE-RL: Video-LLMs meet Bayesian Surprise
+
+- Decision: Accept (Poster)
+- Scores: 8, 6, 6, 6
+
+## Abstract
+Real-world videos often show routine activities punctuated by memorable, surprising events. However, most Video-LLMs process videos by sampling frames uniformly, likely missing critical moments that define a video's narrative. We introduce SPIKE, an inference-time framework that quantifies Bayesian Surprise as the belief update triggered by new visual evidence in the video stream, identifying moments where new visual evidence conflicts with prior beliefs. SPIKE effectively localizes surprise in videos, correlated with humans on positive (FunQA) and negative (Oops!) surprise benchmarks. SPIKE-RL further improves on SPIKE's ability to detect surprise, leveraging GRPO to refine its belief hypotheses based on a reward signal from the video caption. SPIKE and SPIKE-RL guide query-agnostic surprise-weighted frame sampling, which allocates more frames to interesting moments in the video. With this strategy, we achieve consistent performance gains on five downstream benchmarks. By enabling Video-LLMs to track beliefs and register surprise, our work paves the way for more robust models that can revise their understanding in response to new information.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper presents a novel and well-motivated framework that integrates Bayesian surprise into video-language models, enabling belief-driven reasoning and adaptive frame selection. The proposed SPIKE and SPIKE-RL frameworks not only introduce interpretable belief tracking but also deliver consistent improvements across surprise localization and general video understanding benchmarks. The idea of quantifying model surprise to guide frame sampling is elegant and cognitively inspired, bridging the gap between passive perception and proactive understanding in Video-LLMs.
+
+### Strengths
+1. The idea of connecting Bayesian surprise to video understanding is elegant and intuitive. Whle the proposed method is simple to plug in and does not require retraining large models. As authors report, results are strong and consistent across both surprise-related and general reasoning tasks.
+
+2. The paper is clearly written and easy to follow; the belief visualizations make the concept concrete.
+
+3. The reinforcement learning extension (SPIKE-RL) adds genuine value and improves diversity and accuracy.
+
+### Weaknesses
+The computational cost of generating multiple belief trajectories isn’t fully discussed.
+
+### Questions
+Have you consider the other modality included? (e.g.: Audio).
+
+As you mentioned that the Oops is the negetive side, it seems related the anomaly detection? Have you tried the video anomaly understanding as the downstream application?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces SPIKE, an inference-time framework that enables Video-LLMs to detect semantically "surprising" events by quantifying Bayesian Surprise. The core mechanism computes surprise as the KL divergence between belief distributions over textual hypotheses before and after observing new visual evidence. The paper further proposes SPIKE-RL, which cleverly uses reinforcement learning (GRPO) with a video captioning reward signal to optimize the hypothesis generation process, by passing the need for direct hypothesis supervision.
+
+### Strengths
+1.	The use of  Bayesian surprise for frame selection introduces an interpretable probabilistic belief-tracking mechanism distinct from prior query-based or heuristic methods.
+2.	Human-readable hypothesis sets enable qualitative analysis of belief shifts.
+3.	Gains on five video understanding tasks show that surprise-aware sampling transfers beyond the surprise domain.
+4.	The method is explained very clearly, and the figures (especially Fig 2 and Fig 4) provide excellent visualizations of the architecture and qualitative improvements .
+
+### Weaknesses
+1.	The model's performance seems highly dependent on the quality and diversity of the belief set. The number of hypotheses is fixed at N=3, which seems very low to capture a complex belief space.
+2.	The sensitivity to hyperparameters (W) is not explored. It is unclear how performance changes with different $W$ sizes or if the complex historical summary $H_t$ is truly necessary compared to just using the $W_t$ window.
+3.	The entire SPIKE-RL optimization relies on a proxy reward signal from an LLM (LLM-Match, using Olmo-7B-hf). The paper does not provide validation for the reliability or potential biases of this specific LLM judge. If the reward model is flawed, the optimization may lead to a policy (hypothesis generator) that is simply good at "gaming" the Olmo-7B judge, rather than generating genuinely better hypotheses.
+4.	The RL training procedure appears computationally prohibitive. For each training sample, it requires $M$ full rollouts , each involving $K$ steps of hypothesis generation/scoring, plus a final caption generation, plus a call to the reward model LLM. This high training cost (multi-model, multi-step) may limit the method's scalability, reproducibility, and adoption.
+
+### Questions
+1.	How reliable is the LLM-Match reward function across diverse linguistic styles?
+2.	Does the reinforcement signal propagate stably when rewards are normalized within small rollout groups?
+3.	For the Qwen2.5-VL baseline in Table 1, the prompt in Appendix A.3 asks for a binary 0/1 label . How was this binary output converted into a continuous surprise score suitable for calculating the IoU and Acc metrics, which require finding a "peak" or a "window"?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+The paper proposes **SPIKE**—an inference-time, **Bayesian-surprise** framework for Video-LLMs—and **SPIKE-RL**, a reinforcement-learning refinement of SPIKE’s hypothesis generation. SPIKE tracks **human-interpretable textual beliefs** about upcoming events and defines surprise as the **divergence between prior and posterior belief distributions** when a new frame arrives; this surprise signal then drives **query-agnostic, surprise-weighted frame sampling** that reallocates a fixed frame budget toward informative moments. SPIKE-RL uses **GRPO** with an **LLM-Match** caption reward to improve the diversity and usefulness of belief trajectories. The approach substantially improves **surprise localization** on **Oops!** and **FunQA**, and delivers consistent gains on **five downstream benchmarks** (e.g., BlackSwan, ExFunTube, VideoMME-S, NextQA) by simply replacing uniform sampling in Qwen2.5-VL with surprise-weighted sampling.
+
+### Strengths
+* Surprise is formalized as **KL/JSD** between posterior and prior over **textual hypotheses**, yielding a transparent score and human-readable beliefs that explain *why* a segment is surprising.  
+* Surprise-weighted sampling consistently outperforms uniform and classic shot-boundary heuristics across diverse tasks, with additional improvements from SPIKE-RL. 
+* SPIKE-RL approaches human [Acc@0.25s](mailto:Acc@0.25s) on **Oops!** and improves **FunQA** IoU, showing robust belief tracking beyond zero-shot baselines. 
+* Drops in as a **sampling layer** for existing Video-LLMs, leaving architectures untouched and keeping complexity linear in frame budget.
+
+### Weaknesses
+* SPIKE-RL optimizes with an **LLM-based caption reward** (LLM-Match); potential evaluator bias and reward hacking risks are only partially audited. 
+* Surprise localization relies on **Oops!**, **FunQA**, and a **Mr. Bean** set with **laughter-based silver labels**; broader domains and richer human annotations would strengthen claims.  
+* Inference adds hypothesis generation and prior/posterior scoring at multiple timesteps
+
+### Questions
+1. What additional **human studies or inter-rater reliability analyses** would you require to trust **LLM-Match** as a faithful reward for belief optimization (vs. stylistic matching)? 
+2. Which **non-humor / non-slapstick** domains and **alternative surprise annotations** (beyond laughter or single-event labels) should be added to convincingly establish general surprise tracking? 
+3. What **latency/throughput breakdowns** (per-step hypothesis generation, scoring, sampling) and **ablation of frame budget vs. quality** would you need to see to judge practicality for streaming or long-video settings?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper introduces SPIKE-RL, a frameworks that enables Video-LLMs to identify surprising moments in videos through Bayesian belief tracking. The core approach maintains explicit probability distributions over textual hypotheses about what might happen next in a video, computing surprise as the KL divergence between prior and posterior beliefs when new frames are observed. SPIKE-RL further refines this through reinforcement learning (GRPO) that optimizes hypothesis generation based on video captioning quality. The authors demonstrate that their surprise scores correlate strongly with human judgments on surprise localization benchmarks and show that replacing uniform frame sampling with surprise-weighted sampling—which allocates more frames to high-surprise moments—leads to consistent improvements across five downstream video understanding tasks including question answering and temporal reasoning. The method is query-agnostic, computationally efficient, and provides interpretable results through human-readable belief hypotheses, offering a principled alternative to uniform sampling that better mimics human attention to memorable, expectation-violating events.
+
+### Strengths
+1. Novel and principled approach: Introduces a theoretically grounded Bayesian framework for surprise detection in videos, formalizing belief tracking through explicit probability distributions over human-interpretable textual hypotheses rather than relying on heuristics or purely visual features.
+2. The proposed method achieves near-human performance on surprise localization (62.9% vs 62.1% human accuracy on Oops! Acc@0.25s) and significantly outperforms baselines across multiple benchmarks, with 10-fold improvement over zero-shot Qwen2.5-VL.
+3. Unlike query-conditioned methods, SPIKE works proactively without requiring downstream questions, and provides human-readable belief hypotheses that make the surprise scores interpretable and debuggable.
+
+### Weaknesses
+1. The training set is small. SPIKE-RL is trained on only 2,000 videos, which raises concerns about overfitting and generalization. No ablation studies on training set size or analysis of what the model actually learns during RL training.
+2. The zero-shot Qwen2.5-VL baseline appears poorly designed (simple binary scoring prompt). Missing comparisons with recent video understanding methods that use attention mechanisms or saliency detection. Shot boundary detection baselines (RGB Histogram, ECR) seem strawmen as they're not designed for semantic surprise.
+3. The scope of the method is limited. Only tested on short videos were used and evaluation focuses heavily on unintentional failures (Oops!) which may not generalize to other surprise types
+4. Limited discussion of attention mechanisms in video transformers, video saliency detection, or cognitive science literature on prediction error beyond the single Bayesian ToM citation.
+5. On VideoMME-S and NextQA, gains are only +2.7% and +1.7%, suggesting the approach primarily benefits surprise-heavy scenarios, limiting broader applicability claims.
+
+### Questions
+Why is KL divergence the right measure of surprise for this task? JSD mentioned in appendix but not compared
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

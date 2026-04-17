@@ -1,0 +1,185 @@
+# Be Consistent! Enhancing Robust Visual Reasoning in LVLMs with Consistency Constraints
+
+- Decision: Reject
+- Scores: 4, 6, 4, 2
+
+## Abstract
+While Large Vision-Language Models (LVLMs) exhibit strong perceptual capabilities, they remain vulnerable in visual reasoning tasks. Existing benchmarks largely focus on symbolic mathematical or scientific problems and simple vision-centric tasks, offering limited assessment of complex visual reasoning and logical consistency, a critical requirement for reliable reasoning systems. We introduce ConVBench, a complex vision-centric reasoning benchmark where each image is paired with two logically equivalent questions across six categories: action and state, complex counting, spatial reasoning, causal and intent understanding, commonsense reasoning, and temporal perception. To complement this benchmark, we define two evaluation metrics, logical consistency and robust accuracy, that jointly assess both correctness and consistency of model responses. We further present ConVLM, which improves LVLM reasoning through Group Relative Policy Optimization (GRPO)-based reinforcement learning with novel consistency reward. This method leverages automatically generated logically equivalent question–answer pairs and a dual reward design combining accuracy- and consistency-based signals, encouraging agreement between paired responses. The framework functions effectively with or without strict answer supervision. On our ConVBench, ConVLM-7B achieves 73.36% logical consistency and 66.83% robust accuracy, setting a new state of the art among open-source models, and generalizes strongly to V*Bench (84.90% accuracy) and InfoVQA-test (81.90 ANLS).
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper introduces ConVBench, a benchmark designed to jointly evaluate complex visual reasoning and logical consistency by pairing each image with two logically equivalent questions. To improve consistency in model outputs, the authors propose ConVLM, which uses GRPO-based reinforcement learning with a consistency reward in addition to accuracy supervision.
+
+### Strengths
+1. The proposed benchmark construction is systematic. The division into six reasoning categories and the human verification pipeline provides a reasonably well-controlled dataset.
+2. The proposed method ConVLM outperforms strong open-source baselines and shows non-trivial generalization to external benchmarks.
+3. The paper is well-written and ablations are well-conducted to verify the contribution of each component.
+
+### Weaknesses
+1. Prior works on visual reasoning [1][2][3] have already highlighted the need for enforcing consistency across semantically equivalent prompts. The current method appears to mainly package GRPO + consistency reward + auto-generated pairs, and the conceptual contribution beyond these works is not fully articulated.
+2. While the benchmark claims “complex reasoning”, most question types appear to involve single-hop inference rather than multi-step chain-of-thought visual reasoning. It remains unclear whether ConVLM actually improves multi-step visual reasoning, an aspect emphasized in recent VLM reasoning literature.
+
+- [1] Jing, Chenchen, et al. "Maintaining reasoning consistency in compositional visual question answering." CVPR 2022
+- [2] Wang, Xuezhi, et al. "Self-Consistency Improves Chain of Thought Reasoning in Language Models." ICLR 2023
+- [3] Zhang, Mingyu, et al. "Take a step back: Rethinking the two stages in visual reasoning." ECCV 2024
+
+### Questions
+1. The authors need to clarify how their notion of reasoning consistency specifically differs from prior studies such as [1][2][3]. It would be helpful to elaborate on the conceptual or methodological distinctions between their formulation and these earlier works.
+2. The equivalence between q₁ and q₂ is determined by GPT-4.1, and although human oversight is mentioned, the process lacks quantitative details. To ensure the rationality of the benchmark, the authors should report how many generated pairs were accepted, corrected, or discarded after human verification.
+3. The authors are encouraged to conduct a case study on inconsistent reasoning instances to provide more insight. Analyzing when and why inconsistencies persist across different reasoning categories could lead to a deeper and more informative understanding of the model’s behavior.
+4. As shown in Table 1, the proposed open-source models outperform other models of similar size but still lag behind large closed-source systems. The authors should discuss whether the proposed method would continue to be effective at larger model scales, or whether such consistency improvements might naturally emerge from increased model capacity and data volume.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper addresses the consistency issue in vision-language models (VLMs), where a model may provide conflicting answers to two logically equivalent questions. For instance, when asked "Is object X moving away?" and "What is the action of object X? Options: A) toward, B) away," a consistent VLM should output aligned responses such as ("yes" and "away") or ("no" and "toward"). However, existing VLMs often fail to maintain such logical alignment.
+
+To tackle this problem, they introduce ConVBench, a novel benchmark where each image is paired with two logically equivalent 〈Question, Answer〉 pairs. They also propose two evaluation metrics: standard accuracy and a consistency score, which measures whether a model correctly answers both equivalent questions simultaneously.
+
+Furthermore, they present ConVLM, a GRPO-based reinforcement learning framework designed to enhance VLM consistency. The reward function incorporates both accuracy and consistency objectives. Training data is automatically generated by a proposer agent (GPT-4), which produces logically equivalent 〈Q, A〉 pairs based on MSCOCO images. Extensive experiments on ConVBench and the V* benchmark demonstrate the effectiveness of ConVLM.
+
+### Strengths
+1. This paper proposes ConVBench, a novel benchmark for evaluating the consistency of Vision-Language Models (VLMs) using logically equivalent question-answer pairs. In addition to conventional accuracy metrics, ConVBench introduces a dedicated consistency score to assess whether a model provides coherent answers across reformulated versions of the same question.
+
+2. To address the inconsistency issue, the authors introduce a GRPO-based reinforcement learning framework that incorporates both accuracy and consistency rewards in its objective function. Experimental results demonstrate that the resulting model, ConVLM, achieves notable improvements on both ConVBench and the V* benchmark.
+
+### Weaknesses
+1.The details of ConVBench's construction are insufficiently described in Section 2. It remains unclear whether its generation process aligns with the training-set generation pipeline illustrated by the proposer in Figure 3. A more thorough explanation of the benchmark creation methodology, including data sources, transformation rules, and validation procedures, is necessary to ensure reproducibility and proper interpretation.
+
+2.Table 1 indicates that commercial VLMs (e.g., Claude, Gemini, ChatGPT) achieve relatively high consistency scores. This raises the question of whether scale (i.e., larger parameter counts) inherently mitigates consistency issues. It would be insightful to include results from large open-source models such as Qwen2.5-VL-72B to better disentangle the impact of model size from architectural or training data factors.
+
+3 According to Table 3, most evaluated models perform better on InfoVQA than on V, except for ConVLM. This discrepancy may stem from domain relevance: if ConVLM is trained on MSCOCO-derived data, does its relatively lower performance on InfoVQA indicate a domain adaptation gap, while its strong result on V reflects better alignment with the MSCOCO distribution? Further analysis on the domain characteristics of each benchmark would help contextualize these results.
+
+### Questions
+1. How is ConVBench generated?
+
+2. Does the consistency issue persist in large-scale VLMs?
+
+3. Why does InfoVQA not benefit as much as V*?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper addresses the critical yet under-explored issue of logical consistency in Large Vision-Language Models (LVLMs). The authors argue that while LVLMs have strong perceptual abilities, they often fail at complex visual reasoning tasks and produce contradictory answers to logically equivalent questions. To tackle this, the paper presents two main contributions:
+
+1. ConVBench: A new vision-centric benchmark designed to rigorously evaluate both complex reasoning and logical consistency. Each image in ConVBench is paired with two logically equivalent questions across six reasoning categories. The benchmark introduces two novel metrics: logical consistency and robust accuracy.
+
+2. ConVLM: A framework for improving LVLM reasoning by enforcing consistency. The method uses GRPO with a novel dual-reward mechanism. This reward combines a standard accuracy signal with a new consistency reward, which encourages the model to produce agreeing outputs for logically equivalent question pairs. Notably, the training data for this process is generated automatically by a powerful LVLM  and then validated by humans, making the approach scalable.
+
+The authors demonstrate through extensive experiments that their ConVLM-7B model achieves state-of-the-art results among open-source models on ConVBench, significantly outperforming strong baselines. Furthermore, the model shows excellent generalization capabilities on other challenging benchmarks like V*Bench and InfoVQA, indicating that the consistency training imparts a more robust and generalizable reasoning ability.
+
+### Strengths
+1. The paper tackles a fundamental flaw in current LVLMs. Logical consistency is a cornerstone of reliable and trustworthy AI, and this work provides a formal framework to measure and improve it.
+
+2. ConVBench is a valuable asset for the field. Its design principles—focusing on vision-centric tasks, complex reasoning, and logically equivalent question pairs—fill an important gap in existing evaluation suites.
+
+3. The ConVLM framework is elegant and well-motivated. The key novelty lies in the dual-reward design that explicitly optimizes for consistency alongside accuracy.
+
+### Weaknesses
+1. While the concept is powerful, the examples shown primarily involve rephrasing or direct one-step implications (e.g., hitting a ball implies it's moving away). The paper could benefit from a more detailed discussion on the diversity and complexity of the logical relationships present in ConVBench.
+
+2. Proving the method's efficacy on STEM-related data, such as visual mathematics or physics problems (e.g., on benchmarks like MathVista), would greatly strengthen the paper's claims.
+
+### Questions
+The ablation study in Table 2 shows that training with only the consistency reward (w/o-Acc) leads to a dramatic improvement in both consistency and accuracy over the baseline. This is a fascinating result. Could you elaborate on why enforcing consistency provides such a strong implicit signal for accuracy?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+5
+
+### Summary
+This paper introduces ConVBench, a novel benchmark designed to evaluate both complex visual reasoning and logical consistency in Large Vision-Language Models (LVLMs) using logically equivalent question-answer pairs. To address the limitations of existing models, the authors propose ConVLM, a weakly supervised framework that enhances robust visual reasoning through Group Relative Policy Optimization (GRPO) with a novel consistency-based reward. ConVLM achieves SOTA performance on ConVBench and demonstrates strong generalization to other benchmarks. The work highlights the importance of consistency in visual reasoning and offers a new approach to training more robust LVLMs.
+
+### Strengths
+- The ConVBench addresses the crucial aspects of complex vision-centric reasoning and logical consistency, which are often overlooked in existing benchmarks. The design with logically equivalent question pairs provides a robust mechanism for assessing reasoning consistency.
+- The proposed ConVLM framework, which integrates GRPO with a novel dual reward mechanism (accuracy and consistency), is innovative. The ability to automatically generate question-answer pairs and optimize models without strict answer supervision makes the approach scalable and efficient.
+- The strong generalization performance of ConVLM to external visual reasoning benchmarks (V*Bench, InfoVQA-test) is a significant strength.
+
+### Weaknesses
+- While the paper makes a valuable step by focusing on pairwise answer consistency for question pairs, it does not model cross-image consistency. This limits the evaluation of consistency to isolated instances rather than broader contextual or temporal coherence across related visual information.
+- The reliance on a Large Language Model (GPT-4.1) for automatically generating logically equivalent question-answer pairs introduces a potential dependency and scalability challenge. If the underlying LLM itself exhibits biases or inconsistencies, it could subtly affect the quality and diversity of the generated training data, even with human validation.
+- The paper describes ConVLM as a "weakly supervised framework", but the pipeline involves generating "pseudo-answers" and human validation. This blend of automated generation and human curation makes the "weakly supervised" claim somewhat ambiguous.
+- While the dual reward mechanism (accuracy and consistency) is effective, the consistency reward is based solely on string matching. This might be too simplistic for capturing nuanced semantic consistency. More sophisticated methods for evaluating logical consistency beyond exact string matches, such as semantic similarity metrics or entailment checks, could potentially offer richer and more robust training signals.
+
+### Questions
+- The prompt templates for question generation are detailed in Appendix J. Could the authors discuss the sensitivity of the generated questions and pseudo-answers to prompt engineering? Were different prompt variations explored, and how robust is the data generation process to changes in the prompts?
+- Figure 6 provides a case study of incorrect answers. Could the authors provide a more detailed qualitative analysis of the types of errors ConVLM makes compared to baselines, especially focusing on cases where it achieves high consistency but low accuracy, or vice-versa?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1

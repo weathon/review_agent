@@ -1,0 +1,163 @@
+# Finding the Broad Gini in the Bottle: Optimizing Equity, Efficiency, and Resilience in Grid Restoration
+
+- Decision: Reject
+- Scores: 6, 0, 4
+
+## Abstract
+Restoring a damaged power grid requires balancing efficiency, resilience to tail events, and equitable service under deep uncertainty. We **diagnose** a structural “Alignment Trap” where standard linear scalarizations of these objectives cause optimization to collapse into degenerate “zero-restoration” solutions. 
+
+We address this by establishing a **foundational framework for safe learning**, integrating  (i) a physics-grounded mixed-integer **Oracle that generates high-fidelity expert demonstrations**,  (ii) a CVaR-based formulation that **restores informative gradients**, and  (iii) a fast policy surrogate distilled from optimal plans to **prove the learnability of the restoration manifold**.
+
+To evaluate societal trade-offs, we introduce **Broad Gini**, a composite metric capturing efficiency, resilience, and equity. Across diverse topologies, our method prevents collapse, improving N-1 resilience by **23.3% (IEEE-145)** and reducing inequity by **96% (IEEE-30)**. **Rather than proposing a singular control algorithm**, this work establishes a rigorous, verifiable benchmark that **unlocks the solution space** for safety-critical reinforcement learning agents, bridging the gap between operations research and scalable AI.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper proposes an end-to-end methodology for post-disaster power grid restoration that essentially tackles two issues simultaneously: first, when restoring a power grid, equity is a real concern since restoration takes a long time and may be restored to certain consumers before other consumers.  Second, renewable sources such as solar and wind introduce uncertainty into the power grid that must be considered when designing a restoration plan: specifically, “worst-case” scenarios where e.g., renewable energy suddenly becomes unavailable are important to consider.  To approach this, the authors propose to use a CVaR (conditional value at risk) metric to quantify robustness against these worst-cases, a Gini Coefficient to capture equity, and a generative model + K-means to generate “worst-case” scenarios that are tractable for considering as part of a MILP pipeline.
+
+### Strengths
+The usage of CVaR to capture the tail risk induced by renewables is a nice inclusion that speaks to the realistic challenges posed by renewables.
+
+ Modeling of the underlying constraints and physics is correct and aligns well with practical considerations for grid restoration.
+
+Subject to some questions I have that relate to the presentation of the experimental results, the proposed framework appears to be effective on the standard IEEE 30-bus test case used in the experiments.
+
+### Weaknesses
+ICLR papers typically have a strong machine learning component, and my sense is that this paper might be slightly out of scope for ICLR — I have some questions about the Hidden Markov Model (HMM) which constitutes the main “predictive” component of the paper (see below).  Beyond ICLR, I think the paper would be received well at conferences like ACM e-Energy, ACM BuildSys, IEEE PES, or a journal like IEEE Transactions on Smart Grid.
+
+Figures throughout are a little hard to read — the text size is small and contrast is poor in some places (e.g., cylinder D, Figure 1).
+
+The presentation of the experiments could be improved — four approaches are presented (“Baseline”, “Constrained Baseline”, “Game Theory”, and “Stochastic CVaR”), with the latter presumably being the main contribution of the paper, but I cannot find the concrete description of each model and how they differ beyond the phrase “ablation study” on line 393.
+
+### Questions
+Line 210 states “we employ a non-linear, Pareto-based weighting scheme that penalizes significant drops in any single KPI”, but the definition of “Broad Gini” on line 215 seems to be a linear weighted sum of the different KPIs — could you elaborate on this point?  I am likely missing something.
+
+On line 218, it looks like the heading “1. Min N-1 Ratio” should start on the next line.
+
+About the Gini coefficient — if one load is particularly large (e.g., an industrial electricity consumer), does that necessarily make the Gini coefficient “more inequitable” when the grid is fully restored?  When the grid is partially restored, I am convinced that the Gini coefficient is the right thing to do since it encourages us to balance across loads (e.g., all loads get some base level of power), so this question is more to check my understanding.  It may be reasonable to compute the “fairness” of restoration with respect to some arbitrary partitioning (e.g., Neighborhood A, Neighborhood B, Industrial Customers) — is that a straightforward change under your model?
+
+Figure 2: Scenario 2 generated by the HMM seems to suggest a solar PV output of >= 60% for nearly 24 straight hours, which is not possible on Earth.  Am I misinterpreting the graph, or is this a limitation of the HMM forecast (not capturing physical laws)?  Since the “worst-case” scenario probably corresponds to scenario 1 (no solar generation), I imagine this wouldn’t change the downstream optimization, but it raises questions about the quality of scenarios generated by the HMM.  Table 1 shows that the basic statistics match up, but I think these statistics won’t capture some structural properties that might be hard to enforce in a predictive model (e.g., it’s never sunny at midnight).
+
+Line 310: I think this is an incomplete sentence: “The generated scenarios reveal tail risk. While a risk-neutral objective that maximizes only the expected outcome would dangerously ignore the possibility of worst-case scenarios leading to catastrophic failures (see Fig. 3).”
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+0
+
+### Rating Number
+0
+
+### Confidence
+5
+
+### Summary
+The paper develops a two-stage stochastic mixed integer multi-objective programming model of power system restoration and provides experimental evidence that the problem can be solved and tradeoffs in the different terms of the of the objective.
+
+### Strengths
+1.	The paper could provide a tool/model that allows users to explore the tradeoffs in different metrics when considering the power restoration problem.
+
+### Weaknesses
+1.	The major weakness of the paper is contribution.  The paper presents a standard two stage MILP stochastic problem where multiple objectives are modeled as a linear combination of terms.  The problem is then solved using a standard MILP solver.  So, there is not an algorithmic contribution.  The only potential contribution is then in the model itself, which is limited to the metrics used to evaluate the solution (unmet demand, risk, fairness, etc.).  However, there is a large body of work exploring variation of these metrics (and combinations) – a simple search of power system restoration, multi-objective, etc., reveals many papers tackling this problems).  For this to be a contribution, the paper needs to be able to assert that these metrics have never been used and the combination of these metrics yields new insights and solutions that could not be gleaned from the prior work.  There is also a claim that the HMM for producing load forecasts is a contribution.  There is an extremely wide body of work on load forecasting/load scenario generation in the power engineering literature, and it is not clear how the paper’s HMM is a contribution in the context of this literature. 
+2.	Paper mixes modeling elements from distribution and transmission network modeling.  In particular, why is there are a radiality requirement (equation 7 and 8)?  This is only a requirement for distribution system modeling, whereas the rest of the model description focuses on transmission modeling (uses transmission IEEE benchmarks, models a single phase balanced system, etc.).
+3.	The paper presents two distinct objective functions (linear combination of equations 16-19 and equation 23). Why are two presented?  Which one is used? Maybe one is a first stage objective and the other the second stage objective?
+4.	What are the two stages?  The first stage appears to be a whole sequence of topologies and unit commitments (first paragraph of section 3).  Why can’t the sequence of topologies and unit commitments vary between load scenarios?  These actions, esp. unit commitment, don’t need to be fixed for a given load scenario. This can change depending on conditions, especially during emergency situations. Regardless, the formulation does not formerly describe the problem as a first and second stage stochastic program so it is very difficult to understand the problem.
+5.	What is restoration?  The paper does not describe what the restoration is.  Typically restoration is about determining the sequence of lines to re-energize, but that is not at all clear.
+6.	A description of the data is not provided, with most data being described as caseXX.  Most readers will not know what caseXX refers to.
+7.	Runtimes and scalability of the model are not provided.
+8.	Game theory is stated as a crucial component of the hybrid architecture.  But it is not described as part of the workflow or model at all.  It only appears as a comparison point in the results.
+
+### Questions
+1.	Why are radiality constraints included?  The models seems to be geared towards transmission restoration (benchmarks are transmission, single phase modeling, etc.), but radiality is only a concern for distribution networks.
+2.	What objective is used? There are two described – linear combination of equations 16-19 and equation 23
+3.	What were the computational runtimes of the model.
+4.	How does game theory enter into the model?
+5.	What are the two stages?
+6.	What is the definition of restoration.
+
+### Soundness
+1
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper addresses post disaster power-grid restoration as a three-way trade-off among efficiency (energy restored), equity (fairness across regions), and resilience (robustness to contingencies). Authors propose a two-stage stochastic MILP: an HMM generates scenarios that are then K-means clustered (Scenario pipeline); stage one chooses grid topology, stage two dispatches power dynamically as per the scenario. The objective jointly optimizes expected energy, a CVaR term for robustness, and a (Broad) Gini-based fairness metric. On the IEEE-30 bus system, ablations show the model can raise N-1 reserves for resilience with some energy loss, or cut the Gini while keeping high energy output. Finally, the outlook sketches a deep/multi-agent RL path that encodes the “Broad Gini” as intrinsic reward for fast, adaptive restoration.
+
+### Strengths
+Originality:
+* Integrative framework: Combines HMM-based scenario generation, CVaR robustness, and a (Broad) Gini fairness term in a unified two-stage MILP for post-disaster restoration.
+* Emphasis on Fairness: Elevates equity to a primary objective (Broad Gini) alongside efficiency and resilience, reframing restoration as a principled tri-objective problem rather than a single-metric optimization.
+
+Quality:
+- Optimization setup: Linearized two-stage MILP solved to ε-optimality. Clear argument that trade-offs reflect true optima rather than heuristic artifacts.
+- Quantitative trade-off evidence: Ablations demonstrate controllable knobs (e.g., increase in N-1 reserve at an energy cost; and decrease in Gini while maintaining energy), tying modeling choices to measurable outcomes on diverse topologies.
+- Scenario pipeline sanity checks: Initial statistical validation comparing HMM scenarios to historical data in Table 1
+
+Significance:
+- The DRL/MARL outlook to encode Broad Gini as intrinsic reward points toward real-time, scalable control. While the current evaluation on static planning shows promise as a quantitative lever to navigate real policy trade-offs, I believe showing the impact beyond static planning is key to the contributions of this framework to close the loop as described in the initial parts of the paper.
+
+### Weaknesses
+Scenario generator fidelity & comparison to community developed tools: The HMM-based scenario pipeline is a thoughtful idea, and your initial statistical check (Table 1) is a good start. However, I’m still concerned about whether the generated scenarios are representative enough for restoration planning, especially in the tails that drive CVaR and resilience. Could you share any tool-level benchmarking beyond Table 1 (e.g., code, seeds, datasets, out-of-sample tests)? Also, why did the authors not consider making using of off-the-shelf baselines like the widely used ChroniX2Grid and show that key findings (e.g., Broad-Gini trade-offs) persist when swapping in these off-the-shelf generators? ChroniX2Grid is open-source and benchmarked and used in many downstream applications like Grid2Op. In any case, please consider either adopting or rigorously benchmarking against community-validated generators such as ChroniX2Grid (often paired with Grid2Op). 
+
+Closed-loop impact: The MILP experiments do expose static trade-offs on IEEE cases but they are static, that is they stop short of demonstrating benefits in sequential, closed-loop operations where contingencies unfold over time. A more impactful evaluation would be to embed your “Broad Gini” objective into a Grid2Op environment as a reward function and test whether optimizing it via RL improves survival time and operational robustness while maintaining fairness/efficiency across standard Grid2Op test cases. Such an analysis will be much more impactful and beneficial. Tools like Grid2Op are already readily available, so this such an analysis should be easy.
+
+Related works on trade-off quantification: While your study frames a broader trilemma (efficiency–resilience–equity), there is adjacent literature that explicitly quantifies cost–survival-time trade-offs in grid operations. Positioning this paper with respect to the recent works such as the IEEE paper titled  “Blackout Mitigation via Physics-Guided RL” would help readers see how your “Broad Gini + CVaR” treatment generalizes beyond cost–survival to a richer multi-objective setting and clarify (i) what those papers optimize (cost vs. survival time), and (ii) why your fairness/robustness terms address additional policy-relevant axes  would strengthen the paper’s context and impact.
+
+### Questions
+For the Scenario generator, I’d suggest:
+- Compare multivariate and spatio-temporal structure, not just univariate GHI: joint dependencies among load, renewable injections, outages and/or maintenance, spatial correlations across buses/regions, regime/seasonality shifts.
+- Do downstream performance backtesting: run your MILP on (i) HMM scenarios and (ii) ChroniX2Grid scenarios, then compare restoration energy, fairness, and N-1 reserves.
+- Evaluate extremes and tail behavior (block maxima, CVaR at relevant α) to test the events that most affect your objective.
+
+For the Closed-loop impact, I’d suggest:
+- Translate your multi-objective into a single episodic reward with a tunable risk parameter and include explicit penalties for N-1 margin violations, load shedding inequity, and reserve depletion.
+- Train standard RL agents (e.g., DQN/A2C/PPO) on your reward and compare to (i) Grid2Op default rewards, (ii) energy-only and fairness-only rewards, and (iii) a MILP controller to isolate the contribution of proposed framework “Broad Gini.”
+- Report survival time, cascading failure rate, average restored energy, Min N-1 reserve, and Gini over episodes; include confidence intervals over multiple seeds.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

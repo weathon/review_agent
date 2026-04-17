@@ -1,0 +1,222 @@
+# Globally aware optimization with resurgence
+
+- Decision: Accept (Poster)
+- Scores: 2, 8, 4, 6
+
+## Abstract
+Modern optimization faces a fundamental challenge: local gradient-based methods provide no global information about the objective function $L$ landscape, often leading to suboptimal convergence and sensitivity to initialization. We introduce a novel optimization framework that leverages resurgence theory from complex analysis to extract global structural information from divergent asymptotic series. Our key insight is that the factorially divergent perturbative expansions of parameter space partition functions encode precise information about all critical objective function value in the landscape through their Borel transform singularities.
+
+The algorithm works by computing the statistical mechanical partition function $Z(g) = \int e^{-L(\theta)/g} d\theta$ for small coupling $g\ll 1$, extracting its asymptotic series coefficients, and identifying Borel plane singularities that correspond one-to-one with critical objective function values. These target values provide global guidance to local optimizers, enabling principled learning rate adaptation and escape from suboptimal regions. Unlike heuristic adaptive methods, targets are theoretically grounded in the geometry of the optimization landscape.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This work proposes to inject non-local informtaion about the objective function into the optimization process.
+It relies on resurgenece theory to obtain the function values of the critical points of the objective function and then uses this information for learning rate adaptation.
+
+### Strengths
+As far as I can tell, the use of resurgence theory to improve optimization algorithms is novel and this idea seems to have a lot of potential. If one can indeed obtain a god approximation function values of the critical points of the objective function, this could dramatically improve optimization algorithms.
+
+
+This work provides a thorough introduction on this topic.
+
+### Weaknesses
+### Lack of connection between "2.1 An intuitive intro to resurgence" and the rest of the paper
+This work starts with a lengthy introducion to resurgence theory. However, it is not clear how large parts of this introduction relate to the rest of the paper. As far as I understand, the discussion about the integration contour 172-205 is not necessary to understand the rest of the paper and only confuses the reader.
+
+### Unclear what is new vs existing and missing references
+- There should be a reference for Thm. 1
+- I don't understand whether Prop. 2 and Thm. 3 are novel or existing results. If they are existing, please provide references. Also, both the statement and the proof of Thm. 3 need much more details: how is the integration over the level set done for instance?
+
+### General lack of literature review
+Optimization on non-convex landscapes as well as adaptive learning rate schemes are both very active research areas but the discussion of related work is very limited.
+In particular, the following topics should be discussed:
+- Adaptive and parameter-free leanring rates, with a particular focus Polyak-type schemes, which also use function values to adapt the learning rate.
+- Langevin dynamics on non-convex landscapes: these methods sample from the Gibbs distribution, which is closely related to the statistical mechanics discussion in Sec. 2.3.
+- Simulated annealing and tempering methods, which also rely on the partition function to explore non-convex landscapes and therefore seem related to the proposed approach.
+
+### Unclear how the practical algorithm follows from the theory
+Most of the steps of the algorithm in 3.1 appear pretty ad-hoc and it is not clear why the authors chose these particular steps.
+- In particular, at l32, why choose the maximum value in T lower than the current function value? Why not the minimum? Indeed, if the theory is correct, the set T contains the function values of all critical points: therefore one should only choose the minimum one, since it corresponds to the global minimum of the objective function. This discrepancy between theory and practice is never discussed.
+- Why use this function value to adapt the learning rate as in l34? Why not use it in other ways? In particular, why not use a Polyak-type learning rate scheme?
+
+### Experimental section is weak
+All experiments are on toy problems (1D function or MNIST), hyperparameters are not proeprly tuned (one should report the result for the best learning rate for each method), there are no error bars, no adaptive learning rate baselines (e.g., Polyak-type schemes at the very least) and no clear benefit of the proposed method is shown.
+
+Moreover, it is not clear whether the resurgence theory is indeed useful for the proposed algorithm: one could imagine much simpler approaches.
+For instance at L342, this work explains how to obtain an approximation of the partition function 
+$$
+Z(g) = \int e^{-f(\theta)/g} d\theta
+$$
+which I agree is an interesting idea. However, the authors then use the intricate machinery to exract the function values of the critical points from this partition function while, if I am not mistaken, $- g \log Z(g)$ for small $g$ is already a good approximation of the global minimum of $f$. This value could then be used in a Polyak-type learning rate scheme or in the proposed learning rate adaptation scheme. It would be interesting to see whether this simpler approach, that does not use resurgence theory, works just as well as the proposed method.
+
+### Not clear how the proposed scheme helps escaping "suboptimal regions"
+The abstract states that "These target values provide global guidance to local optimizers, enabling [...] escape from suboptimal regions". However, it is not clear how the proposed learning rate adaptation scheme helps escaping suboptimal regions. If the function value of a critical point is used to adapt the learning rate, and if the current iterate is in a basin of attraction of a suboptimal local minimum, then the adapted learning rate will likely be small (since the function value at the current iterate is close to that of the suboptimal local minimum). Therefore, it is not clear how this scheme helps escaping suboptimal regions.
+
+### Questions
+Please address "Lack of connection between "2.1 An intuitive intro to resurgence" and the rest of the paper", "Unclear what is new vs existing and missing references" and "General lack of literature review" above.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+The paper proposes SURGE (Singularity Unified Resurgent Gradient Enhancement), a novel optimization framework that leverages resurgence theory (via Borel transforms of partition functions over neural-network parameter space) to identify critical objective values in the loss landscape. These values are used to guide adaptive learning rates for any base optimizer, with the aim of improving convergence and escape from sub-optimal local minima. The authors provide theoretical arguments linking Borel singularities of the network partition function to landscape critical values, and demonstrate empirical improvements (e.g., Sec. 4.2, ~10K-parameter networks) compared to baseline optimizers. 
+
+The approach is conceptually intriguing and mathematically elegant, and has potential to open a new line of optimization research. However, I feel that the current version may fall short in practical guidance, sensitivity to numerical computations, scalability evidence, and empirical benchmarking.
+
+### Strengths
+(1) From my point of view, the use of resurgence theory and partition-function singularity detection to gain global landscape information is highly innovative in ML optimization work.
+(2) The algorithmic wrapper (SURGE) is optimizer-agnostic and shows promising empirical results.
+(3) The connection between complex-analysis tools (Borel transforms) and ML optimization adds theoretical depth and opens a new direction of research.
+
+### Weaknesses
+(1) 	The method hinges on computing a partition function and identifying singularities to yield target values; however, the manuscript lacks guidance on how to choose the initial model parameters or coupling parameter g in general settings (even simple losses like cross-entropy or MSE). The authors should provide practical heuristics or guidelines for parameter initialization. 
+(2) 	Computing the partition function Z(g) over a coupling range and performing Borel analysis seem to be likely very expensive and may restrict the method’s applicability. I feel that the method may simply shift the optimization burden onto a heavy pre-computation. More discussion is needed on the cost and scalability trade-offs. In addition, I wonder how the quality of numerical approximation of asymptotic series, equation (29), affect the overall performance of adapting learning step when employing (33) and (34).
+(3)  Although the method is theoretically rich, the empirical setting (10K parameters) is still modest relative to real-world deep networks (millions of parameters).  Also, the authors note that SURGE may amplify over-fitting by pushing harder toward identified critical values, but no empirical analysis or mitigation strategy is provided.
+
+### Questions
+(1) In addition, I wonder how the quality of numerical approximation of asymptotic series, equation (29), affect the overall performance of adapting learning step when employing (33) and (34).
+
+(2) The paper reports improvement in final objective values, but lacks wall-clock time comparisons against standard optimizers.
+
+(3) I wonder sensitivity analysis and performance under noisy given data of the proposed algorithm as a wrapper for general optimizer with adaptive learning rate.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+The authors propose a boost to local searching algorithms for objective functions that is able to aim critical points by exploiting global (although approximated) information about the function itself. They show how this improves time of convergence in a few examples.
+
+### Strengths
+It seems a truly original and intriguing piece of work, based on robust mathematical theory.
+It is visible the effort towards clarity and very appreciated, however it remains mysterious the intuition about the algorithm proposed.
+
+### Weaknesses
+It is visible the effort towards clarity and very appreciated, however it remains mysterious the intuition about the algorithm proposed.
+It is also missing a critical discussion on the limitations of this approach, despite the pretended global information obtained about the objective function. It cannot be the full information otherwise it would be overcoming NP hardness.
+Without these discussions it is hard to understand what is the actual contribution to improve algorithms convergence in the general case, this explains my conservative rating FAIR to “contribution”.
+
+### Questions
+There must be limitations to this approach otherwise we should believe that it can make GD able to solve NP hard problems in polynomial time which it would be the astonishing main result, were it true, but it is not mentioned, therefore there must be something I do not understand. The authors should discuss how NP problems remain not solvable in polynomial time even with this approach and in general discuss limitations more explicitly, beside the advantages.
+
+For rough objective functions the evaluation of the partition function should be exponentially hard. What is the cost expected also considering the approximation proposed?
+
+SGD does not necessarily see the same landscape as the objective function. 
+
+Hitting critical points is not necessarily useful, especially when there is a huge number of saddles and maxima, and few minima which may be even fewer if associated to low values of the objective function. In fact it would be better if GD could avoid saddles, rather than hitting them, as they slow the dynamics down without giving other advantages. How can the algorithm select among the critical points? 
+
+It was appreciated the intuitive introduction to resurgence. It is way less clear the implementation of the algorithm. Although apparently explained in multiple places, I cannot find intuition on how it must work.
+
+Line 170-171 “we see where it backfires at us in the example” which example? It should be made clearer.
+
+In figure 1 on both sides there are 4 double series of data, while legends refers to only three choices of parameters. In some instances long time behaviour between blue and red is very similar, in other very different. What is the reason for that?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper introduces SURGE, a novel optimization framework that utilizes resurgence theory to uncover global structural information encoded within divergent asymptotic series. In particular, the factorially divergent perturbative expansions of parameter-space partition functions intrinsically capture all critical objective function values through the singularities of their Borel transforms. Algorithmically, SURGE operates by constructing the partition function of the loss landscape, extracting its asymptotic expansion coefficients, and identifying singularities in the Borel plane that correspond one-to-one with critical objective values. These values serve as global targets, offering principled guidance for local gradient-based optimizers via adaptive learning rate modulation. Empirically, SURGE demonstrates consistent performance gains of 15–30% across diverse settings, ranging from function approximation to large-scale neural network optimization (Transformer).
+
+### Strengths
+- The paper establishes a rigorous theoretical correspondence between Borel singularities and critical points of the objective function, thereby providing a principled mechanism to extract global geometric information from the optimization landscape. This contribution is particularly significant, as most existing optimization algorithms (e.g., SGD, Adam) are inherently local and lack awareness of the broader landscape structure.
+
+- Empirically, SURGE demonstrates consistent improvements of 15–30% over conventional optimization approaches across a variety of problem settings, highlighting both the robustness and practical potential of the proposed method.
+
+- The paper is well-written and self-contained.
+
+### Weaknesses
+- The partition function integral $Z(g)$ is computationally intractable in high-dimensional parameter spaces. Approximating it with a learned sampler $q_\psi(\theta|g)$ introduces an additional optimization layer, which may incur significant computational cost and potential instability during training.
+
+- The experimental evaluation is relatively limited in scope, focusing primarily on small-scale setups—including synthetic function approximation, a modest MLP on MNIST, and a lightweight Transformer with only 10k parameters on Shakespeare text. Validation on larger and more realistic architectures would strengthen the empirical credibility of the approach.
+
+### Questions
+- Could the authors provide a computational complexity analysis of SURGE? In particular, is the proposed framework scalable to modern large-scale architectures (e.g., models with millions or even billions of parameters)?
+
+- Can the authors include an additional experiment to empirically verify that the detected Borel singularities indeed correspond to all critical points of the objective function?
+
+- In Figure 3c, SURGE appears unstable and performs worse than SGD with a learning rate of 1e-3. Could the authors provide an explanation or analysis of this behavior?
+
+Minor points:
+
+- Line 345: The reference to “2” should be replaced with “Algorithm 2.”
+
+- Section 4.1 would benefit from a brief paragraph summarizing and interpreting the experimental results of SURGE.
+
+- Figure 1’s legend appears incomplete, with eight curves but only six labels. Please revise to ensure consistency.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

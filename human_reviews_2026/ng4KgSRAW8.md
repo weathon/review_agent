@@ -1,0 +1,213 @@
+# Scaling Synthetic Task Generation for Agents via Exploration
+
+- Decision: Accept (Poster)
+- Scores: 2, 6, 6, 6
+
+## Abstract
+Post-Training Multimodal Large Language Models (MLLMs) to build interactive agents holds promise across domains such as computer-use, web navigation, and robotics. A key challenge in scaling such post-training is lack of high-quality downstream agentic task datasets with tasks that are diverse, feasible, and verifiable. Existing approaches for task generation rely heavily on human annotation or prompting MLLM with limited downstream environment information, which is either costly or poorly scalable as it yield tasks with limited coverage. To remedy this, we present AutoPlay, a scalable pipeline for task generation that explicitly explores interactive environments to discover possible interactions and current state information to synthesize environment-grounded tasks. AutoPlay operates in two stages: (i) an exploration phase, where an MLLM explorer agent systematically uncovers novel environment states and functionalities, and (ii) a task generation phase, where a task generator leverages exploration trajectories and a set of task guideline prompts as context to synthesize diverse, executable, and verifiable tasks. We show AutoPlay generates $20$k tasks across $20$ Android applications and $10$k tasks across 13 applications Ubuntu applications to train mobile-use and computer-use agents. AutoPlay generated tasks enable large-scale task demonstration synthesis without human annotation by employing an MLLM task executor and verifier. This data enables training MLLM-based UI agents that improve success rates up to $20.0\%$ on mobile-use and $10.9\%$ on computer-use scenarios. In addition, AutoPlay generated tasks combined with MLLM verifier-based rewards enable scaling reinforcement learning training of UI agents, leading to an additional $5.7\%$ gain. coverage. These results establish AutoPlay as a scalable approach for post-training capable MLLM agents reducing reliance on human annotation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+The paper implements a system where an LLM explores a (simulated) environment to generate exploration traces and these traces are hindsight relabeled by an LLM prompted to define types of tasks to provide with goals for those traces. The method is applied in the domain of graphical user interface interactions, evaluated in the Android World and OSWorld environments. The exploration process includes compression of past experiences into text summaries for use in memory to support diversity of outputs while addressing context length limitations of LLMs. Traces from the system are used for supervised finetuning of VLMs and can be combined with the generated tasks to support VLM verifiers for RL finetuning. 
+
+Evaluations compare the model against baseline UI agents and ablations of the model.
+
+### Strengths
+# originality
+Primarily in the form of bringing ideas for automated exploration to bear on the GUI agent domain.
+
+# quality
+Evaluates against strong baselines and in two different, relevant domains.
+
+# significance
+Scalable data generation for VLM agent training is broadly relevant to agentic AI systems in general: whether digital agents (GUI-based, here) or physical agents (robots or game playing).
+
+### Weaknesses
+# originality
+Few elements of the proposal are unique on their own. The novelty is tied to idea combination.
+
+# quality
+It is unclear how much the model improves compared to baselines, and by how much or under which conditions. See below for detailed questions. Currently it is not yet clear to me that the framework can do more than modestly improve a weak model, which sometimes is outperformed by a baseline that ablates the exploration method (at least in some scenarios). 
+
+The results seem quite mixed at the moment and the scaling and costs are not clearly addressed.
+
+
+# clarity
+It is very difficult to follow the experiment results narrative and how it relates to the tables. Concrete points are below. Generally the definitions and abbreviations are not clear and not well-connected by the text or captions. Figure 3 is particularly cumbersome to understand.
+
+
+# significance
+The approach is tailored to the specific GUI task domains through the task guideline prompts and perhaps a few other design decisions. This will modestly limit the scope to the GUI agent audience.
+
+### Questions
+# questions
+- How do agent performance results scale with the generated dataset size?
+	- Even with the existing dataset, it would help to show how downstream agent training improves with subsets of the total generated interactions. This could help strengthen the claims that this approach is valuable by showing that it can provide strongly improving baseline model improvements. Right now the results saturate below strong baselines.
+- How do these results scale with repetition of the whole loop? That is: explore, train the agent (SFT & RL), then explore again.
+	- This would strengthen the claim that the method is scalable over human annotation.
+- How do the costs of AutoPlay scale?
+	- In terms of quantities like number of LLM calls and wall-clock compute time.
+	- Also in terms of number of interactions or diversity of tasks.
+	- This can strengthen the scalability claims.
+- Table 1: Is there any statistical test for differences and effect sizes that could be applied to these results?
+
+
+# suggestions / smaller details
+- Table 2: Where are the data referenced in lines 416-420? I'm not sure I follow which data are referenced by the claims about the same executor feasibility vs agent training.
+	- Why does No Exploration show such a high Pass@5 in Android World?
+	- What does the high Pass@1 for Task Execution of Iterative Exploration indicate (56.4% vs Autoplay with 46.0%)?
+	- I think my confusion is different terms are used in the text and the tables, with the definitions somewhere else in the text, making the results unclear. After some reviewing I believe: task execution references the fixed executor, Pass@1 means 'average success rate' (per line 344), but the 9.4% number is the percentage point (not percentage) difference between AutoPlay and No Exploration in Android World in Pass@5 (defined to be percentage of tasks where any trial is successful on lines 346-347).
+- Section 3.4: Why use a different verifier (Qwen2.5-VL-32B-Instruct; lines 307-308) for RL instead of training data generation and verification (GPT-4o; lines 275-276)?
+- Figure 3: I do not understand how to read this figure.
+	- What are Left vs Right in the caption? The figure has 3 subfigures. (b) is labeled "AndroidWorld Tasks", but the legend says OSWorld for green.
+	- Please tell me if this is the correct interpretation: dark colors are execution success rates, light colors are proportions among the total dataset. (a) shows AndroidWorld, (b) shows OSWorld, (c) is a comparison of AutoPlay to NoExploration.
+	- I think this should be split into different figures that are clearer. The distribution would make sense as a pie chart or side-by-side bars or stacked bars. The success rates should be visulized separately as they are semantically different. Same for the ablation (ideally adding Iterative Exploration).
+- Table 1 might benefit from including a column indicating model size. Right now many results appear underwhelming as AutoPlay performs worse than many of the baselines.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+1
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+AUTOPLAY proposes a two-stage, exploration-first pipeline to synthesize large-scale, feasible and verifiable UI-agent tasks without human labels. Stage (i) uses a goal-agnostic MLLM explorer  to discover novel states and functionalities; stage (ii) conditions an MLLM task generator on exploration trajectories plus domain task guidelines to synthesize diverse, feasible, and verifiable tasks. Using an MLLM executor and verifier, the authors collect demonstrations (no human annotation) for SFT and train with RL via verifier rewards. On AndroidWorld and OSWorld, AUTOPLAY improves success rates over base Qwen2.5-VL models across sizes (e.g., +20.6% at 7B on AndroidWorld, +10.1% at 72B on OSWorld), competes with or surpasses several strong baselines, and shows an additional +5.7% from RL. Ablations indicate both exploration and task guidelines are important.
+
+### Strengths
+1. The paper offers originality and significance. The paper targets a central bottleneck, scalable, feasible, and verifiable downstream task data for post-training MLLM agents—and proposes a  closed-loop pipeline  that delivers substantial improvements, suggesting a general recipe for building capable UI agents and enabling RL at scale.
+
+2. Results show end-to-end gains across two established benchmarks (AndroidWorld/OSWorld) and multiple model scales. Ablations carefully compare each components, supporting the design choices.
+
+3. The paper is clear and reproducible. It decomposes the method into well-scoped components,with a consistent algorithmic framing, which facilitates understanding and reproduction.
+
+### Weaknesses
+1. Quality of Exploration (systematicity, coverage, and realism) need further analysis. The paper claims the task generator yields diverse tasks, but the exploration stage lacks formal analysis of how exploration is systematic and how coverage is measured. It also remains unclear whether the synthesized task distribution aligns with real-world task distributions.
+
+2. Verifier reliability and shared-model bias. Both the executor and verifier use GPT-4o, creating a risk of style/format bias. The entire pipeline (SFT and RL rewards) hinges on an MLLM verifier, yet no human-consistency study is reported.
+
+3. Tasks are generated on the same app suites used for final evaluation (AndroidWorld/OSWorld). Without an explicit app-level or task-level split,  it is unclear how well the trained agent generalizes to hold-out, unseen apps, and there is risk of distribution leakage.
+
+### Questions
+1. Please provide formal metrics for exploration quality: e.g., UI-state/transition coverage, unique control coverage. How closely do generated tasks match natural task distributions? Report distribution comparisions against AndroidWorld/OSWorld category or other human-annotated datasets
+
+2. I recommend a rigorous evaluation of the verifier. Please report precision/recall against a small, human-audited gold set and document any calibration or abstention policy. In addition, establish multi-judge consistency by adding a second, independent judge (e.g., an open-source LLM or simple rule-based checks) and comparing accuracy and agreement; this would materially increase confidence in the generated data quality and the reliability of rewards.
+
+3. Did you enforce strict isolation so that evaluation tasks/functions never appeared during task generation? Is there an OOD split (cross-app / cross-task )? Any results under UI perturbations (resolution, locale, light/dark theme) would make the generalization claims more convincing.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper proposes a new method, AutoPlay, for generating agent instructions given an environment. The paper shows how this method (given a strong verifier model) can be combined with rejection-sampling or RL over these synthetic instructions to improve an agent's performance, as done in prior work. This overall pipeline yields improvements on AndroidWorld and OSWorld. The key contribution is how AutoPlay conditions instruction generation on environment exploration. The paper shows how their particular method for doing this has advantages over prior work.
+
+### Strengths
+The proposed method is intuitively compelling. Conditioning environment exploration on previous rollouts encourages diversity. Conditioning task generation on environment exploration encourages both feasibility of generated instructions and diversity. While the general idea of synthetic instruction generation conditioned on exploration is not novel, some of the specific design decisions are different from prior work and the ablations indicate these are useful.
+
+### Weaknesses
+* The main novel aspect is generation of the instructions (not post-training a model given these instructions). It would have been useful to see more head-to-head comparisons and analysis with alternative recipes and methods from prior work for instruction generation, although I understand it is hard to quantify their utility without also tuning downstream models. As a practitioner, the main take-away is what aspects of the instruction generation method should be adopted. Table 2 provides some of this analysis, although perhaps additional analysis could be useful. This shouldn't necessarily block acceptance, just a suggestion.
+* Relatedly, it seems most of the method's advantage comes from prompt engineering of the task guidelines. Perhaps ablations could be extended to consider which aspects related to exploration are most crucial.
+
+Nits:
+
+* There is some prior work on web agents that is not discussed. The recipes are similar enough to mobile and compute use agents that it is certainly relevant. For example, https://arxiv.org/abs/2410.02907 and https://arxiv.org/abs/2403.08140.
+
+### Questions
+* Do you plan to release the generated trajectories?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces AutoPlay, a scalable pipeline that generates synthetic tasks for training UI agents without human annotation by first exploring interactive environments to discover states and functionalities, then using these exploration trajectories with task guideline prompts to generate diverse, feasible, and verifiable tasks. The method generates 20k tasks across 20 Android apps and 10k tasks across 13 Ubuntu applications, which are used to synthesize demonstrations via an MLLM executor and verifier. Training agents on AutoPlay-generated data improves success rates on AndroidWorld and OSWorld, with an additional gain when using reinforcement learning with verifier rewards. The approach outperforms prior methods that either use limited environment information or iterative exploration, demonstrating that exhaustive exploration combined with guided task generation produces higher-quality training data for UI agents.
+
+### Strengths
+1. The method is simple and practical to implement, following a straightforward two-stage pipeline of exploration. It provides an effective solution for large-scale synthetic task generation, demonstrating strong improvements for both SFT and RL.
+
+2. The paper excels in clarity of presentation with well-structured sections and intuitive visual examples. The writing is smooth and clear, making the core contributions immediately accessible to readers.
+
+### Weaknesses
+1. The comparison with baselines is limited to only No Exploration and Iterative Exploration methods, missing evaluations against more sophisticated task generation approaches.
+2. The paper evaluates only on AndroidWorld and OSWorld benchmarks, insufficient for demonstrating generalization across UI domains.
+3. The verifier's accuracy is never validated despite being critical for filtering trajectories and providing RL rewards - no false positive/negative rates reported.
+4. Experimental details are insufficiently specified - specific apps, exploration steps, task sampling strategies, and app selection criteria are missing, hindering reproducibility.
+
+### Questions
+1. Are there comparison results with existing task generation methods?
+2. Are there evaluation results in other GUI agent benchmarks?
+3. Do you validate the accuracy of the proposed verifier?
+4. Is it possible to disclose more details concerning the task generation process?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2

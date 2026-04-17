@@ -1,0 +1,214 @@
+# Practical Mechanism via Simple Input Control for Fault-Tolerant Spiking Neural Networks
+
+- Decision: Reject
+- Scores: 2, 4, 4, 4
+
+## Abstract
+Spiking Neural Networks (SNNs) attract researchers due to their energy-efficient operations in neuromorphic devices. Despite their energy efficiency, hardware-implemented SNNs in neuromorphic devices are vulnerable to hardware faults, which impair the functionality of learnable parameters (e.g., Stuck-At-Faults (SAFs) in synaptic weights). This impairment reduces the capacity to absorb information. When input data contains information exceeding the capacity, SNNs may not absorb information correctly, referred to as **the bottleneck problem**. Existing approaches have relied on complex algorithms or direct modification to most synaptic weights in hardware-implemented SNNs, limiting their practicality in neuromorphic devices. This paper proposes a simple yet effective input control mechanism to address the problem, grounded in a thorough motivation study. Our mechanism divides the input samples into small fragments, following the best fragmentation strategy, derived by analyzing the characteristics of the input samples and diagnosing the current influence of faults. Experimental results demonstrate that our mechanism significantly enhances fault tolerance over existing methods, achieving these gains without complex algorithms or direct weight modification in various SNN models. Additionally, our mechanism improves the fault tolerance of SNN models with actual hardware devices.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This paper proposed an input control mechanism to improve the fault tolerance of SNNs. It is claimed that the proposed method is also beneficial to SNNs implemented on FPGA devices.
+
+### Strengths
+1. The motivation study section (section 4) contains an analysis of different aspects.
+
+### Weaknesses
+1. The paper should clearly establish at the outset that the research focuses on hardware-implemented SNNs and their fault tolerance.
+
+2. The section title “3.2 Mechanisms to Improve the Fault Tolerance of SNNs” is misleading, as SNNs themselves do not suffer the described faults and therefore do not require such fault tolerance. Moreover, the section discusses neuromorphic hardware fault-tolerance research, which does not fit well under this section title.
+
+3. Section 5: The research appears to focus on on-chip SNN learning. This should be stated explicitly earlier in the paper, before detailing the methods.
+
+4. Section 5: It is unclear how the three subsections work together to form the proposed mechanism. A brief summary at the beginning of this section would be helpful.
+
+5. Abstract and Introduction: FPGA is mentioned only four times in the main text, without explaining how the method works on FPGAs or what benefits the proposed method provides to FPGA. Since the main paper does not include any FPGA-relevant analysis, it should not be presented as a primary contribution in the Abstract as well as the Introduction.
+
+### Questions
+See weakness for questions.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper studies fault tolerance in SNNs, which are prone to performance degradation from faults like Stuck-At-Faults (SAFs) in synaptic weights. The authors identify a bottleneck problem: faults cause pre-activation values to drift outside the surrogate gradient corridor, leading to vanishing gradients and a severe reduction in the network's usable learning capacity.
+
+To solve this, they propose 
+
+i) a novel and simple mechanism inspired by flow control in computer networks. Instead of modifying the SNN's weights or architecture, their method controls the input. The core idea is to fragment input images into smaller pieces based on a sensitivity score that combines image complexity (edges, texture) and fault influence.
+ii) They find the optimal cutting angle by minimizing the Gini coefficient of the 1D projection of this score, ensuring each fragment has a balanced information load. These fragments are then fed sequentially to the SNN, and the outputs are aggregated using an entropy-based weighting scheme.
+iii) The proposed method is evaluated extensively on various SNN models (MLP, VGG-7/11/15, ResNet-18/34) and datasets (MNIST, FMNIST, CIFAR-10/100, Tiny-ImageNet, UCI-HAR) under different fault types (SAFs, RWFs, CEFs), the mechanism yields the highest accuracy at a given fault ratio versus benchmarks (ECOC, SoftSNN, Routing, Astrocyte, FalVolt, LIFA).
+
+### Strengths
+The authors have touched each dimension of originality, quality, clarity, and significance.
+
+Originality: The authors focus on input fragmentation plus fault-influence guidance over weight-level scanning, explicitly targeting the surrogate-gradient corridor to prevent gradient bottlenecks. The approach of using input fragmentation controlled by a Gini-optimized strategy is novel and also provides a theoretical analysis (on corridor occupancy/gradient attenuation and capacity thresholds) that explains failure modes under SAF/RWF/CEF and why the mechanism helps. The analogy to network flow control is creative and provides a strong, intuitive foundation.
+
+Quality: The authors do not show just an empirical demonstration but support a thorough motivation study that meticulously shows how faults lead to pre-activation drift and gradient collapse. The appendices provide a rigorous mathematical framework for both the problem and the near-optimality of their solution. The experimental evaluation is extensive, covering multiple models, datasets, fault types, time steps, ablation studies, hyperparameter sensitivity, and even a comparison with DNNs and a real FPGA implementation.
+
+Clarity: The paper is well-written and structured. The problem is clearly motivated, the mechanism is explained step-by-step with the help of key points, and the figures and tables effectively support the claims. The use of a simple, high-level analogy (flow control) makes the complex underlying concept more accessible.
+
+Significance: The proposed mechanism directly targets a critical and common limitation in deployed SNNs, especially for resource-constrained or neuromorphic platforms. Its low complexity and implementation compatibility make it highly relevant for practitioners and researchers seeking robust edge AI solutions.
+
+### Weaknesses
+1. The explanation of the "bottleneck problem" in the paper (at line 60) lacks conceptual clarity and mixes two different learning regimes. The authors first state that "when faults appear in SNNs' synapses, the weights of the faulty synapses become fixed during training," implying that training is happening on-chip, where hardware faults would indeed interfere with plasticity and learning. However, the next line attributes the capacity degradation to surrogate gradient vanishing due to abnormal pre-activation values, this is clearly a reference to offline training using backpropagation through time (BPTT) and surrogate gradients, as implemented in frameworks like snnTorch or SpikingJelly.
+
+This conflation is problematic. In most practical settings, SNNs are trained offline on fault-free software platforms, and then deployed on neuromorphic hardware. If faults arise, they typically occur after training, during deployment, due to physical issues such as resistance drift, electromigration, peripheral CMOS aging, or read-disturb effects. Thus, during offline BPTT training, the weights are unaffected by hardware faults. On the other hand, if the authors intend to analyze on-chip learning, then the appropriate learning rule would be local, online methods like STDP, not surrogate-gradient-based BPTT. In that case, the "gradient vanishing" explanation does not apply.
+
+In summary, it is implying a vague explanation and needs clarification for accurately motivating the problem and for aligning the theoretical analysis with real-world neuromorphic deployment.
+
+
+2.) The paper focuses solely on synaptic faults (e.g., stuck-at, random-weight), but this overlooks other critical fault modes, especially given that the model is deployed on FPGA hardware. In digital neuromorphic systems, faults can also arise in core arithmetic components such as adders, multipliers, counters, and comparators, which directly impact spiking neuron-level computations. Prior works 
+https://ieeexplore.ieee.org/abstract/document/10658724
+https://ieeexplore.ieee.org/abstract/document/10858960
+
+have shown that such logic-level faults can significantly degrade SNN performance. A broader fault model or at least a discussion acknowledging these hardware-level vulnerabilities would strengthen the paper's scope and relevance for real-world neuromorphic deployment.
+
+3.) The Section 4. Motivation Study frames the impact of synaptic faults entirely from the perspective of offline software-based BPTT training, which is not representative of how SNNs operate on neuromorphic hardware. In practice, BPTT cannot be used on neuromorphic devices, only online, local learning rules such as STDP are hardware-compatible. Prior works (e.g., Vatajelu et al., 2019; Lee & Lim, 2023) have correctly modeled faults within unsupervised, on-chip STDP-based learning, which reflects real-world behavior. Without grounding the fault impact in such realistic learning settings, the motivation for the proposed input-fragmentation mechanism remains speculative. A more appropriate justification would consider how faults affect STDP-based learning dynamics or inference-time reliability post offline training.
+
+4.) While the authors provide code as supplementary material, there is no accompanying README or documentation explaining how to execute it. This makes it difficult to reproduce the experiments or understand the workflow. Additionally, although the paper reports FPGA-based results, the supplementary materials contain only Python (.py) files, with no Verilog: hardware-specific code required for actual FPGA deployment. Including these files or at least providing a pointer to the hardware implementation would significantly enhance the reproducibility and credibility of the hardware claims.
+
+5.) In Appendix A.7 (line 1296), the authors mention FPGA evaluation using only an MLP model. However, other models used in the paper, such as VGG-7/11/15 and ResNet-18/34 are not included in the hardware experiments. It remains unclear why these deeper architectures were omitted, especially since they form a core part of the software evaluation. Including them would provide a more complete and realistic assessment of the proposed method's hardware applicability.
+
+6.) Hardware results show the pattern but the device/precision configuration dominates performance. A clearer breakdown of numeric formats, bit-width per layer, and resource utilization vs accuracy would strengthen reproducibility claims for hardware.
+
+7.) The proposed approach is heavily designed towards 2D images. How would the approach generalize it to other data modalities, such as audio (1D time series) or text? The paper's significance would be greatly amplified if the core idea could be shown to be more broadly applicable.
+
+8.) Though the method is optimized using sensitivity metrics and Gini coefficients, practical constraints (batch effects, alignment in hardware) may limit its generality. Further discussion of trade-offs in real-world settings (e.g., latency, fragment count vs. accuracy) would be valuable.
+
+9.) Is there potential to dynamically rather than statically per batch adapt the fragmentation strategy during training as fault characteristics evolve, and how might this affect convergence and hardware cost?
+
+10.) The method focuses on gradient-based supervised SNN training. Would similar fragmentation principles benefit unsupervised SNNs?
+
+### Questions
+I would request authors to answer all points that are raised in Weaknesses.
+
+### Soundness
+2
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+5
+
+### Summary
+The paper presents a method for fault tolerance to stuck-at and synaptic faults in spiking neural networks running on neuromorphic hardware using flow control methods based on sensitivity analysis of neurons. The system uses the Gini coefficient to analyse sensitivity and route inputs past problematic nodes that cause gradient collapse due to anomalously large spiking values. This is tested against some other neuromorphic approaches using the Leaky Integrate and Fire method. Overall, the paper presents this as a highly theoretically grounded approach and draws on behavioral models of faults in neuromorphic hardware and tests this in an FPGA.
+
+### Strengths
+The paper's theoretical section is very solid, in particular the appendix proof that provides theoretical guarantees of the system's optimality. Similarly, it presents the use of flow control as a very intuitive approach, comparing it to flow control in computer networks - this makes a complex idea and approach seem much more digestible. I believe that this combination of complex, thorough theory and solid explanation by analogy is what makes the presentation of this paper a very sound addition to the conference provided its weaknesses are addressed.
+
+Its hardware based experimental section is also very good - the use of real hardware for fault tolerance analysis is a mark of good experimentation.
+
+### Weaknesses
+I am worried about the paper's experimental section, in particular its contrast to prior art in the hardware space that has modelled Leaky Integrate and Fire neurons in non-FPGA formats. The FPGA is not the only cutting-edge accelerator hardware being examined in the field, and resilience approaches in prior art have also looked at:
+
+1) Setting anomalous values to zero based on neuron output statistics in an inference or training episode [1] or using DropOut [2]. This seems a very lightweight approach, as opposed to requirements of routing and flow control that impose interconnect and communication overheads - manageable in an FPGA but may be harder in analog, compute-in-memory or GPU substrates. How does your approach contrast to this? I would like to see a discussion of that.
+
+2) Persistent faults in the network - which are ideally addressed using flow control - have been addressed using testing based approaches (online and offline self-test in [2]; and a signature-based compact test strategy in [3]) which has the benefit of amortizing test overhead over number of inferences, rather than being an always-on strategy. It would be good to show how the online approaches examined here, applied as they are to persistent faults, contrast with test strategies that may be amortizable over the training process.
+
+[1] A. Saha, C. Amarnath and A. Chatterjee, "A Resilience Framework for Synapse Weight Errors and Firing Threshold Perturbations in RRAM Spiking Neural Networks," 2023 IEEE European Test Symposium (ETS), Venezia, Italy, 2023, pp. 1-4, doi: 10.1109/ETS56758.2023.1017422
+
+[2] T. Spyrou, S. A. El-Sayed, E. Afacan, L. A. Camuñas-Mesa, B. Linares-Barranco and H. -G. Stratigopoulos, "Neuron Fault Tolerance in Spiking Neural Networks," 2021 Design, Automation & Test in Europe Conference & Exhibition (DATE), Grenoble, France, 2021, pp. 743-748, doi: 10.23919/DATE51398.2021.9474081.
+
+[3] A. Saha, C. Amarnath, K. Ma and A. Chatterjee, "Signature Driven Post-Manufacture Testing and Tuning of RRAM Spiking Neural Networks for Yield Recovery," 2024 29th Asia and South Pacific Design Automation Conference (ASP-DAC), Incheon, Korea, Republic of, 2024, pp. 740-745, doi: 10.1109/ASP-DAC58780.2024.10473874.
+
+### Questions
+1) Could the authors provide a discussion w.r.t. prior art in the hardware space? A few papers are cited above, but the approaches involving forward-pass resilience seem to be lower overhead than flow-control approaches, especially when applied to non-FPGA hardware.
+
+2) Could the authors provide a short discussion contrasting these on-line approaches with offline or online periodic self-test and repair systems in hardware that would allow for resilience overhead to be amortized over a larger number of computations, at the cost of potentially allowing some faults through? What are the pros and cons, and the application domains, of each approach?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper proposed an input fragmentation mechanism inspired by flow control in computer networks. It tackles the important issue of fault tolerance in Spiking Neural Networks (SNNs).
+
+### Strengths
+The main strength of this paper is that they have done various experiments on several models.
+
+### Weaknesses
+The main weakness is that the idea presentation could be clearer.
+
+There could be more information for SAFs and RWFs since they are important characteristics in fault tolerant research.
+
+Line 167-170, this paragraph has a lot of parameters with neither explanation nor citations.
+
+Equations (1)–(4) are very complicated, which needs a more sufficient explanation or derivative. If they are not completely proposed by the authors, some citations would be better.
+
+Datasets could be used with citations.
+
+### Questions
+What is the Gini coefficient? If it is proposed by the authors, could they add some introductions for this?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

@@ -1,0 +1,178 @@
+# Offline Reinforcement Learning for Interval-Censored Data
+
+- Decision: Reject
+- Scores: 4, 2, 4, 4
+
+## Abstract
+This paper proposes a framework that applies reinforcement learning to multi-stage interval-censored data processing to develop an intelligent decision system capable of offering personalized behavioral recommendations based on observers' state and action variables. Interval-censored data is a common form of data encountered in practical data analysis, where observed results are only known to lie within certain intervals rather than exact values. This approach not only adapts to individual heterogeneity but also provides valuable decision support for personalized treatment. Experimental results demonstrate that this integrated approach effectively enhances individuals' longevity, providing a new method for personalized interventions and recommendations. This research is significant for the development of intelligent and personalized health management systems, offering valuable insights for future health sciences and intelligent decision systems.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a reinforcement learning framework for multi-stage interval-censored data. It modifies traditional Q-learning by replacing the unobservable reward with the cumulative hazard function, estimated via sieve-based maximum likelihood. The authors prove the unbiasedness of the resulting Q-function and validate the method through simulations and a breast-cancer application, showing improved personalized decision-making.
+
+### Strengths
+The main strength of this paper lies in its novel reinforcement learning framework that effectively handles multi-stage interval-censored data, a setting where existing RL methods fail due to unobservable event times. By redefining the reward as the logarithm of the survival or cumulative hazard function, the approach enables policy learning under time uncertainty while maintaining theoretical rigor. The method combines this with a sieve-based maximum likelihood estimator for reliable hazard estimation and proves the unbiasedness of the resulting Q-function.
+
+### Weaknesses
+Although the paper consider the interval censored data setting which has not been studied in the Q learning, this main contribution could be incremental since censored Q learning has been previously studied in Goldberg and Kosorok (2012). Moreover, the paper’s theory stops at unbiasedness of the Q-function, without stronger results common in this area (e.g., efficiency, regret/risk bounds, asymptotic normality for policy value).
+
+### Questions
+1.	While the paper successfully proves the unbiasedness of the estimated Q-function under correct model specification, the theoretical development remains incomplete without an analysis of its efficiency or convergence properties. It would substantially strengthen the contribution if the authors could extend the theory to include asymptotic variance bounds, efficiency characterization, or regret guarantees analogous to those in standard reinforcement learning analyses.
+
+2.	The paper introduces a sieve-based maximum likelihood estimator to estimate the conditional survival or hazard function, which is then used to define the reward. Could the authors elaborate on why sieve estimation is necessary in this RL framework? In standard RL, function approximation is often achieved via neural networks, kernel methods, or basis expansions learned directly from reward signals. What advantages does the sieve approach provide over these more common RL approximators?
+
+3.	How does the proposed log-survival based reward formulation fundamentally differ from existing IPCW or imputation-based Q-learning approaches (e.g., Goldberg & Kosorok, 2012; Lyu et al., 2023)? Beyond accommodating interval censoring, does it offer any theoretical or computational advantages?
+
+Goldberg, Y., & Kosorok, M. R. (2012). Q-learning with censored data. Annals of statistics, 40(1), 529.
+Lyu, L., Cheng, Y., & Wahed, A. S. (2023). Imputation‐based Q‐learning for optimizing dynamic treatment regimes with right‐censored survival outcome. Biometrics, 79(4), 3676-3689.
+
+4.	It would be helpful if the authors compared their proposed method with existing approaches for censored data, such as IPCW Q-learning (Goldberg & Kosorok, 2012) and imputation-based Q-learning (Lyu et al., 2023), even though those methods are developed for right-censored outcomes. Such a comparison would clarify how much improvement comes from addressing interval censoring versus general modeling or algorithmic differences.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+3
+
+### Summary
+This work focuses on the offline reinforcement leanring with the interval-censored data structure. The settings of interval-censored data are common in practical scenarios. The empirical studies have been conducted to validate the effectiveness of the learned decision rule by the developed algorithm. Additionally, a cancer data analysis has been conducted to showcase its potential applicability.
+
+### Strengths
+1. The work focuses on the valuable setting, i.e., interval-censored data, in the decision-making domain.
+2. This paper uses real cancer data as an example to illustrate the potential of the developed algorithm.
+
+### Weaknesses
+1. Although this work is benchmarked in the offline RL domain, the crucial challenges in offline RL have not been discussed, e.g., when offline data has not covered the evaluated policy, which is a usual case in offline settings. 
+2. The motivations for modeling survival functions and the resulting objective function are not clear. 
+3. As this work aims to provide some theoretical investigations for the developed algorithm, it is necessary to study the regret of the learned policy, which is the standard criterion to evaluate the effectiveness of the algorithms in RL. 
+4. In the experiments, the algorithm is not benchmarked with the state-of-the-art algorithms.
+
+### Questions
+See weakness.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+2
+
+### Summary
+This paper tackles the challenge of offline reinforcement learning in scenarios with interval-censored event times, which is a common yet underexplored issue in survival analysis and personalized medicine. In many real-world situations—such as monitoring cancer progression or following up on hypertension—the exact timing of clinical events is often unknown; instead, we only have information about the interval during which these events occurred. The authors propose a robust framework that integrates survival analysis models with offline reinforcement learning to identify optimal dynamic treatment strategies. A key innovation of this work is the use of the logarithm of the conditional survival function as a proxy for immediate rewards, allowing policy learning even when precise event times are unavailable. The method is further developed for multi-stage decision-making, accommodates various types of censoring (left, interval, and right), and considers individual differences and the possibility of skipping stages in treatment.
+
+### Strengths
+This paper has a clear formulation of the problem, accompanied by robust theoretical analysis (which covers the unbiasedness and bounded variance of the estimated Q-function). It performs thorough empirical validation through both simulation studies, utilizing Cox proportional hazards (PH) and accelerated failure time (AFT) data-generating processes, and a real-world application to SEER breast cancer data. In this application, the paper successfully identifies significant covariates specific to different stages of cancer and develops meaningful radiation treatment policies.
+
+### Weaknesses
+- While the integration of survival modeling with RL is thoughtful, the technical novelty is incremental: the core contribution lies in adapting existing tools (sieve estimation, survival-based rewards) to a new data modality rather than introducing a fundamentally new algorithmic or theoretical framework. 
+- The choice of log-survival as a reward lacks justification in terms of meaningful objectives (e.g., maximizing median survival or restricted mean survival time). 
+- The method’s computational complexity and scalability to high-dimensional state spaces or large numbers of stages are not thoroughly discussed.
+- The paper assumes familiarity with the interval-censored survival analysis. Still, it does not clearly situate itself within the broader RL literature, making it difficult to assess how much the approach advances the state of the art in RL versus survival analysis. Due to this reason, its significance and novelty relative to the RL literature remain somewhat unclear. I am open to revising my score based on author responses and other reviewers’ insights.
+
+### Questions
+Will replacing the reward with the log-survival cause misalignment issues? How can one ensure that using the log-survival reward aligns with the original task, rather than leading to suboptimal policies?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+4
+
+### Summary
+This paper proposes a reinforcement learning framework for multi-stage interval-censored data. Instead of using instantaneous rewards, the authors define the reward as the logarithm of the survival function. The authors estimate the survival function via sieve-based maximum likelihood and integrate the survival function into a Bellman-equation formulation for policy optimization. Simulations and real data analysis demonstrate the properties of the proposed method in healthcare settings.
+
+### Strengths
+1. This paper is the first attempt to extend RL frameworks to interval-censored outcomes in healthcare settings.
+
+2. This paper provides formal theoretical results of the proposed method.
+
+### Weaknesses
+1. In the Introduction, I believe the examples can be more relevant. The current examples are only about situations where interval-censored data arise, but why shall we concern about RL in these situations?
+
+2. In the second paragraph of Section 4.1, the authors claim that "due to the interval-censored nature of the data, such precise observations (of rewards) are unavailable". This confuses me because even though the response variable of interest is interval-censored, can we define a non-censored variable as a reward? Or are the authors specifically considering situations where the reward is interval-censored? If so, I suggest the authors clarify this at the beginning of the paper when stating the problem.
+
+3. Are the authors sure about the correctness of this sentence? "Since the survival function takes values in the range [0,1], it is evident that the immediate reward defined above is bounded."
+
+4. The cumulative discounted reward defined in Section 4.1 seems difficult to interpret in a clinical setting. In Goldberg & Kosorok (2012) for example, the cumulated reward is the total survival time, which is straightforward. But here the authors are considering the discounted cumulative probability of surviving past some time threshold, which is strange. I enourage the authors to include more justification about why such a definition should matter in the clinical sense.
+
+5. In Section 4.2, can the authors be more clear about how the optimal Q function is estimated? I find it hard to connect estimation of the survival function by MLE with the estimation of the optimal Q function.
+
+6. In Table 1, are the numbers p-values? Please clean this table up.
+
+7. Can the authors interpret the estimated policy in the SEER example? How do we actually use this policy? What implication does it have?
+
+### Questions
+1. In the first paragraph of Section 2, what is "DWSurv"?
+
+2. Small typo: 
+	- Line 233 on page 5: "he" -> "the"
+	
+3. I suggest the authors use the terminology of either "optimal dynamic treatment regime" or "optimal policy" consistently throughout the paper. The sentence on line 233 on page 5 "For a given x..." seems to repeat the proceeding sentence.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3

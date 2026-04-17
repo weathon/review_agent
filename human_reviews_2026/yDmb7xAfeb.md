@@ -1,0 +1,178 @@
+# World-In-World: World Models in a Closed-Loop World
+
+- Decision: Accept (Oral)
+- Scores: 8, 8, 6, 6
+
+## Abstract
+Generative world models (WMs) can now simulate worlds with striking visual realism, which naturally raises the question of whether they can endow embodied agents with predictive perception for decision making. Progress on this question has been limited by fragmented evaluation: most existing benchmarks adopt open-loop protocols that emphasize visual quality in isolation, leaving the core issue of embodied utility unresolved, i.e., *do WMs actually help agents succeed at embodied tasks?*
+To address this gap, we introduce World-In-World, the first open platform that benchmarks WMs in a closed-loop setting that mirrors real agent-environment interactions. World-In-World provides a unified online planning strategy and a standardized action API, enabling heterogeneous WMs for decision making.
+We curate four closed-loop environments that rigorously evaluate diverse WMs, prioritize task success as the primary metric, and move beyond the common focus on visual quality; we also present the first data scaling law for world models in embodied settings.
+Our study uncovers three surprises: (1) visual quality alone does not guarantee task success—controllability matters more; (2) scaling post-training with action-observation data is more effective than upgrading the pretrained video generators; and (3) allocating more inference-time compute allows WMs to substantially improve closed-loop performance. By centering evaluation on closed-loop outcomes, World-In-World establishes a new benchmark for the systematic assessment of WMs.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces WoW!, the first open benchmark for evaluating generative world models in a closed-loop, control-focused setting across four domains: Active Recognition, Image-Goal Navigation, Active Embodied Question Answering, and Robotic Manipulation. The authors propose a unified planning strategy and action API to integrate diverse world models into a consistent decision-making pipeline. Key findings include: (1) controllability is more crucial than visual quality for task success; (2) post-training with limited data yields significant gains; and (3) increasing inference-time compute improves performance. This paper shifts the evaluation focus from visual fidelity to embodied decision-making, setting a new standard for world model assessment in interactive environments.
+
+### Strengths
+- This paper is well-written and easy to follow.
+- It addresses a crucial gap in the evaluation of video generation models from a control-centric perspective, an area previously overlooked by benchmarks, which is a valuable step forward in world model development.
+- The benchmark’s task design and baseline selection are thorough and rigorous, incorporating both high-level and low-level decision-making tasks, as well as the latest video generation models.
+- The experimental insights are impactful, especially the finding that controllability is more important than visual quality for decision-making tasks, and the observation that model-based planning is scalable during test-time.
+
+### Weaknesses
+- The analysis of proposal and revision policies is limited. Specifically, the revision policy, which selects among simulated rollouts, uses the same VLM as the proposal policy. The paper does not explore how sensitive the results are to the revision policy design, such as whether a simpler reward model would yield different outcomes for world model utility.
+- The unified action API assumes world models can conform to a shared action vocabulary. However, real-world domains often use incompatible action semantics, and mapping between them may introduce misalignment or information loss. The paper does not analyze how such action misalignments affect final task performance.
+- Another concern is the computational cost and inference-time overhead of the proposed framework. Planning-based methods are known for being computationally intensive, and integrating large video generation models into decision-making could significantly reduce the frequency of decision-making due to high computational demands.
+
+### Questions
+- How much impact do the revision policies have on task success?
+- How sensitive is closed-loop performance to action misalignment caused by the unified action API? Could the different action API lead to different experimental conclusions?
+- Compared to the base policy, how much does the inference time increase when introducing world models? How can the computational burden of model-based planning be mitigated?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This work addresses a significant gap in evaluating world models for their utility in the development of embodied agents tasks. World models are largely evaluated for their visual quality, motion coherence or controllability, but there is no available benchmark to assess how well a world model can improve embodied reasoning and task success. This work introduces a new general evaluation benchmark for world models, specific for assessing their performance on embodied interactions. The authors provide 1) a unified closed-loop planning strategy 2) a unified action API to allow various world models to be compared and 3) a study on finetuning pretrained video generators for a specific downstream task and the effect of data scaling.
+
+### Strengths
+1) Addresses an existing gap in the research community on assessing world models for their ability to be integrated in decision making embodied agents, presenting a well-rounded general framework for closed-loop evaluation. This allows the research community to make informed decisions when pursuing research goals around improving the utility of world models for embodied scenarios.
+2) Presents a comprehensive set of tasks for embodied agents - 4 tasks (active recognition, image-goal navigation, active embodied question answering, robotic manipulation) - I particularly appreciate the inclusion of robotic manipulation, as it provides an important additional dimension and usability for the proposed evaluation framework.
+3) Conducts an extensive and detailed analysis on 9 world model benchmarks, both using image and video based approaches, highlighting the key results of their evaluation: the use of world models enhance provides performance gains over base policies across tasks, post training aids the utility of world models & the current limitations in manipulation tasks where world models struggle with simulating precise motion and dynamics.
+4) Presents valuable insights on data-size scaling for post-training, highlighting that even a small dataset size (4K) from the task domain can yield significant gains with post training. This is useful for future work in this space.
+
+### Weaknesses
+Overall, the work provides a great set of references and supporting experiments. The paper is easy to follow, with detailed result figures and tables.
+
+A couple of minor suggestions:
+- I might have missed this, but I couldn't see the results of the A-EQA task evaluation from Table 2 discussed in more detail in Section 3. There is a stronger focus on the other 3 tasks, specifically AR, ImageNav and robotic manipulation.
+- In Fig 5(b), Wan2.2 5B (post-trained) seems to have high controllability, but performs low in terms of task success rate, which goes against the positive correlation claimed in the paper. Same for Runway Gen4 that has lower LIPIS, but very high SR.
+- At the beginning of section 3.2, you discuss findings presented in Figure 5 (a) - it would be good to reference it.
+
+### Questions
+1) In Table 2, what does A14B stand for in the Wan2.2 #param column?
+2) nitpick: For clarity, it might be good to mark in the main body text on line 303 that post-trained variants have a special symbol (described in the description of Table 1), and first used on line 313 with Wan2.1.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This article presents the Wow! World Models in a Closed-Loop World, which is the first Visual World Model (WM) evaluation platform for Closed-Loop interactive scenarios. Unlike previous open-loop evaluations that focused solely on the quality of the generated video —such as video fidelity —Wow, taking task success rate as the core index, the practical utility of the world model for decision-making is systematically evaluated across four embodied intelligent tasks (active recognition, image target navigation, active question answering, and manipulator operation). The authors introduce a unified online planning strategy and a standardized action API to enable heterogeneous world models to participate in closed-loop interactions under the same protocol, three key findings were revealed: (1) visual quality ≠ task success, and controllability is more important; (2) fine-tuning with a small amount of action-observation data on the target domain is more effective than upgrading the pre-trained video generator; (3) increasing the number of simulations can significantly improve the performance.
+
+### Strengths
+- The author has pointed out the “Open-loop bias” in the current world model evaluation,i.e., overemphasis on generation quality and neglect of its practical value in closed-loop decision-making. Wow! For the first time, the focus of assessment has shifted from “Looking like” to “Working with,” a paradigm shift that plays an important guiding role for embodied AI and the world model community.
+- This paper constructs four tasks covering perception, navigation, and operation, and evaluates more than ten mainstream world models (including SVD, Wan, LTX, Cosmos, etc.). Through the standardized action API and online planning framework, heterogeneous models can be fairly compared.
+- The conclusion that “High visual quality ≠ high task success” challenges the current community's prevailing assumptions about generative model capabilities (such as whether Sora-like models are naturally suitable for embodied tasks). The authors further provide empirical support through the controllability quantification (LPIPS alignment), the data size law, and the inference extension, and the results show that the proposed model is more robust than previous models. It points to the optimization direction for follow-up research (e.g., emphasizing alignment of motion conditions rather than simply improving resolution).
+
+### Weaknesses
+- In the current framework, both the proposal and revision policies use powerful VLM (such as QWEN2.5-VL-72B). This makes the extent to which task success is attributable to the world model vs. The strategy itself is unclear. Complementary ablation experiments are suggested: for example, fixed-strategy capabilities (such as using weak or regular strategies), observing differences in performance gains across different world models, to more purely assess the decision-aid value of WM.
+- Habitat-sim data comes only from indoor scenes in HM3D and Matterport3D, and RLBench is also limited to desktop operations. This limits generalization to more complex environments, such as outdoor, dynamic obstacles, and multi-agents. The authors mention generalizability as a challenge in the discussion section but do not validate cross-domain transfer in experiments (e.g., in Habitat training and the Gibson test), weakening the persuasiveness of the universal world model claim.
+
+### Questions
+- In table 1-3, the baseline strategy (e.g., VLM) already has strong capabilities (e.g., AR task 50% + accuracy). Can the world model still deliver significant improvements with weaker strategies (such as random strategies or simple heuristics)? This helps clarify the marginal contribution of WM.
+- The paper highlights generalization as a key challenge (Section 4), but all experiments were evaluated within the training domain. Have you tried to train the model after testing in an unfamiliar scenario (e.g., new building layout, new object category) or across simulators (e.g., Habitat → Igibson)? Preliminary results, even if negative, are very useful.
+- Figure 7 shows that increasing the number of inferences improves performance, but computing resources are limited in real deployments. What is the “cost performance”(performance/amount of computation) of the different world models on a fixed computing budget (e.g. 5 rollouts per step)? Are there design implications for a Lightweight World Model?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+The paper introduces WoW!, a new open platform to address the flaws of existing world model (WM) benchmarks, arguing that "closed-loop" embodied task success, not "open-loop" visual quality, is the proper metric to evaluate the WMs. The platform provides a unified planning strategy and action API to evaluate heterogeneous WMs on four categories of embodied tasks. Using this benchmark, the paper finds that visual quality does not correlate with task success, but controllability does, and that performance scales with both in-domain post-training data and inference-time compute.
+
+### Strengths
+1. The paper's main contribution is shifting the evaluation of world models from open-loop visual fidelity to closed-loop embodied task success. This is a significant and necessary service for the field.
+2. The benchmark, through its Unified Action API, allows for direct, fair comparison of heterogeneous SOTA video generators across comprehensive embodied tasks.
+3. The paper's "three surprises" are all well-supported by evidence and can provide insights for the community.
+
+### Weaknesses
+1. The "three surprises" are to some extent overstated, especially the first and the second ones, as these findings have been pointed 
+out by many previous papers, e.g. [1,2,3].
+2. The paper does not directly specify the reward function used to score the world model's imagined trajectories. 
+3. The method on how to refine the policy during planning is not that clear (beyond directly using the plan with the highest score).
+4. There already exist some benchmarks that also evaluate the pretrained video generation models' capability on control tasks, e.g. VP2 [3]. Some of the insights in WoW! are also pointed out in VP2, like the first "surprise". Although WoW! is indeed a more comprehensive benchmark for evaluating video generation models as WMs on embodied tasks, the paper must reference these prior works and include a discussion or comparison to properly situate WoW!'s contributions within the existing literature.
+
+[1] Gao S, Zhou S, Du Y, et al. Adaworld: Learning adaptable world models with latent actions[J]. arXiv preprint arXiv:2503.18938, 2025. \
+[2] He H, Zhang Y, Lin L, et al. Pre-trained video generative models as world simulators[J]. arXiv preprint arXiv:2502.07825, 2025. \
+[3] Tian S, Finn C, Wu J. A control-centric benchmark for video prediction[J]. arXiv preprint arXiv:2304.13723, 2023.
+
+### Questions
+1. See 2 and 3 in the Weakness.
+2. Regarding the limited gains in manipulation tasks, where the WM provides only a marginal boost over the VLM-only baseline as is pointed out, could you provide a deeper analysis? Is it purely a failure to model contact-rich physics, and what are potential solutions? Given that manipulation is a key focus of embodied AI, what other roles might WMs play in these complex tasks where their current planning utility appears minimal?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3

@@ -1,0 +1,199 @@
+# Open Set Opponent Modeling
+
+- Decision: Reject
+- Scores: 2, 6, 6, 4
+
+## Abstract
+In multi-agent systems, opponent modeling aims to reduce environmental uncertainty by modeling other agents. Existing research has utilized opponent information to enhance decision-making capabilities based on various methodologies. However, they generally lack good generalization when opponents adopt an open set of policies. In particular, no work has managed to effectively identify never-before-seen opponents. To address these issues, we propose an end-to-end Open Set Opponent Modeling (OSOM) training approach, which for the first time enables explicit identification and response to open set opponents. First, OSOM overcomes the challenges of partial observability by distilling opponent policies into information encodings of controlled agent through representation learning. Second, using randomly generated opponent type embeddings as prompts, OSOM achieves identification of opponent types with variable numbers and semantics by maximizing the probability of selecting the true opponent type embedding via contrastive learning. Finally, with the aggregated opponent type embeddings selected from recent history as context, OSOM learns to best respond to sampled opponents through online reinforcement learning. At test time, OSOM only needs to randomly generate opponent type embeddings as prompts again to achieve effective on-the-fly identification and response to non-stationary open set opponents. Extensive controlled experiments in competitive, cooperative, and mixed environments quantitatively validate the significant advantages of OSOM over existing approaches in terms of identification accuracy and response performance.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces Open Set Opponent Modeling (OSOM), an end-to-end framework that enables an agent to explicitly identify and respond to policies not seen during training. A representation-learning objective uses an encoder–decoder structure to predict an opponent’s observations and actions from the self-agent’s trajectory, aiming to create a latent state, $e_t$, that remains informative under partial observability. This requires access to opponent data during training. A Transformer-based Opponent Identifier takes the history of latent states and a set of $K$ randomly generated, orthogonal Opponent Type Embeddings (OTEs) as a prompt. It is trained via a contrastive loss to output a prediction, $\hat{z}_t$, that is maximally similar to the ground-truth OTE for the current opponent. A separate Opponent Responder is trained via online RL. Its policy is conditioned on the self-agent’s observation, $o_t^1$, and a context vector, $x_t$, which is an average-pooled aggregation of the OTEs selected by the Identifier over the recent history. At test time, the model is frozen, and a new set of $M$ random, orthogonal OTEs is generated to serve as the prompt for the $M$ unseen test opponents. The agent then performs on-the-fly identification and response. The authors present strong empirical results, showing significant outperformance against baselines in unseen scenarios.
+
+### Strengths
+The paper tackles the open-set opponent modeling problem, which is a significant and practical challenge. The core idea of using randomly generated embeddings as a prompt for a Transformer, and training it with a contrastive loss to perform open-set identification, is novel and interesting, though with technical concerns. OSOM attempts to explicitly identify which unseen opponent it is facing, which could enable more complex reasoning and adaptation.
+
+### Weaknesses
+1. My main concern is as follows:
+
+The Responder ($\pi^1(a^1|o^1, x)$) learns to map a specific context vector $x_{train}$ to an optimal policy. This $x_{train}$ is an aggregate of *selected* OTEs from the *training prompt* ($\mathcal{Z}^{train}$). For example, it learns that the vector $z_{train, A}$ means "best respond to Opponent A."
+
+  During Testing, let's assume opponent A is also in the Eval Set. The trained Identifier (correctly) outputs a prediction $\hat{z} _ t$ based on the opponent's behavior. However, it must now match this $\hat{z} _ t$ to the closest OTE in the new, random test prompt ($\mathcal{Z}^{test}$). Let's say it selects $z_{test, B}$. The Responder now receives $z_{test, B}$ as its context.
+
+  The Responder was trained to associate $z_{train, A}$ with Opponent A's policy. It has *never* seen $z_{test, B}$ and has no way of knowing that $z_{test, B}$ *also* means "best respond to Opponent A." Moreover, $z_{test, B}$ may be very likely orthogonal to $z_{train, A}$ if $d$ is large enough. The mapping from opponent policy to context vector is completely and randomly re-assigned at test time, I don't think it can learn any association between $z_{train, A}$ and $z_{test, B}$.
+
+2. Let's continue with the $M=1$ test case. If the model is prompted with only one test OTE ($z_{test, 1}$), the selection probability (Eq. 3) for that OTE will always be 1, regardless of the Identifier's output $\hat{z} _ t$. 
+The context vector $x_t$ will thus always be $z_{test, 1}$. This means the Responder's policy will be fixed and non-adaptive, conditioned on a single random vector, which should not work when $z_{test, 1}$ is sampled badly. I would like to see the experiment of $M=1$.
+
+3. The policy distillation objective ($\mathcal{J}_{distil}$) requires access to the opponent's observations and actions ($o^{-1}, a^{-1}$) during training. While the ablation study (Fig. 5) shows the model can work without it ("OSOM w/o Distill Loss"), performance drops significantly. This reliance on privileged information during training should be more clearly stated as a limitation.
+
+4. The method requires a priori knowledge of the exact number of opponent types, $M$, that will be present in the test set (as said in Sec. 5). In a truly "open" environment, $M$ is unknown. This assumption significantly limits the "openness" of the setting and is a major practical limitation. The method relies on generating $M$ pairwise orthogonal OTEs. This is only possible if the embedding dimension $d$ is greater than or equal to $M$. The paper does not discuss what happens if the number of test-time opponents $M$ is larger than the training-time embedding dimension $d$. This seems to be a hard constraint on the method's scalability.
+
+5. The Context Aggregator uses simple average pooling over the last $C$ episodes, which is a naive approach. A discounted average might be better if we assume the non-stationary policy change is not dramatic.
+
+This paper's core idea is novel, but the current description of the method seems to contain a fundamental disconnect that makes its strong empirical results difficult to understand. Therefore, I need to reject this paper before receiving reasonable clarification. I am willing to increase the score if the explanation and rebuttal provided by the author are convincing.
+
+### Questions
+1. Could the authors please clarify the disconnect between the Responder and the Identifier? The Responder is trained on context vectors derived from the training OTEs, but at test time, it is fed context vectors derived from a new, random set of test OTEs. How can the Responder generalize its policy when the context vectors is randomly re-initialized? This is either a great novelty or a serious flaw.
+
+2. Given this disconnect, why does the method perform so well empirically? Can you compare against a simple PPO baseline that has no access to any context at all (non-recurrent, observation-only input)? 
+
+3. Could the authors elaborate on the model's expected behavior when $M=1$? My understanding is that the context vector would become a single, fixed, random vector, making the agent's policy non-adaptive. Is this interpretation correct?
+4. What is your choice of $d$ in your experiments? 
+
+5. Can the authors comment on the adaptation speed? How many timesteps does it take for the context vector $x_t$ to "flush out" the old OTE and converge to the new one after an opponent policy switch?
+
+6. Can the authors provide the code, which is crucial for reproducibility?
+
+### Soundness
+1
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+2
+
+### Summary
+This paper proposes a novel end-to-end neural architecture involving a transformer component for opponent modeling. The first component is an opponent policy distilling network which maps the agent's past trajectories into a latent embedding. And then, it utilizes a transfomer network, which first includes K randomly sampled opponent-type-embeddings and the embeddings distilled from past trajectories, and output a predicted opponent embedding. This network is trained via contrastive learning. And then, all these predicted type-embedding are aggregated as a state representation for training an RL best response. This design effectively takes opponent-modeling as an inductie biases for this end-to-end training loop.
+
+### Strengths
+The design is novel. The experimental results are comprehensive.
+
+### Weaknesses
+It was not clear how to ensure the opponent test set is diverse. The abalation studies can be improved.
+
+### Questions
+The end-to-end design of OSOM is very amazing. However, I have some detailed questions:
+
+1. About the transformer: are you applying full causal mask for the whole sequence, and what kind of positional embedding are you using? I.e., is the ordering of these K opponent embeddings matter?
+
+2. The K opponent embeddings are sampled without imposing further structure. However, it is not very clear to me why this should be the way. Have you done ablation study are the way you sample these embeddings?
+
+3. Not very clear to me in the experiments how were the training-time and test-time opponents constructured. Could you elaborate more?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper it motivated by the problem of identifying and provide best response policies to unseen opponents. They propose, Open Set Opponent Modeling, a framework which 1) learns encodings enabling OSOM to identify opponent types, 2) uses these embeddings as a prompt to condition a best response policy. This framework is validated on three competitive benchmarks, including Khun Poker, Partially Observed Overcooked, and Predator-Pray with watch towers, achieving superior performance compared to baseline approaches.
+
+### Strengths
+* OSOM is intuitive and empirically effective
+* Ablations and comprehensive and validate key parts of the architecture 
+* Performance across all environments tested is strong.
+* The paper is well written and clearly states and supports its claims with evidence.
+
+### Weaknesses
+* OSOM uses a Transformer identifier, while several baselines use GRUs/MLP. Without an ablation, it is unclear whether OSOM truly enables better opponent modeling or is the benificiary of a better sequence model.
+* OSOM beats the random baseline on “who’s my opponent?”, but accuracies seen in table 1 are still quite low. I would recommend the authors tamper their claims on the effectiveness of opponent identification.
+* The frequency H is set in the paper as 20, 5, and 5 in KP, POO, and PPW. It's not entirely clear the reason for these particular numbers? 
+* While the paper includes three environments, I find their predator prey variant to be particularly non compelling. Inclusion of experiments on SMAC/Hanabi would further strengthen the paper.
+
+### Questions
+* LOSI (https://openreview.net/forum?id=S0KGzCEhJp) appears to be current work. It would strengthen the submission to discuss the differences from OSOM. As this is concurrent work I do not expect the authors to implement their work, but a discussion would be useful.
+* A further ablation on H on at least one of the environments would be a beneficial ablation. 
+* Would experiments on SMAC/Hanabi be burdensome? I don't believe they are strictly necessary for acceptance, but would improve the strength of the paper.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper addresses a key limitation in opponent modeling for multi-agent systems: the inability to effectively identify and respond to previously unseen, or "open set," opponents. To overcome this, the authors propose a novel end-to-end training framework called Open Set Opponent Modeling (OSOM).
+
+The OSOM approach works in three key stages:
+
+1). Policy Distillation: It uses representation learning to encode opponent policies into latent representations, overcoming challenges of partial observability.
+
+2). Open Set Identification: It employs contrastive learning with randomly generated "prompt" embeddings to enable explicit identification of opponent types, even when their number and semantics are unknown.
+
+3). Context-Aware Response: Using the identified opponent types as context, it learns optimal responses through online reinforcement learning.
+
+A notable feature is that at test time, OSOM can perform on-the-fly identification and adaptation to non-stationary opponents by reusing the same prompt-generation mechanism. The paper validates OSOM's superiority over existing methods through extensive experiments in competitive, cooperative, and mixed environments, demonstrating significant improvements in both identification accuracy and response performance.
+
+### Strengths
+1. The research tackles a significant and long-standing problem in Multi-Agent Reinforcement Learning (MARL)—open-set opponent modeling. The topic is both compelling and rigorously justified.
+
+2. Overall, the paper is structured logically and clearly written, making its content and methodology easy to understand.
+
+3. An extensive ablation study validates the contribution of each core component of OSOM. The results demonstrate that the identification learning mechanism is the most impactful, directly supporting the paper's central motivation and claims.
+
+### Weaknesses
+1. The three-stage learning pipeline of OSOM—comprising opponent policy distillation, type identification, and online RL policy training—results in a complex framework that may be impractical for scenarios where any one of these stages is difficult to implement.
+
+2.  A significant limitation of OSOM is that it is designed exclusively for controlling a single agent, and its framework does not extend to multi-agent control, which is quite common in MARL tasks.
+
+### Questions
+1. How does OSOM extend to multi-agent or team control in the open set setting?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

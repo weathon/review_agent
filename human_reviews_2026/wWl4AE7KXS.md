@@ -1,0 +1,159 @@
+# IPOD:Inverse-Problem-Driven Meta-Learning for Fast Generalizable Neural Representations in MRI Reconstruction
+
+- Decision: Reject
+- Scores: 2, 4, 8
+
+## Abstract
+Implicit neural representation (INR) demonstrates strong performance in magnetic resonance imaging (MRI) reconstructions by learning continuous mappings from spatial coordinates to signal intensities. However, existing unsupervised INR approaches require training from scratch for each observation, which is time-consuming and limits practical deployment. In this work, we propose an inverse-problem-driven meta-learning framework (iPod) that learns generalizable parameter initializations for INR directly from various undersampled reconstruction tasks without requiring fully sampled references. Technically, the meta-update is adaptively modulated by the hyperparameters performance of each inverse problem, ensuring optimal parameter distributions for robust and efficient initialization. Our approach leverages diverse reconstruction tasks with varying sampling patterns and anatomical structures to acquire a powerful and robust prior. Experimental validations demonstrate that the proposed framework provides powerful initialization that achieves fast convergence and superior reconstruction quality across different imaging protocols, outperforming baseline INR methods. Furthermore, this framework eliminates the dependence on reference images in conventional meta-learning procedures and has the potential to be extended to INR-based solutions for a wide range of imaging inverse problems. The code and data will be available at: https://anonymous.4open.science/r/iPod-2C60
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+2
+
+### Rating Number
+2
+
+### Confidence
+4
+
+### Summary
+This paper introduces IPoD, a meta-learning framework for implicit neural representations, to accelerate the reconstruction and super-resolution of undersampled MRI. For this, the authors utilize an established meta-learning framework based on Tancik et al., and integrate the forward k-space physical model, typically used in k-space INRs, into the meta-learning process. Leveraging the proposed framework, the authors are able to outperform subject-specific MRI baselines trained on individual scans only by high margins.
+
+### Strengths
+- The paper is well-written, has strongly motivated reasoning as to why meta-learning could be a beneficial candidate for accelerating k-space INRs, and provides convincing results that this enables accelerated learning.
+- The introduction of the physical model in the methods section reads particularly well, and is important because it introduces the reader to a concept that is at the core of this paper.
+- In experiments, the proposed method is able to outperform the baseline methods by high margins even though a perceptual metric such as LPIPS would have helped to assess the reconstruction quality even more.
+
+### Weaknesses
+- Novelty of the proposed method:
+
+While the results are encouraging and convincing for the presented method, the work lacks technical novelty. It builds upon the framework introduced in [9], which has already shown that meta-learning single-instance INRs is beneficial (also in the context of CT / medical images), and merely adds the physical forward model to conduct this in the k-space, which is not exactly new since INRs have been used in k-space before as well, e.g. in [10]. In conclusion, I believe this paper does not propose the novelty expected for ICLR and would be better suited for an application-centered presentation e.g. at a medical conference such as MIDL or MICCAI, or a medical journal paper (e.g., TMI, MEDIA). However, I would strongly encourage this, given the merit of the work and the value it may provide to the k-space reconstruction community.
+
+The authors state that "For medical image reconstruction inverse problems, the potential of meta-learning-based INR initialization remains unexplored." I would argue that this has been studied in a number of publications (e.g., [4, 5, 6, 8]), and some of these, while possibly still under review, have been released on arXiv at the beginning of this year, or published, eg at MICCAI last year [6].
+
+- Structure of Introduction and Related Work:
+
+While the paper subtly touches upon some of these concepts, I feel it would benefit from a clearer structure, especially in the Related Work section. The paper lacks a discussion and contextualization of the work within the field of INR approaches in medical imaging, especially regarding the "physical modeling prior." It would be beneficial to know if related works use similar physical priors (I suspect they do, as this is standard), but the absence of this discussion is problematic since it is the main contribution of the paper.
+
+Also regarding architectures, the INR medical imaging community typically distinguishes between instance-specific (single-subject) INRs (which the authors use) and cohort-learned INRs, where multiple images are modeled by the same network (e.g., [4]). The authors should be aware of this distinction since they cite [3, 5]. For cohort-learned INRs, different architectures exist, most of which use a modulation-based approach [1, 2, 3]. I feel that a reader who is not aware of this distinction won't be able to properly place the work within the context of current medical INR works. Moreover, the authors do not state why the single-instance framework may be of particular relevance in this case, since cohort-learned INRs may provide even higher incentive given that they model a dataset jointly [4,7]. At the very least, they should acknowledge this limitation.
+
+- Minor: There is a typo in line 052 (as indicated in the original PDF, though not visible here).
+
+[1] Park, Jeong Joon, et al. "Deepsdf: Learning continuous signed distance functions for shape representation." Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. 2019.
+
+[2] Mehta I, Gharbi M, Barnes C, Shechtman E, Ramamoorthi R, Chandraker M. Modulated periodic activations for generalizable local functional representations. InProceedings of the IEEE/CVF International Conference on Computer Vision 2021 (pp. 14214-14223).
+
+[3] Dupont, Emilien, et al. "From data to functa: Your data point is a function and you can treat it like one." arXiv preprint arXiv:2201.12204 (2022).
+
+[4] Dannecker M, Kyriakopoulou V, Cordero-Grande L, Price AN, Hajnal JV, Rueckert D. CINA: conditional implicit neural atlas for spatio-temporal representation of fetal brains. InInternational Conference on Medical Image Computing and Computer-Assisted Intervention 2024 Oct 3 (pp. 181-191). Cham: Springer Nature Switzerland.
+
+[5] Bauer M, Dupont E, Brock A, Rosenbaum D, Schwarz JR, Kim H. Spatial functa: Scaling functa to imagenet classification and generation. arXiv preprint arXiv:2302.03130. 2023 Feb 6.
+[6] De Paolis GR, Lenis D, Novotny J, Wimmer M, Berg A, Neubauer T, Matthias Winter P, Major D, Muthusami A, Schröcker G, Mienkina M. MICCAI ShapeMI Workshop.
+
+[7] Friedrich P, Bieder F, Cattin PC. MedFuncta: Modality-Agnostic Representations Based on Efficient Neural Fields. arXiv preprint arXiv:2502.14401. 2025 Feb 20.
+
+[8] Dannecker M, Sanchez T, Cuadra MB, Turgut Ö, Price AN, Cordero-Grande L, Kyriakopoulou V, Hajnal JV, Rueckert D. Meta-learning Slice-to-Volume Reconstruction in Fetal Brain MRI using Implicit Neural Representations. arXiv preprint arXiv:2505.09565. 2025 May 14.
+
+[9] Tancik M, Mildenhall B, Wang T, Schmidt D, Srinivasan PP, Barron JT, Ng R. Learned initializations for optimizing coordinate-based neural representations. InProceedings of the IEEE/CVF conference on computer vision and pattern recognition 2021 (pp. 2846-2855).
+
+[10] Huang W, Li HB, Pan J, Cruz G, Rueckert D, Hammernik K. Neural implicit k-space for binning-free non-cartesian cardiac MR imaging. InInternational Conference on Information Processing in Medical Imaging 2023 Jun 8 (pp. 548-560). Cham: Springer Nature Switzerland.
+
+### Questions
+1. PSNR Improvement: What is the authors' intuition for attaining much higher PSNR scores? From what I have read in other meta-learning papers, the benefit of using meta-learning typically lies in the convergence speed, and not necessarily in an improvement of the converged networks. Have all networks converged in your experiments?
+
+2. Hyperparameter Sweep: Did you conduct a learning rate hyperparameter sweep for the non-meta-learned INRs? Since meta-learning heavily changes the training dynamics, it would be important to report the best learning rate configuration for the vanilla models, especially since the meta-learning framework has its own optimization loop.
+
+3. "Unsupervised" Paradigm: In several sections of the paper (Abstract, Introduction, Methods), the authors present INRs as an "unsupervised paradigm." Could the authors please elaborate on this? I personally believe they are quite the contrary: they overfit to signals, they embed information in their weights (or latents in the context of modulated INRs), and they have a supervised loss (even in the context of k-space INRs).
+
+4. Transferability Claim: In lines 098-100, the authors state: "This limitation is a primary reason for their unstable performance and relatively slow reconstruction speeds, as each new dataset requires training from scratch, and the learned representations are difficult to transfer even to similar data domains." Is there any evidence to support the claim that meta-learning makes this process more stable? Why would meta-learning avoid this, and do your experiments validate this claim?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper introduces IPoD a meta learning method for initializing INR weights from data to be used downstream in reconstruction tasks. The authors show that by utilizing their meta-learning initialization for INRs they can achieve higher quality image reconstructions with INRs than with random initialized INRs. Importantly they show that this method of initialization only requires access to under sampled data which is an important when training inverse problems in the self-supervised setting.  The main results of the paper show that both visually and numerically that their initialization outperforms random initialization.  They showed that their method worked on a variety of different datasets, and most importantly, on prospectively collected MR data.
+
+### Strengths
+The paper provides an interesting method for improving the performance of INR based image reconstruction methods. The experiments show nice performance gains in the reconstruction quality over random initialization which are not just numerical but are also clearly visible in the reconstructions. Additionally, its really great to see results on prospectively collected data which is seldom shown for new reconstruction techniques.
+
+### Weaknesses
+I do believe that there are comparisons to existing work which should be included. As this method is a self-supervised approach the authors should compare to at least one other non-INR self-supervised recon technique like "Self-Supervised Learning of Physics-Guided
+Reconstruction Neural Networks without FullySampled Reference Data". Although this method is not INR based, there are existing popular self-supervised methods for MRI reconstruction that are even used on some of the same datasets. On top of this, I would like to see metrics for different acceleration levels on the 1D cartesian under sampling example. If the authors are dealing with multi-coil data, R=3,4 is not too challenging of a task. Typically even parallel imaging + hand crafted regularization can do very well here. Please try and include some metrics for at least R=8 1D cartesian sampling if possible or compare to hand crafted regularization techniques at R=3,4. Without these additional comparisons it is difficult to conclude if the method provides improvements to the broader category of self-supervised reconstruction techniques.
+
+### Questions
+1. How does the method preform at higher acceleration levels?
+2. How does the method compare to existing self-supervised reconstruction techniques like SSDU?
+3. How long does each reconstruction take in seconds?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+4
+
+### Summary
+This paper introduces IPOD (Inverse-Problem-Driven Meta-Learning), a novel meta-learning framework designed to find generalizable parameter initializations for Implicit Neural Representations (INRs) in accelerated MRI reconstruction. IPOD leverages physics-informed optimization across diverse, undersampled reconstruction tasks, eliminating the need for fully-sampled ground truth images during meta-training and achieving faster convergence and superior reconstruction quality.
+
+### Strengths
+1. The framework consistently achieves faster convergence and superior reconstruction quality across diverse, unseen out-of-domain scenarios, including different anatomies, contrast mechanisms, and sampling patterns/protocols. This is a major improvement over conventional scan-specific INR methods that suffer from slow speeds.
+
+2. IPOD is shown to be a unified framework that provides effective initialization for multiple distinct INR architectures (DINER, SIREN, HASH).
+
+3. The performance is consistently better than all the baseline methods.
+
+4. The writing and figures are clear and easy to follow.
+
+### Weaknesses
+1. The study primarily focuses on 2D MRI reconstruction tasks. The application to 3D MRI reconstruction is unexplored.
+
+2. A  missing ablation study is proof for the paper's claim that its diverse problem set (e.g., varying sampling patterns and anatomies) creates a robust prior. The authors should have compared their model's generalization against models meta-trained on non-diverse, specialized sets (e.g., only brains or only Cartesian sampling) to quantify the actual benefit of this diversity.
+
+### Questions
+Same as the weakness part.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3

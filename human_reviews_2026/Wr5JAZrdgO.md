@@ -1,0 +1,169 @@
+# SBFA: Single Sneaky Bit Flip Attack to Break Large Language Models
+
+- Decision: Reject
+- Scores: 6, 6, 4, 6
+
+## Abstract
+Model integrity of Large language models (LLMs) has become a pressing security concern with their massive online deployment. Prior Bit-Flip Attacks (BFAs)—a class of popular AI weight memory fault-injection techniques—can severely compromise Deep Neural Networks (DNNs): as few as tens of bit flips can degrade accuracy toward random guessing. Recent studies extend BFAs to LLMs and reveal that, despite the intuition of better robustness from modularity and redundancy, only a handful of adversarial bit flips can also cause LLMs' catastrophic accuracy degradation. However, existing BFA methods typically focus on either integer or floating-point models separately, limiting attack flexibility. Moreover, in floating-point models, random bit flips often cause perturbed parameters to extreme values (e.g., flipping in exponent bit), making it not stealthy and leading to numerical runtime error (e.g., invalid tensor values (NaN/Inf)). In this work, for the first time, we propose SBFA (Sneaky Bit-Flip Attack), which collapses LLM performance with only one single bit flip while keeping perturbed values within benign layer-wise weight distribution. It is achieved through iterative searching and ranking through our defined parameter sensitivity metric, ImpactScore, which combines gradient sensitivity and perturbation range constrained by the benign layer-wise weight distribution. A novel lightweight SKIP searching algorithm is also proposed to greatly reduce searching complexity, which leads to successful SBFA searching taking only tens of minutes for SOTA LLMs. Across Qwen, LLaMA, and Gemma models, with only one single bit flip, SBFA successfully degrades accuracy to below random levels on MMLU and SST-2 in both BF16 and INT8 data formats. Remarkably, flipping a single bit out of billions of parameters reveals a severe security concern of SOTA LLM models.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+They propose bit-flip attack aganst LLM, that completely collapses performance with only one bit flip. Unlike a trivial attack that makes a value as extreme as leading to invalid tensor values, they propose a sneaky attack, where the perturbed parameter still remains within a benign distribution.
+
+### Strengths
+1. **Good presentation**: Their motivation is clear, comparison with related works is reasonably extensive, and each component of their method is well justified (e.g., SKIP Search can reduce the search range from 14B to 15k (line 245)).
+
+2. **Thorough analysis**: Their model choice allows them to analyze their method deeply (e.g., having mixed observations depending on the model family (line 330), and a good scalability to larger models (Table 4)). Further, the analysis is not only extensive, but also “to-the-point”, and readers would be interested in every experimental result that they present.
+
+### Weaknesses
+1. **Literature review on existing BFAs on LLMs** (line 120-127): The authors claim existing methods are constrained to specific formats, while their method handles diverse formats. I don’t think this is the best framing. For example, given that the method of *Almalky et al., 2025* is to flip the sign bit (line 115), I do not see why this approach does not generalize to int8, which also has a sign bit.
+
+2. **Defense missing**: I think the attack experiments are already quite extensive. Here, I would appreciate it more if there were at least one paragraph that discusses potential defense. For example: (i) Are there any methods that could make the LLM robust against such attacks? (ii) Can the model provider identify potential vulnerable parameters a priori, i.e., are there any properties that are shared across parameters/bits detected through SBFA?
+
+### Questions
+**Justification on sneakiness**: They claim that their attack being “sneaky (as e.g., depicted in Fig. 2)” is one of their contribution. They show that even under this constraint, the method achieves near-random generation. Here, I am not convinced how stealthier it is compared to extreme perturbations that could yield NaN/Inf (i.e., the ones that the authors mention in their abstract, criticizing that they are not stealthy). For example, I can consider it to be stealthy if the generation is reasonably plausible (e.g., free-form generation that seems plausible but contains factual errors). In contrast, their results demonstrate 0% accuracy on multiple-choice benchmarks. While I understand that ensuring it being within sneaky range is “technically” more challenging and interesting, I would like to ask the authors to elaborate on a “practical” implication of pursuing 0% accuracy instead of ending up with having NaN/Inf.
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper propose sneaky bit flip attack (SBFA) for LLM, which can collapses LLM performance with only one single bit flip. SBFA propose ImpactScore to evaluate gradient sensitivity while considering the benign layer-wise weight distribution for stealthiness. The search strategy SKIP also proposed to improve the searching efficiency. SBFA is effective for both floating-point and integer quantized models.
+
+### Strengths
+- The writing and presentation of the paper are excellent, with a clear and logical flow.
+- The proposed attack is stealthy considering the layer-wise weight distribution and effective for both floating-point and integer quantized models.
+- The proposed search strategy is effective, demonstrating the practical of SBFA.
+
+### Weaknesses
+- Only easy tasks have been evaluated. BFA was initially proposed for classification tasks with simple DNN models, such as CNN. However, the major task for LLMs is not classification, but generation task, how about the generation performance influenced by bit flipped.
+- No defense methods have been considered.
+- No quantitative ablation study to prove the effectiveness of the proposed ImpactScore and SKIP algorithm. The author should further include an ablation study to demonstrate the effect of the benign range (e.g., comparing it with only using the gradient). Table4 only provides the time for each process, but not give the baseline time without using SKIP.
+
+### Questions
+- In table1, for the mixed setting, there is a lack of vulnerability analysis across different tensor types. Do all Crit-1 Flip bits come from Int8 tensor or floating-point tensor? Compared to Int8 setting, are the int8 tensors in the mixed setting more vulnerable or more robust?
+- In table1, for Qwen3-1.7B, why the mixed version is more vulnerable than even BF16, with Crit-1 Flip of 62.
+- Have you ever compare the base model and instruct-tuned model to show which is more vulnerable for bit flip attack?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+4
+
+### Rating Number
+4
+
+### Confidence
+3
+
+### Summary
+This paper studies bit-flip attacks against LLMs and proposes a new framework called SBFA. The goal is to show that flipping a single bit in the LLM's weights can catastrophically degrade model performance. The authors observe that previous BFAs often cause numerical overflow (NaN) in floating-point formats, making the attack easy to detect. To address this, SBFA introduces a "stealthy flip" constraint that ensures the flipped weight remains within the layer’s normal range. The paper defines an ImpactScore, calculated as the product of the gradient magnitude and the maximum feasible perturbation under this constraint, to rank bit candidates. A SKIP strategy is also proposed to skip unpromising layers based on upper bounds, significantly speeding up the search. Experiments show that SBFA can drive model accuracy to near zero across multiple models (Qwen, LLaMA, Gemma) and formats (BF16, INT8), with claimed cross-task transferability from MMLU to SST-2, GSM8K, and ARC-Easy.
+
+### Strengths
+- The topic itself, i.e., studying the security of large language models, is important and timely.
+- The paper’s observations and methods are interesting. The observation that previous work suffered from numerical overflow issues is interesting, and the proposed constraint that enforces flipped weights to stay within the normal range is reasonable. The proposed ImpactScore and SKIP strategy are also intuitively sound and smartly designed.
+- The experimental results are quite strong. The paper claims flipping one-bit can work across multiple models and tasks and shows a large number of "Crit-1Flip" cases and cross-task transferability. Such results would be a serious warning to the community.
+
+### Weaknesses
+- The threat model is quite strong and somewhat unrealistic. The attack assumes full white-box access, the ability to compute gradients, and precise control to flip a specific bit in the deployed environment. These assumptions are very strong, and the paper does not describe the realistic scenarios where they hold. Since the attack completely destroys the model’s usability, even simple validation checks could easily detect and replace the corrupted model. It is unclear what the attacker’s motivation would be and why the victim would continue using such a corrupted model.
+- The paper assumes that an attacker can flip a specific bit corresponding to a model weight through Rowhammer, but modern DRAM (e.g., DDR5) includes strong mitigations, which make this extremely hard. Recent studies [1,2] show that modern Rowhammer attacks require extensive reverse engineering of hardware address mappings and precise timing synchronization, which might be orders of magnitude more complex than what this paper assumed.
+- In Section 5.1, the authors write "All results are reported from the best outcome over three runs with different predefined random seeds", meaning they report only the best of three runs. It is unclear why this choice is made, as it may overestimates the attack strength and also raises concerns about fairness when compared to baselines. If the proposed method exhibits high variance, while baselines are more stable, this evaluation protocol could make SBFA look stronger simply due to lucky runs rather than consistent superiority.
+
+Ref:
+
+[1] Kim et al. Rowhammer attacks in dynamic random-access memory and defense methods
+
+[2] Jattke et al. McSee: Evaluating Advanced Rowhammer Attacks and Defenses via Automated DRAM Traffic Analysis
+
+### Questions
+NA
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+3
+
+### Summary
+This paper introduces SBFA (Sneaky Bit-Flip Attack), a framework that investigates the vulnerability of large language models (LLMs) to single-bit flips. The authors first propose ImpactScore, a metric designed to assess the sensitivity and vulnerability of individual parameters. Based on this metric, they develop an efficient search strategy, SKIP (Selective sKipping with Impact Prioritization) Search, to identify impactful bit-flips. Extensive experiments demonstrate the effectiveness of SBFA on both BF16 and INT8 formats across a variety of LLMs and benchmarks.
+
+### Strengths
+1. The paper is well written and easy to follow. The SBFA framework, along with the ImpactScore metric and SKIP search algorithm, is described clearly and in detail.
+
+2. The experimental evaluation is comprehensive. The authors test SBFA on a broad range of widely used LLMs, including Qwen2.5-7B, Qwen3 series, LLaMA3-18B-Instruct, and Gemma3-12B. The results convincingly demonstrate the effectiveness of the proposed approach.
+
+### Weaknesses
+1. The runtime overhead of SBFA is significant. Identifying candidate bit flips is computationally expensive, taking more than half of the total execution time as shown in Table 4.
+
+2. The paper lacks a direct comparison with prior work in terms of runtime efficiency and transferability, which would help position SBFA more clearly in the existing literature.
+
+### Questions
+1. How does task difficulty affect the transferability of bit-flip attacks? For instance, Table 5 shows that critical bits identified using the multi-task MMLU benchmark can transfer effectively to both simple (SST-2) and hard (GSM8K) tasks, but not to medium-difficulty tasks such as commonsense reasoning. Can the authors provide insights into this behavior?
+
+2. How does SBFA compare to previous approaches in terms of both efficiency and transferability? A quantitative comparison would strengthen the experimental section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
