@@ -9,7 +9,6 @@ Rules:
 - Do not invent strength/weaknesses just because they appeared in a retrieved review.
 - If the retrieved reviews are not relevant enough, only return strength/weaknesses that are related, which could be empty. 
 - Keep the search focused and efficient.
-- Note in your final review that papers with similar strength/weaknesses's score range. List all similar paper path (not just shared weaknesses) for traceability.
 - Do not made up an weakness and look for validation. Find similar papers and gather similar weaknesses.
 
 Directory: Focus your search on the `human_reviews/` directory — that's where the human reviews live.

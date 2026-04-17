@@ -13,7 +13,8 @@ from openai import OpenAI
 import dotenv
 dotenv.load_dotenv()
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
+HUMAN_REVIEW_DIR = os.path.abspath(os.environ.get("HUMAN_REVIEW_DIR", "../human_reviews/"))
+EMBEDDINGS_PATH = os.path.abspath(os.environ.get("EMBEDDINGS_PATH", "./human_reviews_embeddings.pkl"))
 
 with open("prompts/timeline.md", "r") as f:
     timeline = f.read().replace("{{CURRENT_DATE}}", __import__("time").strftime("%Y-%m-%d"))
@@ -41,7 +42,7 @@ def _ensure_indexes():
     _bm25_db["bm25"] = BM25Okapi(tokenized)
     _bm25_db["files"] = all_file_paths
 
-    with open("./human_reviews_embeddings.pkl", "rb") as f:
+    with open(EMBEDDINGS_PATH, "rb") as f:
         db = pickle.load(f)
     _bm25_db["filenames"] = list(db.keys())
     _bm25_db["vectors"] = np.array(list(db.values()))
@@ -145,7 +146,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
             top_indices = similarities.argsort()[-n:][::-1]
             results = []
             for idx in top_indices:
-                fpath = os.path.abspath(f"../human_reviews/{filenames[idx]}")
+                fpath = os.path.abspath(os.path.join(HUMAN_REVIEW_DIR, filenames[idx]))
                 score = similarities[idx]
                 with open(fpath, "r", errors="replace") as fh:
                     content = fh.read()

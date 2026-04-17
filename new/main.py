@@ -5,17 +5,19 @@ import json
 import random
 import re
 import logging
+import sys
 import time
+import os
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, grep_file, search_file, allow_path  # glob_files removed (unused)
+
+from tools import read_file, read_file_full, grep_file, search_file, allow_path, HUMAN_REVIEW_DIR  # glob_files removed (unused)
 import weave
 weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
-import os
 os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 # HUMAN_FINDER = "kimi-k2.5"
@@ -43,7 +45,6 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 CONCURRENCY = 5
 
 # ── Agent-level retry ────────────────────────────────────────────────
@@ -94,16 +95,13 @@ Your calibration process:
    - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
    - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
-3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
+3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale, **even if there is a topic mismatch**:
    - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
    - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
    - Compare the paper under review against BOTH ends, not just the middle.
 
    Examples: if reviewing a paper about privacy attacks on face recognition, search for:
    - "privacy attack face recognition strong paper" → find high-scored papers in the same area
-   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
-   - "face recognition evaluation paper high score" → broaden to related topics at the high end
-   - "privacy evaluation rejected" → find low-end anchors with similar flaws
 
    If no papers are found with the same topic, you can use more general queries.
 
@@ -115,8 +113,10 @@ You can use read_file to read these files. List the papers you compared and the 
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples.
 The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
+List all papers you compared against and their human scores, and explain how you positioned the current paper relative to them.
+You HAVE TO include a few extream high and low end samples. 
 
-There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to find more papers with extreme scores to see what made a paper really good/bad, it doesn't need to be the same topic for these extream score queries. 
+There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You HAVE TO also try to find papers with extreme scores to see what made a paper really good/bad, it doesn't need to be the same topic for these extream score queries. 
 
 Do NOT be afraid to give extreme scores if justified.
 """

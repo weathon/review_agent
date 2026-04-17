@@ -1,7 +1,9 @@
 
 from agents import Agent, Runner, function_tool
 import os
-ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
+HUMAN_REVIEW_DIR = os.path.abspath(os.environ.get("HUMAN_REVIEW_DIR", "../human_reviews/"))
+EMBEDDINGS_PATH = os.path.abspath(os.environ.get("EMBEDDINGS_PATH", "./human_reviews_embeddings.pkl"))
+ALLOWED_PATHS = [HUMAN_REVIEW_DIR]
 
 
 def allow_path(path: str) -> None:
@@ -44,12 +46,22 @@ print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
 
 
 import numpy as np
-with open("./human_reviews_embeddings.pkl", "rb") as f:
+with open(EMBEDDINGS_PATH, "rb") as f:
     import pickle
     db = pickle.load(f)
 
 filenames = list(db.keys())
 vectors = np.array(list(db.values()))
+
+_embedding_names = set(filenames)
+_dir_names = {f for f in os.listdir(HUMAN_REVIEW_DIR) if f.endswith(".md") or f.endswith(".txt")}
+_missing_in_dir = _embedding_names - _dir_names
+_missing_in_embeddings = _dir_names - _embedding_names
+assert not _missing_in_dir and not _missing_in_embeddings, (
+    f"Embeddings and human review dir mismatch.\n"
+    f"  In embeddings but not in dir ({len(_missing_in_dir)}): {sorted(_missing_in_dir)[:10]}\n"
+    f"  In dir but not in embeddings ({len(_missing_in_embeddings)}): {sorted(_missing_in_embeddings)[:10]}"
+)
 
 
 # ── Tools ────────────────────────────────────────────────────────────
@@ -144,7 +156,7 @@ def search_file(query: str, n: int, mode: str) -> str:
         top_indices = similarities.argsort()[-n:][::-1]
         results = []
         for idx in top_indices:
-            file_path = os.path.abspath(f"../human_reviews/{filenames[idx]}")
+            file_path = os.path.abspath(os.path.join(HUMAN_REVIEW_DIR, filenames[idx]))
             score = similarities[idx]
             with open(file_path, "r", errors="replace") as file_handle:
                 content = file_handle.read()

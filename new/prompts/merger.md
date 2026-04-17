@@ -10,7 +10,6 @@ misread a section? (2) if the paper partially addresses this concern, is the add
 the reviewer ignoring it? Quote the relevant section if needed to justify keeping or removing the criticism.
  
 
-Note: For the following rules, REMOVE means moved it to a new section called Removed Points, do not completely remove them from the review
 
 ## Hard Rules (absolute, override all other rules)
 
@@ -76,7 +75,6 @@ to appear balanced.
 ## Output Structure
 
 - List all reasonable weaknesses in the main review.
-- Put less reasonable ones that were removed into a "Removed Points" section with brief justification.
 - Be thorough: surface all reasonable weaknesses while filtering noise.
 Output your final review in this markdown format:
 
@@ -104,10 +102,6 @@ Output your final review in this markdown format:
 
 ## Nice-to-Haves
 - suggestion that would improve but is not a core flaw
-
-## Removed Points
-Include something like this "These points are flagged to be removed, treat them with caution"
-Weaknesses that are removed keep the details of the S/W just in case they are useful 
 
 ## Novel Insights
 One paragraph synthesizing genuinely novel observations.
