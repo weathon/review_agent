@@ -1,119 +1,106 @@
-Now let me look at calibration papers for scoring.Now let me read the OmniPhysGS paper's weaknesses and the Sync4D paper for more calibration context:Now I have sufficient context to write the final review. Let me compile everything.
+Now let me look at what the paper says about evaluation, particularly regarding 3D consistency and multi-view evaluation:
 
----
+The paper text says in Section 5.1: "WorldScore (Duan et al., 2025) is employed to measure photo consistency, 3D consistency, and motion smoothness."
+
+But the 3D consistency metric in WorldScore likely requires multi-view rendering. Let me check — actually, looking at Table 1, the paper reports "3D Consist" scores for various methods including ones that don't produce 3D content. For video-only methods like Sora and Runway, how can they have a 3D consistency score? WorldScore is a benchmark designed for world generation that can evaluate videos rendered from generated scenes. But for video-only baselines, the paper must be rendering a single video from a single viewpoint and then evaluating 3D consistency from that, which is different from evaluating true multi-view 3D consistency.
+
+Looking more carefully at Table 1, Sora gets 64.26 3D consistency, and CogVideoX gets 81.90 — video-only methods are getting evaluated on 3D consistency. This suggests the metric is applied to single-view videos and doesn't actually test multi-view consistency. The paper claims "explorable" and "3D consistency" but evaluates everything via single rendered videos.
+
+Let me now synthesize the final review.
 
 ## Summary
 
-CP4D presents a three-stage compositional framework for physics-aware 4D scene generation. Given a text prompt, it (1) builds separate 3D Gaussian representations of a static background and foreground objects using pre-trained expert models, (2) produces physically grounded motions via heterogeneous physics simulators (MPM/rigid/PBD) refined by SDS-based optimization of material parameters and object displacements, and (3) fuses dynamic foregrounds with the static background via a depth-aware placement and optimization mechanism. Experiments on 17 curated prompts show quantitative improvements over video generators, physics-driven baselines, and text-to-4D methods across VBench, WorldScore, and GPT-4o evaluation.
-
----
+CP4D proposes a compositional framework for photorealistic 4D scene generation that decomposes scenes into static backgrounds and physically dynamic foregrounds. The method follows a three-stage pipeline: (1) generating stylistically coherent 3D representations of background and foreground via conditioned image editing and pre-trained 3D reconstruction models, (2) producing physically grounded trajectories through a hybrid strategy combining physics simulators (MPM, rigid-body, PBD) with video diffusion model refinement via SDS, and (3) fusing foreground and background through an automated depth-based composition mechanism. The paper reports superior performance over video generation and physics-driven baselines on 17 curated examples across VBench, WorldScore, and GPT-4o evaluation metrics.
 
 ## Strengths
 
-- **Compelling compositional formulation.** Separating the 4D scene into a static 3D environment and physically governed dynamic foregrounds mirrors real-world scene structure. This is a principled, practical design that enables modular editing (shown in Fig. 6) and naturally handles the stylistic coherence problem that naive independent generation creates.
+- **Well-motivated compositional formulation.** The decomposition of 4D scenes into static backgrounds and physically grounded dynamic foregrounds aligns with real-world scene structure and naturally enables controllable editing (demonstrated in Section 5.4 with zero-shot replacement of objects, backgrounds, and motions). This is a practical and intuitive design choice.
 
-- **Hybrid motion synthesis is a genuinely useful idea.** Using physics simulators (MPM, rigid body, PBD) to anchor physically consistent trajectories and then using SDS from a video diffusion model to correct imprecise material parameters and collision artifacts is a sensible design that addresses known complementary weaknesses of both paradigms. The ablation in Fig. 5 visually validates both components.
+- **Hybrid motion synthesis is a sound technical idea.** Combining physics simulators for coarse, physically constrained trajectories with video diffusion priors for perceptual refinement addresses complementary weaknesses — physics simulators produce physically consistent but visually coarse motions, while video diffusion provides commonsense interaction priors. The ablation in Figure 5 demonstrates that removing either the material parameter optimization or the displacement optimization degrades results, validating both components.
 
-- **Strong quantitative results across multiple metrics.** CP4D achieves the best or near-best scores on VBench (motion smoothness 0.998, consistency 0.972), WorldScore (photo consistency 97.42, 3D consistency 95.55), and GPT-4o physical realism (0.694 vs. best baseline 0.624), outperforming both commercial video generators (Sora, Runway, Wan) and dedicated physics-driven methods (PhysGen, PhysGen3D, OmniPhysGS).
+- **Stylistic coherence strategy for 3D generation.** Generating the foreground image conditioned on the background (via F_edit) before segmentation is a simple but effective approach to avoid the "realistic background + cartoon foreground" style mismatch that would arise from independent text-to-3D generation.
 
-- **Depth-aware automated composition is practical.** The frustum-based scale bounding heuristic (Eq. 8) and sequential scale-then-translation optimization (Eq. 9) is a reasonable, largely automatic solution to the coordinate-alignment ambiguity between independently reconstructed 3D assets.
-
----
+- **Automated depth-aware composition.** The frustum-based scale initialization (Eq. 8) and sequential scale-then-position optimization (Eq. 9) provide a principled approach to placing independently generated 3D assets in a shared coordinate space, addressing a real engineering challenge in compositional 3D generation.
 
 ## Weaknesses
 
-### Fatal
-*(None that fully invalidate the contribution, but the following major issues collectively undermine the strength of claims.)*
+### Major:
 
-### Major
+- **Evaluation scale and claim strength mismatch.** The entire evaluation uses only 17 author-curated examples, with no description of selection criteria, diversity coverage, or failure rates. Claims of "significantly outperforming existing methods" and "consistent outperformance" carry strong statistical implications that cannot be supported by a 17-example test set without confidence intervals or variance reporting. The small scale also raises cherry-picking concerns that are not mitigated by showing only two qualitative examples (Fig. 4) and no failure cases.
 
-- **Evaluation set of only 17 self-curated examples is insufficient to support broad claims.** The paper explicitly states "We curate a dataset of 17 examples" (Sec. 5.1), and the composition of this set is entirely opaque: no category breakdown, no diversity analysis (rigid vs. deformable vs. fluid, simple vs. complex interactions), and no description of selection criteria. With n=17, the aggregate metrics in Tables 1–2 carry very large variance; a few outlier cases can shift rankings meaningfully. No error bars or per-category statistics are reported. Yet the Abstract and Conclusion repeatedly assert the method "significantly outperforms" and "consistently outperforms" baselines. This is the paper's most severe weakness—it is not a minor scaling request but a fundamental mismatch between claim scope and evidence scale. The entire comparative case rests on results that are statistically fragile.
+- **Evaluation protocol misaligned with 4D claims.** The paper repeatedly claims to generate "explorable and interactive 4D scenes" with "3D consistency" (Abstract, Intro, Sec. 5.1), but all evaluation is conducted on single-view rendered videos. WorldScore's "3D consistency" metric is applied uniformly to all methods including 2D video generators (Sora, Runway), meaning it does not actually test multi-view 3D consistency of the generated scene. No experiment demonstrates rendering from novel viewpoints, probing the core advantage of having a 4D volumetric representation over simply producing a video.
 
-- **Evaluation metrics do not measure physical correctness, yet physical fidelity is the central claim.** VBench and WorldScore measure perceptual quality, temporal coherence, and 3D consistency—not whether dynamics obey physics. The GPT-4o "physical realism" ratings in Table 2 are subjective per-video LLM judgments from visual appearance alone; they cannot reliably distinguish correct physics from plausible-looking motion, and they heavily conflate physical realism with photorealism. There is no evaluation using physics-specific measures (e.g., energy/momentum checks, trajectory comparison against analytical or simulator ground truth, contact/penetration metrics). The paper cites VideoPhy but does not use it. The method's core "faithful adherence to complex physical dynamics" claim is thus structurally unsupported by the evaluation: the metrics confirm visually good videos, not physically correct dynamics.
+- **"Physics-aware" and "faithful adherence to complex physical dynamics" claims are overstated relative to evidence.** No quantitative ground-truth physical validation is provided — no comparison against known physics trajectories, no energy/momentum conservation checks, no calibrated physical accuracy metrics. The physical realism assessment relies entirely on GPT-4o subjective ratings and perceptual metrics. SDS-based refinement (Eqs. 4–5) optimizes for text-conditioned visual realism as judged by a video diffusion model, not for adherence to physical laws; visually pleasing but physically incorrect trajectories (e.g., exaggerated collisions, unrealistic restitution coefficients) would be rewarded by this objective. This is not to say the method doesn't produce physically plausible results — it likely does — but the language of "faithful adherence" goes beyond what perceptual metrics can establish.
 
-- **Ablation is insufficient to isolate the physics contribution.** The ablation in Sec. 5.3 only removes the material-parameter SDS optimization and the relative-position SDS optimization. It does not test: (a) physics simulator–only motion without SDS refinement; (b) SDS–only motion without any simulator; (c) the full pipeline without the compositional background/foreground separation. Without these ablations, the source of CP4D's quantitative gains cannot be attributed to the physics component specifically—improvements may come primarily from the 3D compositional architecture or the strong video prior, not from physics.
+- **GPT-4o serves as both pipeline component and evaluator, creating potential circularity.** GPT-4o/Qwen is used for prompt decomposition and physical parameter inference, and then GPT-4o is the sole evaluator for physical realism, photorealism, and semantic alignment (Table 2). While different specific models (GPT-4o for evaluation, Qwen for generation) are used, both are large language models with correlated biases, and the same class of model generating and judging the content undermines the independence of evaluation.
 
-- **The SDS-based refinement of material parameters and global displacements creates tension with the "physically faithful" framing.** The paper explicitly notes that "VLMs often lack the numerical accuracy required" and that grid-based solvers produce "perceptually implausible outcomes" (Sec. 4.2). To fix these issues, SDS optimizes Θ (material parameters) and ΔΓ (global per-object displacements) to match what a video diffusion model finds plausible. This is an appearance-driven correction, not a physics-grounded one. The paper acknowledges global displacements are added to "alleviate inaccuracies… during inter-object interactions"—i.e., objects are shifted so the rendered video looks better, not so the collision is physically correct. There is no explicit constraint keeping the optimized parameters or trajectories near physically valid values. The method is more accurately characterized as "physics-initialized, appearance-refined generation" than "faithful physical dynamics," and the paper's language should reflect this.
+### Minor:
 
-### Minor
+- **Pipeline complexity without failure analysis.** The system chains together 6+ pre-trained models (LLM for decomposition, text-to-image, image editing, segmentation, depth estimation, two 3D reconstruction models, physics solvers, video diffusion). Each can fail independently, and error propagation is not analyzed. The paper does not discuss failure modes or what types of prompts or scenes the system cannot handle (e.g., scenes where the background should itself be dynamic, thin deformable objects, complex fluid-structure interactions).
 
-- **Pipeline complexity and error propagation are not analyzed.** CP4D chains at minimum 8 components: GPT-4o (prompt decomposition), Qwen-Image (background generation), Qwen-Image-Edit (composite synthesis), SAM (segmentation), Depth Anything (depth estimation), Trellis (foreground-to-3D), Viewcrafter (background-to-3D), VLMs (material estimation), physics solvers, and SDS optimization. Errors in early stages (bad segmentation, incorrect material inference, depth errors) will propagate. No failure cases are discussed and no robustness analysis is provided, making it unclear how often the pipeline produces usable results.
+- **Ablation depth is limited.** The ablation study (Fig. 5) shows only qualitative on/off comparisons for material optimization and displacement optimization. There is no ablation of Stage I (style-coherent generation vs. independent text-to-3D), Stage III (composition mechanism vs. simpler placement), or disentangling the contribution of physics simulation from SDS refinement.
 
-- **Static background assumption limits scope.** The formulation explicitly assumes backgrounds are immutable while only foregrounds are dynamic. Many physically interesting scenarios require dynamic backgrounds (flowing water, deformable terrain, contact with deformable environments). The paper briefly acknowledges this in Sec. 2.2 but does not quantify or discuss the limitation concretely.
+- **Limited baseline comparison for core 4D claims.** DreamGaussian4D is the only true 4D generation baseline, and it is a text-to-4D object method, not a compositional scene generator. The other baselines (Sora, Runway, CogVideoX, Wan) are 2D video generators structurally incapable of producing explorable 3D scenes. Comparing a 4D scene generator primarily against 2D video methods on video quality metrics is informative but does not test the claimed advantage of producing explorable 4D content.
 
-- **Computational cost is not reported.** Given multi-stage inference with large pretrained models, heterogeneous physics solvers, and SDS optimization loops, the runtime and GPU requirements are critical for assessing practical applicability. These are entirely absent from the paper.
+### Trivial:
 
-### Trivial
-
-- The paper claims to compare against "all competing approaches" in the physics-aware 4D space, but the text-to-4D baseline set is thin (only DreamGaussian4D, an older method). TC4D and 4D-Fy are cited in related work but not compared against.
-
----
+- The conclusion restates strong claims without acknowledging limitations or qualifications.
 
 ## Nice-to-Haves
 
-- **Scale up the evaluation and show per-category statistics.** Even 50–100 diverse examples with clear category breakdown (rigid, elastic, fluid; single vs. multi-object; simple vs. complex) would make the comparative claims far more credible.
+- **Novel-view evaluation.** Rendering from 3–4 substantially different viewpoints and measuring consistency (PSNR/SSIM/LPIPS) would directly substantiate the "explorable 4D scene" claim.
 
-- **Add a physics-specific evaluation component.** Even a small study comparing simulator trajectories before vs. after SDS refinement, or checking energy/momentum conservation on simple controlled scenarios, would add rigor to the "physics-aware" claim.
+- **Larger, more diverse evaluation set.** Expanding to 50+ examples covering different material types (rigid, elastic, fluid), interaction patterns (collision, stacking, flowing), and failure cases would significantly strengthen confidence in the results.
 
-- **Report novel-view rendering quality.** The claim that CP4D produces truly "explorable" 4D scenes (vs. good-looking single-view videos) would be strengthened by multi-view PSNR/SSIM/LPIPS or 4D consistency metrics across held-out viewpoints.
+- **Human evaluation study.** A small-scale human study comparing physical plausibility across methods would ground the GPT-4o scores and address circularity concerns.
 
-- **Validate the GPT-4o physical realism scores with a user study.** Even a small-scale human preference study (20 participants) would establish that GPT-4o's "physical realism" ratings correlate with human perception.
+- **Computational cost analysis.** The pipeline involves iterative SDS optimization alongside multiple pre-trained models; reporting wall-clock time and GPU costs would help assess practical applicability.
 
-- **Report parameter values before and after SDS optimization** (e.g., Young's modulus, density) to show whether SDS refinement moves parameters toward or away from physically reasonable values.
-
----
+- **Physics compliance metrics.** Even simple measures like trajectory smoothness, energy conservation in closed systems, or collision accuracy compared to ground-truth simulations would substantiate the physics-awareness claims far more convincingly than perceptual scores.
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **Harsh Critic – "Hybrid motion synthesis is under-specified / effectively opaque" (beyond what is kept above):** The reviewer raises legitimate concerns but also includes reproducibility nitpicks (exact optimization schedules, learning rates, CFL conditions, time step sizes). These cross into implementation detail not standard to disclose in a systems paper of this type. The core concern—how Gaussians are mapped into and out of the simulator, and how solver coupling works for multi-object scenes—is a legitimate weakness retained in the Major section above. The reproducibility-specific sub-points about learning rates and stability conditions are removed.
+- **"Unreliable VLM-based physical parameter estimation"** (harsh critic, #3 under Section-by-Section): The paper already acknowledges this limitation explicitly (Sec. 4.2: "VLMs are not explicitly trained on physics-oriented datasets, the inferred material parameters...often lack the numerical accuracy required to reflect precise physical behavior") and proposes SDS-based optimization of Θ as a mitigation. While the mitigation is imperfect (SDS optimizes for visual plausibility, not physical accuracy), the paper does address this concern rather than ignoring it. Keeping as minor concern about SDS not guaranteeing physical accuracy, but removing the claim that this is unaddressed.
 
-- **Harsh Critic – "Comparison to baselines mixes fundamentally different capabilities":** The point about 2D video generators being included is valid as a minor concern (3D consistency metrics naturally favor a 3D-native method), but the harsh reviewer frames it as a fundamental methodological flaw. The paper's goal is precisely to produce superior 4D content versus ALL alternatives including video generators; such comparisons are standard in this field (OmniPhysGS does the same). This is not an unfair comparison against the author's method—the asymmetry is intentional. Removed per hard rules.
+- **"Closed-source models treated as directly comparable"** (harsh critic): This is a standard comparison practice in the field — Sora, Runway etc. are widely compared against in recent literature. Removing as a standalone weakness.
 
-- **Harsh Critic – Background/foreground decomposition reproducibility (Sec. 4.1):** The sub-point about undisclosed segmentation thresholds and number of views used in reconstruction is a reproducibility nitpick. Removed per hard rules.
+- **"Reproducibility of proprietary components"** (harsh critic, #1 under Sec. 4.1): This is a nitpick about reproducibility of components that exist and are available (GPT-4o API, Qwen models). Per hard rules, removing this.
 
-- **Spark – "Missing baselines Physics3D and Phys4DGen":** While these are cited, we cannot confirm the specific availability or usability of these methods as baselines without external sources. Per the "do not mention missing related works" rule, this is removed.
+- **"Missing related works"** (spark's suggestion to compare with Physics3D and DreamPhysics): Per hard rules, do not mention missing related works as they may not exist or may not be directly comparable.
 
-- **All reviewers – "Undisclosed hyperparameters for SDS":** Learning rates, number of optimization steps, batch sizes for SDS are trivial implementation details. Paper notes details are in Appendix B/C. Removed as reproducibility nitpick.
+- **"Formatting/style nitpicks"** (neutral reviewer #5 about sequential optimization being described with just "our experiments reveal"): This is partially valid — the sequential optimization is supported by empirical observation rather than theoretical justification — but the criticism about presentation style is removed.
 
----
+- **"No confidence intervals or variance"** (harsh critic): For a 17-example evaluation, reporting variance would be appropriate but this is close to a standard practice nitpick in a field where single-run evaluations are common. Moved to Nice-to-Haves.
 
 ## Novel Insights
 
-The most underappreciated tension in CP4D—and in the broader physics-aware generation literature—is that appearance-based objectives (SDS, GPT-4o ratings) and physics fidelity are not just complementary but are in structural opposition: a visually plausible motion need not be physically correct, and SDS will always push toward the diffusion prior's preference regardless of physical law. CP4D's design honestly acknowledges this (VLM parameters are inaccurate, grid approximations fail, so we apply visual correction), but then claims "faithful adherence to physical dynamics." The field needs evaluation methodology that can distinguish "looks physically plausible" from "is physically correct"—and CP4D's results, which are entirely the former, are being framed as evidence of the latter. Resolving this distinction is the key open problem for physics-aware 4D generation.
-
----
+The paper identifies a genuine and underexplored tension in physics-aware generation: physics simulators produce physically grounded but visually coarse dynamics (due to VLM estimation errors and grid-based collision approximations), while video diffusion models produce visually plausible but physically unconstrained motions. The hybrid approach of using physics simulation as initialization and SDS refinement for perceptual correction is a reasonable middle ground, but the paper's own evidence (Fig. 5) suggests the "physically grounded" claim primarily means "visually more plausible than simulation alone," which is a different and weaker claim than faithful physical dynamics. This distinction matters for applications requiring actual physical accuracy (robotics simulation, scientific visualization) versus applications needing only perceived realism (entertainment, content creation).
 
 ## Suggestions
 
-1. **Expand evaluation to ≥50 examples** with clear provenance and category coverage; report per-category breakdowns to identify failure modes.
-2. **Add an SDS-free control condition** to Table 1–2 ablation: simulator only, no SDS. This directly tests the physics contribution.
-3. **Add at least one physics-grounded metric** (e.g., comparing final positions/trajectories against known-correct simulator output for simple scenes; or an energy conservation check) to ground the "physical fidelity" claim.
-4. **Calibrate the GPT-4o evaluator** with a small human study, or replace with a validated physics realism benchmark (e.g., VideoPhy).
-5. **Report total runtime per sample** and GPU memory requirements.
-6. **Show at least 3 failure cases** and discuss the likely failure mode (e.g., bad segmentation, poor VLM material estimation, depth estimation error).
+- **Soften "physics-aware" claims** to "perceptually more physically plausible" or "physics-informed" throughout the paper, since the evaluation provides no quantitative evidence of physical correctness beyond perceptual metrics.
 
----
+- **Add a novel-view rendering experiment** (even qualitative) to substantiate the "explorable 4D" claim — this is the single highest-impact addition possible.
+
+- **Expand the evaluation set** to at least 30–50 examples with explicit coverage of different material types and interaction patterns, and report per-scene results or variance.
+
+- **Add failure case analysis** showing where the pipeline breaks down, which would build trust in the method's general applicability.
+
+- **Disentangle simulator vs. SDS contributions** with a granular ablation (simulator-only trajectories alone vs. SDS-only vs. full pipeline).
 
 ## Score and Decision
 
-**Calibration anchors:**
-- *OmniPhysGS* (accepted poster, scores 8,6,6,6,6 avg ~6.4): Most directly comparable—physics-aware 3D generation with SDS-guided material parameter optimization. More principled physics (12 constitutive sub-models), larger evaluation set, but narrower scope (single-object dynamics, no compositional full-scene). OmniPhysGS also received criticism for unconvincing metrics and weird result in collision demos.
-- *Physics3D* (withdrawn/rejected, scores 8,5,5,1 avg ~4.75): Similar MPM+SDS architecture. Single-object only. No compositional formulation.
-- *CompGS* (withdrawn/rejected, scores 5,5,5,6,6 avg ~5.4): Compositional text-to-3D with Gaussian splatting—no dynamics or physics.
-- *Sync4D* (withdrawn/rejected, scores 3,5,5,5 avg ~4.5): Physics-based 4D generation, limited quantitative evaluation.
+Calibration against similar papers:
+- **Trans4D** (compositional text-to-4D, weak results, limited novelty): scores 3, 5, 3, 5 → avg ~4
+- **Sync4D** (physics-based 4D with MPM, limited validation): scores 3, 5, 5, 5 → avg ~4.5
+- **OmniPhysGS** (physics-aware 3DGS with multi-material, stronger results): scores 8, 6, 6, 6, 6 → avg ~6.4
+- **Physics3D** (physical properties via video diffusion, limited novelty per component): scores 8, 5, 5, 1 → avg ~4.75
+- **ElastoGen** (4D elastodynamics with physics priors, limited experiments): scores 5, 3, 5 → avg ~4.3
+- **CompGS** (compositional 3D with SDS, engineering-heavy pipeline): scores 5, 5, 5, 6, 6 → avg ~5.4
 
-CP4D is more ambitious than any individual anchor—it combines full-scene compositional generation (à la CompGS), physics-driven simulation (à la Physics3D/OmniPhysGS), and 4D dynamic rendering. Its quantitative numbers are genuinely strong. However, the n=17 evaluation set is markedly smaller than what supported OmniPhysGS's acceptance, the "physical realism" claim is inadequately validated, and the ablation does not isolate the physics contribution. Placed below OmniPhysGS (which had a more principled physics mechanism and broader evaluation) but above Sync4D/Physics3D (which had narrower scope and equally or more severe validation weaknesses). The paper lands at a borderline-reject: the ideas are solid and the system works, but the evidence does not yet support the strength of claims being made.
+CP4D sits between OmniPhysGS (which has stronger per-component novelty but similar evaluation issues) and Trans4D/Sync4D (which have weaker results). CP4D's pipeline engineering is more comprehensive than most comparators (three-stage with genuine physics integration plus composition), and the results on the curated examples look convincing. However, the small evaluation scale (17 examples), overclaimed "faithful adherence to physical dynamics" without calibrated physics validation, GPT-4o circularity, lack of multi-view evaluation for claimed 4D capability, and limited ablation depth are substantive weaknesses that undermine the core claims. The method is a reasonable system contribution but not a strong scientific one given the gap between claims and evidence.
 
-**Originality:** Moderate-high — compositional + physics-aware 4D generation is a novel combination.
-**Importance:** High — 4D scene generation with physical plausibility is an important open problem.
-**Claim support:** Weak — overclaimed relative to 17-example evaluation.
-**Experimental soundness:** Moderate — metrics are reasonable for visual quality but inadequate for the physics claim; ablation is insufficient.
-**Writing clarity:** Good overall; motivation and pipeline description are clear.
-**Value to the community:** Positive if claims are calibrated; the compositional framework is practically useful.
-
-**Final Score: 5.0**
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
