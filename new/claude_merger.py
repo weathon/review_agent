@@ -161,51 +161,89 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
     )
 
 
-CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
+CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers via the `calibration_search` subagent (invoked through the Task tool).
+
+How to use the subagent:
+- Send it a SHORT, focused retrieval request. Each request should target ONE attribute at a time (occasionally two if they combine naturally) — not a broad multi-criteria search.
+  - Good: "find papers with weakness: unfair baseline comparison"
+  - Good: "find papers scored 7+ on a topic loosely related to face recognition privacy"
+  - Bad: "find papers about face recognition with weak baselines AND missing ablations AND scored 3-5" (too many attributes — split into separate calls)
+- When asking for a score range, the topic should be LOOSELY RELATED, not the exact same topic. This avoids the same papers being returned every time and gives broader anchoring.
+- The subagent returns a list of paper paths each with a one-sentence summary. It does NOT do calibration reasoning — that is your job.
+- After you receive the list, use your own read_file tool to read the FULL reviews of the 2-4 most relevant anchors. Then judge how the paper under review compares.
 
 Your calibration process:
 
-1. **Topic-based anchors**: Use the review finder to retrieve papers with similar topics. Note their human scores.
+1. **Topic-based anchors**: Ask the subagent for papers with similar topics. Note their human scores.
 
-2. **Quality-based anchors**: This is critical. Do NOT only search by topic. Search for papers that share similar strength/weakness patterns with the paper under review:
-   - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
-   - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
+2. **Weakness/strength-pattern anchors**: Ask the subagent for papers sharing a SPECIFIC weakness or strength pattern with the paper under review (one attribute per call).
 
-3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
-   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
-   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
-   - Compare the paper under review against BOTH ends, not just the middle.
-
-   Examples: if reviewing a paper about privacy attacks on face recognition, search for:
-   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
-   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
-   - "face recognition evaluation paper high score" → broaden to related topics at the high end
-   - "privacy evaluation rejected" → find low-end anchors with similar flaws
-
-   If no papers are found with the same topic, you can use more general queries.
+3. **Deliberate range anchoring**: Separately ask the subagent for HIGH-scoring (~7+) and LOW-scoring (~3 and below) papers in a loosely related topic area. Compare the paper under review against BOTH ends, not just the middle.
 
 4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
 
 When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
 
-You can use read_file to read these files. List the papers you compared and the reasoning.
+Limit yourself to at most 4 calibration_search invocations.
 
-Let the score distribution follow the actual quality of the paper relative to the calibration examples.
-The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well."""
+Let the score distribution follow the actual quality of the paper relative to the calibration examples. The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well."""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
 
-async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, no_cal: bool = False) -> str:
+CALIBRATION_SUBAGENT_PROMPT = """You are a retrieval helper for the main merger agent. The main agent gives you a retrieval request (e.g. "find papers with weakness: unfair baseline comparison" or "find papers scored 7+ on a topic loosely related to diffusion adversarial attacks"), and you return a concise list of matching paper reviews.
+
+You have these tools (all under the mcp__merger_fs__ namespace):
+- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- read_file(abs_path, start_line, end_line): read lines from a human review file.
+- grep_file(pattern, abs_path): substring search inside a single file.
+
+Workflow:
+1. Run 1-3 search_file calls to find candidate reviews matching the request.
+2. Optionally skim promising candidates with read_file to confirm they match.
+3. Return a list of matching papers. For each: the absolute file path and ONE sentence describing why it matches (the key weakness/strength/score that makes it relevant).
+
+Output format (strict):
+- <abs_path>: <one-sentence reason it matches the request, mentioning score/decision if known>
+- <abs_path>: <one-sentence reason>
+...
+
+Constraints:
+- Return 3-8 papers, not more.
+- Do NOT produce a review, do NOT give calibration advice, do NOT compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
+- Keep the whole response under 300 words.
+- Cap yourself at 6 tool calls total.
+- The main agent's request will usually target ONE attribute (a specific weakness, a specific score range, a specific topic — sometimes two combined). Do not broaden the request on your own; search exactly for what was asked.
+- When the request asks for a score range with a topic, treat the topic as LOOSELY RELATED, not exact-match. Return papers in the requested score range that touch on the topic area, not papers on the identical topic.
+"""
+
+
+def _make_calibration_subagent():
+    from claude_agent_sdk import AgentDefinition
+
+    return AgentDefinition(
+        description="Retrieval helper for calibration anchors. Accepts a retrieval request (e.g. 'find papers with weakness X' or 'find papers scored 7+ on topic Y') and returns a list of paper paths each with a one-sentence summary. Does not do calibration reasoning.",
+        prompt=CALIBRATION_SUBAGENT_PROMPT,
+        tools=[
+            "mcp__merger_fs__search_file",
+            "mcp__merger_fs__read_file",
+            "mcp__merger_fs__grep_file",
+        ],
+        model="haiku",
+    )
+
+
+async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, no_cal: bool = False) -> tuple[str, dict]:
     """
     Run the merger agent via Claude Agent SDK.
-    Returns the final merged review text.
+    Returns (final merged review text, usage dict with cost/tokens/turns).
     """
     from claude_agent_sdk import (
         ClaudeSDKClient,
         ClaudeAgentOptions,
         AssistantMessage,
         TextBlock,
+        ResultMessage,
     )
 
     print(f"  [Merger] starting Claude Agent SDK ({model_id}) ...")
@@ -221,26 +259,41 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
 
     mcp_server = _make_merger_mcp_server(paper_dir, no_cal=no_cal)
 
+    # Main merger only gets read_file/grep_file. Calibration retrieval is
+    # delegated to the calibration_search subagent (invoked via Task) so its
+    # many search/read tool results don't accumulate in the main merger's
+    # context — only the subagent's short paper-list response does.
     allowed_tools = [
         "mcp__merger_fs__read_file",
         "mcp__merger_fs__grep_file",
     ]
+    agents = None
     if not no_cal:
-        allowed_tools.append("mcp__merger_fs__search_file")
+        allowed_tools.append("Task")
+        agents = {"calibration_search": _make_calibration_subagent()}
 
     options = ClaudeAgentOptions(
         model=model_id,
         allowed_tools=allowed_tools,
         permission_mode="bypassPermissions",
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
         mcp_servers={"merger_fs": mcp_server},
         max_turns=30,
         cwd="/tmp",
+        agents=agents,
     )
 
     full_prompt = f"{system_prompt}\n\n---\n\n{merger_prompt}"
 
     result_text = ""
+    sdk_usage: dict = {
+        "model": model_id,
+        "total_cost_usd": None,
+        "num_turns": None,
+        "duration_ms": None,
+        "duration_api_ms": None,
+        "usage": None,
+    }
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(full_prompt)
         async for message in sdk_client.receive_response():
@@ -248,9 +301,15 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+            elif isinstance(message, ResultMessage):
+                sdk_usage["total_cost_usd"] = message.total_cost_usd
+                sdk_usage["num_turns"] = message.num_turns
+                sdk_usage["duration_ms"] = message.duration_ms
+                sdk_usage["duration_api_ms"] = message.duration_api_ms
+                sdk_usage["usage"] = message.usage
 
     if not result_text.strip():
         raise RuntimeError("[Merger] Claude Agent SDK returned empty output")
 
     print(f"  [Merger] done — {model_id} (Claude Agent SDK)")
-    return result_text
+    return result_text, sdk_usage

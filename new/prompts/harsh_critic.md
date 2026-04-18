@@ -33,6 +33,24 @@ Briefly note what the paper does well. Be specific. "Interesting problem" is not
 
 FUNDAMENTAL ISSUES: If any weakness is severe enough to undermine the paper's core claims or it is simply "not even a paper", it overrides all strengths. The overall assessment must reflect this severity rather than averaging strengths and weaknesses or softening the judgment with "could be strong with revisions."
 
+## Missing Parts and Places to Improve
+
+Separate from the critical issues above, list the most important things missing from the paper or places where it could be meaningfully improved. This is NOT a wishlist — every item must pass the test: "Would addressing this meaningfully change whether the paper's core claims are believable, or substantially strengthen the contribution?" If not, leave it out.
+
+Be focused and prioritized. List only the TOP 3-5 most important items per category. State what's needed directly: "Add X because without it, claim Y is not convincing." Each item should be 1-3 sentences.
+
+### Missing Experiments
+1. ... (what experiment, why it matters for the claims)
+
+### Deeper Analysis Needed
+1. ... (what insight is missing and why it matters)
+
+### Visualizations & Case Studies
+1. ... (what would reveal whether the method works)
+
+### Obvious Next Steps
+1. ... (what should have been in this paper)
+
 ## Overall Assessment
 
 One paragraph. State your honest judgment of whether the contribution stands. Calibrate your language to your actual confidence: if the structural issues are decisive, say the paper should not be accepted in its current form. If the issues are real but fixable, say that. Do not hedge to seem balanced. A review that lists serious problems and then concludes "overall a promising contribution" is incoherent and unhelpful.

@@ -19,9 +19,6 @@ import os
 os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
-SPARK_MODEL = os.environ.get("SPARK_MODEL")
-# HUMAN_FINDER = "kimi-k2.5"
-HUMAN_FINDER = os.environ.get("HUMAN_FINDER", "ollama:glm-5.1:cloud")
 MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
@@ -159,20 +156,19 @@ def resolve_model(spec: str | None):
 
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=resolve_model(HUMAN_FINDER))
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
-_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
-_merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
+# _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
+# _merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
 
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
 else:
-    merger = Agent(name="Merger", instructions=_merger_instructions, model=resolve_model(MERGER_MODEL), tools=_merger_tools)
+    # Non-claude_sdk merger path temporarily disabled — focus on claude_sdk path.
+    # merger = Agent(name="Merger", instructions=_merger_instructions, model=resolve_model(MERGER_MODEL), tools=_merger_tools)
+    merger = None
     _MERGER_SDK_MODEL = None
-
-spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"), model=resolve_model(SPARK_MODEL))
 
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
@@ -197,15 +193,9 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     paper_content = paper_content
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
-    
-    find_human_prompt = (
-        f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
-        f"--- PAPER CONTENT START ---\n{paper_content}\n--- PAPER CONTENT END ---\n"
-    )
 
     agents_and_prompts = [
         (harsh, review_prompt), (neutral_reviewer, review_prompt),
-        (spark, review_prompt), (human_finder, find_human_prompt),
     ]
 
     print(f"  Phase 1: Running {len(agents_and_prompts)} agents in parallel ...")
@@ -226,6 +216,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, outputs)]
 
 
+    sdk_usage: dict | None = None
     print("  Phase 2: Merger ...")
     if _MERGER_SDK_MODEL is not None:
         from claude_merger import run_merger_claude_sdk
@@ -233,26 +224,32 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"Here is the paper being reviewed (extracted from PDF — formatting "
             f"artifacts are parser issues, not paper problems):\n\n"
             f"Paper path: {paper_path_abs}, read it in chunks.\n\n"
+            f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
             f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
             f"Now produce the final consolidated review following your instructions. "
             f"Remember: many of the harsh critic's points may be nonsensical or overly "
             f"picky — cross-check everything against the actual paper before including it."
         )
         paper_dir = str(Path(paper_path_abs).parent)
-        merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
-        agent_usages["Merger"] = None
+        merged_review, sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        agent_usages["Merger"] = None  # SDK usage tracked separately below
     else:
-        merger_prompt = (
-            f"Here is the paper being reviewed (extracted from PDF — formatting "
-            f"artifacts are parser issues, not paper problems):\n\n"
-            f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
-            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
-            f"Now produce the final consolidated review following your instructions. "
-            f"Remember: many of the harsh critic's points may be nonsensical or overly "
-            f"picky — cross-check everything against the actual paper before including it."
+        raise NotImplementedError(
+            "Non-claude_sdk merger path is currently disabled. "
+            "Set MERGER_MODEL to 'claude_sdk:<model>' to use the Claude Agent SDK merger."
         )
-        merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
-        agent_usages["Merger"] = merger_usage
+        # merger_prompt = (
+        #     f"Here is the paper being reviewed (extracted from PDF — formatting "
+        #     f"artifacts are parser issues, not paper problems):\n\n"
+        #     f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
+        #     f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
+        #     f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
+        #     f"Now produce the final consolidated review following your instructions. "
+        #     f"Remember: many of the harsh critic's points may be nonsensical or overly "
+        #     f"picky — cross-check everything against the actual paper before including it."
+        # )
+        # merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
+        # agent_usages["Merger"] = merger_usage
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
@@ -270,18 +267,32 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             total_tokens += usage.total_tokens
     token_lines.append(f"  TOTAL: input={total_input} output={total_output} total={total_tokens}")
 
+    sdk_lines = []
+    if sdk_usage is not None:
+        u = sdk_usage.get("usage") or {}
+        sdk_lines.append(f"  Model: {sdk_usage.get('model')}")
+        sdk_lines.append(f"  Cost (USD): {sdk_usage.get('total_cost_usd')}")
+        sdk_lines.append(f"  Turns: {sdk_usage.get('num_turns')}")
+        sdk_lines.append(f"  Duration: total={sdk_usage.get('duration_ms')}ms api={sdk_usage.get('duration_api_ms')}ms")
+        sdk_lines.append(
+            f"  Tokens: input={u.get('input_tokens')} output={u.get('output_tokens')} "
+            f"cache_read={u.get('cache_read_input_tokens')} cache_creation={u.get('cache_creation_input_tokens')}"
+        )
+
     log_path = Path(__file__).parent / os.environ.get("MERGE_LOG", "pipeline.log")
     with open(log_path, "a") as log_f:
         log_f.write(f"\n{'='*60}\n")
         log_f.write(f"Paper: {paper_path}\n")
         log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
         log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
+        if sdk_lines:
+            log_f.write(f"\n--- Claude SDK Merger Usage ---\n" + "\n".join(sdk_lines) + "\n")
         log_f.write(f"\n--- Merged Inputs ---\n\n{chr(10).join(labeled)}\n")
         log_f.write(f"\n--- Merged Review ---\n{merged_review}\n")
         log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
         log_f.write(f"\n--- Decision ---\n{decision}\n")
 
-    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision}
+    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision, "sdk_usage": sdk_usage}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -526,6 +537,19 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
                 print(f"Acceptance rate @ score={score}: {exact_rate:.2%} (n={exact_n})")
                 print(f"Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})")
                 print(f"Percentile of score={score}: {percentile:.1f}% (n={pct_n})")
+
+    sdk_usage = result.get("sdk_usage")
+    if sdk_usage is not None:
+        u = sdk_usage.get("usage") or {}
+        print(f"\n{'=' * 72}\nClaude SDK Merger Usage\n{'=' * 72}")
+        print(f"  Model:         {sdk_usage.get('model')}")
+        print(f"  Cost (USD):    ${sdk_usage.get('total_cost_usd')}")
+        print(f"  Turns:         {sdk_usage.get('num_turns')}")
+        print(f"  Duration:      total={sdk_usage.get('duration_ms')}ms api={sdk_usage.get('duration_api_ms')}ms")
+        print(f"  Input tokens:  {u.get('input_tokens')}")
+        print(f"  Output tokens: {u.get('output_tokens')}")
+        print(f"  Cache read:    {u.get('cache_read_input_tokens')}")
+        print(f"  Cache create:  {u.get('cache_creation_input_tokens')}")
     os.makedirs(os.path.join(Path(__file__).parent, "reviews"), exist_ok=True)
     with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
