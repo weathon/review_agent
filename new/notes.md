@@ -64,3 +64,54 @@ python main.py --single_paper <path>
 ```
 
 metric.py 里加了 per-bin accept rate (pred vs individual human) — 这是最直观看到 pipeline 压缩的方式。
+
+---
+
+## 2026-04-17 (晚) Pipeline 精简: 砍掉 Spark + Human Finder, Merger 改 Claude SDK + Haiku 子代理
+
+### 改动
+
+1. **砍 Spark agent**: 把它的 "Missing Experiments / Deeper Analysis / Visualizations / Next Steps" 角色合并进 Harsh Critic 的 prompt 里(harsh_critic.md 新增 "Missing Parts and Places to Improve" section, 在 Strengths 和 Overall Assessment 之间)。
+
+2. **砍 Human Finder**: 用日志分析评估了它的实际贡献:
+   - 它吃掉单篇 ~55% 的 token (avg input 395k vs 全 pipeline 730k)
+   - 它产出的 weakness 里 ~65% 是 noise (40-45% transplanted - 直接从相似论文抄过来; 15-20% generic; 5% hallucinated; 只有 30-35% 是真的 paper-grounded)
+   - 这 30-35% paper-grounded 的也大多和 Harsh Critic / Neutral 重叠
+   - 唯一独特的产出是 calibration anchor list, 但 Merger 自己就有 search/grep/read 工具可以做
+   - **结论**: 整个 agent 删掉, calibration 让 Merger 直接做
+
+3. **Merger 改 Claude SDK + 子代理 calibration_search**:
+   - Merger 之前 ~302k input / ~12 turns, 因为每个 search 结果都累积进 context, 反复传 12 次
+   - 把 search/read/grep 工具下放给 Haiku 跑的子代理 calibration_search (通过 SDK 的 Task 工具调用)
+   - Merger 只看到子代理返回的 short paper-list summary, search 中间结果不污染主上下文
+   - 子代理是 *retrieval* 角色 (返回 paper path + 一句话 why match), **不做** calibration reasoning
+   - 子代理约束: 一次 call 只查一个 attribute (occasional 两个); 按分数找 anchor 时只要 topic loosely related, 不要完全同 topic (避免重复返回)
+   - Merger 限制最多 4 次 calibration_search invocation
+
+4. **Harsh Critic 也走 Claude SDK** (HARSH_MODEL=claude_sdk:claude-sonnet-4-6):
+   - SDK CLI 有输入长度限制, 论文不能直接 inline, 给 read_file 工具让它自己读
+   - 同 Merger 共用 _run_claude_sdk_query helper, 自动捕获 ResultMessage 里的 cost/usage
+
+5. **Token/cost tracking**:
+   - 之前只记 OpenAI agent 的 token, SDK merger 是 N/A
+   - 现在每个 SDK agent 单独记 cost (USD) / turns / input / output / cache_read / cache_creation
+   - log 里有 `--- Claude SDK Usage ---` section + TOTAL 行
+   - run_single_paper 终端也打印这块
+   - meta data 上 OpenAI usage 和 SDK usage 分开两个 dict (agent_usages vs sdk_usages)
+
+6. **OpenAI Merger path 临时禁用** (raise NotImplementedError, 代码注释掉但留着): 集中精力优化 SDK 路径。
+
+### 单论文测试结果 (../paper.md, FaceLinkGen)
+
+- Final score: 6.5 / Accept (定性看也合理)
+- 总耗时 ~6 min, 总 cost $0.55:
+  - Harsh Critic: $0.234, 5 turns, 9.5k output, 43k cache read
+  - Merger: $0.315, 9 turns, 8.2k output, 132k cache read
+- 比之前 GLM merger 的 raw input ~302k 降到 ~174k (12 + 129k cache_read + 44k cache_create), 主要 win 来自子代理隔离 search context
+- 主观看 review 质量也比 GLM 版强 (尤其 weakness 的具体 grounding 和 score calibration 解释)
+
+### 没解决 / 待办
+
+- 主代理子代理共用 MCP server name "merger_fs", print prefix 都显示 "[merger:read_file]", 看不出哪个是主哪个是子, 需要重命名 print label
+- Subagent 跑过几次没有被实际 invoke (Merger 直接绕过), 要看是不是 prompt 不够强制 / 或者 Merger 觉得不需要 calibration
+- 还没跑 batch 验证整体 MAE/Pearson 在 ICLR2025/2026 上有没有改善, 单论文不能下结论

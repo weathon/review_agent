@@ -66,7 +66,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
         abs_path = args["abs_path"]
         start_line = args.get("start_line", 1) or 1
         end_line = args.get("end_line", 0) or 0
-        print(f"  [merger:read_file] {abs_path} lines {start_line}-{end_line or 'EOF'}")
+        print(f"  [claude:read_file] {abs_path} lines {start_line}-{end_line or 'EOF'}")
         err = _check_path(abs_path)
         if err:
             return {"content": [{"type": "text", "text": err}], "is_error": True}
@@ -164,57 +164,70 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
 CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers via the `calibration_search` subagent (invoked through the Task tool).
 
 How to use the subagent:
-- Send it a SHORT, focused retrieval request. Each request should target ONE attribute at a time (occasionally two if they combine naturally) — not a broad multi-criteria search.
-  - Good: "find papers with weakness: unfair baseline comparison"
-  - Good: "find papers scored 7+ on a topic loosely related to face recognition privacy"
-  - Bad: "find papers about face recognition with weak baselines AND missing ablations AND scored 3-5" (too many attributes — split into separate calls)
-- When asking for a score range, the topic should be LOOSELY RELATED, not the exact same topic. This avoids the same papers being returned every time and gives broader anchoring.
-- The subagent returns a list of paper paths each with a one-sentence summary. It does NOT do calibration reasoning — that is your job.
-- After you receive the list, use your own read_file tool to read the FULL reviews of the 2-4 most relevant anchors. Then judge how the paper under review compares.
+- Send it a SHORT, focused retrieval request describing ONE attribute (a topic, a specific weakness, or a specific strength).
+- For EACH request, the subagent will internally run THREE score-bin retrievals (low / medium / high) and return a combined anchor list covering the full score spectrum. You do not need to ask for score ranges yourself — the subagent handles that.
+- The subagent returns paper paths each with a one-sentence summary + score bin. It does NOT do calibration reasoning — that is your job.
+- After you receive each list, use your own read_file tool to read the FULL reviews of the most relevant anchors. Then judge how the paper under review compares.
 
-Your calibration process:
+You MUST issue exactly these THREE calibration_search calls (run them in parallel where possible):
 
-1. **Topic-based anchors**: Ask the subagent for papers with similar topics. Note their human scores.
+1. **Topic** — dispatch a request naming the paper's topic area.
+   Example: "topic: <topic of paper under review>"
 
-2. **Weakness/strength-pattern anchors**: Ask the subagent for papers sharing a SPECIFIC weakness or strength pattern with the paper under review (one attribute per call).
+2. **Weakness** — dispatch a request naming ONE specific weakness of the paper under review (ignore topic).
+   Example: "weakness: <specific weakness from this paper>"
 
-3. **Deliberate range anchoring**: Separately ask the subagent for HIGH-scoring (~7+) and LOW-scoring (~3 and below) papers in a loosely related topic area. Compare the paper under review against BOTH ends, not just the middle.
+3. **Strength** — dispatch a request naming ONE specific strength of the paper under review (ignore topic).
+   Example: "strength: <specific strength from this paper>"
 
-4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
+Do NOT collapse multiple attributes into one call. Do NOT skip any of the three calls. Do NOT specify score ranges — the subagent does that itself.
 
-When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
+After all three calls return:
+- Read the FULL review of 1-2 most relevant anchors per bucket and per score bin (so roughly 6-9 read_file calls total on human review files).
+- Position your final score relative to the retrieved examples. If similar-topic/weakness/strength HIGH-bin anchors got 7s from humans, and LOW-bin anchors got 3s, use that as your range. Do not compress everything into 4-6.
 
-Limit yourself to at most 4 calibration_search invocations.
+When reporting your score, briefly state which calibration papers you compared against (cite each of the three buckets) and why the paper under review is above or below them.
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples. The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well."""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
 
-CALIBRATION_SUBAGENT_PROMPT = """You are a retrieval helper for the main merger agent. The main agent gives you a retrieval request (e.g. "find papers with weakness: unfair baseline comparison" or "find papers scored 7+ on a topic loosely related to diffusion adversarial attacks"), and you return a concise list of matching paper reviews.
+CALIBRATION_SUBAGENT_PROMPT = """You are a retrieval helper for the main merger agent. The main agent gives you ONE attribute (a topic, a specific weakness, or a specific strength) and you return anchor papers spanning LOW / MEDIUM / HIGH human-score bins for that attribute.
 
 You have these tools (all under the mcp__merger_fs__ namespace):
 - search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
 - read_file(abs_path, start_line, end_line): read lines from a human review file.
 - grep_file(pattern, abs_path): substring search inside a single file.
 
-Workflow:
-1. Run 1-3 search_file calls to find candidate reviews matching the request.
-2. Optionally skim promising candidates with read_file to confirm they match.
-3. Return a list of matching papers. For each: the absolute file path and ONE sentence describing why it matches (the key weakness/strength/score that makes it relevant).
+Workflow (run these three searches SEQUENTIALLY, one per score bin):
+
+1. **LOW bin (~3 or below)**: Run search_file with a query combining the attribute with low-score signals (e.g. "<attribute> reject weak paper" or "<attribute> score 3 below"). Skim 1-2 top hits with read_file to confirm the human score is actually low; discard candidates that do not match the score bin.
+
+2. **MEDIUM bin (~4-6)**: Run search_file with a query combining the attribute with medium/borderline signals (e.g. "<attribute> borderline poster" or "<attribute> score 5"). Skim 1-2 top hits with read_file to confirm.
+
+3. **HIGH bin (~7 or above)**: Run search_file with a query combining the attribute with high-score signals (e.g. "<attribute> strong accept oral spotlight" or "<attribute> score 7 above"). Skim 1-2 top hits with read_file to confirm.
+
+For each bin, return 2-3 anchor papers that actually land in that bin based on what you read.
 
 Output format (strict):
-- <abs_path>: <one-sentence reason it matches the request, mentioning score/decision if known>
-- <abs_path>: <one-sentence reason>
-...
+### LOW (~3 or below)
+- <abs_path>: <one-sentence reason + human score + decision>
+- <abs_path>: ...
+
+### MEDIUM (~4-6)
+- <abs_path>: ...
+
+### HIGH (~7 or above)
+- <abs_path>: ...
 
 Constraints:
-- Return 3-8 papers, not more.
+- Return 2-3 anchors per bin (6-9 total).
 - Do NOT produce a review, do NOT give calibration advice, do NOT compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
-- Keep the whole response under 300 words.
-- Cap yourself at 6 tool calls total.
-- The main agent's request will usually target ONE attribute (a specific weakness, a specific score range, a specific topic — sometimes two combined). Do not broaden the request on your own; search exactly for what was asked.
-- When the request asks for a score range with a topic, treat the topic as LOOSELY RELATED, not exact-match. Return papers in the requested score range that touch on the topic area, not papers on the identical topic.
+- Keep the whole response under 400 words.
+- Cap yourself at ~10 tool calls total (3 search_file + up to ~6 read_file for verification).
+- If one bin has no solid match after searching, write "(none found)" for that bin rather than forcing a weak match.
+- For the TOPIC attribute, treat the topic as LOOSELY RELATED, not exact-match, so the anchor set stays diverse.
 """
 
 
@@ -222,7 +235,7 @@ def _make_calibration_subagent():
     from claude_agent_sdk import AgentDefinition
 
     return AgentDefinition(
-        description="Retrieval helper for calibration anchors. Accepts a retrieval request (e.g. 'find papers with weakness X' or 'find papers scored 7+ on topic Y') and returns a list of paper paths each with a one-sentence summary. Does not do calibration reasoning.",
+        description="Retrieval helper for calibration anchors. Accepts ONE attribute (topic, weakness, or strength) and internally runs three sequential score-bin retrievals (low/medium/high), returning 2-3 anchor papers per bin with one-sentence summaries. Does not do calibration reasoning.",
         prompt=CALIBRATION_SUBAGENT_PROMPT,
         tools=[
             "mcp__merger_fs__search_file",
