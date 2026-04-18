@@ -486,8 +486,32 @@ def predict_acceptance_rate(csv_path: str, score: float, window: float = 0.5):
     return exact_rate, exact_total, win_rate, win_total, percentile, pct_n
 
 
+from datalab_sdk import DatalabClient, ConvertOptions
+
+def pdf_to_markdown(pdf_path: Path) -> str:
+    client = DatalabClient()
+    options = ConvertOptions(
+        output_format="markdown",  # "markdown", "html", "json", "chunks"
+        mode="fast",           # "fast", "balanced", "accurate"
+        paginate=True,             # Add page delimiters
+        page_range="0-9",         # Process specific pages (0-indexed)
+        token_efficient_markdown=True,  # Optimize markdown output for LLM token usage
+    )
+
+    result = client.convert(pdf_path, options=options)
+    return result.markdown + "\n\n Rest of paper (reference and Appendix) is removed."
+
+
 async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: str | None = None):
     print(f"Reviewing: {paper_path}")
+
+    if paper_path.endswith(".pdf"):
+        md = pdf_to_markdown(Path(paper_path))
+        md_path = Path(paper_path).with_suffix(".md")
+        md_path.write_text(md, encoding="utf-8")
+        paper_path = str(md_path)
+        print(f"Converted PDF to markdown: {paper_path}")
+
     result = await run_pipeline(paper_path, no_cal=no_cal)
     print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
     score = result["scorer_output"]
