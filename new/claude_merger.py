@@ -233,10 +233,20 @@ def _make_calibration_subagent():
     )
 
 
-async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, no_cal: bool = False) -> tuple[str, dict]:
+async def _run_claude_sdk_query(
+    *,
+    label: str,
+    model_id: str,
+    system_prompt: str,
+    user_prompt: str,
+    allowed_tools: list[str],
+    mcp_servers: dict | None = None,
+    agents: dict | None = None,
+    max_turns: int = 30,
+) -> tuple[str, dict]:
     """
-    Run the merger agent via Claude Agent SDK.
-    Returns (final merged review text, usage dict with cost/tokens/turns).
+    Generic single-turn-style Claude SDK runner. Captures cost/usage from
+    ResultMessage and returns (text, usage dict).
     """
     from claude_agent_sdk import (
         ClaudeSDKClient,
@@ -246,44 +256,20 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
         ResultMessage,
     )
 
-    print(f"  [Merger] starting Claude Agent SDK ({model_id}) ...")
-
-    with open("prompts/merger.md", "r") as f:
-        system_prompt = f.read()
-    system_prompt = system_prompt.replace(
-        "{{PAPER_ACCESS_INSTRUCTION}}",
-        "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly.",
-    )
-    cal_instruction = CAL_INSTRUCTION_WITHOUT if no_cal else CAL_INSTRUCTION_WITH
-    system_prompt = system_prompt.replace("{{CALIBRATION_INSTRUCTION}}", cal_instruction)
-
-    mcp_server = _make_merger_mcp_server(paper_dir, no_cal=no_cal)
-
-    # Main merger only gets read_file/grep_file. Calibration retrieval is
-    # delegated to the calibration_search subagent (invoked via Task) so its
-    # many search/read tool results don't accumulate in the main merger's
-    # context — only the subagent's short paper-list response does.
-    allowed_tools = [
-        "mcp__merger_fs__read_file",
-        "mcp__merger_fs__grep_file",
-    ]
-    agents = None
-    if not no_cal:
-        allowed_tools.append("Task")
-        agents = {"calibration_search": _make_calibration_subagent()}
+    print(f"  [{label}] starting Claude Agent SDK ({model_id}) ...")
 
     options = ClaudeAgentOptions(
         model=model_id,
         allowed_tools=allowed_tools,
         permission_mode="bypassPermissions",
         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-        mcp_servers={"merger_fs": mcp_server},
-        max_turns=30,
+        mcp_servers=mcp_servers or {},
+        max_turns=max_turns,
         cwd="/tmp",
         agents=agents,
     )
 
-    full_prompt = f"{system_prompt}\n\n---\n\n{merger_prompt}"
+    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
     result_text = ""
     sdk_usage: dict = {
@@ -309,7 +295,65 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
                 sdk_usage["usage"] = message.usage
 
     if not result_text.strip():
-        raise RuntimeError("[Merger] Claude Agent SDK returned empty output")
+        raise RuntimeError(f"[{label}] Claude Agent SDK returned empty output")
 
-    print(f"  [Merger] done — {model_id} (Claude Agent SDK)")
+    print(f"  [{label}] done — {model_id} (Claude Agent SDK)")
     return result_text, sdk_usage
+
+
+async def run_harsh_claude_sdk(model_id: str, harsh_prompt_user: str, paper_dir: str, system_prompt: str) -> tuple[str, dict]:
+    """
+    Run the Harsh Critic via Claude Agent SDK with only read_file (so it can
+    read the paper from disk instead of receiving it inline).
+    """
+    mcp_server = _make_merger_mcp_server(paper_dir, no_cal=True)
+    return await _run_claude_sdk_query(
+        label="Harsh Critic",
+        model_id=model_id,
+        system_prompt=system_prompt,
+        user_prompt=harsh_prompt_user,
+        allowed_tools=["mcp__merger_fs__read_file"],
+        mcp_servers={"merger_fs": mcp_server},
+        max_turns=15,
+    )
+
+
+async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, no_cal: bool = False) -> tuple[str, dict]:
+    """
+    Run the merger agent via Claude Agent SDK.
+    Returns (final merged review text, usage dict with cost/tokens/turns).
+    """
+    with open("prompts/merger.md", "r") as f:
+        system_prompt = f.read()
+    system_prompt = system_prompt.replace(
+        "{{PAPER_ACCESS_INSTRUCTION}}",
+        "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly.",
+    )
+    cal_instruction = CAL_INSTRUCTION_WITHOUT if no_cal else CAL_INSTRUCTION_WITH
+    system_prompt = system_prompt.replace("{{CALIBRATION_INSTRUCTION}}", cal_instruction)
+
+    mcp_server = _make_merger_mcp_server(paper_dir, no_cal=no_cal)
+
+    # Main merger only gets read_file/grep_file. Calibration retrieval is
+    # delegated to the calibration_search subagent (invoked via Task) so its
+    # many search/read tool results don't accumulate in the main merger's
+    # context — only the subagent's short paper-list response does.
+    allowed_tools = [
+        "mcp__merger_fs__read_file",
+        "mcp__merger_fs__grep_file",
+    ]
+    agents = None
+    if not no_cal:
+        allowed_tools.append("Task")
+        agents = {"calibration_search": _make_calibration_subagent()}
+
+    return await _run_claude_sdk_query(
+        label="Merger",
+        model_id=model_id,
+        system_prompt=system_prompt,
+        user_prompt=merger_prompt,
+        allowed_tools=allowed_tools,
+        mcp_servers={"merger_fs": mcp_server},
+        agents=agents,
+        max_turns=30,
+    )

@@ -154,7 +154,14 @@ def resolve_model(spec: str | None):
         return OpenAIChatCompletionsModel(model=name, openai_client=client)
     return spec
 
-harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
+if HARSH_MODEL.startswith("claude_sdk:"):
+    harsh = None  # Claude SDK Harsh Critic — invoked per-call in run_pipeline
+    _HARSH_SDK_MODEL = HARSH_MODEL[len("claude_sdk:"):]
+    _harsh_sdk_system_prompt = load_prompts("harsh_critic.md", paper_access=PAPER_ACCESS_FILE)
+else:
+    harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
+    _HARSH_SDK_MODEL = None
+    _harsh_sdk_system_prompt = None
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
@@ -194,29 +201,49 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
 
-    agents_and_prompts = [
-        (harsh, review_prompt), (neutral_reviewer, review_prompt),
-    ]
-
-    print(f"  Phase 1: Running {len(agents_and_prompts)} agents in parallel ...")
-    responses = await asyncio.gather(
-        *(run_agent_with_retry(a, p) for a, p in agents_and_prompts),
-        return_exceptions=True,
+    # Harsh Critic input: when running via Claude SDK, replace the inline paper
+    # content with a directive to read it from disk (SDK has a CLI input length
+    # limit). Otherwise, pass the full paper inline as before.
+    sdk_harsh_user_prompt = (
+        f"NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.\n\n"
+        f"Paper path: {paper_path_abs}. Use read_file (in chunks) to read the paper end-to-end before reviewing."
     )
-    for (a, _), r in zip(agents_and_prompts, responses):
+
+    async def _run_harsh():
+        if _HARSH_SDK_MODEL is not None:
+            from claude_merger import run_harsh_claude_sdk
+            paper_dir = str(Path(paper_path_abs).parent)
+            text, usage = await run_harsh_claude_sdk(
+                _HARSH_SDK_MODEL, sdk_harsh_user_prompt, paper_dir, _harsh_sdk_system_prompt
+            )
+            return ("Harsh Critic", text, None, usage)
+        text, usage = await run_agent_with_retry(harsh, review_prompt)
+        return ("Harsh Critic", text, usage, None)
+
+    async def _run_neutral():
+        text, usage = await run_agent_with_retry(neutral_reviewer, review_prompt)
+        return ("Neutral Reviewer", text, usage, None)
+
+    print(f"  Phase 1: Running 2 agents in parallel ...")
+    phase1_results = await asyncio.gather(_run_harsh(), _run_neutral(), return_exceptions=True)
+    for r in phase1_results:
         if isinstance(r, Exception):
-            print(f"  🔥ERROR: {paper_path} — agent '{a.name}' raised {type(r).__name__}: {r}")
+            print(f"  🔥ERROR: {paper_path} — phase 1 agent raised {type(r).__name__}: {r}")
             return None
 
-    agent_usages = {}
+    agent_usages: dict = {}
+    sdk_usages: dict = {}
     outputs = []
-    for (a, _), (out, usage) in zip(agents_and_prompts, responses):
+    names = []
+    for name, out, openai_usage, sdk_usage_phase1 in phase1_results:
+        names.append(name)
         outputs.append(out)
-        agent_usages[a.name] = usage
-    labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, outputs)]
+        agent_usages[name] = openai_usage  # may be None for SDK path
+        if sdk_usage_phase1 is not None:
+            sdk_usages[name] = sdk_usage_phase1
+    labeled = [f"### {n}\n{o}" for n, o in zip(names, outputs)]
 
 
-    sdk_usage: dict | None = None
     print("  Phase 2: Merger ...")
     if _MERGER_SDK_MODEL is not None:
         from claude_merger import run_merger_claude_sdk
@@ -231,7 +258,8 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"picky — cross-check everything against the actual paper before including it."
         )
         paper_dir = str(Path(paper_path_abs).parent)
-        merged_review, sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        merged_review, merger_sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        sdk_usages["Merger"] = merger_sdk_usage
         agent_usages["Merger"] = None  # SDK usage tracked separately below
     else:
         raise NotImplementedError(
@@ -268,16 +296,22 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     token_lines.append(f"  TOTAL: input={total_input} output={total_output} total={total_tokens}")
 
     sdk_lines = []
-    if sdk_usage is not None:
-        u = sdk_usage.get("usage") or {}
-        sdk_lines.append(f"  Model: {sdk_usage.get('model')}")
-        sdk_lines.append(f"  Cost (USD): {sdk_usage.get('total_cost_usd')}")
-        sdk_lines.append(f"  Turns: {sdk_usage.get('num_turns')}")
-        sdk_lines.append(f"  Duration: total={sdk_usage.get('duration_ms')}ms api={sdk_usage.get('duration_api_ms')}ms")
+    sdk_total_cost = 0.0
+    for sdk_name, su in sdk_usages.items():
+        u = (su or {}).get("usage") or {}
+        sdk_lines.append(f"  [{sdk_name}]")
+        sdk_lines.append(f"    Model: {su.get('model')}")
+        sdk_lines.append(f"    Cost (USD): {su.get('total_cost_usd')}")
+        sdk_lines.append(f"    Turns: {su.get('num_turns')}")
+        sdk_lines.append(f"    Duration: total={su.get('duration_ms')}ms api={su.get('duration_api_ms')}ms")
         sdk_lines.append(
-            f"  Tokens: input={u.get('input_tokens')} output={u.get('output_tokens')} "
+            f"    Tokens: input={u.get('input_tokens')} output={u.get('output_tokens')} "
             f"cache_read={u.get('cache_read_input_tokens')} cache_creation={u.get('cache_creation_input_tokens')}"
         )
+        if su.get("total_cost_usd"):
+            sdk_total_cost += su["total_cost_usd"]
+    if sdk_lines:
+        sdk_lines.append(f"  TOTAL Claude SDK cost (USD): {sdk_total_cost:.4f}")
 
     log_path = Path(__file__).parent / os.environ.get("MERGE_LOG", "pipeline.log")
     with open(log_path, "a") as log_f:
@@ -286,13 +320,13 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
         log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
         if sdk_lines:
-            log_f.write(f"\n--- Claude SDK Merger Usage ---\n" + "\n".join(sdk_lines) + "\n")
+            log_f.write(f"\n--- Claude SDK Usage ---\n" + "\n".join(sdk_lines) + "\n")
         log_f.write(f"\n--- Merged Inputs ---\n\n{chr(10).join(labeled)}\n")
         log_f.write(f"\n--- Merged Review ---\n{merged_review}\n")
         log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
         log_f.write(f"\n--- Decision ---\n{decision}\n")
 
-    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision, "sdk_usage": sdk_usage}
+    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision, "sdk_usages": sdk_usages}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -538,18 +572,24 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
                 print(f"Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})")
                 print(f"Percentile of score={score}: {percentile:.1f}% (n={pct_n})")
 
-    sdk_usage = result.get("sdk_usage")
-    if sdk_usage is not None:
-        u = sdk_usage.get("usage") or {}
-        print(f"\n{'=' * 72}\nClaude SDK Merger Usage\n{'=' * 72}")
-        print(f"  Model:         {sdk_usage.get('model')}")
-        print(f"  Cost (USD):    ${sdk_usage.get('total_cost_usd')}")
-        print(f"  Turns:         {sdk_usage.get('num_turns')}")
-        print(f"  Duration:      total={sdk_usage.get('duration_ms')}ms api={sdk_usage.get('duration_api_ms')}ms")
-        print(f"  Input tokens:  {u.get('input_tokens')}")
-        print(f"  Output tokens: {u.get('output_tokens')}")
-        print(f"  Cache read:    {u.get('cache_read_input_tokens')}")
-        print(f"  Cache create:  {u.get('cache_creation_input_tokens')}")
+    sdk_usages = result.get("sdk_usages") or {}
+    if sdk_usages:
+        print(f"\n{'=' * 72}\nClaude SDK Usage\n{'=' * 72}")
+        total_cost = 0.0
+        for name, su in sdk_usages.items():
+            u = (su or {}).get("usage") or {}
+            print(f"  [{name}]")
+            print(f"    Model:         {su.get('model')}")
+            print(f"    Cost (USD):    ${su.get('total_cost_usd')}")
+            print(f"    Turns:         {su.get('num_turns')}")
+            print(f"    Duration:      total={su.get('duration_ms')}ms api={su.get('duration_api_ms')}ms")
+            print(f"    Input tokens:  {u.get('input_tokens')}")
+            print(f"    Output tokens: {u.get('output_tokens')}")
+            print(f"    Cache read:    {u.get('cache_read_input_tokens')}")
+            print(f"    Cache create:  {u.get('cache_creation_input_tokens')}")
+            if su.get("total_cost_usd"):
+                total_cost += su["total_cost_usd"]
+        print(f"  TOTAL Claude SDK cost (USD): ${total_cost:.4f}")
     os.makedirs(os.path.join(Path(__file__).parent, "reviews"), exist_ok=True)
     with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
