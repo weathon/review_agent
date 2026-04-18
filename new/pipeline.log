@@ -64411,3 +64411,424 @@ MY FINAL DECISION: <orange>Reject</orange>
 
 --- Decision ---
 Reject
+
+============================================================
+Paper: papers/2602.10095v1.md
+Timestamp: 2026-04-17T18:10:21.047647
+
+--- Token Usage ---
+  Harsh Critic: input=16554 output=3382 total=19936 requests=1
+  Neutral Reviewer: input=16054 output=2362 total=18416 requests=1
+  Spark: input=16239 output=2347 total=18586 requests=1
+  Human Finder: input=565663 output=4491 total=570154 requests=13
+  Merger: input=359375 output=5156 total=364531 requests=11
+  TOTAL: input=973885 output=17738 total=991623
+
+--- Merged Inputs ---
+
+### Harsh Critic
+## Critical Issues
+
+### 1. The main conceptual claim (“causality is separable from denoising”) is overstated relative to the evidence  
+**Type: Structural**
+
+- Central claim (title, Abstract, §1, §4, §5, Conclusion) is that temporal causal reasoning can be *separated* from denoising and amortized into a once-per-frame encoder, without material loss.
+- The actual empirical evidence is:
+  - Middle-layer activations are highly similar across timesteps (Fig. 2), but not identical; similarity drops to ~0.8 near the end of the trajectory (Limitations; Fig. 2).
+  - Cross-frame attention mass in deep layers is small but non-zero (Fig. 4); removing it requires finetuning (Fig. 5), and the paper acknowledges a “slight quality gap” vs fully causal models at high resolution (Limitations; Table 3).
+- The separability the paper demonstrates is *approximate* and architecture-dependent. The title and repeated framing (“causality is separable from denoising”, “decouples temporal reasoning from iterative denoising”) suggest a more general, almost architectural-law claim.
+- Evidence is limited to a few architectures (DiT-style transformers and WAN-like T2V), specific training recipes (teacher forcing / self-forcing), and standard metrics (FVD, LPIPS, etc.), plus modest finetuning; no negative cases or failure modes are systematically explored.
+- The paper’s own Limitations section concedes that residual couplings plausibly explain a measurable quality gap at higher resolution, contradicting a strict separability claim.
+
+This mismatch matters because the headline conceptual contribution is framed as a general property of causal diffusion, but the experiments only support “strong redundancy and partial separability under certain designs.” As written, the core claim is stronger than the evidence can justify.
+
+### 2. The probing evidence for “where causal reasoning happens” is not causally identified  
+**Type: Evidential**
+
+Sections §4.1–4.2 interpret correlation patterns as causal structure:
+
+- §4.1: High cosine similarity of middle-layer features across timesteps and successful skip-layer finetuning (Fig. 2, Fig. 3) are taken to show that “content and motion dynamics are effectively established in a single step,” and later denoising largely handles low-level details.
+- §4.2: Decreased cross-frame attention mass with depth (Fig. 4) and successful removal of deep cross-frame attention after finetuning (Fig. 5) are interpreted as deeper layers being “primarily” intra-frame renderers and that “cross-frame attention is largely unnecessary.”
+  
+Problems:
+
+- The leave-one-out / skip / mask experiments all involve *retraining or finetuning* (5k steps etc.). This shows that the base model’s *weights* can be adapted to a modified architecture while roughly preserving manifold and quality; it does not cleanly show that, in the original trained model, causal reasoning resides only in early layers or in single-step passes.
+- High cosine similarity in a 1536-d space (Fig. 2) shows redundancy but not that temporal reasoning is done only once. A small but systematically varying 0.05–0.1 difference in cosine can encode nontrivial dynamics. There is no analysis of what information is lost when reusing only step-0 features.
+- Attention mass is a crude proxy for “where the model reasons about time.” A small fraction of cross-frame attention in deep layers can suffice for crucial motion consistency, especially for rare or long-horizon events; the paper does not probe such cases or stratify by motion complexity.
+- No targeted causal intervention is done: e.g., selectively corrupting early vs. deep cross-frame paths and measuring quantitative degradation on motion-specific metrics; or zeroing out deep cross-frame attention *without* finetuning to see what breaks.
+
+This weakens the paper’s more mechanistic claims about *where* temporal reasoning occurs. The observed patterns justify the *engineering hypothesis* that an encoder–decoder split can work, but not the stronger interpretive story the paper tells.
+
+### 3. Evaluation of the SCD architecture is too narrow to justify the claimed generality  
+**Type: Evidential**
+
+The central architectural claim (§5–§6) is that SCD “significantly improves throughput and per-frame latency while matching or surpassing the generation quality of strong causal diffusion baselines,” and that it is a broadly better design for causal video diffusion.
+
+Issues:
+
+- **Datasets / tasks are limited and mostly short, generic clips.**  
+  - Pretraining from scratch is only on TECO-Minecraft (128²) and UCF-101 (64²), plus RealEstate10K in the appendix. These are small, relatively simple, low-res datasets with short horizons and modest motion complexity.
+  - The high-res evaluation is only on VBenCh (Table 3) via distillation from Wan, not from-scratch training on a large, diverse T2V corpus. Real-world streaming or long-duration scenarios—where amortized temporal reasoning should matter most—are not empirically tested.
+- **Metrics underweight temporal causality and long-horizon coherence.**  
+  - TECO-Minecraft and UCF evaluations rely on LPIPS, SSIM, PSNR, and FVD. These primarily capture reconstruction similarity and overall distributional distance, not fine-grained long-horizon temporal coherence or causal consistency under error accumulation.
+  - For the WAN-based SCD, VBenCh scores (Total, Quality, Semantic) are reported, but again these are aggregate metrics; no explicit long-horizon or streaming evaluation (e.g., drift under long rollouts, dependence on KV cache length, robustness to feedback errors) is presented.
+- **Teacher-forcing vs. open-loop generation is under-explored.**  
+  - §3 notes that teacher forcing creates a train–test mismatch; §5.3 uses teacher forcing again for SCD training. The paper claims improved robustness via noise in the context (Eq. 7), but all the main tables appear to be evaluated in standard, relatively short-horizon autoregressive settings. There is no explicit experiment comparing long unrolled trajectories of SCD vs. causal baselines under compounding error.
+- **Ablations are mostly architectural micro-choices**, not failure modes or task stress tests. There is no evidence that SCD maintains causal fidelity under:  
+  - rapid scene changes,  
+  - complex non-Markovian motion,  
+  - conditional controls (actions, camera paths) that require multi-frame integration.
+
+The upshot is that SCD is well-evaluated on a handful of standard video benchmarks and on one major T2V distillation setting, but the broader claim—“causal reasoning can be decoupled once-per-frame without sacrificing quality”—is not stress-tested in the regimes where it is most critical.
+
+### 4. Distillation from a pretrained bidirectional T2V model confounds architectural benefits with teacher capabilities  
+**Type: Methodological gap**
+
+In §6.2, the “high-resolution” success story of SCD is based on fine-tuning from Wan 2.1:
+
+- SCD performance on VBenCh (Table 3) is very close to Self Forcing and Wan, while being faster. However, this is after:
+  - Ad hoc architectural adaptation: picking 25 early layers as encoder and grouping first+last 5 layers as decoder, based partly on a leave-one-out study (Fig. 7).
+  - Specialized input reparameterization: feeding high-noise current frames into the encoder during training to mimic the teacher’s distribution and pure Gaussian noise at inference.
+  - Self-rollout distillation (self-forcing-style) that explicitly aligns SCD’s sample distribution with the teacher.
+
+This means:
+
+- The high-res performance is largely inherited from Wan; SCD is not independently demonstrating that its separable architecture scales *per se*.
+- The leave-one-out metric (validation diffusion loss; Fig. 7) is used to justify which layers are preserved without demonstrating that this decomposition is robust or optimal; it may be brittle and very specific to this teacher.
+- Claims like “SCD achieves strong performance while being ~1.3× faster” plausibly hold for this teacher and recipe but may not for other large T2V models.
+
+This does not invalidate the result, but it limits its generality. The paper would need a clearer separation between “architectural advantage” and “teacher knowledge transfer” to back broader claims.
+
+---
+
+## Section-by-Section Notes
+
+### Abstract / Introduction
+
+- The framing “causality is separable from denoising” and “separable causal diffusion” reads as a principle of causal diffusers in general. The rest of the paper shows a compelling *engineering design* that exploits redundancy and sparsity; it does not show that multi-step causal integration is fundamentally unnecessary or that the identified patterns are universal.
+- The introduction motivates real-time streaming and low-latency settings, but experiments do not include explicit streaming or interactive benchmarks (e.g., live rollouts, adaptive conditional control).
+
+### §3 Preliminaries
+
+- The exposition of causal diffusion and the TF/DF discussion are accurate and helpful.
+- However, the claim “the model must repeatedly consult the context along the whole reverse trajectory; causal reasoning is therefore entangled with the entire diffusion path” is strictly correct under the loss formulation, but it is already known that models often *effectively* use context non-uniformly across steps and layers; the paper later rediscovering redundancy and sparsity should be framed as empirical characterization rather than a surprise.
+
+### §4 Uncovering Causal Separability
+
+**§4.1 Repetitive computation**
+
+- Fig. 2 and the PCA visualization are informative. But the leap from “high similarity” to “causal reasoning done once; later steps only refine pixels” is stronger than the evidence.
+- The skip-layer finetuning experiment (Fig. 3) does show that a model with reduced mid-layer compute across steps can be adapted without major quality loss. This supports the *feasibility* of amortizing computation, not the *internal mechanistic claim* about the original model’s reasoning structure.
+- There is no quantitative comparison (e.g., FVD / LPIPS) between baseline and skipped model on a held-out set, only visual examples. That makes it hard to assess whether subtle temporal artifacts or rare failure modes increase.
+
+**§4.2 Deep layers separable in time**
+
+- Cross-frame attention mass visualization (Fig. 4) is useful but not tied to outcome measures. A more compelling analysis would show, for example, that selectively removing deep cross-frame attention (without retraining) causes negligible loss on most metrics, or that any degradation is limited to specific phenomena.
+- The finetuned frame-diagonal mask (Fig. 5) again demonstrates architectural plasticity rather than causal identification of where temporal reasoning happens.
+
+Overall, §4 is good empirical characterization work but somewhat overinterprets its probes.
+
+### §5 Separable Causal Diffusion
+
+- The basic encoder-decoder design (Fig. 6) is clear and coherent, and the inference complexity analysis makes sense.
+- Training description (§5.3) is high-level; many important practical details (e.g., exact noise schedule, how many noise scales per frame, weighting between frames, how corruption of \(c_i\) is scheduled) are deferred to the appendix. For a flagship architectural paper, more of these should be in the main text to enable reproduction and understanding of what is essential vs. incidental.
+- The “corrupting causal context” mechanism (Eq. 7) is presented as important for robustness, but its impact on the main benchmarks is only described in an appendix table. There is no visible main-text evidence that SCD is notably *more* robust to compounding errors than a strong causal baseline.
+
+### §6 Experiments
+
+**6.1 Training from scratch**
+
+- Tables 1 and 2: SCD variants are fairly compared to Causal DiT of similar capacity and to published baselines (Latent FDM, FAR, RaMvD, MCVD). Reporting seconds per frame on a fixed GPU is appropriate.
+- SCD-M and SCD-B clearly win or tie on standard metrics while being faster. On these small datasets, the evidence for “at least comparable quality with higher throughput” is strong.
+- However:
+  - There is no statistical analysis (variance over seeds / clips) or qualitative analysis of particular failure cases that might arise from reduced temporal coupling.
+  - All benchmarks are relatively short (e.g. UCF-101 4→12), so temporal depth is limited.
+  - The paper mentions RealEstate10K results in the appendix; those should be summarized at least briefly in the main text to show robustness beyond two datasets.
+
+**6.2 Fine-tuning pretrained T2V**
+
+- Table 3: Evaluation on a standardized benchmark (VBenCh) is appropriate. SCD is indeed faster and nearly matches Self Forcing.
+- However:
+  - The slight drop in semantic score is downplayed; given the paper’s emphasis on temporal reasoning, any degradation in semantics and alignment is notable and should be discussed in more depth (e.g. error modes, examples).
+  - The text attributes this gap to “inevitable architectural mismatch” but does not examine whether missing residual temporal couplings in deep layers (their own limitation) contribute.
+  - Figure 8 (training speed) is helpful but is mislabeled/described in the text: the caption claims “SCD achieves superior training efficiency,” but the figure (as described) has “Remove One Block” bars *higher* in seconds than “Full WAN,” which would mean slower training if interpreted literally. This might be a parser artifact, but if not, it’s contradictory.
+
+### Conclusion / Limitations
+
+- The Limitations section is unusually candid and undercuts the absolutist reading of the title. It correctly notes that separability is approximate and that residual dependencies may be important at high resolution.
+- This honesty is a strength, but it also confirms that the main narrative oversells the generality (“causality is separable”) relative to what is rigorously demonstrated.
+
+---
+
+## Strengths
+
+- Clear and well-motivated architectural proposal (SCD) that is consistent with empirical observations about redundancy and sparsity in causal video diffusers.
+- Strong engineering results: on TECO-Minecraft and UCF-101, SCD achieves substantial latency gains with equal or better standard metrics compared to strong causal baselines. On VBenCh, SCD matches Self Forcing’s overall quality while being faster.
+- Probing analyses (cosine similarity over timesteps, layer-wise attention mass, leave-one-out layers) are thoughtfully executed and provide useful insight into how large video diffusers actually use temporal context.
+- Careful treatment of distillation and architectural adaptation when transferring from a pretrained bidirectional T2V model, including input reparameterization and layer selection guided by loss-based importance.
+- Limitations are explicitly discussed instead of being hidden, including acknowledging residual couplings and minor quality gaps.
+
+---
+
+## Overall Assessment
+
+The paper presents a convincing *engineering* contribution: Separable Causal Diffusion is a well-designed, empirically validated architecture that delivers real speedups over strong causal video diffusion baselines with little or no loss in conventional quality metrics on standard benchmarks, including a substantial T2V model. That contribution stands. However, the paper’s central *conceptual* claim—that “causality in video diffusers is separable from denoising”—is substantially stronger than what the evidence supports. The probing analyses show redundancy and emergent sparsity, but they do not causally identify where temporal reasoning occurs or establish strict separability; the own limitations section admits non-negligible residual couplings and quality gaps at scale. In its current form, the work is a strong architectural and empirical paper and an interesting set of probes, but not a definitive statement about the nature of causal reasoning in diffusion models. I would recommend acceptance conditional on significantly tempering the overarching claim (title, abstract, and narrative) to match the actually demonstrated scope: approximate separability and practical decoupling in the studied settings, rather than a general principle of causal diffusion.
+### Neutral Reviewer
+## Balanced Review
+
+### Summary
+
+This paper identifies two regularities in autoregressive video diffusion models — (1) middle-layer features are highly redundant across denoising steps, and (2) cross-frame attention becomes sparse in deeper layers — and leverages these findings to propose Separable Causal Diffusion (SCD), an encoder-decoder architecture that runs causal reasoning once per frame while iterating a lightweight frame-wise diffusion decoder across denoising steps. Experiments on both small-scale pretraining and large-scale fine-tuning benchmarks show SCD achieves 2–3× lower latency while maintaining competitive generation quality.
+
+### Strengths
+
+1. **Insightful and systematic probing analysis.** The paper provides two complementary lines of evidence: cosine similarity of middle-layer features across denoising steps (Fig. 2, consistently >0.95) and cross-frame attention mass heatmaps across layers (Fig. 4, showing clear sparsity in deep layers). The PCA visualization and attention mass quantification make the empirical case compelling and concrete.
+
+2. **Strong validation through finetuning experiments.** Rather than relying solely on observational evidence, the paper validates the two regularities through intervention: skipping 15 middle layers across denoising steps (Fig. 3) and removing cross-frame attention from the last 5 layers (Fig. 5) both recover baseline quality with only brief finetuning. These causal tests substantially strengthen the claims.
+
+3. **Architecturally clean and well-motivated design.** SCD directly operationalizes the two findings: the causal encoder runs once per frame (exploiting step-wise redundancy), and the diffusion decoder operates frame-wise without cross-frame attention (exploiting depth-wise sparsity). The interface through context tokens $c_i$ and frame-wise concatenation is simple and principled.
+
+4. **Demonstrated practical efficiency gains.** On VBenCh (Table 3), SCD achieves 11.1 FPS vs. 8.9 FPS for Self Forcing with comparable quality scores. On TECO-Minecraft (Table 1), SCD-M achieves >4× speedup over Causal DiT-M. The throughput improvements are significant and practically relevant for real-time and streaming applications.
+
+5. **Honest discussion of limitations.** The paper explicitly acknowledges that step-wise invariance weakens in the last 10 denoising steps (cosine similarity drops to ~0.8) and that deep layers retain non-zero cross-frame attention, which plausibly explains the slight quality gap on VBenCh. This transparency adds credibility.
+
+### Weaknesses
+
+1. **Residual quality gap on high-resolution benchmarks.** On VBenCh (Table 3), SCD achieves a Total Score of 84.03 vs. Self Forcing's 84.26, with a notable drop in Semantic Score (79.60 vs. 80.30). The paper attributes this to "inevitable architectural mismatch," but this explanation is somewhat unsatisfying — it remains unclear whether this gap is fundamental to the separability assumption or an artifact of specific design choices (e.g., layer allocation, noise injection strategy).
+
+2. **Partially ad hoc fine-tuning recipe when adapting pretrained models.** The architecture adaptation for fine-tuning involves multiple non-obvious choices: feeding a highly corrupted current frame to the encoder during training, and combining the first 5 and last 5 layers to form the decoder (§6.2). The leave-one-out analysis (Fig. 7) motivates keeping early/late layers but doesn't directly justify this specific 5+5 combination, nor does it explore alternative splits.
+
+3. **Limited analysis on highly dynamic or long-horizon scenes.** The probing analysis is conducted on relatively short video sequences. Given that the separability assumption hinges on temporal context being effectively summarized in a single pass, it is unclear how well the approach scales to scenarios requiring extensive long-range temporal reasoning (e.g., complex multi-object interactions, long-term state tracking). The benchmarks used (Minecraft, UCF-101, VBenCh) may not stress-test this aspect sufficiently.
+
+4. **Comparison with concurrent hybrid AR-diffusion models is incomplete.** The related work section discusses MarDini [45] and VideoMAR [88], which share the encoder-decoder spirit. However, no experimental comparison is provided against these closely related methods, making it hard to assess the relative contribution of the specific SCD design versus the general encoder-decoder paradigm.
+
+5. **Context corruption strategy is under-explored in the main text.** Equation 7 introduces Gaussian corruption of $c_i$ as a training augmentation, and the paper notes it improves robustness, but detailed ablations are deferred to Appendix B.3. Given that this directly addresses the train-test mismatch inherent in the teacher-forcing setup, its interaction with the separability assumption deserves more prominence and analysis.
+
+### Novelty & Significance
+
+The paper's primary novelty lies in its **diagnostic contributions** rather than the architectural design. The two regularities — step-wise redundancy and depth-wise sparsity of temporal attention — are clearly established through careful probing and validated via finetuning interventions. The SCD architecture is a natural and well-executed consequence of these findings, though encoder-decoder diffusion designs for video generation (MarDini, VideoMAR) are conceptually related.
+
+The **significance** is practically high: the 2–3× latency reduction with preserved quality addresses a key bottleneck for autoregressive video diffusion in streaming/interactive settings. The finding that causal reasoning can be amortized across denoising steps is also conceptually important, as it suggests that the prevalent design of applying causal attention at every layer and step introduces unnecessary computation — a message likely to influence future architectures.
+
+### Suggestions for Improvement
+
+1. **Provide more granular analysis of the quality gap.** Decompose the Semantic Score gap on VBenCh into finer-grained categories (e.g., motion consistency vs. object identity preservation) to clarify whether the gap is due to the separability assumption or specific implementation choices.
+
+2. **Explore alternative layer-allocation strategies for the decoder.** The current fine-tuning recipe uses a specific 25/5+5 encoder/decoder split. A systematic ablation over different splits (e.g., 20/5+10, 20/10+5) would strengthen the claim that the chosen design is well-justified rather than hand-tuned.
+
+3. **Include comparison with hybrid AR-diffusion baselines.** If MarDini or VideoMAR are available for comparison (even on synthetic benchmarks), including them would help isolate the contribution of the specific SCD design (once-per-frame encoder + multi-step frame-wise decoder) from the general encoder-decoder framework.
+
+4. **Strengthen the context corruption analysis in the main text.** Move at least a key ablation table from Appendix B.3 into Section 5.3 or 6.1, showing how noise scale $\eta$ affects generation quality and robustness. This is central to the training framework.
+
+5. **Test on longer sequences or more dynamic content.** Adding evaluation on a benchmark with longer horizons (e.g., longer Minecraft episodes, or a benchmark with complex multi-object dynamics) would strengthen the claim that a single causal pass per frame sufficiently captures temporal reasoning.
+### Spark
+## How to Improve This Paper
+
+### Missing Experiments (top 3-5 only)
+1. **Long-horizon video generation (100+ frames) comparing SCD vs. fully causal baseline.** The core claim—that temporal reasoning can be done once per frame—is most vulnerable over long sequences where context drift and error accumulation compound. Without this, separability is only validated for short clips where repeated causal attention may be unnecessary simply due to limited temporal depth.
+
+2. **Probing under autoregressive rollout conditions, not just teacher forcing.** Figs. 2 and 4 measure redundancy/sparsity using clean ground-truth context frames. During actual inference, past frames are model-generated and imperfect, which could fundamentally alter attention patterns and feature stability across steps. If the observed separability vanishes under rollout, the architectural premise collapses.
+
+3. **Feature-caching baseline within the original causal architecture.** If middle-layer features are nearly identical across denoising steps, a much simpler intervention—caching early-layer activations across steps within the existing architecture—could achieve similar speedups without architectural separation. Without this comparison, it's unclear whether SCD's decoupled design is necessary or whether cheaper caching suffices.
+
+4. **Controlled parameter-count comparison in the fine-tuning experiment.** SCD (1.6B) is compared against Self Forcing (1.3B), making the slight quality gap difficult to interpret. A matched-parameter baseline (or SCD-1.3B) is needed to isolate the effect of architectural separation from capacity differences.
+
+### Deeper Analysis Needed (top 3-5 only)
+1. **Quantitative analysis of error propagation through the context latent c_i over frames.** The encoder produces c_i once per frame and it is never updated. How much does c_i drift accumulate across a sequence, and how does this affect frame-to-frame temporal consistency? The paper acknowledges this in limitations but provides no measurement.
+
+2. **Impact of the similarity drop at later denoising steps.** The paper notes cosine similarity drops from ~0.95 to ~0.8 for the last 10 steps, then dismisses it. This 0.2 gap could carry critical high-frequency information. An ablation testing how denoising quality degrades when the encoder context is updated at, say, only the first 80% of steps vs. all steps would clarify the cost of full separation.
+
+3. **What information is lost when removing deep cross-frame attention?** The attention mass analysis shows sparsity, but even small cross-frame attention mass may be critical for fine-grained temporal consistency. An information-theoretic or probing analysis of what the residual cross-frame attention captures (e.g., motion details vs. static structure) would clarify whether it can be safely discarded.
+
+### Visualizations & Case Studies
+1. **Side-by-side failure cases for SCD vs. causal baseline, especially for temporal consistency artifacts** (flickering, object drift, motion discontinuities). This would reveal where the once-per-frame context becomes insufficient.
+
+2. **Generated video frames at positions 1, 10, 30, 60, 100** to visualize quality degradation over long horizons. Currently all examples are short clips where SCD's advantages are least contested.
+
+3. **Attention rollout visualizations for the causal encoder's output c_i**, showing what spatial/temporal information it encodes vs. what is missing compared to the full causal baseline's context at different denoising steps.
+
+### Obvious Next Steps
+1. **Test SCD on longer video generation (64–256 frames) where the separability assumption is most stressed**, and report temporal consistency metrics (e.g., temporal FVD, frame-to-frame SSIM, motion consistency).
+2. **Investigate a hybrid where c_i is updated at a few key denoising steps** (e.g., at t=0.5) rather than strictly once, to close the quality gap observed in Table 3.
+3. **Direct comparison with concurrent hybrid AR-diffusion models** like MarDini and VideoMAR, which share the encoder-decoder philosophy, to position SCD's contribution clearly.
+
+### Other stuff you can add
+1. **Report FVD on standard text-to-video benchmarks for the from-scratch models**, not just pixel-domain metrics (LPIPS/SSIM/PSNR), to enable comparison with the broader video generation literature.
+2. **Include training compute (GPU-hours) comparisons alongside inference metrics**, since the efficiency story should encompass both training and inference.
+### Human Finder
+Based on my analysis of the paper and relevant human reviews from similar papers (MarDini, ARLON, NOVA, ACDC, Δ-DiT, ToCa, HART, Progressive AR Video Diffusion, MovieDreamer), here are the strengths and weaknesses:
+
+---
+
+## Strengths
+
+1. **Insightful probing analysis**: The systematic analysis of feature similarity across denoising steps (§4.1) and cross-frame attention sparsity with depth (§4.2) is compelling and well-motivatated. The skip-layer and frame-diagonal finetuning experiments directly validate these findings. This kind of careful empirical characterization of existing models provides genuine insight into where computation is redundant.
+
+2. **Principled architectural design**: The SCD architecture is a natural consequence of the discovered regularities—decoupling once-per-frame causal reasoning from multi-step per-frame denoising is a clean design that yields strong efficiency gains (2–3× lower latency).
+
+3. **Strong efficiency gains with competitive quality**: On both pretraining (Tables 1–2) and post-training (Table 3) benchmarks, SCD achieves substantial throughput improvements while maintaining competitive generation quality. The 11.1 FPS vs. 8.9 FPS improvement over Self Forcing at comparable quality is notable.
+
+4. **Comprehensive ablation study**: The paper includes skip-layer experiments, frame-diagonal finetuning, leave-one-out analysis for layer assignment, and context corruption ablations (Appendix B.3), lending credibility to the design choices.
+
+---
+
+## Weaknesses
+
+1. **Training-inference mismatch and error accumulation**: During training, the encoder processes ground-truth clean historical frames (teacher forcing), while at inference it must rely on its own previously generated outputs. Although the paper introduces context corruption (Eq. 7) to mitigate this, the mismatch is arguably deeper: the encoder sees clean context but the decoder iteratively refines noisy frames, and at inference the encoder conditions on outputs that may have errors that compound over time. Reviewers of ARLON raised a related concern: *"I am concerned that these strategies cannot truly simulate the error of AR inference, which may limit the model performance"* (ARLON, Reviewer 1). Similarly, reviewers of NOVA questioned *"What is the limit of the model's video extrapolation capability? In other words, after how many autoregression steps will the cumulative errors severely affect the frame quality?"* (NOVA, Reviewer 4). The paper does not analyze how generation quality degrades as the autoregressive context grows longer—an important practical concern for streaming applications.
+
+2. **Quality gap relative to the fully causal baseline at high resolution**: In Table 3, SCD achieves 84.03 total score vs. Self Forcing's 84.26, with the semantic score dropping from 80.30 to 79.60. The paper's own Limitations section acknowledges this may stem from residual cross-frame couplings in deeper layers that SCD cannot capture. Reviewers of MarDini noted similar concerns when hybrid architectures underperform monolithic baselines: *"Despite the introduction of numerous additional parameters, the image-to-video performance in Table 4 still lags behind previous work"* (MarDini, Reviewer 1), and *"From Table (4), it seems that the 'L' variants of MarDini perform worse than the 'S' variants?"* (MarDini, Reviewer 2). The partial quality gap, even if acknowledged, warrants deeper analysis of what temporal information is being lost and whether it matters for complex, multi-object scenes.
+
+3. **Limited evaluation scale and diversity**: The pretraining experiments are on small, low-resolution datasets (Minecraft 128×128, UCF-101 64×64). The higher-resolution T2V evaluation (Table 3) relies on fine-tuning from WAN 1.3B, with only VBench metrics at a single resolution. Reviewers of Progressive AR Video Diffusion flagged similar concerns: *"Lack of comprehensive evaluation...they do not provide quantitative results on mainstream metrics such as FVD"* (PA-VDM, Reviewer 2). Reviewers of NOVA similarly noted *"For text-to-video (T2V), NOVA uses relatively less data and fewer parameters and has fast inference speeds but falls short in performance. Therefore, it needs further testing about scalability"* (NOVA, Reviewer 3). SCD's performance on more complex, diverse, longer videos (e.g., multi-subject, rapid motion, camera motion) is unknown.
+
+4. **Probing conclusions may not generalize beyond the specific model studied**: The key observations (step-wise redundancy and depth-wise sparsity) are primarily demonstrated on WAN-2.1 T2V-1.3B. While Appendix A.2 claims consistency across other architectures (Self-Forcing, 3D UNet), the paper does not systematically analyze whether these patterns hold across different model scales, training regimes, or data distributions. Reviewers of Δ-DiT raised a related concern: *"Could the authors also provide results on more recent models such as SD3 which is also transformer-based?"* (Δ-DiT, Reviewer 4). If the redundancy patterns are model-specific, the architectural implications would be less general.
+
+5. **Insufficient comparison with alternative acceleration strategies**: The paper frames SCD as an alternative to full causal attention but does not compare against simpler acceleration methods that could be applied to the same baseline—such as feature caching (e.g., ToCa), layer skipping (Δ-DiT), or block reuse (BlockDance)—which also exploit step-wise redundancy. Reviewers of ToCa noted the need for comprehensive comparisons: *"The manuscript does not adequately illustrate the computation costs associated with the proposed approach"* (ToCa, Reviewer 3). A Pareto curve comparing SCD against these acceleration baselines would better contextualize the efficiency-quality tradeoff.
+
+6. **Architecture assignment heuristic lacks theoretical grounding**: The decoder is formed by combining the first 5 and last 5 layers of the 30-layer pretrained model (§6.2), motivated by a leave-one-out analysis (Fig. 7). However, this analysis only shows which individual layers are important in the original model, not whether combining first+last layers into a decoder is optimal. The paper acknowledges that *"learned feature distributions across different layers...differ substantially from the intended functionality of our SCD design"* (§6.2), but does not explore alternative encoder-decoder splits. Reviewers of MarDini raised similar concerns: *"I am not yet convinced of the scalability of this model"* and *"The training recipe is a little bit complicated"* (MarDini, Reviewers 2 and 3).
+
+7. **Memory and KV-cache overhead analysis missing**: While the paper emphasizes per-frame latency and throughput, it does not analyze the memory footprint of the causal encoder's KV cache, which grows with video length. For long video generation (the use case motivating causal models), this could become a practical bottleneck. Reviewers of MarDini specifically called out: *"Although the proposed method offers some advantages in inference latency, it introduces a large number of parameters...which increases the memory requirements...Table 3 lacks a direct comparison of memory usage"* (MarDini, Reviewer 1).
+
+---
+
+**Similar paper paths**: `/home/wg25r/review_agent/human_reviews/YJwnlplKQ7.md` (MarDini), `/home/wg25r/review_agent/human_reviews/8pusxkLEQO.md` (ARLON), `/home/wg25r/review_agent/human_reviews/JE9tCwe3lp.md` (NOVA), `/home/wg25r/review_agent/human_reviews/Zp51wHvoot.md` (ACDC), `/home/wg25r/review_agent/human_reviews/pDI03iK5Bf.md` (Δ-DiT), `/home/wg25r/review_agent/human_reviews/yYZbZGo4ei.md` (ToCa), `/home/wg25r/review_agent/human_reviews/q5sOv4xQe4.md` (HART), `/home/wg25r/review_agent/human_reviews/WSze9IIN3d.md` (Progressive AR Video), `/home/wg25r/review_agent/human_reviews/QHj2LL958o.md` (MovieDreamer)
+
+**Score range of similar papers**: 3–8 (median ~5.5–6), reflecting papers with interesting architectural ideas but questions about evaluation completeness, scalability, and quality tradeoffs.
+
+--- Merged Review ---
+I've already read the full paper content from the user message. Let me now verify some specific claims from the reviewers against the paper text.
+
+Let me check some key details:
+
+1. The paper's Table 3 - does SCD have 1.6B params vs Self Forcing 1.3B? Yes, Table 3 confirms SCD is 1.6B.
+2. The quality gap - Total Score 84.03 vs 84.26, Semantic Score 79.60 vs 80.30.
+3. The probing experiments - are they only under teacher forcing or also under rollout?
+
+The paper section 4.1 discusses "middle-layer activations within the same frame show extremely high cosine similarity (above 0.95)" and the Limitations section says "step-wise invariance weakens near the end of the trajectory: the similarity between middle-layer features in the last 10 denoising steps and the first 40 drops to about 0.8."
+
+Now let me synthesize the review.
+
+Key points from reviewers to evaluate:
+
+**Harsh Critic Issues:**
+1. Overclaim of "causality is separable" - VALID concern but partially overstated by reviewer. The paper's own Limitations section acknowledges approximate nature.
+2. Probing not causally identified - VALID but partially addressed by finetuning experiments. The mechanistic claims about *where* reasoning happens are indeed correlation-based.
+3. Evaluation too narrow - VALID. Small datasets, short sequences, no long-horizon stress testing.
+4. Distillation confounds architectural benefits with teacher capabilities - VALID concern. The 1.6B vs 1.3B parameter comparison makes interpretation difficult.
+
+**Neutral Reviewer Issues:**
+1. Residual quality gap - VALID, acknowledged in paper
+2. Ad hoc fine-tuning recipe - VALID but this is an engineering contribution
+3. Limited dynamic/long-horizon scenes - VALID
+4. No comparison with MarDini/VideoMAR - This is a REQUEST for additional comparisons, not a fundamental flaw
+5. Context corruption under-explored - Valid but appendix exists
+
+**Spark Issues:**
+1. Long-horizon evaluation - VALID
+2. Probing under rollout conditions - VALID concern
+3. Feature caching baseline - Interesting but this is a nice-to-have comparison
+4. Controlled parameter-count comparison - VALID, 1.6B vs 1.3B makes interpretation difficult
+
+**Human Finder Issues:**
+1. Teacher forcing vs rollout mismatch - VALID concern about error accumulation
+2. Quality gap at high resolution - VALID
+3. Limited evaluation scale - VALID
+4. Probing may not generalize - PARTIALLY VALID - paper does show consistency across models in appendix A.2
+5. Insufficient comparison with alternative acceleration strategies - VALID as nice-to-have
+6. Architecture assignment heuristic - VALID but acknowledged
+7. Memory/KV-cache overhead missing - Valid minor concern
+
+Now let me calibrate the score. Looking at similar papers:
+- PAB (Real-Time Video Generation): scores 8,8,6,6 → Accept Poster - training-free speedup with strong empirical results
+- NOVA (AR Video Generation without VQ): scores 6,6,6,8 → Accept Poster - architectural innovation with speed improvements
+- NBP (Next Block Prediction): scores 5,3,3,3 → Reject - incremental idea, limited evaluation
+- Δ-DiT: scores 3,8,5,6 → Reject - mixed reviews, concerns about impact
+
+This paper has:
+- Strong empirical characterization (probing analysis)
+- Clear architectural innovation (SCD) motivated by findings
+- Real efficiency gains (2-3× latency)
+- Competitive quality on standard benchmarks
+- Honest limitations section
+- But: overclaiming in title/abstract about "separability" being a general principle when evidence supports "approximate/mostly separable"
+- Evaluation limited to short horizons
+- Parameter mismatch in main comparison (1.6B vs 1.3B)
+- The conceptual claim is stronger than what the probing evidence establishes
+
+I'd put this paper above NBP but with some concerns about overclaiming. It's a solid contribution with genuine insight and practical impact, but the conceptual framing goes beyond the evidence. The paper is more like NOVA or PAB in terms of quality - a good systems/architecture paper with clear practical value, but with some overclaim on the scientific insight side.
+
+I'd score this around 6.0-6.5. It has genuine contributions but the overclaim needs tempering.</think>## Summary
+
+This paper identifies two regularities in autoregressive video diffusion models—(1) middle-layer features are highly redundant across denoising steps, and (2) cross-frame attention becomes sparse in deeper layers—and leverages these findings to propose Separable Causal Diffusion (SCD), an encoder-decoder architecture that runs causal reasoning once per frame while iterating a lightweight frame-wise diffusion decoder across denoising steps. Experiments on small-scale pretraining benchmarks (TECO-Minecraft, UCF-101) and a large-scale fine-tuning setup from Wan 2.1 show SCD achieves 2–3× lower latency while maintaining competitive generation quality.
+
+## Strengths
+
+- **Insightful probing analysis with intervention validation.** The cosine similarity analysis (Fig. 2, consistently >0.95) and cross-frame attention mass visualization (Fig. 4) provide concrete empirical evidence for redundancy and sparsity. Crucially, these observational findings are validated through intervention: skip-layer finetuning (Fig. 3) and frame-diagonal mask finetuning (Fig. 5) both recover baseline quality, strengthening the claims beyond mere correlation.
+
+- **Principled and effective architectural design.** SCD directly operationalizes the two findings: the causal encoder runs once per frame (exploiting step-wise redundancy), and the frame-wise decoder avoids cross-frame attention (exploiting depth-wise sparsity). The design is clean and well-motivated, achieving 4× speedup on TECO-Minecraft and ~1.3× on VBenCh with comparable quality.
+
+- **Honest and transparent limitations discussion.** The paper explicitly acknowledges that step-wise invariance weakens near the end of the trajectory (similarity drops to ~0.8), that deep layers retain non-zero cross-frame attention, and that these residual couplings may explain the slight quality gap on VBenCh. This transparency adds credibility.
+
+- **Comprehensive ablation study.** Multiple design choices are ablated: encoder vs. decoder depth scaling (Tables 1–2), concatenation strategy (Appendix Table 4), context corruption magnitude (Appendix Table 6), skip-layer configurations, and leave-one-out layer analysis for fine-tuning (Fig. 7). These provide useful practical guidance.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **The central conceptual claim ("causality is separable from denoising") overstates the evidence.** The title and framing suggest a general architectural principle, but what the paper demonstrates is that causal reasoning is *approximately* and *mostly* separable from the denoising process in specific model families and settings. The own Limitations section concedes a measurable quality gap attributable to residual temporal couplings, and the similarity drop from >0.95 to ~0.8 in late denoising steps (Fig. 2) indicates information is lost by fully amortizing temporal reasoning. The phrase "causality is separable" implies a cleaner decomposition than the evidence supports. This matters because the gap between the paper's framing and its actual evidence could mislead future work into treating SCD's architecture as the final answer rather than an important step requiring refinement.
+
+- **Evaluation is limited to relatively short-horizon, low-complexity settings, leaving long-horizon and error accumulation properties untested.** TECO-Minecraft (128²), UCF-101 (64²), and even VBenCh evaluate relatively short clips. The core motivation for causal/AR video generation is streaming and long-horizon generation, yet no experiment tests quality under extended autoregressive rollouts (e.g., 100+ frames) where error accumulation and context drift would most challenge SCD's once-per-frame encoder. The probing analyses (Figs. 2, 4) are conducted under teacher-forcing (clean context) conditions, not under open-loop rollout where past frames are model-generated and imperfect. If separability patterns degrade under compounding errors, the practical value for streaming is undermined. Given the paper's emphasis on real-time applications, this is a significant gap.
+
+- **Parameter-count mismatch in the primary high-resolution comparison.** In Table 3, SCD (1.6B) is compared against Self Forcing (1.3B). The paper reports SCD achieves "strong performance while being ~1.3× faster" with a Total Score of 84.03 vs. 84.26, but the 30% parameter advantage makes it difficult to isolate whether the efficiency gains stem from architectural separation or simply from having more compute capacity. A matched-parameter baseline (SCD-1.3B or Self Forcing-1.6B) would substantially strengthen the architectural claims.
+
+### Minor
+
+- **The fine-tuning recipe for adapting pretrained models involves ad hoc choices with limited justification.** The 25-layer encoder / 5+5-layer decoder split is motivated by leave-one-out analysis (Fig. 7), but this analysis only shows which *individual* layers are important in the original model—it does not directly justify combining the first and last 5 layers into a decoder. The input reparameterization (feeding high-noise current frames during training) is also introduced without systematic exploration of alternatives.
+
+- **No direct comparison with recent hybrid AR-diffusion models (MarDini, VideoMAR).** While these are architecturally related, the authors discuss them in related work but provide no experimental comparison. This makes it hard to assess the marginal contribution of SCD's specific design (once-per-frame encoder + multi-step frame-wise decoder) versus the general encoder-decoder paradigm.
+
+### Trivial
+- The caption of Figure 8 appears to have a description that could be confusing: the text states "SCD achieves superior training efficiency" but the bar chart description mentions "Remove One Block" bars being higher in seconds, which would mean slower training. This may be a parser artifact or labeling inconsistency.
+
+## Nice-to-Haves
+
+- **Long-horizon rollout evaluation** (e.g., 100+ frames) comparing SCD vs. fully causal baselines under autoregressive generation, measuring temporal consistency and error accumulation—directly addressing the paper's own stated motivation for real-time streaming.
+
+- **Feature caching baseline within the original causal architecture.** If middle-layer features are nearly identical across steps, a simple caching mechanism within the existing architecture could achieve some of SCD's speedups without architectural changes. Comparing SCD against this simpler alternative would clarify when full architectural separation is necessary.
+
+- **Hybrid variant** where $c_i$ is updated at a few key denoising steps rather than strictly once, to close the quality gap observed on VBenCh and test whether the remaining residual couplings are important.
+
+## Removed Points
+
+These points are flagged to be removed; treat them with caution.
+
+- **Claim that probing is "not causally identified" in a strict sense.** The harsh reviewer argues that skip-layer and frame-diagonal experiments "show that the base model's weights can be adapted to a modified architecture" rather than establishing causal structure. However, the successful adaptation after only brief finetuning (5K steps) *does* provide meaningful evidence about the functional role of different layers—it shows the information in those layers is not irreversibly entangled. The probing conclusions are observational but the intervention experiments add causal support. This concern is valid but partially addressed.
+
+- **Demand for comparison with acceleration methods like ToCa, Δ-DiT, or BlockDance.** These are training-free caching/acceleration methods for *non-causal* video diffusion, operating in a fundamentally different setting. SCD targets a different problem (architectural redesign of *causal* diffusion), and comparing against orthogonal acceleration methods would mix categories. The relevant comparison domain is causal/AR video models, where the paper provides appropriate baselines.
+
+- **Memory/KV-cache overhead analysis.** While relevant for streaming, the paper measures wall-clock latency and throughput (the more practical metrics) and the encoder-decoder design explicitly eliminates the extra KV-cache pass that prior AR models require (§5.3). This is addressed in principle.
+
+- **Demand for FVD on from-scratch models.** The paper reports comprehensive pixel-domain metrics (LPIPS, SSIM, PSNR) plus FVD for TECO-Minecraft and UCF-101, which are standard for these benchmarks. Adding more FVD numbers is a nice-to-have, not a core flaw.
+
+- **Request for training compute comparison.** The paper does include training efficiency results (Fig. 8). This is not a missing experiment.
+
+## Novel Insights
+
+The most insightful finding is that cross-frame causal attention in video diffusers naturally collapses into a sparse, depth-wise pattern even when trained with dense causal masks—early layers concentrate temporal reasoning while deeper layers shift to intra-frame rendering (Fig. 4). This is an emergent property of the trained model, not an explicit architectural bias, and it directly motivates the practical question of whether dense causal attention throughout the network is unnecessary. The skip-layer experiment (Fig. 3) is the most convincing validation: removing 15 of 30 middle layers across denoising steps and recovering quality with brief finetuning demonstrates that this redundancy is not just statistically observed but functionally expendable.
+
+## Score and Decision
+
+**Calibration:** I compared against PAB (Pyramid Attention Broadcast, scores 8/8/6/6, Accept Poster)—a training-free speedup method with strong empirical results on video diffusion efficiency; NOVA (AR video generation, scores 6/6/6/8, Accept Poster)—an architectural innovation for AR video with speed improvements; and NBP (Next Block Prediction, scores 5/3/3/3, Reject)—an incremental architectural modification for video AR. This paper's contribution is more substantial than NBP (which was rejected for being incremental) and has a stronger empirical characterization than typical efficiency papers. However, compared to PAB (which achieved 10.5× speedup with zero quality loss on full-scale benchmarks), this paper's contribution sits in a different space: PAB is a training-free method with a cleaner claim, while SCD is a novel architecture with a broader conceptual claim that is somewhat overclaimed. Relative to NOVA, this paper has comparable practical impact but the conceptual overclaim is a real issue.
+
+The probing insights are genuinely valuable, the architecture is well-designed, and the efficiency gains are significant and practically meaningful. But the major weaknesses—the overclaimed generality of separability, the lack of long-horizon/rollout evaluation, and the parameter-count mismatch in the headline comparison—prevent this from being a top-tier contribution. The weaknesses are addressable in principle (moderate scope revision and additional experiments), but they are not trivial.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
