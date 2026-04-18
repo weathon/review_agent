@@ -744,27 +744,27 @@ def analyze_and_plot(path):
     else:
         ax5.axis("off")
 
-    # Bottom-right: Human AUROC curve (individual scores)
+    # Bottom-right: Human PRC (individual scores)
     ax6 = axes[1, 2]
     if has_curves and human_auroc is not None:
+        human_precision, human_recall, _ = precision_recall_curve(human_indiv_labels, human_indiv_scores)
+        human_auprc = auc(human_recall, human_precision)
+        human_baseline_rate = float(n_indiv_pos) / len(human_indiv_labels)
         ax6.plot(
-            human_fpr,
-            human_tpr,
+            human_recall,
+            human_precision,
             color="#f39c12",
             lw=2.5,
-            label=(
-                f"Human Indiv (AUROC={human_auroc:.3f} "
-                f"[{human_auroc_ci_val[0]:.3f}, {human_auroc_ci_val[1]:.3f}])"
-            ),
+            label=f"Human Indiv (AUPRC={human_auprc:.3f})",
         )
-        ax6.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
-        ax6.set_xlabel("False Positive Rate", fontsize=12)
-        ax6.set_ylabel("True Positive Rate", fontsize=12)
-        ax6.set_title("ROC Curve (Human Individual Scores)", fontsize=13)
+        ax6.axhline(y=human_baseline_rate, color="k", linestyle="--", alpha=0.3, label=f"Baseline ({human_baseline_rate:.3f})")
+        ax6.set_xlabel("Recall", fontsize=12)
+        ax6.set_ylabel("Precision", fontsize=12)
+        ax6.set_title("Precision-Recall Curve (Human Individual Scores)", fontsize=13)
         ax6.set_xlim(-0.02, 1.02); ax6.set_ylim(-0.02, 1.02)
         ax6.set_aspect("equal")
         ax6.grid(True, alpha=0.2)
-        ax6.legend(fontsize=9, loc="lower right")
+        ax6.legend(fontsize=9, loc="lower left")
     else:
         ax6.axis("off")
 
