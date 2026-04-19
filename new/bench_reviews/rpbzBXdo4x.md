@@ -1,39 +1,27 @@
-Now I have enough context from calibration papers. Let me synthesize my final review.
+Now let me search for calibration papers to anchor the score.Now I have enough context to write the comprehensive final review.
 
-Key calibration papers:
-- "To CoT or not to CoT?" (Accept Poster, scores 6/8/6) - most directly comparable, meta-analysis showing CoT helps mainly on math/symbolic reasoning. That paper was accepted despite similar questions about generalizability across models.
-- "Visual LLMs Exhibit Human-Level Cognitive Flexibility" (Withdrawn/Reject, scores 5/3/3) - rejected for overstating human-model parallels, no validation, poor methodology.
-- "ReCogLab" (Accept Poster, scores 6/3/6/5) - accepted for framework + careful evaluation but had weaknesses in task selection justification.
-- "Quantifying AI Psychology" (Reject, scores 5/5/3/8) - rejected for overstatement and weak methodology.
+---
 
-This paper is substantially stronger than the rejected psychology-to-LLM papers. It has:
-1. Real, large, and practically significant empirical findings
-2. A principled framework (psychology-based heuristic)
-3. Honest reporting of cases where the heuristic doesn't work
-4. Multiple models tested
-5. Novel task construction
+## Summary
+This paper investigates when chain-of-thought (CoT) prompting systematically reduces LLM/LMM performance by drawing on cognitive psychology literature on when verbal thinking harms human performance. Across six tasks adapted from psychology, CoT significantly hurts performance in three—implicit statistical learning (ISL), facial recognition (FR), and classification with exceptions (CDE)—while producing neutral or positive effects in the other three. The central claim is that a heuristic derived from cognitive psychology can help identify CoT failure cases, with practical implications for inference-time reasoning deployment.
 
-But it also has real weaknesses:
-- The o1-preview vs GPT-4o headline comparison is confounded
-- Lack of mechanistic analysis (what does CoT actually cause models to do?)
-- The causal claim about "thinking" vs prompt engineering is not well isolated
-- Overgeneralization from the cross-model patterns that are actually heterogeneous
-
-Let me write the final review.</think>## Summary
-
-This paper investigates when chain-of-thought (CoT) prompting systematically reduces LLM/LMM performance by drawing on cognitive psychology: tasks where verbal thinking or deliberation hurts human performance may also hurt models. The authors identify six such task categories from the psychology literature, adapt them for model evaluation, and find that three—implicit statistical learning (artificial grammar), face recognition (verbal overshadowing), and classification with pattern exceptions—show significant CoT-induced performance drops across multiple models (e.g., up to 36.3% absolute for o1-preview vs. GPT-4o zero-shot, 331% more learning rounds for exceptions). The other three tasks (logical inconsistency, spatial intuition, feature aggregation) do not show the predicted effect, which the authors attribute to meaningful differences between human and model capabilities.
+---
 
 ## Strengths
 
-- **Novel and practically important research question.** Identifying when CoT harms rather than helps is urgent given the default deployment of inference-time reasoning in frontier models. The paper provides concrete, large-magnitude failure cases that practitioners should know about.
+- **Genuine novelty of framing.** Using the cognitive psychology literature on verbal overshadowing, implicit learning, and explanation-impaired learning as a principled guide to find CoT failure cases is a creative interdisciplinary contribution that goes beyond prior empirical surveys of CoT harm (e.g., Sprague et al., 2024).
 
-- **Principled hypothesis generation.** Using well-established cognitive psychology findings to systematically predict CoT failure modes is a creative and intellectually rich approach that goes beyond ad-hoc task exploration. The paper generates falsifiable predictions and honestly reports cases where the heuristic does not hold.
+- **Large-scale, robust ISL results.** The ISL experiment tests 4,400 classification problems across 100 FSGs and 9 models. The within-model CoT drops are large and practically meaningful: 23.1% for GPT-4o, 8.0% for Claude 3 Opus, 6.05% for Gemini 1.5 Pro, 8.80% for Llama 3.1 70B. These are not marginal findings.
 
-- **Substantial empirical scope.** Nine+ models (open- and closed-source) tested across six carefully constructed tasks, with large-scale procedurally generated datasets (4400 grammar problems, 500 face-recognition problems, 2400 vehicles, etc.). The effort in scaling psychological paradigms to model evaluation is itself a contribution.
+- **Compelling CDE multi-turn design.** The classification-with-exceptions experiment closely mirrors the human paradigm, and the 331%/178%/129% iteration increases are striking and practically important results.
 
-- **Large and consistent negative CoT effects on three tasks.** The drops are not marginal: 23.1% absolute for GPT-4o on ISL, 8.80% for Llama 3.1 70B, 14.40% absolute for Claude 3 Opus on face recognition, and 331% more learning rounds for GPT-4o on CDE. These are practically significant findings with clear deployment implications.
+- **Consistent facial recognition CoT degradation.** All six tested LMMs show CoT-induced drops, with the strongest models showing 12.8–14.4% absolute drops. The consistency across architectures strengthens the conclusion.
 
-- **Thoughtful analysis of mismatches.** The paper's honest treatment of the three tasks where the heuristic fails—attributing these to specific human-model capability differences—is analytically careful and increases intellectual credibility.
+- **Honest reporting of null results.** The paper does not quietly drop the three null tasks. It devotes substantial effort to explaining why the human→model heuristic fails, and explicitly acknowledges this as a limitation, which is commendable.
+
+- **Practical implications.** The paper speaks directly to the growing trend of deploying inference-time reasoning by default. Demonstrating consequential failures in specific, identifiable task types has real deployment relevance.
+
+---
 
 ## Weaknesses
 
@@ -42,69 +30,82 @@ None.
 
 ### Major
 
-- **The headline 36.3% comparison (o1-preview vs. GPT-4o zero-shot) conflates model capability differences with CoT effects.** The paper's most prominent figure compares two different models (o1-preview has built-in CoT; GPT-4o does not). Architecture, training data, and capacity differences all contribute to this gap. The within-model GPT-4o comparison (87.50% → 64.40%, a 23.1% drop) is still large and meaningful, but the abstract and introduction foreground the cross-model number. This inflates the perceived impact and conflates two distinct factors. The authors do present both, but the framing prioritizes the confounded comparison.
+- **The headline 36.3% figure conflates model differences with CoT effects.** As shown in Table 1, the 36.3% "accuracy decrease" compares GPT-4o zero-shot (94.00%) to o1-preview CoT (57.70%)—two *different models* under *different conditions*. Since o1-preview has CoT architecturally embedded and cannot be run in zero-shot, this number cannot be attributed to CoT alone; it conflates model capability differences with prompting strategy effects. The paper frames this as a central headline result in the Abstract ("up to 36.3% absolute accuracy decrease for OpenAI o1-preview compared to GPT-4o") and Introduction, but the methodologically sound within-model comparison is GPT-4o zero-shot vs. CoT (23.1%), which is still large and compelling. The cross-model framing inflates the key result and should not be presented as primary evidence of CoT harm.
 
-- **Lack of mechanistic analysis of why CoT hurts.** Across all three negative-effect tasks, the paper reports performance differences but does not analyze the actual content of model CoT outputs. Without examining what models write during CoT—do they verbalize incorrect rules? shift from pattern-matching to rule-search? override in-context evidence?—the claim that this mirrors human cognitive failures (rule bias, verbal overshadowing) remains speculative. The paper acknowledges this gap in §5 ("alternative explanation") but does not address it empirically. This limits the contribution from "we identified when CoT hurts" (empirical and valuable) to "we identified why CoT hurts in a way analogous to humans" (not established).
-
-- **CoT is not isolated from broader prompt changes.** Zero-shot and CoT conditions differ in multiple ways beyond "thinking": instruction framing, verbosity, answer format positioning, and the model's distributional exposure to CoT-style prompts during training. The paper does not include controls (e.g., non-reasoning filler text matched to CoT length, instruction-only variants) to disentangle whether the effect is specific to reasoning or is a more general prompt-engineering artifact. The Tree-of-Thought result on ISL (Appendix A.4) is a partial step but only on one task.
+- **NLI is not a clean null case.** The paper categorizes the logical inconsistency (NLI) task as one of three non-effects ("tasks with a mismatch between human and model abilities"), but Table 4 shows Gemini 1.5 Pro declining −5% on MNLI and −4.9% on SNLI, and Claude 3 Opus declining −3.9% and −7.5% with CoT. The paper notes this in one sentence ("we did see decreases in performance with CoT") but does not revise its clean "3 hits, 3 nulls" framing accordingly. A more honest characterization is that the NLI task shows *mixed* results depending on the model's prior zero-shot capability, which is actually theoretically interesting (models with strong enough zero-shot priors *do* show verbal-overshadowing-style harm). The current handling understates the complexity.
 
 ### Minor
 
-- **Cross-model heterogeneity is under-analyzed relative to the narrative.** Claude 3.5 Sonnet shows a slight *improvement* on ISL with CoT (−1.8%, non-significant), GPT-4o and Llama 3.1 70B show large drops, Gemini shows moderate ones. The paper's narrative of "consistent decreases" papers over meaningful variation. The Discussion could more explicitly address which model properties (size, training for reasoning, instruction tuning) moderate the CoT-harm effect.
+- **The heuristic's predictive scope is underspecified.** The three null cases are explained post hoc by model-human differences (lack of motor priors, superior working memory, near-chance zero-shot baselines). While Section 3 does *frame* these differences prospectively, the specific boundary conditions that determine when a model-human difference will neutralize the psychology effect are only articulated after observing results. The Discussion itself (Section 5) acknowledges this: "knowledge of what drives a decrease in performance in humans can be leveraged to generate predictions about the effects of CoT, but this remains an inferential step." The paper would benefit from attempting a more explicit, prospective decision procedure rather than individual post-hoc explanations.
 
-- **Face recognition task validity concerns.** Synthetic faces generated from identical textual descriptions may not adequately test "verbal overshadowing" because the task structure may bias models toward the very verbalizable attributes that overshadowing is supposed to interfere with. The connection to human verbal overshadowing—where faces are hard *because* their distinguishing features resist verbalization—is weakened when stimuli are generated from verbal descriptions. Some models also perform below chance (answering "all same person"), making percentage-point drops in this regime harder to interpret.
+- **Anomalous Llama 3.1 70B behavior on the apartment (WM) task goes underanalyzed.** Table 6 shows Llama 3.1 70B CoT performance collapsing to 6%/5%/20% against zero-shot values of 42%/44%/43%—a massive, real CoT degradation. The paper explains this as the model "often unable to return an answer" in CoT, but this is mentioned only briefly and the model is otherwise included in the results. Either the model should be excluded with explicit justification, or this dramatic CoT failure should be discussed rather than treated as a technical implementation artifact. It also complicates the characterization of the apartment task as a "positive CoT" case.
 
-- **No trivial algorithmic baselines for the grammar task.** The ISL task gives models 15 training examples and asks classification. It is unclear whether zero-shot GPT-4o is doing anything like "implicit statistical learning" or simply performing string similarity matching. A simple nearest-neighbor or Levenshtein-distance baseline would contextualize whether high zero-shot performance reflects genuine grammar learning.
+- **Practically trivial effect sizes for small Llama models in ISL.** The statistically significant CoT drops for Llama 3 8B (1.80%, p<0.05) and Llama 3.1 8B (1.98%, p<0.0001) are driven by the large sample size (4,400 problems) and are substantively negligible. Including them in the "consistent decreases" narrative alongside 23.1% and 8.80% drops is misleading. Claude 3.5 Sonnet's −1.8% (p=0.969) is correctly identified as non-significant; the small Llama effects should be similarly qualified.
+
+- **Selective CDE model evaluation.** The CDE task is evaluated on only three frontier models (GPT-4o, Claude 3.5 Sonnet, Claude 3 Opus). Llama 3.1 70B is excluded due to "unusable outputs" from multi-turn failures. The paper should clarify whether these failures are task-design-specific or reflect a genuine model limitation, and should explicitly note that the CDE finding has not been demonstrated on open-weight models.
 
 ### Trivial
 
-- The paper uses p-values with very large sample sizes (4400 items), making almost any difference "significant." The authors appropriately emphasize effect sizes, but some p-values are reported to four decimal places (e.g., p < 0.0001) which overstates precision.
+- **Below-chance InternVL2 models on face recognition.** InternVL2 26B (9.2% zero-shot) and InternVL2 Llama3 76B (15.77% zero-shot) both fall below random chance (20%), with the paper acknowledging they "answered that all images are of the same person." The 3.2% and 2.0% absolute CoT drops in these models are thus measured against a degenerate baseline and add little evidential weight. These models should be flagged as reliability-limited footnotes rather than full entries in the main table.
+
+---
 
 ## Nice-to-Haves
 
-- Error analysis of CoT traces on the three negative-effect tasks (what do models actually write, and where do they go wrong?)
-- Length-matched or non-reasoning filler controls to isolate the "thinking" component from verbosity/format effects
-- Few-shot CoT or alternative CoT prompt phrasings to test robustness of the negative effect across prompting strategies
-- Confidence intervals per task/model rather than just point estimates and p-values
+- **Within-family baseline for o1-preview.** Even comparing o1-preview to o1-mini (both CoT-native) would provide a partial sanity check on whether the o1-preview result reflects something substantive rather than just model capability differences.
+- **Qualitative analysis of CoT reasoning chains.** Examining what the model *actually writes* under CoT for ISL and CDE would reveal whether it exhibits the rule-seeking verbalization hypothesized to cause harm—strengthening the mechanistic story rather than leaving it implicit.
+- **Intervention-based test.** If CoT harms ISL by forcing rule articulation, a modified CoT prompt that discourages explicit rule-stating ("respond based on your intuition without identifying rules") might partially restore performance, which would validate the mechanism beyond the correlation.
+- **Expanded ToT analysis.** The ToT ablation (Appendix A.4) is promising but limited to one task and one model. Extending it to CDE and FR would clarify whether the finding generalizes across inference-time reasoning techniques.
+
+---
 
 ## Removed Points
 
-These points were flagged for removal or significant weakening:
+*These points are flagged to be removed; treat them with caution.*
 
-- **Data contamination / memorization concern (from Human Finder):** The claim that psychology task structures might be in the paper's training data is speculative. The paper carefully constructs novel procedural stimuli (random FSGs, synthetic faces, generated vehicle lists) rather than using well-known psychology stimuli verbatim. Removed as unsupported.
+- **"Synthetic face dataset raises unresolved validity concerns" (harsh critic, evidential)**. The critic argues that synthetic faces may not reproduce the human verbal overshadowing effect, and that the generation pipeline may produce unnatural discriminative cues. However: (a) The paper explicitly explains the generation process and its quality controls in Appendix B.1; (b) the claim that synthetic faces invalidate the verbal overshadowing parallel is speculative—there is no counter-evidence that the phenomenon requires natural faces; (c) the main finding (consistent CoT drops across 4 high-performing models) holds even setting aside the two below-chance open-source models. The criticism would require empirical evidence to be actionable. Weakened to a minor note in the Trivial tier above.
 
-- **Multiple comparisons correction (from Spark):** While always good practice, this is a standard methodological nicety rather than a core flaw. The effect sizes are large enough that they would survive correction. Moved to Nice-to-Have.
+- **"Missing related works" (both reviewers)**. Per hard rules, no related works will be cited in this review as potential hallucination risks.
 
-- **Missing related works (from Human Finder):** Flagged as not verifiable—I cannot confirm existence of specific papers not cited by the authors.
+- **"Prompt engineering sensitivity" (neutral reviewer)**. The paper explores prompt variations per task, acknowledges their non-exhaustiveness in Section 5, and the results are consistent across prompt conditions tested. This is a generic concern that does not specifically undermine the core findings.
 
-- **Llama 3.1 70B apartment task anomaly (from Spark):** The near-collapse (42%→6%) is indeed striking, but the paper does note this was because the model "was often unable to return an answer after deliberating in the CoT condition," which is a different phenomenon from reasoning-induced degradation. However, this is already discussed in the paper and does not invalidate the overall findings for other models. Kept as a mention in minor weaknesses but not elevated.
+- **"Limited task diversity within categories"** (neutral reviewer). The paper's scope is to identify specific exemplar tasks where CoT harms performance; it does not claim to characterize *all* tasks in each category. Demanding multiple tasks per category is out of scope and would dilute the focused depth of each experiment.
 
-- **"Not yet released" / availability doubts about models or datasets:** Per instructions, all cited models and datasets are assumed to exist.
+- **"Requesting confidence intervals" for large-scale benchmarks**. Statistical significance tests are provided and appropriate.
 
-- **Formatting/style nitpicks (from Spark):** Removed per instructions.
-
-- **Reproducibility concerns about hyperparameters (from Spark):** Removed per instructions as trivial implementation details.
+---
 
 ## Novel Insights
 
-The most insightful finding is the partial success of the psychology heuristic: it works for three task types where language and generalization bias create shared vulnerabilities for humans and models (implicit learning, verbal-overshadowing, exception-laden rules), but fails for three others where human-specific limitations (working memory constraints, lack of motor simulation) don't apply to models. This asymmetry is itself informative: it suggests that CoT-harm transfers from humans to models *specifically* when the bottleneck is a shared representational limitation (language's inability to encode certain information), not when the bottleneck is a shared processing limitation. This distinction—representational vs. processing bottlenecks—is not made explicit in the paper but could guide future work on predicting CoT failures.
+The most genuinely novel observation in this work is the bidirectional interpretability insight in Section 5: not only can we use psychology to predict CoT failures in models, but LLM/LMM results can reciprocally inform *why* verbal thinking impairs human performance—specifically by distinguishing task/mechanism-level causes (shared by humans and models) from uniquely human strategy or biological limitation causes. The ISL and CDE results suggest the relevant failure mechanism is language's inability to represent implicit statistical structure, which LLMs share despite their architectural differences from human cognition. This is a genuinely productive hypothesis for future mechanistic work in both cognitive science and ML.
+
+---
 
 ## Suggestions
 
-- **Reframe the headline finding.** Lead with the within-model GPT-4o comparison (23.1% drop) rather than the confounded o1 vs. GPT-4o comparison, and report the cross-model comparison separately. The within-model result is still strong.
-- **Add CoT content analysis.** Even a qualitative analysis of 20-50 CoT traces per negative-effect task would substantially strengthen the mechanistic claim and connect the results more concretely to the psychology literature.
-- **Test at least one alternative CoT prompt per task** to assess whether the effect is robust to prompt wording, or specific to the particular instructions used.
+1. **Replace the cross-model 36.3% headline with within-model figures.** The most defensible lead result is GPT-4o zero-shot (87.5%) → CoT (64.4%) = 23.1% drop. Present o1-preview separately as a suggestive but uncontrolled comparison.
+2. **Reframe the heuristic as a productive discovery tool rather than a validated predictive framework.** The Discussion already partially does this; the Abstract and Introduction should reflect it. The paper's empirical contribution—that psychology-inspired heuristics found real, large CoT failures—is solid even without claiming the heuristic is fully predictive.
+3. **Address the NLI mixed results directly.** Gemini and Claude showing CoT harm on NLI while GPT-4o and Llama improve is theoretically interesting: it suggests model-specific verbal priors interact with the human parallel. Promote this finding rather than burying it.
+4. **Handle Llama 3.1 70B on the apartment task transparently.** Either exclude it with explanation, or analyze the CoT collapse as a genuine failure that complicates the "CoT helps on WM tasks" narrative.
+5. **Qualify small Llama effect sizes in ISL.** Distinguish substantively large effects (GPT-4o: 23.1%) from statistically significant but trivially small ones (Llama 3 8B: 1.80%).
+
+---
 
 ## Score and Decision
 
-**Calibration comparison:**
+**Calibration anchors:**
 
-- "To CoT or not to CoT" (Accept Poster, scores 6/8/6): Similar topic, broad empirical scope, but more comprehensive model-wise analysis and cleaner causal framing. That paper had a clearer contribution (meta-analysis + controlled experiments). The current paper has a more creative framing (psychology heuristic) but weaker causal attribution.
-- "ReCogLab" (Accept Poster, scores 6/3/6/5): Similar approach of psychology-inspired evaluation framework. Weaker reviewer consensus but accepted for novelty and framework value.
-- "Visual LLMs Cognitive Flexibility" (Withdrawn/Reject, 5/3/3): Overclaimed human-model parallels without validation—this is a pitfall the current paper largely avoids by honestly reporting mismatches.
-- "Quantifying AI Psychology" (Reject, 5/5/3/8): Weak methodology and overclaiming—substantially worse than the current paper.
+- *"Do Vision & Language Decoders use Images and Text equally?"* (lCasyP21Bf.md): Accept (Poster), Scores 8, 6, 6, 6, 6 (avg ~6.4). Similar paper type: empirical analysis of model behavior with novel analytical framing, multi-model evaluation. Somewhat more methodologically tight but narrower practical import.
 
-The current paper is stronger than the rejected psychology-LLM papers because it has real, large, and novel empirical findings. But it is weaker than "To CoT or not to CoT" because (1) the causal interpretation is less well-isolated, (2) mechanistic analysis is absent, and (3) the headline comparison is confounded. The paper makes a genuine contribution in identifying task characteristics that predict CoT failure, but the psychology analogy is used more as inspiration than validated theory, and the paper could be clearer about this distinction.
+- *"Rational Metareasoning for LLMs"* (jRZ1ZeenZ6.md): Reject, Scores 5, 5, 5, 5, 5 (avg 5.0). Related topic (CoT cost-performance), cognitive science grounding, but narrower and more incremental.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+- *"On the Language of Thoughts in LLMs"* (3wrMRYuLlQ.md): Reject, Scores 1, 6, 6, 6 (noisy, avg ~4.75). Related theoretical framing of language-vs-reasoning in LLMs, but muddled theoretical grounding. This paper's theoretical grounding is substantially clearer.
+
+**Positioning:** This paper's core empirical finding is stronger and larger in effect size than the VLM decoder paper (avg 6.4, accepted), and its interdisciplinary framing is considerably more novel. The main methodological concern—the cross-model headline comparison—is a presentation flaw, not a flaw that undermines the within-model results (23.1% GPT-4o drop, 14.4% Claude 3 Opus drop on face recognition, 331% GPT-4o increase in CDE rounds). The partially post-hoc heuristic is a real limitation but is explicitly acknowledged in the paper and does not invalidate the empirical discoveries. The paper substantially exceeds the "Rational Metareasoning" reject (avg 5.0) in novelty, scope, and empirical scale.
+
+**Score: 6.5** — Above a borderline reject, firmly in solid-poster territory. The novel framing, large-scale empirical contribution on three tasks, honest null-result reporting, and practical relevance earn an accept. The cross-model headline figure, underanalyzed NLI mixed results, and partially post-hoc heuristic prevent a higher rating.
+
+**Decision: Accept (Poster)**
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

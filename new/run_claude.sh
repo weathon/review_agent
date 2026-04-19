@@ -6,5 +6,5 @@ export OUTPUT_CSV="bench_scores_claude_opus.csv"
 export MERGE_LOG="pipeline_whole_claude.log"
 rm pipeline_whole_claude.log
 ollama serve & 
-python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ') --balanced 
+python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ')
 # use balanced to see quality in the whole spectrum of scores

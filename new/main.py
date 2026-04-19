@@ -9,8 +9,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
-import weave
-weave.init("openai-agents")
+# import weave
+# weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
@@ -20,6 +20,7 @@ os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
 MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
+SUBAGENT_MODEL = os.environ.get("SUBAGENT_MODEL", MERGER_MODEL)  # calibration_search subagent (OpenAI merger path)
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
@@ -44,7 +45,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 3
+CONCURRENCY = 2
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -84,22 +85,30 @@ with open("prompts/timeline.md", "r") as f:
 PAPER_ACCESS_INJECTION = "The full paper text is included in the user message. Use it to verify reviewer claims directly."
 PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly."
 
-CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
+CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score.
+
+How retrieval works: you do not have direct search tools. Use the `calibration_search` tool for every retrieval. It runs BM25 / vector search / grep internally against the human-review corpus and returns a list of paper paths with one-sentence summaries. You decide what to look for; it does the looking.
+
+Workflow for every calibration step below:
+1. Decide what you want to retrieve (topic, weakness pattern, strength pattern, score range, etc.).
+2. Call `calibration_search` with a short natural-language request describing what you want.
+3. Read the returned paper list. If you want more detail on a specific anchor, use your own read_file on the returned absolute path.
 
 Your calibration process:
 
-1. **Topic-based anchors**: Use the review finder to retrieve papers with similar topics. Note their human scores.
+1. Topic-based anchors: ask `calibration_search` for papers with similar topics. Note their human scores.
 
-2. **Quality-based anchors**: This is critical. Do NOT only search by topic. Search for papers that share similar strength/weakness patterns with the paper under review:
-   - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
-   - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
+2. Quality-based anchors: this is critical. Do not only search by topic. Ask for papers that share similar strength/weakness patterns with the paper under review:
+   - If this paper has strong empirical results but overclaims, ask for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
+   - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
-3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
-   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
-   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
-   - Compare the paper under review against BOTH ends, not just the middle.
+3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve 2-4 papers per score range, not just one — a single anchor is too noisy to rely on:
+   - Ask for papers scored ~7+ by humans. Read a few of them to see what made them strong.
+   - Ask for papers scored ~4-6 by humans. These are your borderline anchors.
+   - Ask for papers scored ~3 or below by humans. Read a few to see what made them weak.
+   - Compare the paper under review against all ranges, not just whichever came back in retrieval.
 
-   Examples: if reviewing a paper about privacy attacks on face recognition, search for:
+   Examples: if reviewing a paper about privacy attacks on face recognition, ask for:
    - "privacy attack face recognition strong paper" → find high-scored papers in the same area
    - "privacy attack face recognition weak paper" → find low-scored papers in the same area
    - "face recognition evaluation paper high score" → broaden to related topics at the high end
@@ -107,18 +116,17 @@ Your calibration process:
 
    If no papers are found with the same topic, you can use more general queries.
 
-4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
+4. Score relative to anchors: your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
 
-When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
+5. Score from the anchors, not from how the merged review reads. Papers with many listed weaknesses can still score high if their anchors did. Lean on the anchor range when your gut disagrees with it.
 
-You can use read_file to read these files. List the papers you compared and the reasoning.
+Retrieval is noisy — a single 8 or 3 doesn't pin your score. Use the center of the anchor cluster, weighted by topical similarity, and move outside that range only if the paper clearly beats or falls below most of the anchors.
 
-Let the score distribution follow the actual quality of the paper relative to the calibration examples.
-The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
+When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them. List the papers you compared and the reasoning.
 
-There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to find more papers with extreme scores to see what made a paper really good/bad.
+Let the score distribution follow the actual quality of the paper relative to the calibration examples. The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
 
-Limit your queries to less than 20 rounds, do not dig too deep into retrieval.
+Limit your `calibration_search` invocations to less than 20 rounds, do not dig too deep into retrieval.
 """
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
@@ -162,19 +170,42 @@ else:
     harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
     _HARSH_SDK_MODEL = None
     _harsh_sdk_system_prompt = None
-neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
+neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
-# _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
-# _merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
+
+CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper. The main agent sends you a retrieval request (e.g. "find papers with weakness: unfair baseline comparison" or "find papers scored 7+ on topic X"). You run search_file (BM25 or vector), read_file, grep_file against the human-review corpus and return a concise list of matching paper paths with one-sentence summaries.
+
+Workflow: 1-3 search_file calls; optional read_file on promising candidates to confirm score/decision; return 3-8 lines of "<abs_path>: <one-sentence reason, with score/decision if known>".
+
+Do not review the paper under review. Do not compare or reason about calibration — the main agent does that. Just retrieve and summarize what you find. Cap yourself at 6 tool calls and 300 words total output."""
 
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
 else:
-    # Non-claude_sdk merger path temporarily disabled — focus on claude_sdk path.
-    # merger = Agent(name="Merger", instructions=_merger_instructions, model=resolve_model(MERGER_MODEL), tools=_merger_tools)
-    merger = None
+    _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
+    if _NO_CAL:
+        _merger_tools = [read_file, grep_file]
+    else:
+        _calibration_subagent = Agent(
+            name="Calibration Search",
+            instructions=CALIBRATION_SUBAGENT_INSTRUCTIONS,
+            tools=[search_file, read_file, grep_file],
+            model=resolve_model(SUBAGENT_MODEL),
+        )
+        _calibration_tool = _calibration_subagent.as_tool(
+            tool_name="calibration_search",
+            tool_description="Retrieve calibration anchors from the human-review corpus. Send a short retrieval request (topic / weakness / strength / score range). Returns a list of paper paths each with a one-sentence summary. Does not do calibration reasoning — just retrieves.",
+            max_turns=12,
+        )
+        _merger_tools = [read_file, grep_file, _calibration_tool]
+    merger = Agent(
+        name="Merger",
+        instructions=_merger_instructions,
+        model=resolve_model(MERGER_MODEL),
+        tools=_merger_tools,
+    )
     _MERGER_SDK_MODEL = None
 
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
@@ -183,12 +214,12 @@ else:
 # ── Constants ────────────────────────────────────────────────────────
 REVIEW_PROMPT = """Review the following paper thoroughly.
 
-NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.
+The paper was extracted from PDF by an automated parser. Treat formatting artifacts (broken equations, garbled tables, OCR errors) as parser issues, not paper flaws. The appendix and references were stripped by the parser; assume they exist in the original submission and don't flag them as missing.
 
 {paper_path}
 --- PAPER CONTENT START ---
 {paper_content}
---- PAPER CONTENT END (EVERYTHING AFTER REFERENCE IS REMOVED) ---"""
+--- PAPER CONTENT END (everything after references stripped by parser) ---"""
 
 
 # ── Core pipeline ────────────────────────────────────────────────────
@@ -205,7 +236,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     # content with a directive to read it from disk (SDK has a CLI input length
     # limit). Otherwise, pass the full paper inline as before.
     sdk_harsh_user_prompt = (
-        f"NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.\n\n"
+        f"The paper was extracted from PDF by an automated parser. Treat formatting artifacts (broken equations, garbled tables, OCR errors) as parser issues, not paper flaws. The appendix and references were stripped by the parser; assume they exist in the original submission and don't flag them as missing.\n\n"
         f"Paper path: {paper_path_abs}. Use read_file (in chunks) to read the paper end-to-end before reviewing."
     )
 
@@ -222,7 +253,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
     async def _run_neutral():
         text, usage = await run_agent_with_retry(neutral_reviewer, review_prompt)
-        return ("Neutral Reviewer", text, usage, None)
+        return ("Strength Finder", text, usage, None)
 
     print(f"  Phase 1: Running 2 agents in parallel ...")
     phase1_results = await asyncio.gather(_run_harsh(), _run_neutral(), return_exceptions=True)
@@ -262,22 +293,22 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         sdk_usages["Merger"] = merger_sdk_usage
         agent_usages["Merger"] = None  # SDK usage tracked separately below
     else:
-        raise NotImplementedError(
-            "Non-claude_sdk merger path is currently disabled. "
-            "Set MERGER_MODEL to 'claude_sdk:<model>' to use the Claude Agent SDK merger."
+        # OpenAI Agent SDK merger: grant read/grep access to the paper's dir and
+        # point the merger at the paper via path (not inline).
+        from tools import allow_path
+        allow_path(str(Path(paper_path_abs).parent))
+        merger_prompt = (
+            f"Here is the paper being reviewed (extracted from PDF — formatting "
+            f"artifacts are parser issues, not paper problems).\n\n"
+            f"Paper path: {paper_path_abs} — use read_file (in chunks) or grep_file to read it.\n\n"
+            f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
+            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
+            f"Now produce the final consolidated review following your instructions. "
+            f"Remember: many of the harsh critic's points may be nonsensical or overly "
+            f"picky — cross-check everything against the actual paper before including it."
         )
-        # merger_prompt = (
-        #     f"Here is the paper being reviewed (extracted from PDF — formatting "
-        #     f"artifacts are parser issues, not paper problems):\n\n"
-        #     f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
-        #     f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
-        #     f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
-        #     f"Now produce the final consolidated review following your instructions. "
-        #     f"Remember: many of the harsh critic's points may be nonsensical or overly "
-        #     f"picky — cross-check everything against the actual paper before including it."
-        # )
-        # merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
-        # agent_usages["Merger"] = merger_usage
+        merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
+        agent_usages["Merger"] = merger_usage
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
@@ -287,8 +318,12 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         if usage is None:
             token_lines.append(f"  {agent_name}: N/A (claude_sdk path)")
         else:
+            cached = getattr(getattr(usage, "input_tokens_details", None), "cached_tokens", None)
+            reasoning = getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", None)
             token_lines.append(
-                f"  {agent_name}: input={usage.input_tokens} output={usage.output_tokens} total={usage.total_tokens} requests={usage.requests}"
+                f"  {agent_name}: input={usage.input_tokens} (cached={cached}) "
+                f"output={usage.output_tokens} (reasoning={reasoning}) "
+                f"total={usage.total_tokens} requests={usage.requests}"
             )
             total_input += usage.input_tokens
             total_output += usage.output_tokens
@@ -301,6 +336,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         u = (su or {}).get("usage") or {}
         sdk_lines.append(f"  [{sdk_name}]")
         sdk_lines.append(f"    Model: {su.get('model')}")
+        sdk_lines.append(f"    Session ID: {su.get('session_id')}")
         sdk_lines.append(f"    Cost (USD): {su.get('total_cost_usd')}")
         sdk_lines.append(f"    Turns: {su.get('num_turns')}")
         sdk_lines.append(f"    Duration: total={su.get('duration_ms')}ms api={su.get('duration_api_ms')}ms")
@@ -308,6 +344,14 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"    Tokens: input={u.get('input_tokens')} output={u.get('output_tokens')} "
             f"cache_read={u.get('cache_read_input_tokens')} cache_creation={u.get('cache_creation_input_tokens')}"
         )
+        rl = (su or {}).get("rate_limit")
+        if rl:
+            util = rl.get("utilization")
+            util_str = f"{util*100:.1f}%" if util is not None else "n/a"
+            sdk_lines.append(
+                f"    Plan usage: type={rl.get('type')} util={util_str} "
+                f"status={rl.get('status')} overage={rl.get('overage_status')}"
+            )
         if su.get("total_cost_usd"):
             sdk_total_cost += su["total_cost_usd"]
     if sdk_lines:
@@ -580,6 +624,7 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
             u = (su or {}).get("usage") or {}
             print(f"  [{name}]")
             print(f"    Model:         {su.get('model')}")
+            print(f"    Session ID:    {su.get('session_id')}")
             print(f"    Cost (USD):    ${su.get('total_cost_usd')}")
             print(f"    Turns:         {su.get('num_turns')}")
             print(f"    Duration:      total={su.get('duration_ms')}ms api={su.get('duration_api_ms')}ms")
@@ -587,6 +632,11 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
             print(f"    Output tokens: {u.get('output_tokens')}")
             print(f"    Cache read:    {u.get('cache_read_input_tokens')}")
             print(f"    Cache create:  {u.get('cache_creation_input_tokens')}")
+            rl = (su or {}).get("rate_limit")
+            if rl:
+                util = rl.get("utilization")
+                util_str = f"{util*100:.1f}%" if util is not None else "n/a"
+                print(f"    Plan usage:    type={rl.get('type')} util={util_str} status={rl.get('status')} overage={rl.get('overage_status')}")
             if su.get("total_cost_usd"):
                 total_cost += su["total_cost_usd"]
         print(f"  TOTAL Claude SDK cost (USD): ${total_cost:.4f}")

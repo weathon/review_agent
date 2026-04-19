@@ -35,9 +35,9 @@ FUNDAMENTAL ISSUES: If any weakness is severe enough to undermine the paper's co
 
 ## Missing Parts and Places to Improve
 
-Separate from the critical issues above, list the most important things missing from the paper or places where it could be meaningfully improved. This is NOT a wishlist — every item must pass the test: "Would addressing this meaningfully change whether the paper's core claims are believable, or substantially strengthen the contribution?" If not, leave it out.
+Separate from the critical issues above, list the most important things missing from the paper or places where it could be meaningfully improved. This is not a wishlist — every item must pass the test: "Would addressing this meaningfully change whether the paper's core claims are believable, or substantially strengthen the contribution?" If not, leave it out.
 
-Be focused and prioritized. List only the TOP 3-5 most important items per category. State what's needed directly: "Add X because without it, claim Y is not convincing." Each item should be 1-3 sentences.
+Be focused and prioritized. List only the top 3-5 most important items per category. State what's needed directly: "Add X because without it, claim Y is not convincing." Each item should be 1-3 sentences.
 
 ### Missing Experiments
 1. ... (what experiment, why it matters for the claims)

@@ -64832,3 +64832,554 @@ MY FINAL DECISION: <orange>Accept</orange>
 
 --- Decision ---
 Accept
+
+============================================================
+Paper: papers/2602.10095v1.md
+Timestamp: 2026-04-17T22:37:50.014879
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Neutral Reviewer: input=15878 output=1993 total=17871 requests=1
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=15878 output=1993 total=17871
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Cost (USD): 0.23887935
+    Turns: 5
+    Duration: total=163608ms api=163559ms
+    Tokens: input=9 output=7759 cache_read=43212 cache_creation=29201
+  [Merger]
+    Model: claude-sonnet-4-6
+    Cost (USD): 0.31614125000000004
+    Turns: 9
+    Duration: total=177208ms api=176498ms
+    Tokens: input=10 output=7054 cache_read=114122 cache_creation=36953
+  TOTAL Claude SDK cost (USD): 0.5550
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have enough to write a thorough review. Let me compose it.
+
+---
+
+## Critical Issues
+
+### 1. Parameter counts absent from from-scratch experiments — speedup claim is partially unverifiable (Evidential)
+
+Tables 1 and 2 report seconds-per-frame for Causal-DiT-{B,M} vs. SCD-{B,M} variants but never state how many parameters each model contains. The paper explicitly calls the decoder "lightweight" (Sections 5.2, 5.3), and the SCD decomposition allocates encoder depth and decoder depth from a fixed parameterization budget. If SCD-M has meaningfully fewer total parameters than Causal-DiT-M, the headline 4× latency reduction is at least partly an artifact of model-size reduction rather than the architectural decoupling principle itself. Without an iso-parameter comparison (matching total FLOPs or parameter count between SCD and Causal-DiT at the same depth budget), the claim that separating causality from denoising produces the speedup cannot be cleanly isolated from the confound of smaller models being faster. For the fine-tuning setting (Table 3), this concern is partially mitigated because SCD (1.6B) is *larger* than Self Forcing (1.3B) yet still faster, making the 1.3× gain more credible—but Tables 1–2, where the gains are 4×, are the primary pretraining evidence and need iso-parameter controls.
+
+### 2. Fine-tuning architecture description is structurally under-specified (Structural)
+
+Section 6.2 states: "we designate the first 25 layers of the pretrained 30-layer video diffusion model as the causal encoder, and combine its **first 5 and last 5 layers** to form the diffusion decoder, resulting in a total of 35 layers." This construction implies that layers 1–5 of the original model appear in *both* the 25-layer encoder and the 10-layer decoder simultaneously. The text never clarifies whether these layers are weight-shared between encoder and decoder, initialized independently, or copied and fine-tuned separately. This is not a presentational gap: the answer materially affects (a) the total parameter count of the fine-tuned model, (b) whether the encoder and decoder learn conflicting representations for the same parameters, and (c) whether the leave-one-out analysis in Figure 7 actually motivated this design or whether the design was chosen ad-hoc and Figure 7 retrospectively justifies it. The leave-one-out analysis finds early and late layers are most important, but the decision to include layers 1–5 *in both modules* rather than, say, designating layers 1–20 as encoder and 21–30 as decoder is never explained or ablated.
+
+### 3. Probing is conducted on a large pretrained model; small-scale from-scratch experiments cannot validate the same phenomenon (Evidential)
+
+The two core empirical observations—middle-layer cosine similarity >0.95 across denoising steps, and cross-frame attention sparsity at deep layers—are measured on WAN 2.1 T2V-1.3B, a large-scale model trained on massive data with carefully tuned optimization. The paper asserts these patterns generalize to small models trained from scratch (pointing to Appendix A.2), but the appendix is truncated in the available version. The from-scratch experiments on TECO-Minecraft (128×128) and UCF-101 (64×64) use models that, given the DiT-B/M parameterization, are orders of magnitude smaller than WAN 2.1. It is plausible that the cosine-similarity plateau and cross-frame sparsity are emergent behaviors of large-scale pretraining (where the model has abundant capacity to specialize layers), not intrinsic properties of causal video diffusion. If the separability patterns do not appear in small models, then SCD's from-scratch success (Tables 1–2) would lack the mechanistic motivation the paper claims, reducing the contribution to an empirical architecture search rather than a principled design grounded in interpretable findings.
+
+---
+
+## Section-by-Section Notes
+
+**Section 3 (Preliminaries).** The description of the train-test mismatch for Diffusion Forcing is accurate, but the paper then introduces a Gaussian noise injection on context tokens (Eq. 7) in Section 5.3 as the SCD analogue. The paper never directly compares whether Eq. 7 eliminates the mismatch to a degree comparable with Diffusion Forcing for the encoder's temporal reasoning. Given that the encoder *always* sees clean ground-truth frames during training (Teacher Forcing paradigm, Section 5.3), the mismatch at inference—where the encoder sees the model's own previously generated frames—is structurally identical to the problem the original paper identifies for TF baselines. The noise injection heuristic is evaluated only in an appendix ablation (Table 6, not visible), and its comparison against full Diffusion Forcing on the encoder is absent from the main text.
+
+**Section 4.1 (Feature Similarity).** The argument uses cosine similarity (directional) to claim features are "nearly identical." Cosine similarity ignores magnitude and conflates two cases: features are informationally redundant vs. features have similar direction but carry different magnitudes that affect subsequent layers. The skip-layer finetuning experiment (Figure 3) partially addresses this by showing that quality is recoverable after brief finetuning, but brief finetuning also adapts the remaining layers to compensate, making it difficult to cleanly attribute the preserved quality to the original redundancy claim.
+
+**Section 4.2 (Cross-Frame Attention Sparsity).** Figure 4 is the key evidence. The aggregation of attention mass across all heads is a useful summary, but pooling over heads hides whether some individual heads still perform dense cross-frame attention in late layers. If even a small number of heads in deep layers carry the majority of temporal information (a well-documented phenomenon in transformers), removing all cross-frame attention in those layers is more damaging than the pooled-mass figure suggests. No head-level analysis is presented.
+
+**Section 5.3 (Training and Inference).** The paper says the encoder uses "Teacher Forcing training paradigm." This is reasonable for the encoder at training time but creates the distributional mismatch problem at inference. The paper's noise injection (Eq. 7) is applied to the *context tokens* $c_i$, not to the input frame tokens seen by the encoder. This means the encoder's internal attention mechanism still sees clean ground-truth frames, and the injected noise is only downstream of the encoder. Whether this meaningfully alleviates exposure bias for the encoder's causal attention over history is unclear and not ablated in the main paper.
+
+**Section 6.1 (Pretraining Results).** The comparison to FAR [22] is important, since FAR-M-Long is also a causal diffusion model. SCD-M achieves better LPIPS/SSIM/PSNR/FVD while being ~4× faster than Causal-DiT-M and FAR-M-Long. However, FAR operates with "long context" (144→156 condition for TECO-Minecraft) while SCD operates with a different conditioning setup (36→264 prediction, same table). Since both conditions appear to be evaluated in the same Table 1 column, this is fine, but it would be worth verifying that all models were conditioned on the same number of context frames to ensure a fair comparison.
+
+**Section 6.2 (Fine-Tuning Results, Table 3).** SCD (1.6B) achieves 11.1 FPS vs. Self Forcing (1.3B) at 8.9 FPS—a 1.3× throughput improvement at 1.23× more parameters. The VBench total score drops from 84.26 to 84.03, which is numerically small but the paper attributes this to "inevitable architectural mismatch." That framing is an acknowledgment that the SCD design costs some quality for efficiency. Whether 1.3× speed and 0.23-point quality drop is the right trade-off is a judgment call, but the framing "matches or surpasses generation quality" in the abstract slightly overstates the Table 3 result (SCD is competitive but strictly lower on all VBench subscores vs. Self Forcing, not "surpassing").
+
+**Figure 8 Caption vs. Figure Content.** The caption of Figure 8 says "SCD achieves superior training efficiency than causal diffusion baselines," but the figure's y-axis label and legend text ("Full WAN" vs. "Remove One Block") appear to be mislabeled—"Remove One Block" bars are taller (higher time), which per the caption should correspond to the baseline being *slower*. But the surrounding text claims SCD is 20% faster in single-step rollout training. This is likely a labeling or description artifact, but the inconsistency should be resolved.
+
+---
+
+## Strengths
+
+- **The probing methodology is systematic and multi-faceted.** The authors combine cosine similarity, PCA visualization, attention mass aggregation, skip-layer finetuning, and frame-diagonal finetuning as five complementary lines of evidence. No single experiment is definitive, but their convergence makes the separability observation credible.
+- **The leave-one-out analysis (Figure 7)** is a principled, data-driven approach to deciding which layers of a pretrained model to assign to encoder vs. decoder, rather than relying on a hand-designed or heuristic partition.
+- **The architecture addresses a genuine engineering bottleneck.** Decoupling once-per-frame causal reasoning from per-step denoising is a conceptually clean idea with a clear efficiency motivation, and the connection to next-token prediction in LLMs (run once per position, not once per refinement step) is an apt analogy.
+- **The paper is honest about its limitations.** The acknowledgment that step-wise invariance degrades in the last 10 denoising steps and that deep layers retain non-zero cross-frame attention mass (Section 7) is a mature self-assessment that most architecture papers omit.
+- **Multi-setting evaluation** (pretraining from scratch on two datasets + fine-tuning from a strong pretrained model) strengthens the generalization story, even if parameter-count transparency is lacking.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Iso-parameter ablation for Tables 1–2.** Without matching total parameter counts (or FLOPs) between SCD variants and Causal-DiT baselines, the speedup claim cannot be attributed purely to the decoupling principle. Adding a row with "Causal-DiT matched to SCD-M parameter count" is essential for Tables 1–2 to support the paper's mechanistic claim.
+
+2. **Ablation comparing SCD encoder with Diffusion Forcing-style input noising vs. the proposed Gaussian context corruption (Eq. 7).** The encoder suffers from an exposure-bias problem (clean inputs during training, generated inputs during inference). The paper proposes Eq. 7 as a fix but never compares against the stronger Diffusion Forcing baseline or shows that context-token-level noise injection is as effective as input-level noising. Without this, the encoder's robustness claim is undersubstantiated.
+
+3. **Per-head cross-frame attention analysis (Section 4.2).** Pooling attention mass over all heads in Figure 4 may obscure individual heads that carry disproportionate temporal information in deep layers. A head-level plot or a targeted ablation removing only the high-mass cross-frame heads (rather than all cross-frame attention) would directly validate whether the temporal independence assumption holds at head granularity, not just in aggregate.
+
+### Deeper Analysis Needed
+
+1. **Why does the SCD architecture induce the same separability pattern as the original causal diffusion model?** The paper motivates SCD by discovering separability in pre-existing models, but it does not show that small models trained with the SCD objective *also* exhibit the WAN 2.1-style feature similarity and attention sparsity patterns. Demonstrating that SCD-trained models display the same interpretable structure would close the mechanistic loop and confirm that the architecture is not merely exploiting a coincidental regularity of large pretrained models.
+
+2. **Clarify the weight-sharing structure in the fine-tuned SCD model (Section 6.2).** The 35-layer architecture constructed from 30 pretrained layers, with layers 1–5 apparently appearing in both encoder and decoder, needs a clear diagram and ablation showing which weights are shared, copied, or newly initialized.
+
+### Visualizations & Case Studies
+
+1. **Side-by-side failure cases between SCD and Causal-DiT** would reveal where the 0.23-point VBench gap manifests qualitatively. Figure 9 shows only success cases; a failure analysis would clarify whether quality regression is perceptible in practice or only measurable.
+
+### Obvious Next Steps
+
+1. **Scaling the encoder separately from the decoder.** The paper notes scalability via SCD^E and SCD^D variants but does not study the scaling law for the encoder (number of encoder layers vs. temporal reasoning quality) independently from the decoder. This would clarify whether the encoder benefits from the same scaling behavior as LLMs, which is the analogy the paper invokes but does not test.
+
+---
+
+## Overall Assessment
+
+The paper presents a genuinely interesting and practically useful observation—that causal reasoning in AR video diffusion models is largely separable from iterative denoising—and builds an architecture (SCD) that exploits this separability for efficiency gains. The probing methodology is credible and the overall framing is clear. However, two issues prevent the paper's core efficiency claim from standing firmly. First, the absence of parameter counts in the from-scratch experiments (Tables 1–2) leaves open the possibility that the 4× speedup is partly a function of a smaller model, not the decoupled architecture. Second, the fine-tuning architecture (Section 6.2) involves a layer-sharing or layer-copying construction that is never clearly explained or ablated, making the most deployment-relevant result (Table 3) rest on an underspecified design. The abstract's claim that SCD "matches or surpasses generation quality of strong causal diffusion baselines" overstates the Table 3 result, where SCD is strictly below Self Forcing on all VBench subscores (albeit narrowly). These are addressable with targeted experiments and clearer description, but until the iso-parameter comparison is in place, the paper's headline efficiency claim is supported only circumstantially. The contribution is real and worth publishing, but the current submission does not fully establish the causal relationship between the architectural principle and the observed gains.
+### Neutral Reviewer
+## Balanced Review
+
+### Summary
+
+This paper investigates whether causal (temporal, autoregressive) reasoning in video diffusion models can be separated from the iterative denoising process. Through systematic probing of autoregressive video diffusers, the authors find that (1) early/middle layer features are highly redundant across denoising steps (cosine similarity >0.95), and (2) deeper layers exhibit sparse cross-frame attention, focusing primarily on intra-frame rendering. Based on these observations, they propose Separable Causal Diffusion (SCD), an encoder-decoder architecture where a causal transformer encoder runs once per frame to produce context tokens, and a lightweight diffusion decoder handles multi-step frame-wise denoising. SCD achieves 2–4× speedups on small-scale benchmarks and ~1.3× faster inference on large-scale text-to-video generation while maintaining competitive quality.
+
+### Strengths
+
+1. **Well-motivated empirical analysis with multiple complementary probes.** The paper doesn't rely on a single type of evidence. It establishes redundancy via cosine similarity measurements (Fig. 2a), PCA visualizations (Fig. 2b), skip-layer finetuning (Fig. 3), cross-frame attention mass analysis (Fig. 4), and mask-removal finetuning (Fig. 5). Each probe reinforces the core claim, and the finetuning experiments go beyond observation to validate that the redundancy/sparsity can actually be exploited.
+
+2. **Elegant architectural design directly motivated by findings.** Rather than proposing an arbitrary architecture, SCD is a natural consequence of the two observations: the causal encoder captures the step-invariant temporal reasoning, while the frame-wise decoder handles the step-varying intra-frame refinement. This makes the contribution feel principled rather than engineered.
+
+3. **Strong efficiency gains with maintained quality.** On TECO-Minecraft, SCD-M achieves a 4.6× speedup (0.52 vs 2.4 sec/frame) while improving FVD from 38.7 to 37.6. On UCF-101, SCD-B achieves 3.5× speedup while improving FVD from 187.6 to 174.7. On the large-scale VBenCh benchmark, SCD is 1.3× faster than Self-Forcing with a competitive total score (84.03 vs 84.26) and >10× faster than the non-causal Wan 2.1 baseline.
+
+4. **Practical fine-tuning pipeline from pretrained bidirectional models.** The paper doesn't only evaluate training from scratch; Section 6.2 provides a thoughtful adaptation strategy (leave-one-out layer importance analysis, distribution-matching between encoder input and teacher input, distillation) to fine-tune SCD from a pretrained T2V model, making it practically useful.
+
+5. **Honest and clear limitations discussion.** The authors acknowledge that step-wise invariance weakens near the end of the trajectory (similarity drops to ~0.8) and that deep layers retain non-zero cross-frame attention mass, plausibly accounting for the slight quality gap at high resolution.
+
+### Weaknesses
+
+1. **Remaining quality gap at high resolution.** On VBenCh (Table 3), SCD's semantic score (79.60) meaningfully trails the fully causal Self-Forcing baseline (80.30), despite having similar parameter counts and the same teacher. The limitations section attributes this to "residual couplings" in deeper layers, but the paper does not propose or evaluate any mechanism to recover this gap (e.g., lightweight cross-frame attention in the decoder, or iterative refinement of the causal context).
+
+2. **The architectural adaptation in Section 6.2 feels somewhat ad hoc.** Feeding high-noise corrupted frames to the encoder during training to match the teacher's input distribution is a reasonable engineering choice, but it somewhat contradicts the design principle that the encoder should process clean context. The leave-one-out analysis to select which layers become the encoder vs. decoder is also specific to the WAN-2.1 model, and it is unclear how this would generalize to other architectures. A more systematic discussion of adaptation rules would strengthen the work.
+
+3. **The paper does not compare against recent AR+diffusion hybrid approaches on equal footing.** VideoMAR and MarDini are discussed in related work but not included as baselines. While they may operate on different settings, the paper could benefit from more direct comparison or at least a discussion of how SCD relates to and differs from these concurrent approaches architecturally.
+
+4. **The causal context corruption mechanism (Eq. 7) is underexplored in the main text.** Ablations are "deferred to Appendix B.3," but this is a notable component that could impact robustness. The main text should at least summarize the key findings. Training with noise injection only on $\eta$ (a single scalar) seems like a limited form of corruption compared to the full Diffusion Forcing approach that corrupts context tokens individually.
+
+5. **Evaluation on small-scale datasets uses somewhat dated baselines.** The TECO-Minecraft and UCF-64×64 benchmarks are relatively small, and some baselines (e.g., Latent FDM from 2022, MCVD from 2022) are older. While the gains are clear, these benchmarks may not fully stress-test temporal reasoning challenges that appear in more complex, longer-horizon scenarios.
+
+### Novelty & Significance
+
+The paper's primary novelty lies in the empirical discovery and principled exploitation of causal separability in video diffusion models, rather than the encoder-decoder pattern per se (which has appeared in hybrid AR-diffusion models like VideoMAR and MarDini). The key insight—that temporal reasoning is largely step-invariant while deep refinement is largely frame-local—is novel and has both theoretical and practical implications. The proposed SCD architecture and its adaptation from pretrained models represent a meaningful engineering contribution. The significance is substantial: efficiency gains of 2–4× with maintained quality are highly relevant for real-time and interactive video generation applications, and the analysis may inspire similar separability studies in other causal diffusion domains.
+
+### Suggestions for Improvement
+
+1. **Address the semantic quality gap.** Consider adding lightweight cross-frame attention in the decoder (even just 1–2 layers), or an iterative context-refinement step that updates $c_i$ at mid-denoising points, and evaluate whether this recovers the 0.7-point semantic score gap on VBenCh without sacrificing much efficiency.
+
+2. **Generalize the fine-tuning adaptation strategy.** Instead of relying on a model-specific leave-one-out analysis, propose a heuristic (e.g., assigning ~80% of layers to the encoder based on the cross-frame attention mass threshold) and validate it across multiple pretrained models or model sizes.
+
+3. **Include VideoMAR or MarDini as baselines** if possible, or provide a dedicated discussion comparing SCD's architectural choices (separate encoder-decoder with shared context tokens) against their design choices (e.g., discrete token prediction followed by diffusion refinement).
+
+4. **Report results on longer-horizon generation** (e.g., 100+ frames) to demonstrate whether the claimed benefits of causal separability—particularly the KV cache efficiency and reduced error accumulation—scale with context length.
+
+5. **Bring key ablation results into the main text.** Specifically, the context noise corruption results and the channel vs. sequence concatenation comparison are important design decisions that deserve visibility beyond the appendix.
+
+6. **Discuss theoretical grounding.** Why should we expect causal reasoning to be step-invariant? A brief discussion connecting to the structure of diffusion processes (coarse structure determined early, fine detail later) or the information-theoretic role of context tokens would strengthen the conceptual contribution.
+
+--- Merged Review ---
+Now I have enough information to write the final consolidated review. Let me synthesize everything.---
+
+## Summary
+
+This paper investigates whether causal temporal reasoning in autoregressive (AR) video diffusion models is separable from the iterative denoising process. Through systematic probing experiments on WAN-2.1 T2V-1.3B, the authors identify two complementary regularities: (1) early/middle-layer features are near-redundant across denoising steps (cosine similarity >0.95), and (2) cross-frame attention in deeper layers becomes increasingly sparse. Motivated by these findings, they introduce **Separable Causal Diffusion (SCD)**, an encoder–decoder architecture where a causal transformer encoder runs once per frame to produce context tokens, while a lightweight frame-wise diffusion decoder handles per-frame iterative denoising. SCD is evaluated both in pretraining (TECO-Minecraft, UCF-101) and fine-tuning (WAN 2.1 → VBench) settings, demonstrating 2–4× speedup on small benchmarks and ~1.3× throughput improvement at scale with competitive quality.
+
+---
+
+## Strengths
+
+- **Multi-faceted probing methodology is systematic and convergent.** Five complementary lines of evidence (cosine similarity, PCA visualization, skip-layer finetuning, cross-frame attention mass, frame-diagonal finetuning/mask removal) reinforce the core separability claim. No single probe is conclusive, but their convergence is compelling. The finetuning experiments go beyond observation to show the redundancy/sparsity can actually be exploited without quality loss.
+
+- **Architecture is directly motivated by empirical findings.** SCD is not an ad-hoc design—the encoder/decoder split directly operationalizes the two observed regularities (step-invariant early layers → encode once; frame-local deep layers → decode frame-wise). This makes the contribution feel principled rather than engineered. The analogy to next-token prediction in LLMs is apt and instructive.
+
+- **Efficiency gains are substantial and validated across multiple settings.** SCD-M achieves 4.6× speedup on TECO-Minecraft and 3.5× on UCF-101 while *improving* FVD. In the large-scale fine-tuning setting, SCD (1.6B) achieves 11.1 FPS vs. Self Forcing (1.3B) at 8.9 FPS—a credible gain since the larger model is faster. The 20% training-efficiency improvement in rollout distribution matching (Figure 8) is an additional practical benefit.
+
+- **Leave-one-out layer importance analysis (Figure 7) is a principled contribution.** Rather than guessing which layers to assign to encoder vs. decoder, the authors conduct a data-driven validation loss experiment on WAN-2.1, revealing that earliest and latest layers are most important. This drives the fine-tuning architecture design.
+
+- **Honest and explicit limitations section.** The paper acknowledges that step-wise invariance weakens in the last 10 denoising steps (~0.8 similarity vs. >0.95 earlier) and that deep layers retain non-zero cross-frame attention mass. This maturity is welcome and lends credibility to the overall analysis.
+
+- **Broad validation across model types.** The separability patterns are verified on WAN-2.1, a Self-Forcing model (Appendix Figs. 11-12), and a Diffusion Forcing 3D-UNet (Appendix Fig. 13), demonstrating generality across architectures and training objectives.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+None.
+
+### Minor
+
+- **Parameter counts absent from Tables 1–2.** The paper says SCD "follows the DiT parameterization scheme (B/M/L)" and decomposes total depth into encoder + decoder, which implies a fixed total depth budget. However, since the decoder is described as "lightweight" and operates without cross-frame attention, SCD variants may have fewer effective parameters than Causal-DiT-M/B. Without explicit parameter counts, it is difficult to fully disentangle whether the 4× latency reduction arises from the decoupling principle alone or is partly from a smaller effective model. This is especially important for Tables 1–2 (the primary pretraining evidence), since in Table 3 the larger SCD (1.6B) is faster than Self Forcing (1.3B), making the gain there more clearly attributable to architecture.
+
+- **Fine-tuning architecture (Section 6.2) is underspecified regarding weight sharing.** The paper states: "we designate the first 25 layers of the pretrained 30-layer model as the causal encoder, and combine its first 5 and last 5 layers to form the diffusion decoder, resulting in a total of 35 layers." This implies layers 1–5 of the original model appear in *both* the encoder and decoder. The paper never clarifies whether these overlapping layers are weight-shared, independently initialized from the pretrained weights, or copied and then fine-tuned separately. The answer materially affects the total parameter count and how the encoder and decoder interact. A diagram or explicit clarification would substantially improve reproducibility.
+
+- **Abstract overclaims VBench results.** The abstract states SCD "matches or surpasses the generation quality of strong causal diffusion baselines." In the pretraining setting (Tables 1–2), SCD genuinely surpasses all baselines. However, in Table 3 (VBench), SCD scores 84.03 vs. Self Forcing at 84.26 and is strictly lower on all three subscores (Total: 84.03 vs. 84.26; Quality: 85.14 vs. 85.25; Semantic: 79.60 vs. 80.30). The paper itself correctly calls this "competitive" in the Results section; the abstract's "matches or surpasses" is a mild overstatement that should be corrected to "competitive with" or "nearly matches."
+
+### Trivial
+
+- **Figure 8 labeling is confusing.** The figure description as parsed labels the bars "Full WAN" and "Remove One Block," with "Remove One Block" bars being *taller* (more time) than "Full WAN." The caption reads "SCD achieves superior training efficiency than causal diffusion baselines." If "Full WAN" represents SCD and "Remove One Block" represents the causal baseline, the labeling is counterintuitive and should be clarified (e.g., rename to "SCD" and "Full Causal Diffusion").
+
+---
+
+## Nice-to-Haves
+
+- **Iso-parameter ablation for Tables 1–2.** Adding a row "Causal-DiT-M matched to SCD-M parameter count" (or reporting total FLOPs/parameter counts for all models) would make the efficiency attribution unambiguous.
+
+- **Per-head cross-frame attention analysis.** Figure 4 pools attention mass across all heads per layer, which may obscure heads that carry disproportionate temporal information in deep layers. A head-level breakdown or targeted ablation (remove only the high-mass heads vs. all cross-frame attention) would strengthen the temporal independence claim.
+
+- **Bring key ablation results into the main text.** The context noise corruption ablation (Appendix Table 6) and the concatenation comparison (Appendix Table 4) are important design decisions. At least a one-sentence summary of findings should appear in the main text.
+
+- **Results on longer-horizon generation (100+ frames).** To fully demonstrate whether the KV cache efficiency of the causal encoder scales with context length, an experiment on very long rollouts would be valuable. The paper focuses on 5s clips, but the motivation explicitly invokes real-time streaming.
+
+- **Theoretical grounding for step-invariance.** A brief discussion connecting the observed step-invariance to the structure of diffusion processes (coarse structure determined early, fine detail later) would strengthen the conceptual contribution beyond an empirical observation.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Probing generalizability from large to small models (Harsh Critic #3).** The paper explicitly states in Section 4 that it repeats its observations "on autoregressive video models trained from scratch and on other conditioning: consistent behaviors are summarized in Appendix A.2," and further validates on a 3D-UNet trained with Diffusion Forcing (Appendix Fig. 13). The concern that separability is an emergent property of only large pretrained models is directly addressed by the paper.
+
+- **Cosine similarity ignores magnitude (Harsh Critic, Section 4.1 note).** This is a generic methodological quibble. The paper uses cosine similarity for directional redundancy, which is appropriate for measuring whether features carry the same structural information. The skip-layer finetuning (Figure 3) provides independent functional evidence that the redundancy is real and exploitable.
+
+- **Comparison against VideoMAR/MarDini as baselines (Neutral Reviewer weakness #3).** Per the rules, missing related work comparisons are not evaluated; we cannot confirm these papers exist or whether settings are comparable.
+
+- **Encoder exposure bias is "structurally identical" to Teacher Forcing mismatch (Harsh Critic, Section 5.3).** The paper explicitly addresses this via the Gaussian context corruption (Eq. 7) and through fine-tuning with high-noise encoder inputs (Section 6.2). The approach is standard in the field (citing prior work [11, 67]). The concern that context-level noise injection differs from input-level noising is legitimate but pedantic given the paper's explicit ablation in Appendix B.3.
+
+- **FAR conditioning mismatch in Table 1.** The harsh critic notes FAR-M-Long conditions on 144→156 while SCD uses 36→264. Both are evaluated in the same table columns, and the paper specifically labels the two evaluation columns separately. This is not a fairness issue—the conditions are clearly delineated.
+
+- **Attention mass aggregation hides individual head behavior (Harsh Critic, Section 4.2 note).** While technically true, per-head analysis is a "nice-to-have" enhancement rather than a critical flaw. The aggregate pattern is still strong evidence, and the finetuning validation (Fig. 5) confirms functional separability at the layer level regardless of individual head behavior.
+
+---
+
+## Novel Insights
+
+The paper's most genuinely novel observation is that causal temporal reasoning in AR video diffusion models is *functionally separable*—not just structurally sparse—from iterative denoising, and that this separation can be exploited without performance regression. While encoder-decoder hybrid architectures for video generation have appeared before (VideoMAR, MarDini), this paper is the first to ground such a design in a systematic mechanistic analysis of *where* causal reasoning actually occurs in a learned model. The leave-one-out importance analysis as a method for deciding encoder/decoder layer assignment is a transferable technique for architecture adaptation from pretrained bidirectional models. The specific finding that middle-layer features stabilize with >0.95 cosine similarity as early as the first denoising step, and that this stability persists across diverse architectures (DiT, UNet, Self-Forcing), suggests a structural regularity in how causal video diffusion models organize their computation that warrants further theoretical investigation.
+
+---
+
+## Suggestions
+
+1. Report total parameter counts (or FLOPs) for all variants in Tables 1–2 to clarify the efficiency attribution.
+2. Add a diagram or table in Section 6.2 explicitly describing which layers are shared, copied, or newly initialized in the 35-layer fine-tuned SCD architecture.
+3. Change "matches or surpasses" in the abstract to "competitive with or surpasses" to accurately represent the VBench results.
+4. Clarify the label assignment in Figure 8 so it is immediately clear which bar corresponds to SCD and which to the causal baseline.
+5. Move the key findings from Appendix Tables 4 and 6 (concatenation comparison, noise injection ablation) into the main text as at least a summary sentence each.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+- **LARP** (Oral, scores: 8,6,8,8; avg ~7.5): Strong AR video generation paper with novel tokenization and principled AR prior. Accepted as Oral.
+- **CMD** (Accepted poster, scores: 6,8,8,6; avg ~7): Efficient video diffusion via content-motion decomposition. Similar efficiency-focused contribution.
+- **ARLON** (Accepted poster, scores: 6,8,6,5; avg ~6.25): AR+DiT hybrid for long video, more engineering-heavy.
+
+**Positioning:** SCD compares favorably to CMD—both achieve significant speedups from principled architecture design, but SCD additionally provides a rich probing analysis that justifies its architecture from first principles. SCD falls somewhat below LARP (which earned Oral), primarily because the fine-tuning setting yields only a modest 1.3× gain and the architecture underspecification weakens the reproducibility of the most deployment-relevant result. The weaknesses identified (parameter count clarity, architecture underspecification, minor abstract overclaim) are all addressable and do not invalidate the core contributions. The paper is clearly above the acceptance threshold with genuine novelty, solid methodology, and strong empirical results.
+
+**Final score: 7.0 — Accept**
+
+MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../paper.md
+Timestamp: 2026-04-17T22:47:47.703829
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Neutral Reviewer: input=16131 output=1960 total=18091 requests=1
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=16131 output=1960 total=18091
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: c9358fdc-ad23-4047-b598-914890660111
+    Cost (USD): 0.21229815000000002
+    Turns: 5
+    Duration: total=241137ms api=241088ms
+    Tokens: input=9 output=11406 cache_read=58133 cache_creation=6331
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: ffc41db9-c501-494f-8baf-1bf37134c7f2
+    Cost (USD): 0.4027132
+    Turns: 12
+    Duration: total=203255ms api=242685ms
+    Tokens: input=1291 output=9267 cache_read=79887 cache_creation=39123
+  TOTAL Claude SDK cost (USD): 0.6150
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a full picture of the paper. Let me write the review.
+
+---
+
+# Review: FaceLinkGen: Rethinking Identity Leakage in Privacy-Preserving Face Recognition
+
+---
+
+## Critical Issues
+
+**Issue 1 (Evidential): The attack pipeline is specifically optimized for the same embedding space the PPFR systems are designed to preserve, and this is not adequately stress-tested.**
+
+The three evaluated PPFR systems (PartialFace, MinusFace, FracFace) all aim to retain sufficient identity information for ArcFace-compatible recognition. The attack trains a student model using Antelopev2 (an ArcFace variant) as teacher, then uses Arc2Face (which is explicitly designed to synthesize identity-consistent faces from ArcFace embeddings) for regeneration. The entire pipeline is thus precisely calibrated to the embedding space the PPFR systems were designed to preserve. The claimed novelty is that distillation bridges the template-to-embedding gap—which is valid—but the attack success rate is partly an upper bound achieved because the attacker's embedding model is the natural dual of the defender's recognition model. The paper claims the approach generalizes ("Other embedding models like FaceNet can also be used as long as there is a compatible generative model," Section 3), but provides no empirical support for this. An attack using a different embedding space than the one preserved by the PPFR systems would constitute genuine evidence that the vulnerability is representation-level rather than arising from a matched attack-defense pairing.
+
+**Issue 2 (Evidential): The evaluated systems share a common design principle that the constrained attack explicitly exploits, limiting generalization claims.**
+
+PartialFace, MinusFace, and FracFace all operate by selectively transmitting or subtracting frequency-domain channels, with a shared property the paper itself identifies: "they all preserve high-frequency information while obfuscating low-frequency information" (Section 6). This shared characteristic is what allows the constrained attacker in Section 6 to use a Gaussian-blur-based high-pass filter as a universal proxy without system-specific knowledge. The paper presents this as evidence that "identity leakage is not unique to frequency-domain design," but the three systems are not meaningfully independent—they are three instances of the same core design choice. The results therefore establish a vulnerability in one PPFR design family, not in PPFR generally. The pilot experiments on TIP-IM and CanFG partially address this but are explicitly preliminary and tested on small subsets. The abstract's claim ("motivate complementing pixel-level metrics with identity-centric evaluation in frequency-domain PPFR research") is appropriate; broader claims in the introduction about PPFR at large exceed what the evidence supports.
+
+**Issue 3 (Methodological gap): The headline "above 96% regeneration success" uses Success@5 (any of 5 stochastic attempts), while the per-attempt strict-threshold results tell a different story for some systems.**
+
+Table 2's Success@5 metric—at least one of five generated images passing Face++ verification—consistently exceeds 97.9% across all conditions. However, the per-image pass rate at the strictest threshold (FAR 1×10⁻⁵) drops to 90.4% for FracFace on TPDNE and 94.3% for FracFace on LFW. These are still high, but the gap between the headline metric (Success@5, used in the abstract's "above 96%") and the per-attempt strict rate is meaningful. A single-attempt adversary operating under the strictest verification threshold would see 10%+ failure rates against FracFace. This is not a fatal problem—the attack is clearly powerful—but the prominence of Success@5 in the abstract slightly inflates the impression of attack efficacy.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract / Introduction.** The abstract states "over 98.5% matching accuracy... on three recent frequency-domain PPFR systems." This is difficult to reconcile with Table 3, which reports single-column verification accuracy values of 0.99, 0.98, and 0.92 for PartialFace, MinusFace, and FracFace respectively—the FracFace value being substantially below 98.5%. The 4-row table (apparently Table 5 or part of Table 3, showing MinusFace-to-Face: 0.992, FracFace-to-Face: 0.988, PartialFace-to-Face: 0.992) does support the ">98.5%" claim. The PDF parsing makes it difficult to adjudicate, but there is genuine ambiguity in what "matching accuracy" refers to across the tables, and the 92% figure for FracFace in one table is inconsistent with the abstract's claim if that table is indeed Table 3.
+
+**Section 2 (Threat Model).** This is one of the paper's genuine strengths. The argument that (a) the service provider is the intended adversary, (b) oracle access is achievable by the service provider, and (c) prior work sometimes silently assumes a less realistic external-attacker model is clearly stated and well-reasoned. The critique of CanFG's security relying on model secrecy (when the service provider is the adversary) is sharp and correct.
+
+**Section 3 (Methods).** The distillation formulation is clean and the informal motivation (Equation 1) usefully frames why pixel-level attacks fail. One concern: the student model architecture adds only "one additional 3×3 Conv2D layer" to Antelopev2 to handle different template channel formats. This detail matters for reproducibility: which templates require this extra layer, what channel formats are involved, and whether this layer affects the embedding quality are not explained.
+
+**Section 5 (Experiments).** The training setup (CASIA-WebFace, ~90K images, under 2 hours on A6000) is clearly described. The cost estimate ($0.80–1.60) is a useful data point. The comparison in Table 6 (FracFace's protection rate vs. FaceLinkGen's actual identity leakage) is the paper's most direct empirical point: high channel disruption coexists with near-zero attack resistance under the identity-centric metric. This comparison should be extended to PartialFace and MinusFace, where such a claim would be more convincing for the PPFR field broadly.
+
+**Section 5.2 (Linkage Attack).** The paper claims results "essentially reaching the dataset's theoretical maximum performance" because CASIA-WebFace contains 9.3–13% noise. This is asserted without derivation. The gap between original-to-original linkage (0.88) and template-to-original linkage (0.73–0.86, Table 4) is 2–7 percentage points, which is non-trivial. Whether this represents approaching the theoretical maximum or meaningful identity disruption from the protection method is not clearly distinguished. An analysis of whether the failures in the linkage attack correlate with dataset noise versus template-induced identity loss would clarify this.
+
+**Section 6 (Constrained Attack).** The constrained attacker uses a high-pass filter based on the observation that the PPFR methods "all preserve high-frequency information while obfuscating low-frequency information." The paper calls this "easily observable visually," but this is itself domain knowledge that not every realistic attacker would possess without studying the methods. The claim that only 30 paired samples are used "for validation (not for training)" is important—this is a very strong result if true—but the pipeline still requires the attacker to know which preprocessing to apply per method (the MinusFace-specific Gaussian filter step described in the section). This is slightly inconsistent with the framing of the constrained attacker as having "limited knowledge of the underlying protection mechanisms."
+
+**Section 7 (Similarity Distribution).** The finding that template-to-source similarity exceeds cross-image same-person similarity is an important sanity check that identity information is preserved at the embedding level, independent of Arc2Face or external verifiers. This is a clean, model-agnostic piece of evidence and should be elevated in the paper's structure.
+
+**Section 9 (Soft Identity Leakage).** The multi-head MLP for soft biometrics prediction is trained on FairFace using the student model's output features. Since the student model is explicitly trained to replicate ArcFace embeddings, and the paper cites prior work showing ArcFace embeddings retain soft biometric information (Melzi et al. 2023, Osorio-Roig et al. 2023), this result is largely a corollary of the distillation success rather than an independent finding. The contribution here is demonstrating it directly for protected templates, which is useful, but the paper should acknowledge more clearly that this follows almost mechanically from the embedding alignment result and prior literature.
+
+---
+
+## Strengths
+
+- **The Table 1 motivating example** (CanFG face with SSIM 0.841 but face similarity 0.008; same-person photos with SSIM 0.235 but face similarity 0.586) is among the clearest demonstrations in the paper. It precisely targets the false assumption that pixel-distortion metrics proxy identity similarity.
+
+- **The threat model analysis** (Section 2) correctly identifies the service-provider-as-adversary framing and shows that prior work's attacker assumptions are sometimes inconsistent with PPFR's original motivation. The critique of CanFG's key secrecy assumption is particularly precise.
+
+- **The multi-modal verification strategy** (Face++, Amazon API, ArcFace embedding cosine similarity, soft biometrics) converges consistently, which substantially strengthens the claim that results are not an artifact of any single evaluation tool.
+
+- **The minimal-resource experiment** (Section 5.1, 256 images → 90.5% regeneration, 98.7% linkage) is a strong result that demonstrates the vulnerability is not a function of attacker resources but of what the template itself retains.
+
+- **The Table 6 comparison** between FracFace's channel-disruption protection metric and FaceLinkGen's identity-leakage metric is the paper's clearest empirical point: near-100% claimed protection under the original metric; near-0% resistance under the identity-centric metric. This is the heart of the paper's critique.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Cross-embedding-space attack**: Train the student model on FaceNet or a different embedding model and demonstrate that regeneration or linkage still succeeds. Without this, the claim that the vulnerability is representation-level rather than ArcFace-specific is undemonstrated. This is important because PPFR systems that are not optimized for ArcFace may behave differently.
+
+2. **Quantitative head-to-head with pixel-level attacks on common examples**: Table 6 shows that FracFace achieves near-100% protection against U-Net/StyleGAN attacks by FracFace's own metric. The paper should additionally report what FAR (say, Face++ pass rate) the pixel-level attacks achieve on the same 1,000 images used for FaceLinkGen evaluation, for at least one PPFR system. This would show not just that the metrics are misaligned, but precisely how much better FaceLinkGen is under a unified criterion.
+
+3. **Attack against a PPFR method with a design principle different from frequency-channel selection**: Even one non-frequency method (e.g., DuetFace or FaceObfuscator) evaluated under the same protocol would substantially extend the generalization claim beyond the single design family tested.
+
+### Deeper Analysis Needed
+
+1. **Linkage failure analysis**: The 2–7 percentage point gap between original-to-original linkage and template-based linkage is presented as negligible but is not analyzed. Which identities fail linkage? Does failure correlate with dataset noise, with specific PPFR transformation characteristics, or with identity-specific properties of the face? Understanding why the attack fails on some identities matters for the design of more robust defenses.
+
+2. **Whether the 30-pair constrained attacker's success is due to the high-pass proxy or to cross-system generalization**: The constrained attack trains one model for all three methods. Does this model generalize because the proxy task is universal, or because the three methods are similar enough to treat as one distribution? Ablating this distinction (e.g., training on one method's proxy and testing on another) would strengthen the analysis.
+
+### Visualizations & Case Studies
+
+1. **Failure cases for the regeneration attack**: The paper shows successful regenerations (Figure 1) but no failure cases. Showing when and why the attack fails (and whether failures correlate with specific attributes or protection methods) would sharpen the understanding of the attack's scope and help the community identify what defenses might actually work.
+
+### Obvious Next Steps
+
+1. **Evaluation of a cryptographic or key-based PPFR method** under the same attack protocol. The paper recommends cryptographic approaches as a direction for future defense; demonstrating (or not) that FaceLinkGen fails against CryptoFace [3] or a similar system would validate this recommendation and give the contribution a clear "what works" boundary.
+
+---
+
+## Overall Assessment
+
+The paper makes a real and useful contribution: it identifies a mismatch between the metrics PPFR systems use to claim privacy (PSNR/SSIM) and actual identity-level leakage, and it demonstrates through a simple distillation + generation pipeline that identity information is readily extractable from protected templates even when pixel-level reconstruction fails. The argument is well-structured, the threat model is carefully reasoned, and the multi-modal evaluation strategy is methodologically sound. The cost and simplicity of the attack ($1, under 2 hours, 90K training images or fewer) are notable: the barrier to exploitation is genuinely low.
+
+However, the paper has meaningful limitations that it underweights. The three evaluated systems all share one core design family (frequency channel selection), and the attack's pipeline is specifically calibrated to ArcFace—the same embedding space these systems are designed to preserve. The generalization to other PPFR paradigms is demonstrated only in preliminary pilots. The linkage accuracy gap from 0.88 (original-to-original) to 0.73–0.86 (template-based) is presented as negligible without sufficient analysis. The Success@5 metric slightly inflates the regeneration headline numbers relative to per-attempt strict-threshold results.
+
+These are real limitations, but they are evidential rather than structural: the core claim—that frequency-domain PPFR systems evaluated here do not provide the identity-level privacy their pixel-distortion metrics imply—is well-supported by the evidence. The paper does not overreach catastrophically; it correctly hedges its broader claims to "the evaluated systems" in the conclusion. The contribution is appropriately scoped for a systems security / multimedia venue and would benefit from the cross-embedding and cross-paradigm experiments before it can be said to have established the vulnerability comprehensively rather than for one design family.
+### Neutral Reviewer
+## Balanced Review
+
+### Summary
+This paper argues that the prevailing evaluation paradigm for frequency-domain privacy-preserving face recognition (PPFR)—which measures privacy as resistance to pixel-level reconstruction using PSNR/SSIM—fails to capture identity-level privacy leakage. The authors propose FaceLinkGen, an identity-centric attack using a distillation pipeline to extract identity embeddings from protected templates, then leverage a diffusion model (Arc2Face) for face regeneration. Across three recent PPFR systems (PartialFace, MinusFace, FracFace), FaceLinkGen achieves over 98.5% linkage accuracy and above 96% regeneration success, demonstrating that high pixel-level distortion does not prevent identity extraction.
+
+### Strengths
+1. **Important and well-motivated conceptual contribution.** The core argument—that pixel-level metrics inadequately capture identity leakage—is convincingly articulated and empirically supported. Table 1 effectively illustrates the disconnect between SSIM/PSNR and identity similarity, and the paper distinguishes its position from prior reconstruction-centric assumptions clearly and thoroughly.
+
+2. **Comprehensive empirical evaluation.** The paper evaluates three PPFR systems, three verification APIs (Face++, Amazon, and cosine similarity), three test datasets (TPDNE, CASIA-WebFace hold-out, LFW), and multiple attack dimensions (linkage, regeneration, soft biometrics, constrained adversary). The consistent high success rates across all these settings strengthen the central claim substantially.
+
+3. **Deliberately simple attack design strengthens the argument.** By showing that a straightforward distillation pipeline suffices—completed in under two hours on a single GPU for under $2—the paper demonstrates that the vulnerability lies in the representations themselves rather than requiring sophisticated adversarial techniques. The minimal-resource experiments (800 images, 256 images) further reinforce this point.
+
+4. **Thorough threat model discussion.** The paper carefully justifies the insider adversary assumption, addresses prior threat models and their limitations, and provides a constrained-attacker analysis that goes beyond the primary threat model. The discussion of why external-attacker framings are less relevant to PPFR's original design intent is well-reasoned.
+
+5. **Extensions beyond the core attack.** The paper demonstrates that the vulnerability extends to adversarial de-identification (TIP-IM) and non-frequency-domain methods (CanFG), and provides soft-biometric leakage experiments, showing the scope of the problem is broader than just frequency-domain PPFR.
+
+### Weaknesses
+1. **Limited methodological novelty.** The attack pipeline—knowledge distillation to align a student model with a teacher's embedding space, followed by conditional generation—is a straightforward application of established techniques. The authors acknowledge this ("the simplicity of our method is intentional"), but this means the paper's contribution is primarily empirical and conceptual rather than technical.
+
+2. **Unfairness in the evaluation framing.** The three evaluated PPFR systems were designed and optimized against pixel-level reconstruction attacks, not identity-centric distillation attacks. While the paper argues this is precisely the problem, some discussion of how these methods might be hardened against FaceLinkGen-style attacks (beyond Section 10's brief suggestions) would strengthen the contribution. The future directions section (Section 10) is relatively speculative and underdeveloped.
+
+3. **Constrained-attack analysis partially undermines the threat model.** The constrained scenario (Section 6) relies on the observation that all three methods preserve high-frequency information—domain knowledge that may not generalize. The paper acknowledges this is "specific to the frequency-domain family," but the section's title ("Attack Under Constrained Assumptions") somewhat overstates how constrained the adversary is, given they still need to know the general class of method being used.
+
+4. **Regeneration evaluation relies on a specific generative model and verification API.** While the authors argue that Arc2Face and Face++ are replaceable, the paper does not demonstrate this experimentally. The embedding-level linkage results are the model-agnostic evidence, but the headline regeneration numbers depend on Arc2Face's capabilities. The Amazon API cross-verification partially addresses this, but the gap between Face++ and Amazon results (e.g., ~47–57% vs. ~94–96% for FracFace in Table 7) raises questions about robustness of the regeneration claim across verification standards.
+
+5. **Limited discussion of negative results or failure cases.** The paper presents consistently high success rates but does not deeply analyze cases where the attack fails (the ~1–4% where linkage or regeneration falls short). Understanding failure modes would be valuable for both attack refinement and defense design.
+
+### Novelty & Significance
+The conceptual insight—decoupling pixel-level privacy from identity-level privacy—is significant and timely, directly challenging the evaluation foundation of an active research area. The technical novelty is limited, as the attack methodology combines well-known components (distillation, conditional generation). However, the significance of the finding transcends the attack's simplicity: demonstrating that current PPFR systems fail against a straightforward, low-cost procedure is arguably more impactful than developing a complex novel attack. The work has clear potential to reshape how the community evaluates privacy in PPFR systems.
+
+### Suggestions for Improvement
+1. **Deepen the defense discussion.** Section 10's future directions could be expanded into a more rigorous analysis. For instance, the authors could experiment with simple defenses (e.g., adding noise to the template, quantization, or reducing template dimensionality) and report whether they degrade FaceLinkGen's performance without breaking recognition utility. Even negative results (defenses that don't work) would be highly informative.
+
+2. **Analyze failure cases.** Report and discuss the characteristics of images/identities where FaceLinkGen fails (e.g., the ~2–4% of regeneration failures). Are there systematic patterns related to image quality, pose, or identity groups? This would strengthen understanding of the attack's limits and provide guidance for future defenses.
+
+3. **Narrow the gap between embedding-level and regeneration-level confidence.** The discrepancy between Face++ and Amazon API results deserves more discussion. What explains the ~40-point gap in the constrained attack scenario? Is it sensitivity to AI-generated faces, different thresholds, or something else? This bears directly on how broadly the regeneration claim generalizes.
+
+4. **Add a formal definition or metric for "identity-level privacy leakage."** The paper convincingly argues that PSNR/SSIM are inadequate, but stops short of proposing a principled replacement metric. Even an informal framework (e.g., linkage accuracy at a given false positive rate, or the embedding distance gap between same-identity and different-identity pairs) would help formalize the evaluation paradigm the paper advocates.
+
+5. **Clarify the scope of claims regarding de-identification methods.** The TIP-IM and CanFG results (Table 8) are interesting but presented with smaller datasets and less detail. The paper should be clearer about whether these are "pilot" results or fully vetted, and whether stronger adversarial de-identification methods (e.g., those with adaptive defenses) pose additional challenges.
+
+--- Merged Review ---
+Now I have sufficient information to write the final meta-review.
+
+---
+
+## Summary
+
+FaceLinkGen argues that the prevailing evaluation paradigm for frequency-domain privacy-preserving face recognition (PPFR)—which measures privacy as resistance to pixel-level reconstruction using PSNR/SSIM—fails to capture identity-level leakage. The authors present a knowledge-distillation pipeline that aligns protected templates to a standard ArcFace embedding space, then use Arc2Face to regenerate identity-consistent faces without recovering original pixels. Evaluated on three open-source frequency-domain PPFR systems (PartialFace, MinusFace, FracFace), the attack achieves high linkage accuracy and regeneration success, with pilot results on an adversarial de-identification method (TIP-IM) and a non-frequency-domain method (CanFG) suggesting broader applicability.
+
+---
+
+## Strengths
+
+- **Motivating example (Table 1)** is among the clearest and most persuasive demonstrations of the core problem: a CanFG-protected face achieves SSIM 0.841 with the original yet has face similarity 0.008, while two genuine photos of the same person share SSIM 0.235 but face similarity 0.586. This single example precisely dismantles the proxy assumption.
+
+- **Carefully reasoned threat model (Section 2).** The paper returns PPFR evaluation to its original intent—the service provider as adversary—and shows that the attacker assumed in several prior works (external eavesdropper) contradicts PPFR's motivating privacy concern. The critique of CanFG's reliance on model secrecy when the service provider is the very adversary is particularly incisive.
+
+- **Multi-modal verification convergence.** Results are consistently validated across Face++ (financial-grade), Amazon API, cosine similarity in ArcFace embedding space (Section 7), and soft-biometric prediction (Section 9). The convergence of four independent evaluation modalities substantially reduces concern that results are artifacts of any single tool.
+
+- **Minimal-resource experiment (Section 5.1).** FracFace achieves 97.0% generation pass rate at FAR 1×10⁻⁵ with only 800 training images; with 256 images, linkage accuracy reaches 98.7%. This is a strong, clean result establishing that the vulnerability is intrinsic to the representation rather than dependent on attacker resources.
+
+- **Table 6 comparison** directly juxtaposes FracFace's claimed protection rate (frequency channel disruption, near 100%) against FaceLinkGen's identity-centric pass rate (near 0% resistance). This is the paper's sharpest empirical point and communicates the core critique more compellingly than any single number.
+
+- **Section 7 (similarity distribution)** is model-agnostic evidence: template-to-source embedding similarity consistently exceeds cross-image same-identity similarity, confirming identity leakage at the representation level independently of Arc2Face or external APIs.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **All three evaluated systems share one design family.** PartialFace, MinusFace, and FracFace all operate by selectively transmitting or subtracting frequency-domain channels. The paper itself notes: *"they all preserve high-frequency information while obfuscating low-frequency information"* (Section 6). This shared design characteristic is what makes the constrained attacker's Gaussian-blur high-pass proxy universally applicable. The three systems are not independent data points—they are three instantiations of the same core principle. The paper's broader implication that identity-centric evaluation should be adopted across PPFR research is important, but the evidence base for this claim is a single design family. The pilot experiments on TIP-IM (a different paradigm) and CanFG are on smaller subsets with less detail, and the paper correctly hedges them as "preliminary." The abstract's focus on "frequency-domain PPFR research" is appropriate; however, stronger generalization claims in the introduction should be correspondingly hedged.
+
+### Minor
+
+- **The attack's generalization to non-ArcFace embedding spaces is claimed but undemonstrated.** Section 3 states: *"Other embedding models like FaceNet can also be used as long as there is a compatible generative model,"* but this is offered as assertion rather than empirical evidence. The attack pipeline is specifically calibrated to ArcFace: the teacher/student use Antelopev2 (an ArcFace variant), and Arc2Face was explicitly designed for ArcFace embeddings. PPFR systems designed to preserve recognition under a different embedding model might behave differently under this attack. This does not invalidate the paper's findings for the evaluated systems—all three were designed for ArcFace-compatible recognition—but the paper should be more careful about the generalization claim to other embedding spaces.
+
+- **The abstract's "over 98.5% matching accuracy" is not clearly grounded.** Table 3 reports 1-to-1 LFW verification accuracy of 0.92 for FracFace, which is substantially below 98.5%. The likely intended source for the 98.5% is the cross-verified accuracy in Table 5 (min value 0.988 for FracFace-to-Face), but Table 5 concerns regeneration pass rates against the Amazon API, not "matching accuracy" in the customary sense. The relationship between Tables 3, 4, and 5 and the headline claim should be clarified to avoid confusion about which metric supports the abstract's statement.
+
+### Trivial
+
+- The Future Directions section (Section 10) proposes cryptographic hardening and perception-consistent de-identification as paths forward, but the discussion remains speculative and does not engage concretely with trade-offs. Fleshing this out slightly would strengthen the paper's contribution to the field beyond diagnosis.
+
+---
+
+## Nice-to-Haves
+
+- **Cross-paradigm evaluation with a fully non-frequency method.** Even one thorough evaluation (comparable in detail to the three main systems) of a method with a fundamentally different design (e.g., cryptographic or depth-map-based) would substantially extend the generalization claim. Negative results here (attack fails) would also be highly informative about what actually constitutes a robust defense.
+
+- **Failure-case analysis.** The paper reports consistently high success rates but does not analyze the cases where the attack fails (~1–4% of regeneration attempts, ~10% at the strictest FAR for FracFace). Identifying whether failures correlate with pose, image quality, identity-specific properties, or dataset noise would clarify the attack's scope and help the community identify which defense properties actually matter.
+
+- **Unified identity-leakage metric.** The paper persuasively argues that PSNR/SSIM are inadequate but stops short of proposing a principled replacement. An informal framework—e.g., linkage accuracy at a fixed FAR, or the embedding-distance gap between same-identity and different-identity pairs—would give future PPFR papers a concrete benchmark to adopt.
+
+- **Expand Table 6 to all three systems.** The paper compares FracFace's protection-rate metric against FaceLinkGen's identity-centric pass rate, showing the disconnect clearly. Extending this direct comparison to PartialFace and MinusFace (which presumably have analogous protection metrics) would make the argument more systematic.
+
+---
+
+## Removed Points
+
+*These points were flagged for removal; treat with caution.*
+
+- **Harsh Critic Issue 3 (Success@5 inflates abstract headline):** Removed. The abstract states "above 96% regeneration success," which is actually a conservative lower bound—the minimum Success@5 across all conditions in Table 2 is 97.9% (FracFace/LFW). The paper also reports per-attempt pass rates at all three FAR thresholds; both metrics are transparent. There is no inflation.
+
+- **Harsh Critic – abstract/Table 3 inconsistency as a definitive factual error:** Partially removed (retained as a minor precision/clarity issue rather than a substantive error). The claimed 98.5% matching accuracy most plausibly refers to the Table 5 Amazon cross-verification accuracies (min 0.988), but the precise sourcing is ambiguous. This is a presentation issue, not a methodological one.
+
+- **Neutral Reviewer – "unfairness in evaluation framing" (PPFR systems not designed against distillation attacks):** Removed. This misunderstands the paper's contribution. The point is precisely that the systems were optimized against the wrong attack class; this is the paper's finding, not a fairness violation. The asymmetry favors the defender, making the attack results even more striking.
+
+- **Harsh Critic – student model's single Conv2D layer:** Removed. This is a trivial reproducibility detail, not a meaningful methodological gap.
+
+- **Harsh Critic – "constrained attacker inconsistency" (attacker needs to know high-pass characteristic):** Removed. The paper explicitly states the high-frequency retention is "easily observable visually" (Section 6), which is a reasonable characterization. Requiring visual inspection of the output representation is not a meaningful attacker knowledge constraint.
+
+- **Neutral Reviewer – "soft biometrics result is a corollary of prior work":** Removed. The paper cites the prior literature (Melzi et al. 2023, Osorio-Roig et al. 2023) and directly tests it on protected templates, which constitutes a legitimate empirical contribution even if the mechanism is expected. This is a strawman weakness.
+
+---
+
+## Novel Insights
+
+The paper's deepest insight is not simply that PPFR systems leak identity—it is that the evaluation paradigm itself is structurally misaligned with the privacy guarantee being claimed. By showing that pixel-level distortion is neither necessary nor sufficient for identity protection (via Table 1's CanFG example), and then demonstrating that a $1–2 distillation pipeline extracts identity from "unrecoverable" templates, the paper reframes the question: the problem is not that existing attacks are insufficiently clever, but that the PPFR community has been measuring the wrong thing. The constrained-attacker analysis (Section 6) adds a further insight: the shared high-frequency preservation property across three independently proposed methods is not coincidental—it is a design requirement imposed by the recognition utility constraint, and it is precisely this utility preservation that makes identity leakage structurally inevitable under current designs. This points toward cryptographic or information-theoretic approaches as the only principled path to decoupling utility from identity exposure.
+
+---
+
+## Suggestions
+
+1. **Clarify the abstract's 98.5% matching accuracy figure** with an explicit table reference and a sentence explaining what metric it corresponds to. Consistency with Table 3 (FracFace 0.92) should be acknowledged or resolved.
+2. **Add a direct empirical check of cross-embedding-space generalization** (even a brief ablation swapping Antelopev2 for FaceNet or ElasticFace) to ground the generalizability claim in Section 3.
+3. **Expand the Table 6 analysis to all three PPFR systems**, not only FracFace, to make the pixel-metric-vs-identity-metric disconnect a systematic finding rather than a single case study.
+4. **Strengthen the Future Directions section** by testing at least one simple defense (e.g., additive noise to the template post-conversion, or dimensionality reduction) and reporting whether it degrades recognition utility before it degrades FaceLinkGen's success—even a negative result is informative.
+
+---
+
+## Score and Decision
+
+**Calibration anchors consulted:**
+
+- *Topic (PPFR/face privacy attacks):* `razAcpFapu` (KAN-based PPFR attack, ~3 avg score, rejected) represents a low-quality paper in this space with naive evaluation and no novel framing. FaceLinkGen is substantially above this.
+- *Weakness (limited technical novelty, empirical/conceptual contribution):* `5xxGP9x5dZ` (Unlearn and Burn, 3/8/8, accepted poster) and `aJUuere4fM` (past-tense jailbreak, 8/1/6/8, accepted poster) both demonstrate that limited novelty in attack mechanism is not disqualifying when the problem framing and empirical finding are important. FaceLinkGen's problem framing is at least as careful as these, and its threat model analysis is more rigorous than either.
+- *Strength (comprehensive empirical evaluation revealing fundamental vulnerability):* `ExrEw8cVlU` (Poison-splat, 8/6/8/8, spotlight) is the high-end reference: it has a more technically novel attack and a cleaner experimental scope. FaceLinkGen is comparable in the *importance* of the finding but weaker in *technical depth* and *scope breadth*, placing it below the spotlight tier.
+
+**Positioning:** FaceLinkGen is clearly above the rejected low-tier papers in this area. Its conceptual contribution (reframing PPFR evaluation from pixel-level to identity-level) is original and consequential, the threat model is among the most carefully reasoned in this field, and the multi-modal evaluation is thorough. The main limitation—that all three evaluated systems share one design family, and that ArcFace-specificity of the attack is unaddressed—prevents it from reaching the 7–8 range of Poison-splat. The paper is most comparable to the accepted poster papers (aJUuere4fM, 5xxGP9x5dZ) that make a simple but important empirical point about a fundamental vulnerability. A score of **6.5** reflects a lean-to-solid accept: the paper makes a genuine contribution to the PPFR community's evaluation practices, executes its experiments carefully, and is clearly above threshold.
+
+**Originality:** Good. The pixel-level vs. identity-level framing is genuinely novel within PPFR evaluation; the attack components are established.
+**Importance of research question:** High. Directly challenges the measurement foundation of an active research area.
+**Claims well supported:** Mostly yes, within the three-system scope; generalization claims need more care.
+**Soundness of experiments:** Strong for the evaluated systems; the multi-modal cross-verification is exemplary practice.
+**Clarity of writing:** Good overall; a few table-to-abstract inconsistencies should be cleaned up.
+**Value to the research community:** High. This paper will influence how the community evaluates future PPFR work.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.5
+
+--- Decision ---
+Accept
