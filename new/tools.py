@@ -1,7 +1,32 @@
 
 from agents import Agent, Runner, function_tool
 import os
+import contextvars
+from collections import defaultdict
 ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
+
+# Tool-use counters for the OpenAI Agent SDK merger path.
+# Per-pipeline-run counts live in a ContextVar so concurrent pipelines don't
+# clobber each other. `IN_SUBAGENT` flips while the calibration_search
+# subagent runs so its tool calls land in the "subagent" bucket.
+TOOL_USE_COUNTS: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "TOOL_USE_COUNTS", default=None
+)
+IN_SUBAGENT: contextvars.ContextVar[bool] = contextvars.ContextVar("IN_SUBAGENT", default=False)
+
+
+def _count_tool(name: str) -> None:
+    counts = TOOL_USE_COUNTS.get()
+    if counts is None:
+        return
+    bucket = "subagent" if IN_SUBAGENT.get() else "main"
+    counts[bucket][name] += 1
+
+
+def new_tool_use_counts() -> dict:
+    counts = {"main": defaultdict(int), "subagent": defaultdict(int)}
+    TOOL_USE_COUNTS.set(counts)
+    return counts
 
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
@@ -51,10 +76,11 @@ def allow_path(path: str):
         ALLOWED_PATHS.append(resolved)
 
 
-@function_tool
+@function_tool(failure_error_function=None)
 def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
     If end_line is 0, reads to end of file."""
+    _count_tool("read_file")
     resolved = os.path.abspath(abs_path)
     print(f"  [read_file] Request to read '{resolved}' lines {start_line} to {end_line if end_line > 0 else 'EOF'}")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
@@ -66,9 +92,10 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
 
 
-@function_tool
+@function_tool(failure_error_function=None)
 def read_file_full(abs_path: str) -> str:
     """Read an entire file."""
+    _count_tool("read_file_full")
     resolved = os.path.abspath(abs_path)
     print(f"  [read_file_full] Request to read full file '{resolved}'")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS + ["/home/wg25r/review_agent/iclr2025/papers/"]):
@@ -79,7 +106,7 @@ def read_file_full(abs_path: str) -> str:
         return f.read()
 
 # glob_files is unused — no agent has it in tools=[]; also had a bug (doubled directory in paths)
-# @function_tool
+# @function_tool(failure_error_function=None)
 # def glob_files(pattern: str, directory: str = ".") -> str:
 #     """Find files matching a glob pattern (e.g. '**/*.md', '*.txt') under a directory. Returns one path per line."""
 #     import glob as _glob
@@ -87,9 +114,10 @@ def read_file_full(abs_path: str) -> str:
 #     return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
 
 
-@function_tool
+@function_tool(failure_error_function=None)
 def grep_file(pattern: str, abs_path: str) -> str:
     """Search a single file for a pattern. Returns matching lines with line numbers."""
+    _count_tool("grep_file")
     import re
     resolved = os.path.abspath(abs_path)
     print(f"  [grep_file] Request to grep for pattern '{pattern}' in '{resolved}'")
@@ -108,10 +136,13 @@ def grep_file(pattern: str, abs_path: str) -> str:
         return f"ERROR: {e}"
     return "\n".join(matches) if matches else "No matches found."
 
+from google import genai
+client = genai.Client()
 
-@function_tool
+@function_tool(failure_error_function=None)
 def search_file(query: str, n: int, mode: str) -> str:
     """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode to 'vector' for semantic similarity search or 'bm25' for keyword matching for specific papers."""
+    _count_tool("search_file")
     print(f"  [search_file] Searching for query '{query}' with mode '{mode}' and n={n}")
     if mode == "bm25":
         bm25 = list(database.values())[0]["bm25"]
@@ -129,12 +160,20 @@ def search_file(query: str, n: int, mode: str) -> str:
             results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
         return "\n---\n".join(results) if results else "No relevant files found."
     elif mode == "vector":
-        query_embedding = or_client.embeddings.create( 
-            model="google/gemini-embedding-001",
-            input=query,
-            encoding_format="float" 
+        # query_embedding = or_client.embeddings.create( 
+        #     model="google/gemini-embedding-001",
+        #     input=query,
+        #     encoding_format="float" 
+        # )
+
+
+        result = client.models.embed_content(
+                model="gemini-embedding-001",
+                contents=query
         )
-        query_vector = np.array(query_embedding.data[0].embedding)
+
+        query_embedding = result.embeddings[0].values
+        query_vector = np.array(query_embedding)
         similarities = vectors @ query_vector.T
         top_indices = similarities.argsort()[-n:][::-1]
         results = []

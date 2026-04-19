@@ -8,9 +8,9 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
-# import weave
-# weave.init("openai-agents")
+from tools import read_file, read_file_full, grep_file, search_file, IN_SUBAGENT, new_tool_use_counts, _count_tool  # glob_files removed (unused)
+import weave
+weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
@@ -89,34 +89,40 @@ CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score.
 
 How retrieval works: you do not have direct search tools for the human-review corpus. Use the `calibration_search` tool for every retrieval. It runs BM25 / vector search / grep internally and returns a list of paper paths with one-sentence summaries. You decide what to look for; it does the looking.
 
+How to phrase the query to `calibration_search`: the query you pass is a complete instruction to a separate subagent, not a raw search phrase typed into a search box. Write it as a directive you would give to a helper: state what the subagent should do, what it should look for, what score range or topic/weakness pattern to target, and what you want back. Do not pass a bare keyword string or a lone phrase like "privacy attack face recognition" — those are search queries, not instructions. Instead, wrap the intent in an imperative instruction.
+
+Good example (instruction): "Find 3-5 papers in the corpus whose reviews mention strong empirical results but overclaimed contributions, where the human score was 6 or higher. Return the paper paths with a one-sentence summary of each paper's main strengths and the overclaim."
+
+Bad example (raw query phrase): "strong empirical results overclaim score 6+".
+
 Workflow for every calibration step below:
 1. Decide what you want to retrieve (topic, weakness pattern, strength pattern, score range, etc.).
-2. Call `calibration_search` with a short natural-language request describing what you want.
+2. Call `calibration_search` with a complete natural-language instruction (as described above) telling it what to retrieve and how to report back.
 3. Read the returned paper list. If you want more detail on a specific anchor, use your own read_file tool on the returned absolute path.
 
-Do not try to call search_file, grep_file, or the BM25/vector index directly — those tools are only available to the subagent. If you want more or different anchors, call `calibration_search` again with a refined request.
+Do not try to call search_file, grep_file, or the BM25/vector index directly — those tools are only available to the subagent. If you want more or different anchors, call `calibration_search` again with a refined instruction.
 
 Your calibration process:
 
 1. Topic-based anchors: ask `calibration_search` for papers with similar topics. Note their human scores.
 
-2. Quality-based anchors: this is critical. Do not only search by topic. Ask for papers that share similar strength/weakness patterns with the paper under review:
-   - If this paper has strong empirical results but overclaims, ask for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
-   - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
+2. Quality-based anchors: this is critical. Do not only search by topic. Instruct `calibration_search` to find papers that share similar strength/weakness patterns with the paper under review. Phrase each call as a full instruction, e.g.:
+   - "Find papers in the corpus whose reviews flag overclaimed contributions alongside strong empirical results. Return 3-5 paper paths with their human scores and a one-sentence summary of the overclaim."
+   - "Find papers whose reviews praise novel framing but flag missing or weak baselines. Return 3-5 paper paths with their human scores and a one-sentence summary of the baseline issue."
 
-3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
-   - Ask for reviews of papers that were scored ~7+ by humans. Read a few of them to see what made them strong.
-   - Ask for reviews of papers that were scored ~4-6 by humans. These are your borderline anchors.
-   - Ask for reviews of papers that were scored ~3 or below by humans. Read a few to see what made them weak.
+3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on. Phrase each request as an instruction to `calibration_search`:
+   - "Find 3-4 papers scored 7 or higher by humans. Return paths and one-sentence summaries of what made each strong."
+   - "Find 3-4 papers scored 4-6 by humans (borderline anchors). Return paths and one-sentence summaries."
+   - "Find 3-4 papers scored 3 or below by humans. Return paths and one-sentence summaries of what made each weak."
    - Compare the paper under review against all ranges, not just whichever came back in retrieval.
 
-   Examples: if reviewing a paper about privacy attacks on face recognition, ask for:
-   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
-   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
-   - "face recognition evaluation paper high score" → broaden to related topics at the high end
-   - "privacy evaluation rejected" → find low-end anchors with similar flaws
+   Example instructions for a paper about privacy attacks on face recognition:
+   - "Find high-scored (7+) papers on privacy attacks against face recognition. Return 3-5 paths with one-sentence summaries."
+   - "Find low-scored (≤3) papers on privacy attacks against face recognition. Return 3-5 paths with one-sentence summaries of their weaknesses."
+   - "Broaden to face recognition evaluation more generally: find high-scored anchors. Return 3-5 paths with summaries."
+   - "Find rejected/low-scored papers on privacy evaluation with flaws similar to the paper under review. Return 3-5 paths with summaries."
 
-   If no papers are found with the same topic, you can use more general queries.
+   If no papers are found with the same topic, relax the instruction to a more general one and call `calibration_search` again.
 
 4. Score relative to anchors: your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
 
@@ -133,7 +139,7 @@ The samples could be concentrated in the middle, that does not mean you have to 
 
 There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to ask `calibration_search` for more papers with extreme scores to see what made a paper really good/bad.
 
-Limit your `calibration_search` invocations to less than 20 rounds, do not dig too deep into retrieval."""
+Limit your `calibration_search` invocations to 3–5 rounds, do NOT dig too deep into retrieval."""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
@@ -183,7 +189,7 @@ _NO_CAL = "--no_cal" in __import__("sys").argv
 CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
 You have these tools:
-- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- search_file(query, n, mode): BM25 or vector search over human reviews. mode='bm25' or 'vector'.
 - read_file(abs_path, start_line, end_line): read lines from a human review file.
 - grep_file(pattern, abs_path): substring search inside a single file.
 
@@ -201,7 +207,7 @@ Constraints:
 - Return 3-8 papers, not more.
 - Do not produce a review, do not give calibration advice, do not compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
 - Keep the whole response under 300 words.
-- Cap yourself at 6 tool calls total.
+- Aim for 2–3 tool calls total; stop as soon as you have enough matches.
 - Search exactly for what the main agent asked. Do not broaden or narrow the request on your own.
 """
 
@@ -224,6 +230,17 @@ else:
             tool_description="Retrieve calibration anchors from the human-review corpus. Send a short retrieval request (topic / weakness / strength / score range). Returns a list of paper paths each with a one-sentence summary. Does not do calibration reasoning — just retrieves.",
             max_turns=12,
         )
+        _orig_calibration_invoke = _calibration_tool.on_invoke_tool
+
+        async def _counted_calibration_invoke(ctx, args):
+            _count_tool("calibration_search")
+            token = IN_SUBAGENT.set(True)
+            try:
+                return await _orig_calibration_invoke(ctx, args)
+            finally:
+                IN_SUBAGENT.reset(token)
+
+        _calibration_tool.on_invoke_tool = _counted_calibration_invoke
         _merger_tools = [read_file, grep_file, _calibration_tool]
     merger = Agent(
         name="Merger",
@@ -250,6 +267,7 @@ The paper was extracted from PDF by an automated parser. Treat formatting artifa
 # ── Core pipeline ────────────────────────────────────────────────────
 
 async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool = False) -> dict:
+    tool_counts = new_tool_use_counts()
     paper_path_abs = os.path.abspath(paper_path)
     with open(paper_path, "r") as f:
         paper_content = f.read()
@@ -382,12 +400,23 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     if sdk_lines:
         sdk_lines.append(f"  TOTAL Claude SDK cost (USD): {sdk_total_cost:.4f}")
 
+    tool_lines = []
+    if _MERGER_SDK_MODEL is None:
+        main_counts = dict(tool_counts["main"])
+        sub_counts = dict(tool_counts["subagent"])
+        main_total = sum(main_counts.values())
+        sub_total = sum(sub_counts.values())
+        tool_lines.append(f"  Main merger: total={main_total} " + (", ".join(f"{k}={v}" for k, v in sorted(main_counts.items())) or "(none)"))
+        tool_lines.append(f"  Subagent:    total={sub_total} " + (", ".join(f"{k}={v}" for k, v in sorted(sub_counts.items())) or "(none)"))
+
     log_path = Path(__file__).parent / os.environ.get("MERGE_LOG", "pipeline.log")
     with open(log_path, "a") as log_f:
         log_f.write(f"\n{'='*60}\n")
         log_f.write(f"Paper: {paper_path}\n")
         log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
         log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
+        if tool_lines:
+            log_f.write(f"\n--- Tool Use Counts (OpenAI Agent SDK) ---\n" + "\n".join(tool_lines) + "\n")
         if sdk_lines:
             log_f.write(f"\n--- Claude SDK Usage ---\n" + "\n".join(sdk_lines) + "\n")
         log_f.write(f"\n--- Merged Inputs ---\n\n{chr(10).join(labeled)}\n")
@@ -395,7 +424,13 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
         log_f.write(f"\n--- Decision ---\n{decision}\n")
 
-    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision, "sdk_usages": sdk_usages}
+    return {
+        "merged_review": merged_review,
+        "scorer_output": scorer_output,
+        "decision": decision,
+        "sdk_usages": sdk_usages,
+        "tool_use_counts": {"main": dict(tool_counts["main"]), "subagent": dict(tool_counts["subagent"])},
+    }
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -640,6 +675,14 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
                 print(f"Acceptance rate @ score={score}: {exact_rate:.2%} (n={exact_n})")
                 print(f"Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})")
                 print(f"Percentile of score={score}: {percentile:.1f}% (n={pct_n})")
+
+    tuc = result.get("tool_use_counts") or {}
+    if tuc and (tuc.get("main") or tuc.get("subagent")):
+        main_c = tuc.get("main", {})
+        sub_c = tuc.get("subagent", {})
+        print(f"\n{'=' * 72}\nOpenAI Agent SDK Tool Use\n{'=' * 72}")
+        print(f"  Main merger: total={sum(main_c.values())} " + (", ".join(f"{k}={v}" for k, v in sorted(main_c.items())) or "(none)"))
+        print(f"  Subagent:    total={sum(sub_c.values())} " + (", ".join(f"{k}={v}" for k, v in sorted(sub_c.items())) or "(none)"))
 
     sdk_usages = result.get("sdk_usages") or {}
     if sdk_usages:

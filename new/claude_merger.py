@@ -1,9 +1,24 @@
 """
 Claude Agent SDK merger for main.py.
 Used when MERGER_MODEL starts with 'claude_sdk:'.
+
+Entire module disabled — call sites should not reach this anymore.
 """
 from __future__ import annotations
 
+
+async def run_harsh_claude_sdk(*args, **kwargs):
+    raise NotImplementedError("Claude is having a fever, quarantining now. ")
+
+
+async def run_merger_claude_sdk(*args, **kwargs):
+    raise NotImplementedError("Claude is having a fever, quarantining now. ")
+
+
+# ---------------------------------------------------------------------------
+# Original implementation (commented out)
+# ---------------------------------------------------------------------------
+_DISABLED = '''
 import os
 import numpy as np
 import pickle
@@ -18,6 +33,8 @@ HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 # ── Build indexes (mirrors tools.py) ──────────────────────────────────
 _bm25_db: dict = {}
 _or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+from google import genai
+client = genai.Client()
 
 def _ensure_indexes():
     global _bm25_db, _vectors, _filenames
@@ -102,7 +119,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                         matches.append(f"{i}: {line.rstrip()}")
         except Exception as e:
             return {"content": [{"type": "text", "text": f"ERROR: {e}"}], "is_error": True}
-        text = "\n".join(matches) if matches else "No matches found."
+        text = "\\n".join(matches) if matches else "No matches found."
         return {"content": [{"type": "text", "text": text}]}
 
     @tool(
@@ -113,7 +130,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
     async def _search_file(args: dict) -> dict:
         query = args["query"]
         n = args.get("n", 5)
-        mode = args.get("mode", "vector")
+        mode = args.get("mode", "bm25")
         print(f"  [merger:search_file] query='{query}' n={n} mode='{mode}'")
         if mode == "bm25":
             bm25 = _bm25_db["bm25"]
@@ -127,15 +144,16 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                 score = doc_scores[idx]
                 with open(fpath, "r", errors="replace") as fh:
                     content = fh.read()
-                results.append(f"{fpath}\nscore: {score:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
-            text = "\n---\n".join(results) if results else "No relevant files found."
+                results.append(f"{fpath}\\nscore: {score:.2f}\\nfirst 1000 chars:\\n{content[:1000]}\\n")
+            text = "\\n---\\n".join(results) if results else "No relevant files found."
         else:
-            query_embedding = _or_client.embeddings.create(
-                model="google/gemini-embedding-001",
-                input=query,
-                encoding_format="float",
+            result = client.models.embed_content(
+                    model="gemini-embedding-001",
+                    contents=query
             )
-            query_vector = np.array(query_embedding.data[0].embedding)
+
+            query_embedding = result.embeddings[0].values
+            query_vector = np.array(query_embedding)
             vectors = _bm25_db["vectors"]
             filenames = _bm25_db["filenames"]
             similarities = vectors @ query_vector.T
@@ -146,8 +164,8 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                 score = similarities[idx]
                 with open(fpath, "r", errors="replace") as fh:
                     content = fh.read()
-                results.append(f"{fpath}\nscore: {score:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
-            text = "\n---\n".join(results) if results else "No relevant files found."
+                results.append(f"{fpath}\\nscore: {score:.2f}\\nfirst 1000 chars:\\n{content[:1000]}\\n")
+            text = "\\n---\\n".join(results) if results else "No relevant files found."
 
         return {"content": [{"type": "text", "text": text}]}
 
@@ -165,34 +183,40 @@ CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score.
 
 How retrieval works: you do not have direct search tools for the human-review corpus. Use the `calibration_search` subagent (invoked via the Task tool with subagent_type='calibration_search') for every retrieval. The subagent runs BM25 / vector search / grep internally and returns a list of paper paths with one-sentence summaries. You decide what to look for; it does the looking.
 
+How to phrase the query to the subagent: the query you pass is a complete instruction to a separate subagent, not a raw search phrase typed into a search box. Write it as a directive you would give to a helper: state what the subagent should do, what it should look for, what score range or topic/weakness pattern to target, and what you want back. Do not pass a bare keyword string or a lone phrase like "privacy attack face recognition" — those are search queries, not instructions. Instead, wrap the intent in an imperative instruction.
+
+Good example (instruction): "Find 3-5 papers in the corpus whose reviews mention strong empirical results but overclaimed contributions, where the human score was 6 or higher. Return the paper paths with a one-sentence summary of each paper's main strengths and the overclaim."
+
+Bad example (raw query phrase): "strong empirical results overclaim score 6+".
+
 Workflow for every calibration step below:
 1. Decide what you want to retrieve (topic, weakness pattern, strength pattern, score range, etc.).
-2. Invoke the `calibration_search` subagent with a short natural-language request describing what you want.
+2. Invoke the `calibration_search` subagent with a complete natural-language instruction (as described above) telling it what to retrieve and how to report back.
 3. Read the returned paper list. If you want more detail on a specific anchor, use your own read_file tool on the returned absolute path.
 
-Do not try to call search_file, grep_file, or the BM25/vector index directly — those tools are only available to the subagent. If you want more or different anchors, invoke the subagent again with a refined request.
+Do not try to call search_file, grep_file, or the BM25/vector index directly — those tools are only available to the subagent. If you want more or different anchors, invoke the subagent again with a refined instruction.
 
 Your calibration process:
 
 1. Topic-based anchors: ask the subagent to retrieve papers with similar topics. Note their human scores.
 
-2. Quality-based anchors: this is critical. Do not only search by topic. Ask the subagent for papers that share similar strength/weakness patterns with the paper under review:
-   - If this paper has strong empirical results but overclaims, ask for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
-   - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
+2. Quality-based anchors: this is critical. Do not only search by topic. Instruct the subagent to find papers that share similar strength/weakness patterns with the paper under review. Phrase each call as a full instruction, e.g.:
+   - "Find papers in the corpus whose reviews flag overclaimed contributions alongside strong empirical results. Return 3-5 paper paths with their human scores and a one-sentence summary of the overclaim."
+   - "Find papers whose reviews praise novel framing but flag missing or weak baselines. Return 3-5 paper paths with their human scores and a one-sentence summary of the baseline issue."
 
-3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
-   - Ask for reviews of papers that were scored ~7+ by humans. Read a few of them to see what made them strong.
-   - Ask for reviews of papers that were scored ~4-6 by humans. These are your borderline anchors.
-   - Ask for reviews of papers that were scored ~3 or below by humans. Read a few to see what made them weak.
+3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on. Phrase each request as an instruction to the subagent:
+   - "Find 3-4 papers scored 7 or higher by humans. Return paths and one-sentence summaries of what made each strong."
+   - "Find 3-4 papers scored 4-6 by humans (borderline anchors). Return paths and one-sentence summaries."
+   - "Find 3-4 papers scored 3 or below by humans. Return paths and one-sentence summaries of what made each weak."
    - Compare the paper under review against all ranges, not just whichever came back in retrieval.
 
-   Examples: if reviewing a paper about privacy attacks on face recognition, ask for:
-   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
-   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
-   - "face recognition evaluation paper high score" → broaden to related topics at the high end
-   - "privacy evaluation rejected" → find low-end anchors with similar flaws
+   Example instructions for a paper about privacy attacks on face recognition:
+   - "Find high-scored (7+) papers on privacy attacks against face recognition. Return 3-5 paths with one-sentence summaries."
+   - "Find low-scored (≤3) papers on privacy attacks against face recognition. Return 3-5 paths with one-sentence summaries of their weaknesses."
+   - "Broaden to face recognition evaluation more generally: find high-scored anchors. Return 3-5 paths with summaries."
+   - "Find rejected/low-scored papers on privacy evaluation with flaws similar to the paper under review. Return 3-5 paths with summaries."
 
-   If no papers are found with the same topic, you can use more general queries.
+   If no papers are found with the same topic, relax the instruction to a more general one and invoke the subagent again.
 
 4. Score relative to anchors: your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
 
@@ -217,7 +241,7 @@ CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of t
 CALIBRATION_SUBAGENT_PROMPT = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
 You have these tools (all under the mcp__merger_fs__ namespace):
-- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- search_file(query, n, mode): BM25 or vector search over human reviews. mode='bm25' or 'vector'.
 - read_file(abs_path, start_line, end_line): read lines from a human review file.
 - grep_file(pattern, abs_path): substring search inside a single file.
 
@@ -266,10 +290,6 @@ async def _run_claude_sdk_query(
     agents: dict | None = None,
     max_turns: int = 30,
 ) -> tuple[str, dict]:
-    """
-    Generic single-turn-style Claude SDK runner. Captures cost/usage from
-    ResultMessage and returns (text, usage dict).
-    """
     from claude_agent_sdk import (
         ClaudeSDKClient,
         ClaudeAgentOptions,
@@ -292,7 +312,7 @@ async def _run_claude_sdk_query(
         agents=agents,
     )
 
-    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
+    full_prompt = f"{system_prompt}\\n\\n---\\n\\n{user_prompt}"
 
     result_text = ""
     sdk_usage: dict = {
@@ -338,10 +358,6 @@ async def _run_claude_sdk_query(
 
 
 async def run_harsh_claude_sdk(model_id: str, harsh_prompt_user: str, paper_dir: str, system_prompt: str) -> tuple[str, dict]:
-    """
-    Run the Harsh Critic via Claude Agent SDK with only read_file (so it can
-    read the paper from disk instead of receiving it inline).
-    """
     mcp_server = _make_merger_mcp_server(paper_dir, no_cal=True)
     return await _run_claude_sdk_query(
         label="Harsh Critic",
@@ -355,10 +371,6 @@ async def run_harsh_claude_sdk(model_id: str, harsh_prompt_user: str, paper_dir:
 
 
 async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, no_cal: bool = False) -> tuple[str, dict]:
-    """
-    Run the merger agent via Claude Agent SDK.
-    Returns (final merged review text, usage dict with cost/tokens/turns).
-    """
     with open("prompts/merger.md", "r") as f:
         system_prompt = f.read()
     system_prompt = system_prompt.replace(
@@ -370,10 +382,6 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
 
     mcp_server = _make_merger_mcp_server(paper_dir, no_cal=no_cal)
 
-    # Main merger only gets read_file/grep_file. Calibration retrieval is
-    # delegated to the calibration_search subagent (invoked via Task) so its
-    # many search/read tool results don't accumulate in the main merger's
-    # context — only the subagent's short paper-list response does.
     allowed_tools = [
         "mcp__merger_fs__read_file",
         "mcp__merger_fs__grep_file",
@@ -393,3 +401,4 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
         agents=agents,
         max_turns=30,
     )
+'''
