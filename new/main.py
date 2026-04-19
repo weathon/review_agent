@@ -45,7 +45,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 2
+CONCURRENCY = 10
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -87,12 +87,14 @@ PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_fi
 
 CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score.
 
-How retrieval works: you do not have direct search tools. Use the `calibration_search` tool for every retrieval. It runs BM25 / vector search / grep internally against the human-review corpus and returns a list of paper paths with one-sentence summaries. You decide what to look for; it does the looking.
+How retrieval works: you do not have direct search tools for the human-review corpus. Use the `calibration_search` tool for every retrieval. It runs BM25 / vector search / grep internally and returns a list of paper paths with one-sentence summaries. You decide what to look for; it does the looking.
 
 Workflow for every calibration step below:
 1. Decide what you want to retrieve (topic, weakness pattern, strength pattern, score range, etc.).
 2. Call `calibration_search` with a short natural-language request describing what you want.
-3. Read the returned paper list. If you want more detail on a specific anchor, use your own read_file on the returned absolute path.
+3. Read the returned paper list. If you want more detail on a specific anchor, use your own read_file tool on the returned absolute path.
+
+Do not try to call search_file, grep_file, or the BM25/vector index directly — those tools are only available to the subagent. If you want more or different anchors, call `calibration_search` again with a refined request.
 
 Your calibration process:
 
@@ -102,10 +104,10 @@ Your calibration process:
    - If this paper has strong empirical results but overclaims, ask for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
    - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
-3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve 2-4 papers per score range, not just one — a single anchor is too noisy to rely on:
-   - Ask for papers scored ~7+ by humans. Read a few of them to see what made them strong.
-   - Ask for papers scored ~4-6 by humans. These are your borderline anchors.
-   - Ask for papers scored ~3 or below by humans. Read a few to see what made them weak.
+3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
+   - Ask for reviews of papers that were scored ~7+ by humans. Read a few of them to see what made them strong.
+   - Ask for reviews of papers that were scored ~4-6 by humans. These are your borderline anchors.
+   - Ask for reviews of papers that were scored ~3 or below by humans. Read a few to see what made them weak.
    - Compare the paper under review against all ranges, not just whichever came back in retrieval.
 
    Examples: if reviewing a paper about privacy attacks on face recognition, ask for:
@@ -122,12 +124,16 @@ Your calibration process:
 
 Retrieval is noisy — a single 8 or 3 doesn't pin your score. Use the center of the anchor cluster, weighted by topical similarity, and move outside that range only if the paper clearly beats or falls below most of the anchors.
 
-When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them. List the papers you compared and the reasoning.
+When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
 
-Let the score distribution follow the actual quality of the paper relative to the calibration examples. The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
+You can use read_file to read the returned anchor files for more detail. List the papers you compared and the reasoning.
 
-Limit your `calibration_search` invocations to less than 20 rounds, do not dig too deep into retrieval.
-"""
+Let the score distribution follow the actual quality of the paper relative to the calibration examples.
+The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
+
+There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to ask `calibration_search` for more papers with extreme scores to see what made a paper really good/bad.
+
+Limit your `calibration_search` invocations to less than 20 rounds, do not dig too deep into retrieval."""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
@@ -174,11 +180,30 @@ neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neut
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
 
-CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper. The main agent sends you a retrieval request (e.g. "find papers with weakness: unfair baseline comparison" or "find papers scored 7+ on topic X"). You run search_file (BM25 or vector), read_file, grep_file against the human-review corpus and return a concise list of matching paper paths with one-sentence summaries.
+CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
-Workflow: 1-3 search_file calls; optional read_file on promising candidates to confirm score/decision; return 3-8 lines of "<abs_path>: <one-sentence reason, with score/decision if known>".
+You have these tools:
+- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- read_file(abs_path, start_line, end_line): read lines from a human review file.
+- grep_file(pattern, abs_path): substring search inside a single file.
 
-Do not review the paper under review. Do not compare or reason about calibration — the main agent does that. Just retrieve and summarize what you find. Cap yourself at 6 tool calls and 300 words total output."""
+Workflow:
+1. Run 1-3 search_file calls to find candidate reviews matching the request. Use vector search for semantic queries and bm25 for literal keyword matches.
+2. Optionally skim promising candidates with read_file to confirm they match (especially to verify score/decision if the request specifies a score range).
+3. Return a list of matching papers. For each: the absolute file path and ONE sentence describing why it matches (the key weakness/strength/topic/score that makes it relevant).
+
+Output format (strict):
+- <abs_path>: <one-sentence reason, mentioning human score and decision if known>
+- <abs_path>: <one-sentence reason>
+...
+
+Constraints:
+- Return 3-8 papers, not more.
+- Do not produce a review, do not give calibration advice, do not compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
+- Keep the whole response under 300 words.
+- Cap yourself at 6 tool calls total.
+- Search exactly for what the main agent asked. Do not broaden or narrow the request on your own.
+"""
 
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline

@@ -3,9 +3,13 @@
 
 We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
 
-# :pineapple:  Multi-Agent Paper Reviewer
+# :pineapple: AnchorReview
 
 An automated academic paper review system that uses multiple LLM agents with different roles to produce a consolidated review and score. Benchmarked against ICLR 2026 ground truth reviews.
+
+The name "Anchor" has two meanings, both central to the design:
+1. **Opinionated reviewer anchors** — instead of one balanced reviewer, the pipeline uses two extreme perspectives (a harsh critic and a strength finder) as anchoring points. The merger reconciles them.
+2. **Human-review calibration anchors** — the scorer doesn't emit a score in isolation; it retrieves similar human-reviewed papers from a calibration corpus and anchors its score against their real human scores.
 
 ## Architecture
 

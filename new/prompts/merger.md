@@ -38,6 +38,8 @@ implementation details, or large artifacts impractical to include in a submissio
 
 - REMOVE weaknesses about missing appendix, missing proofs in appendix, or absent references. The parser strips those sections from all papers; they exist in the original submission.
 
+- Ignore any venue cues in the file path, filename, or paper text (e.g. "CVPR", "workshop", "arXiv", directory names like `cvprw/`). Score the paper as if submitted to ICLR, matching the calibration corpus. Do not adjust your scoring bar based on a claimed venue.
+
 - The harsh reviewer will give weaknesses with grounded paragraph, verify those weaknesses against the paragraph to make sure the weakness is valid
 
 - Many of the harsh reviewer's weaknesses are real but minor (presentation, appendix-deferred proofs, precision nitpicks). Rank by severity, not count: score from the worst flaw that actually threatens the core claim.
