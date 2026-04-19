@@ -160,20 +160,12 @@ def search_file(query: str, n: int, mode: str) -> str:
             results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
         return "\n---\n".join(results) if results else "No relevant files found."
     elif mode == "vector":
-        # query_embedding = or_client.embeddings.create( 
-        #     model="google/gemini-embedding-001",
-        #     input=query,
-        #     encoding_format="float" 
-        # )
-
-
-        result = client.models.embed_content(
-                model="gemini-embedding-001",
-                contents=query
+        query_embedding = or_client.embeddings.create(
+            model="google/gemini-embedding-001",
+            input=query,
+            encoding_format="float"
         )
-
-        query_embedding = result.embeddings[0].values
-        query_vector = np.array(query_embedding)
+        query_vector = np.array(query_embedding.data[0].embedding)
         similarities = vectors @ query_vector.T
         top_indices = similarities.argsort()[-n:][::-1]
         results = []

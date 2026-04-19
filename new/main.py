@@ -139,7 +139,7 @@ The samples could be concentrated in the middle, that does not mean you have to 
 
 There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to ask `calibration_search` for more papers with extreme scores to see what made a paper really good/bad.
 
-Limit your `calibration_search` invocations to 3–5 rounds, do NOT dig too deep into retrieval."""
+Limit your `calibration_search` invocations to less than 20 rounds, do not dig too deep into retrieval."""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
@@ -207,7 +207,7 @@ Constraints:
 - Return 3-8 papers, not more.
 - Do not produce a review, do not give calibration advice, do not compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
 - Keep the whole response under 300 words.
-- Aim for 2–3 tool calls total; stop as soon as you have enough matches.
+- Cap yourself at 6 tool calls total.
 - Search exactly for what the main agent asked. Do not broaden or narrow the request on your own.
 """
 
