@@ -115,3 +115,36 @@ metric.py 里加了 per-bin accept rate (pred vs individual human) — 这是最
 - 主代理子代理共用 MCP server name "merger_fs", print prefix 都显示 "[merger:read_file]", 看不出哪个是主哪个是子, 需要重命名 print label
 - Subagent 跑过几次没有被实际 invoke (Merger 直接绕过), 要看是不是 prompt 不够强制 / 或者 Merger 觉得不需要 calibration
 - 还没跑 batch 验证整体 MAE/Pearson 在 ICLR2025/2026 上有没有改善, 单论文不能下结论
+
+---
+
+## 2026-04-18  Pearson 从 0.19 跳到 0.83 的原因
+
+ICLR2025 unbalanced, random 200 sample, seed 2545463167。N=19 partial 结果:
+- MAE = 0.80
+- **Pearson = 0.83** (上次类似 regime 只有 0.19)
+- decision_match = 13/19 (68%)
+
+跟之前"pipeline 挤在 4.5-5.5"的病状对比, 这次 pred range 3.0-6.5 已经打开, gt 范围 2.5-8.0 基本覆盖。
+
+### 做对了什么 (按重要性排)
+
+1. **human_reviews 重采样到 7k balanced corpus** (最大 win)。原来 17791 篇集中在 bin 4/5/6 (14k), 极端 bin 几乎没有。 Merger retrieval 每次都只拿到 middle-clustered anchors, 于是 paper 永远被 placed 在 "between middle anchors" → 4.5-5.5。重采样到 bin 距离 max/min 15× → 5× 后, retrieval 能拿到真正 3 分和 8 分的 anchor, merger 才能 place paper 到极端区间。
+   - HIGH paper (gt=8) Sonnet merger: 全 17k corpus → 5.0 Reject; 7k balanced → 6.5 Accept。单独这一步就解决了 ceiling 问题。
+
+2. **Harsh Critic / Merger 换成 Claude Sonnet (SDK)** (第二大 win)。同 corpus 同 prompt 下, GLM merger 在 HIGH paper 只能到 5.5 Reject, Sonnet 到 6.5 Accept。GLM 的 filter-Harsh 能力弱, 容易把 parser-artifact 当真 flaw (比如 "Theorem 3 没有 proof" 实际是 appendix 被 parser 删了, GLM 照抄, Sonnet 能识别)。
+
+3. **Neutral Reviewer → Strength Finder** (中等 win)。明确分工: 只找 evidence-backed strengths, 不写 weakness。merger.md 加了"strength 与 major weakness 冲突时 weakness 胜, 去掉 superficial/delusional 的 strength"的规则。这避免了 HIGH paper 里 strength 被 merger 一笔带过。
+
+4. **Merger prompt 加了 "score from anchors, not from how the review feels"** (中等 win)。之前 merger 会自己说"this paper sits between X and Y" 然后给低于 X 的分数 (self-contradict)。现在强调 anchor 是 ground truth, gut feeling 不算。
+
+5. **Parser-artifact rule explicit**: "appendix/references 被 parser 删了, 不要当成 missing" — 让 merger 忽略那类假 weakness。
+
+6. **cut Human Finder + Spark**: 前者占 55% token 但只贡献 30% 真 signal (65% noise); 后者大部分和 Harsh overlap。删掉后 noise 减少, Merger 注意力更集中在真实的 Harsh weaknesses 和 Strength Finder strengths。
+
+7. **Subagent 隔离 calibration retrieval**: Merger 不直接跑 search/grep, 而是派 Haiku subagent (Claude SDK) 或 as_tool (OpenAI SDK) 去查。Merger 上下文里只剩 "anchor paper list + 一句话总结", 不会被 search 结果堆成 300k context。
+
+### 注意事项
+
+- 这次是 **unbalanced random sample**, gt 分布本身就集中 (bin 6 占 33%), 所以 decision accuracy 看起来高一部分是 sample 本身偏 middle。Pearson 0.83 不受这个影响因为是 scale-invariant, 但 MAE 和 decision_match 在 balanced sample 上会比现在难看。
+- 这些改动是 **组合拳**, 单独拿任何一个单改动都只能移动 0.5-1 分, 效果不显著。只有多个改动一起上才打开极端分的 ceiling 和 floor。

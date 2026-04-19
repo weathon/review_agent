@@ -1,59 +1,59 @@
-Now let me search for calibration papers.Now I have enough information to write the final consolidated review.
-
----
+Now let me run calibration searches in parallel to determine appropriate scoring anchors.Now I have sufficient information to write the final consolidated review.---
 
 ## Summary
 
-This paper proposes Curve Line Fitting (CLF), a neural network architecture that replaces the traditional linear regression + activation function paradigm of MLPs with piecewise quadratic Bézier curve fitting. By using control points with fixed x-coordinates and learnable y-coordinates, the model eliminates activation functions and produces a directly visualizable representation of learned input-output relationships. The paper introduces single-node, single-layer, and multi-layer variants, with the multi-layer version handling dimension interactions via a covariance-based grouping scheme inspired by gradient boosting.
+The paper proposes the Curve Line Fitting (CLF) network, which replaces MLP linear layers + activation functions with piecewise quadratic Bézier curve fitting applied independently per input dimension. The single-layer variant computes the output as a sum of per-dimension learned curves, while the multi-layer variant organizes grouped dimensions into a tree structure where child-curve shapes vary by parent segment. The central motivation is full interpretability (all relationships stored as explicit quadratic equations) and the elimination of backpropagation.
 
 ---
 
 ## Strengths
 
-- **Principled interpretability mechanism**: The equList representation converts learned Bézier control points into quadratic equations that can be directly plotted. Figure 3 convincingly shows that single-layer CLF isolates individual function components (e.g., recovering $0.01x_1^3$, $3\sin^5(x_2)$, $\log(x_3+1)$ separately) and identifies noise dimensions as flat lines. This is a genuine transparency advantage over MLPs.
-- **Stable optimization**: Table 4 reports that CLF's per-dimension local update rule (Eq. 2) yields highly consistent results across runs (deviation 0.07–0.21%), compared to MLP's 1.46–5.78% run-to-run variance. The no-backward-pass property is a real engineering advantage and the claim is mechanistically grounded.
-- **Clean forward-pass engineering**: The ToQuadraticList transformation (Section 2.1.3) that precomputes quadratic coefficients is a sensible and clearly motivated optimization for inference speed.
-- **Interpretability of multi-layer interactions**: Figure 4 demonstrates that a correctly grouped multi-layer CLF can visually reveal how a root dimension modulates a child dimension's contribution (e.g., sign-flipping of $\log(x_2+1)$ depending on $\sin(x_1)$'s sign), a qualitatively useful diagnostic for understanding dimension interactions.
+- **C¹-continuous piecewise Bézier parameterization (Section 2.1):** The midpoint control-point trick guarantees continuity and differentiability across segment boundaries without requiring additional constraints. The derivation is clean and the resulting O(1) forward evaluation per dimension (via pre-computed quadratic forms, Eq. 3) is a legitimate computational observation.
+
+- **Genuine visual interpretability demonstrated (Figure 3):** The learned per-dimension curves for the 4-D synthetic distribution directly recover the true functional forms (cubic, sin⁵, log, flat noise). This is a concrete demonstration—not merely a theoretical claim—that the model surfaces interpretable structure in the additive setting.
+
+- **Training stability advantage with quantitative evidence (Table 4):** CLF achieves ≤0.21% deviation from mean accuracy across runs, versus up to 5.78% for MLP of comparable parameter count, with some MLP runs requiring retraining. This is a real and repeatable finding for the presented task.
+
+- **Multi-layer structure correctly captures multiplicative interactions (Figures 4, Section 3.3):** For the known-grouping case, child-curve shape modulation by root-segment value (inverted sign when root is negative, squeezed when near zero) is coherently explained and visually confirmed.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None that would prevent the paper from existing as a contribution — but see Major for issues that severely undermine the central claims.*
+*None that fully invalidate all results.*
 
 ### Major
 
-- **The only real-world benchmark contradicts the performance claim.** Table 5 shows that the best CLF variant (CLF+ 2-layer) achieves 95.67% test accuracy on MNIST versus MLP 784-480-10 at 97.92% — a ~2.3 point gap. The plain 2-layer CLF reaches only 94.97%. The paper's abstract and conclusions claim CLF offers "a more efficient means of fitting target distributions," but the one real test directly refutes this. The paper acknowledges this: *"CLF demonstrates higher accuracy on the training dataset but lower accuracy on the test dataset than MLP. This suggests that while CLF can fit the training data more precisely, it lacks the generalizability of MLP"* — yet this admission does not lead to a retraction of the superiority claim. A paper cannot credibly claim performance superiority when its own single real-world result shows the opposite.
+- **No comparison to KAN (Liu et al., 2024), the most directly relevant prior work.** Liu et al. (2024) is cited in the introduction only as a reference to "updating activation functions to be learnable" with no further engagement. KAN replaces MLP linear+activation layers with learnable univariate splines on edges — for the identical goals of improved expressiveness and interpretability, without traditional activations. CLF's Bézier-based approach occupies essentially the same design space. The paper provides no experimental comparison and no conceptual differentiation between Bézier segments and B-splines. At a venue like ICLR, this is a structural submission gap: without this comparison, the contribution cannot be positioned.
 
-- **The most favorable comparison is self-acknowledged as unfair.** Section 3.4 states explicitly: *"the author does not consider this a fair comparison."* The taxonomy dataset (Figure 5) is a 2D custom dataset designed to suit CLF's tree structure, and MLP architectures were hand-matched to CLF's parameter counts in ways that disadvantage MLP. Table 4's results — the paper's most positive comparative evidence — rest on a comparison the authors themselves disclaim. There is no fair head-to-head baseline comparison anywhere in the paper.
+- **Single-layer CLF is a Generalized Additive Model (GAM), but this connection is entirely unacknowledged.** The output ŷ = Σᵢ f(xᵢ) with learnable univariate f is the exact definition of a GAM (Section 2.2.1). GAMs have decades of literature, theoretical results (expressiveness, identifiability), and strong empirical baselines (e.g., Explainable Boosting Machines). The paper's interpretability and functional-form claims directly parallel GAM literature. Failing to position CLF relative to GAMs is not a citation gap—it is a failure to characterize what the proposed model actually is.
 
-- **The key novel component (automatic dimension grouping) is never evaluated end-to-end.** Section 2.3.1 defines $\text{Relation}(i,j) = \text{Cov}(l_{:,i}, \hat{y}_{:,j})$ as an automatic grouping metric. However, all multi-layer experiments in Section 3.3 use *manually pre-specified* correct and incorrect groupings. The automatic algorithm is never applied or validated on a single dataset. Since the multi-layer architecture is fragile to incorrect grouping (Table 3: Model 5 reaches loss ~0.92–0.96 vs 0.13–0.59 for correct grouping), the practical viability of CLF depends entirely on the grouping algorithm working — which is never shown.
+- **The multi-layer CLF's auto-grouping mechanism (Section 2.3.1) is never independently evaluated.** The relation metric `Cov(l_{:,i}, ŷ_{:,j})` is proposed but all Section 3.3 experiments use author-specified groupings derived from known ground-truth data-generating processes. Table 3 demonstrates a 6.7× loss increase for incorrect groupings (`[[x₁,x₃],[x₂]]` gives 0.9201 vs. 0.1365 for correct groupings at 20 segments). The paper's conclusion explicitly lists "grouping accuracy" as an open problem. The central innovation of multi-layer CLF therefore rests on a mechanism that is described but never shown to work in practice—undermining any claim that multi-layer CLF is a usable method beyond oracle-supervised settings.
 
-- **No comparison to the most directly analogous method.** Liu et al. (2024) — cited in the paper — introduces KAN, which also replaces fixed activations with learnable nonlinear functions and emphasizes interpretability. CLF's architecture and motivation are closely parallel to KAN, yet no comparison is made. Without this, claims about CLF's performance, efficiency, and interpretability relative to "activation-function-based MLP" float unanchored from the most relevant baseline.
+- **On MNIST (the only real-world benchmark), CLF is substantially outperformed by MLP,** yet the abstract claims CLF provides "a more efficient means of fitting target distributions." Table 5 shows CLF 2-L at 94.97% vs. MLP 784-480-10 at 97.92%, a gap that is non-trivial for MNIST (simple MLPs routinely exceed 98%). The paper honestly acknowledges "CLF still lacks the generalizability of MLP" (Section 3.5), but this contradicts the abstract's framing of CLF as a superior alternative. Moreover, CLF+ (which partially recovers: 95.67%) is introduced in Table 5 without definition in the main text.
+
+- **The taxonomy comparison is explicitly called "unfair" by the authors, yet comparative conclusions are drawn from it.** Section 3.4 states: "the author does not consider this a fair comparison," explaining that CLF's computational model (one quadratic per dimension) gives it an inherent speed advantage over MLP at the same parameter count. Despite this admission, the section concludes "CLF not only demonstrated superior accuracy but also operated significantly faster than MLP." An experiment the authors themselves concede is unfair cannot support a comparative performance claim without a corrected evaluation.
 
 ### Minor
 
-- **Structural equivalence to GAMs is unacknowledged.** The single-layer CLF produces outputs of the form $\hat{y} = \sum_i f(x_i)$, which is definitionally a Generalized Additive Model. Spline-based GAMs, Explainable Boosting Machines (EBMs), and Neural Additive Models (NAMs) share the same additive assumption but come with theoretical grounding, regularization methods, and established benchmarks. The paper positions CLF relative only to MLP, missing the relevant literature that shares its core structural assumption.
+- **CLF+ is undefined in the main text.** Table 5 reports CLF+ results (92.85% and 95.67% test accuracy) as core MNIST findings, but the model is not described anywhere in the main paper. The paper defers to the appendix ("due to space limitations"). This leaves the main result table incomplete.
 
-- **Interpretability demonstrated exclusively on synthetic data with known ground truth.** Every interpretability demonstration uses functions the authors constructed. For MNIST (the only real-world dataset), no curve visualization or interpretability analysis is provided at all. The claim that CLF "clearly illustrates the relationships between input dimensions and target distributions" is validated only in cases where those relationships are already known.
+- **The taxonomy evaluation is limited to a 2D hand-crafted synthetic dataset.** Even if the comparison were fair, results on a designer 2D classification task cannot support broad claims about CLF vs. MLP performance. At minimum, the scope of this conclusion must be explicitly restricted.
 
-- **CLF+ is presented without definition in the main paper.** Table 5 reports CLF+ results as one of the key findings, but the mechanism is not explained: *"Due to space limitations, further discussion of generalizability issues is provided in the Appendix."* The appendix was not included in the submitted text. The only real-world result that shows any improvement over plain CLF relies on an undefined variant.
-
-- **Scalability is not analyzed.** For MNIST, 784 dimensions had to be reduced to <400 after a filtering step, and only 3 segmentations were used. The control list grows as $N \cdot \text{seg}^{\text{layer}} \cdot (\text{seg}+2)$, which becomes prohibitive even for moderate dimensionality. The paper does not discuss or characterize these constraints.
+- **No convergence analysis for the greedy local update rule (Eq. 2).** The update is a stochastic nearest-neighbor gradient step on control point y-positions, with no backward pass. This precludes learning non-local dependencies and may underlie the MNIST generalization gap—but the paper offers no theoretical or empirical analysis of why CLF fails to generalize.
 
 ### Trivial
 
-- The claim that CLF is "more efficient" than MLP in the abstract is not supported. Efficiency on MNIST is not reported; the taxonomy comparison is on a tiny 2D dataset. The claim should be conditioned on the specific memory-for-speed tradeoff the paper describes.
+- The analogy to neural brain processes ("only specific regions interact," Section 2.1.2) is unscientific and serves no technical purpose. It can be removed without loss.
 
 ---
 
 ## Nice-to-Haves
 
-- Compare against interpretable baselines (EBMs, NAMs, spline-based GAMs) that share the additive assumption — these are the natural competitors for single-layer CLF.
-- Evaluate the $\text{Relation}(i,j)$ automatic grouping algorithm on at least one real dataset where the ground truth interaction structure is known.
-- Demonstrate interpretability on a real tabular dataset (e.g., medical or financial) where the discovered per-dimension curves can be validated against domain knowledge — this would constitute genuine evidence for the interpretability claim.
-- Provide convergence or approximation analysis for the multi-layer optimization, even empirically.
+- Evaluate the auto-grouping algorithm on a real tabular dataset where ground-truth variable interactions are unknown (e.g., UCI datasets with multiplicative structure); show cases where it succeeds and where it fails.
+- Compare single-layer CLF against EBMs (Explainable Boosting Machines) and classical GAMs on tabular benchmarks—this would properly contextualize the interpretability and accuracy trade-off.
+- Provide a formal characterization of the function class representable by single-layer CLF (GAM with piecewise quadratic basis) and multi-layer CLF (sums of products within pre-specified groups).
 
 ---
 
@@ -61,46 +61,47 @@ This paper proposes Curve Line Fitting (CLF), a neural network architecture that
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Convergence proof for the local update rule"** (Harsh Critic, Section-by-Section Notes): Demanding convergence proofs for an empirical systems paper is not standard in this setting and falls into Nice-to-Have territory. Removed as a weakness.
-- **"No theoretical comparison to universal approximation theorems"**: Similarly, requesting formal approximation bounds for an empirical contribution is above the standard for this type of paper. Moved to Nice-to-Have.
-- **"Section 3.1–3.2 — synthetic experiments without baselines are not meaningful"**: Partially valid framing, but showing that a single-node CLF fits an arbitrary nonlinear curve with increasing segmentation is a reasonable basic capability demonstration. The absence of baselines in this subsection is expected. Removed as standalone weakness (subsumed under the broader point that the real-world evaluation is inadequate).
-- **"Brain analogy is not a substitute for theoretical justification"**: A presentation observation, not a scientific weakness. Removed as pure nitpick.
-- **Reproducibility concerns about undisclosed hyperparameters**: The LR is identified as a hyperparameter but not tabulated. Removed per Hard Rules on reproducibility nitpicks.
+- **Harsh Critic: "The claim that no prior network has been based on Bézier curve fitting ignores the broader spline/basis-function literature."** The paper's specific claim is "no existing network architecture has been based solely on this approach [Bézier curve fitting for multi-dimensional networks]" — a narrow claim that the critic inflated. The GAM/KAN positioning criticism already captures the substantive issue.
+
+- **Harsh Critic: "No comparison to standard regression baselines (random forests, Gaussian processes)"** for the synthetic experiments in Sections 3.1–3.2. These experiments are proof-of-concept function fitting demonstrations, not held-out generalization benchmarks. Demanding random forests on fitting tasks is outside the scope of what these experiments claim to show.
+
+- **Harsh Critic: "The claim of 'full interpretability' is asserted rather than defined"** — while it's true no formal metric is used, the paper's interpretability claim is substantiated concretely through Figures 3–4 (learned curves matching ground-truth functions). Demanding a formal user study is beyond community norms for this type of systems paper.
+
+- **Harsh Critic strength note: "Training stability is confined to a toy 2D task"** — while this is true, the numbers in Table 4 are real and statistically substantial (≤0.21% vs. ≤5.78% deviation). The limited scope is captured as a Minor weakness; the strength itself is not fabricated.
 
 ---
 
 ## Novel Insights
 
-The CLF architecture is structurally a Generalized Additive Model with piecewise quadratic Bézier basis functions and a local kernel-regression-style update rule. This connection — unacknowledged by the authors — is the most useful framing for both situating the contribution and identifying the correct comparison class. The multi-layer extension is a novel hierarchical interaction model, but its viability is entirely contingent on the automatic grouping algorithm, which is the paper's central unverified claim. The fundamental tension in the paper — that interpretability and generalization are in competition (as shown by the MNIST overfitting) — is a real and important observation that would benefit from principled treatment.
+The most genuinely novel observation in the combined reviews is the structural tension between CLF's interpretability mechanism and its generalization failure: the same locality property of the update rule (Eq. 2) that produces interpretable, smooth per-dimension curves and training stability is likely the root cause of overfitting and poor generalization on MNIST—each control point responds only to nearby samples, making it impossible to learn globally regularized representations. This suggests that CLF's interpretability and its generalization capacity are not independent properties to be optimized separately, but may be in fundamental tension for high-dimensional data. Making this explicit, and understanding whether CLF+ breaks this tension, would be a meaningful theoretical contribution.
 
 ---
 
 ## Suggestions
 
-1. Either retract the performance superiority claim entirely or add real-world benchmarks (UCI tabular datasets) where fair MLP comparisons can be made.
-2. Run the automatic grouping algorithm end-to-end on a dataset with known interaction structure and report whether it correctly identifies groups.
-3. Acknowledge and compare against the GAM/EBM literature, which shares the additive structure.
-4. Move the CLF+ definition and generalizability discussion into the main paper; it is essential for evaluating the MNIST result.
-5. Compare against KAN on the taxonomy and MNIST tasks, since KAN is already cited and is the directly analogous method.
+1. **Integrate a head-to-head comparison with KAN on at least one shared benchmark** (e.g., a synthetic regression task matching the ones in the KAN paper); articulate clearly whether Bézier segments provide different approximation properties than B-splines.
+2. **Define CLF+ in the main text** and explain precisely how it addresses overfitting.
+3. **Test the auto-grouping algorithm independently** on at least one dataset without oracle grouping knowledge; report failure rates and how visual inspection corrects errors.
+4. **Explicitly frame single-layer CLF as a GAM** and discuss the connection to EBMs, NAMs, and prior GAM literature to properly situate the contribution.
+5. **Replace the taxonomy comparison** with a benchmark on real tabular datasets (e.g., OpenML-CC18 suite) with fair hyperparameter tuning for both CLF and MLP.
 
 ---
 
 ## Score and Decision
 
-**Calibration papers used:**
+**Calibration anchors used:**
 
-| Paper | Scores | Decision | Similarity to CLF |
-|---|---|---|---|
-| K9xuqsaP0R (KAE) | 3,3,3,3 (avg 3.0) | Withdrawn/Reject | KAN variant, weak experimental comparison, insufficient novelty over baselines |
-| 9KNnSvUxLl (TimeKAN) | 6,3,3,3 (avg 3.75) | Withdrawn/Reject | KAN-based interpretable model, limited benchmark coverage |
-| BCeock53nt (KAT) | 6,6,8,8,6 (avg 6.8) | Accept (Poster) | KAN-based architecture, thorough multi-dataset evaluation with strong results |
-| ydlDRUuGm9 (KAN expressiveness) | 6,6,8,5 (avg 6.25) | Accept (Poster) | Theoretical KAN analysis, well-positioned relative to prior work |
+| Paper | Topic | Human Scores |
+|---|---|---|
+| KAN (Ozo7qJ5vZi) | Learnable spline functions replacing MLP, interpretability | 8, 6, 6, 8, 8 (Oral) |
+| KANG (udfjje2xXb) | KAN applied to GNNs, interpretability | 3, 3, 3, 3, 5 (Reject) |
+| ANOVA-NODE (Xy1Lf7uR9H) | Interpretable NN via functional ANOVA decomposition | 5, 6, 3, 6 (Reject) |
 
-**Reasoning**: The CLF paper sits firmly below the KAE (avg 3.0) anchor in one important respect: KAE at least showed real-world improvements on its target tasks, whereas CLF's only real-world result (MNIST) directly contradicts its headline claim. The automatic grouping mechanism — the most novel structural contribution — is never evaluated. The fair comparison is self-disclaimed. These are not fixable by adding appendix material; they represent a fundamental mismatch between the experiments and the claims.
+**Reasoning:** CLF is in the same conceptual space as KAN — both replace linear+activation layers with learnable nonlinear univariate functions for interpretability. KAN received scores of 8,6,6,8,8 due to rigorous theoretical analysis, comprehensive experiments, compelling scientific use cases, and proper positioning. CLF has none of these: no theory, evaluation limited to synthetic datasets plus one real dataset where it loses, no comparison to KAN, and the central innovation (auto-grouping for multi-layer) is never tested. 
 
-Compared to TimeKAN (avg 3.75), CLF is weaker on experimental rigor (one dataset vs. six, no comparison to directly analogous methods) but has a cleaner conceptual contribution (the equList interpretability mechanism).
+CLF is most comparable to KANG (avg 3.2): both apply a function-fitting idea (KAN/Bézier) in a new setting, both fail to compare to the most directly relevant prior work, and both have evaluation limited to narrow settings. CLF has marginally more originality (Bézier from scratch vs. directly applying KAN to GNNs), but KANG at least tested on real graph benchmarks and compared to established baselines, while CLF's only real-world test (MNIST) contradicts its central claim. The unfair-comparison acknowledgment paired with performance conclusions, the unverified auto-grouping, and the unacknowledged GAM identity are collectively disqualifying for ICLR. ANOVA-NODE (avg 5.0) provides a meaningful benchmark for what a borderline interpretable-NN paper looks like — it has theoretical proofs and broader experiments, and still received a 3 from one reviewer. CLF is below that level.
 
-The paper is a coherent early-stage idea with a genuine interpretability contribution demonstrated on synthetic data, but the experimental design fundamentally cannot support the central performance claims. Score: **3.0**.
+**Score: 3.0 — Reject**
 
 MY FINAL SCORE: <pineapple>3.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
