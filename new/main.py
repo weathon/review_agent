@@ -319,6 +319,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
 
     print("  Phase 2: Merger ...")
+    merger_start = time.monotonic()
     if _MERGER_SDK_MODEL is not None:
         from claude_merger import run_merger_claude_sdk
         merger_prompt = (
@@ -352,6 +353,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         )
         merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
         agent_usages["Merger"] = merger_usage
+    merger_elapsed = time.monotonic() - merger_start
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
@@ -372,6 +374,20 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             total_output += usage.output_tokens
             total_tokens += usage.total_tokens
     token_lines.append(f"  TOTAL: input={total_input} output={total_output} total={total_tokens}")
+
+    merger_output_tokens = 0
+    _m_usage = agent_usages.get("Merger")
+    if _m_usage is not None:
+        merger_output_tokens = getattr(_m_usage, "output_tokens", 0) or 0
+    _m_sdk = sdk_usages.get("Merger")
+    if _m_sdk is not None:
+        _u = (_m_sdk or {}).get("usage") or {}
+        merger_output_tokens += (_u.get("output_tokens") or 0)
+    merger_tps = (merger_output_tokens / merger_elapsed) if merger_elapsed > 0 else 0.0
+    token_lines.append(
+        f"  Merger throughput: {merger_output_tokens} output tokens / {merger_elapsed:.1f}s "
+        f"= {merger_tps:.1f} tok/s"
+    )
 
     sdk_lines = []
     sdk_total_cost = 0.0
@@ -430,6 +446,9 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         "decision": decision,
         "sdk_usages": sdk_usages,
         "tool_use_counts": {"main": dict(tool_counts["main"]), "subagent": dict(tool_counts["subagent"])},
+        "merger_elapsed_s": merger_elapsed,
+        "merger_output_tokens": merger_output_tokens,
+        "merger_tokens_per_s": merger_tps,
     }
 
 
@@ -675,6 +694,13 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
                 print(f"Acceptance rate @ score={score}: {exact_rate:.2%} (n={exact_n})")
                 print(f"Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})")
                 print(f"Percentile of score={score}: {percentile:.1f}% (n={pct_n})")
+
+    if result.get("merger_elapsed_s") is not None:
+        print(
+            f"\nMerger throughput: {result['merger_output_tokens']} output tokens / "
+            f"{result['merger_elapsed_s']:.1f}s = {result['merger_tokens_per_s']:.1f} tok/s "
+            f"(output-only; input processing ~instant, main agent waits on subagents, tools ~instant)"
+        )
 
     tuc = result.get("tool_use_counts") or {}
     if tuc and (tuc.get("main") or tuc.get("subagent")):

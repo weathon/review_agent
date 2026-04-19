@@ -7,18 +7,6 @@ Entire module disabled — call sites should not reach this anymore.
 from __future__ import annotations
 
 
-async def run_harsh_claude_sdk(*args, **kwargs):
-    raise NotImplementedError("Claude is having a fever, quarantining now. ")
-
-
-async def run_merger_claude_sdk(*args, **kwargs):
-    raise NotImplementedError("Claude is having a fever, quarantining now. ")
-
-
-# ---------------------------------------------------------------------------
-# Original implementation (commented out)
-# ---------------------------------------------------------------------------
-_DISABLED = '''
 import os
 import numpy as np
 import pickle
@@ -401,4 +389,3 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
         agents=agents,
         max_turns=30,
     )
-'''

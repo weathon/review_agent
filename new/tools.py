@@ -76,7 +76,7 @@ def allow_path(path: str):
         ALLOWED_PATHS.append(resolved)
 
 
-@function_tool(failure_error_function=None)
+@function_tool()
 def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
     If end_line is 0, reads to end of file."""
@@ -92,7 +92,7 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
 
 
-@function_tool(failure_error_function=None)
+@function_tool()
 def read_file_full(abs_path: str) -> str:
     """Read an entire file."""
     _count_tool("read_file_full")
@@ -106,7 +106,7 @@ def read_file_full(abs_path: str) -> str:
         return f.read()
 
 # glob_files is unused — no agent has it in tools=[]; also had a bug (doubled directory in paths)
-# @function_tool(failure_error_function=None)
+# @function_tool()
 # def glob_files(pattern: str, directory: str = ".") -> str:
 #     """Find files matching a glob pattern (e.g. '**/*.md', '*.txt') under a directory. Returns one path per line."""
 #     import glob as _glob
@@ -114,7 +114,7 @@ def read_file_full(abs_path: str) -> str:
 #     return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
 
 
-@function_tool(failure_error_function=None)
+@function_tool()
 def grep_file(pattern: str, abs_path: str) -> str:
     """Search a single file for a pattern. Returns matching lines with line numbers."""
     _count_tool("grep_file")
@@ -139,7 +139,7 @@ def grep_file(pattern: str, abs_path: str) -> str:
 from google import genai
 client = genai.Client()
 
-@function_tool(failure_error_function=None)
+@function_tool()
 def search_file(query: str, n: int, mode: str) -> str:
     """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode to 'vector' for semantic similarity search or 'bm25' for keyword matching for specific papers."""
     _count_tool("search_file")
