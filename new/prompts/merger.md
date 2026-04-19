@@ -30,6 +30,8 @@ their existence and could be making things up.
 
 - REMOVE pure formatting/style nitpicks.
 
+- REMOVE any criticism about typos, spelling, grammar, punctuation, capitalization, whitespace, line breaks, broken characters, garbled text, missing/extra symbols, or any other formatting artifact. These are parser errors, not author errors — the original submission does not have these issues.
+
 - REMOVE nitpicks about reproducibility such as undisclosed hyperparameters, trivial
 implementation details, or large artifacts impractical to include in a submission
 (e.g., complete training logs).
@@ -37,8 +39,6 @@ implementation details, or large artifacts impractical to include in a submissio
 - REMOVE strawman weaknesses that misunderstand the paper content or claiming something the paper already addressed
 
 - REMOVE weaknesses about missing appendix, missing proofs in appendix, or absent references. The parser strips those sections from all papers; they exist in the original submission.
-
-- Ignore any venue cues in the file path, filename, or paper text (e.g. "CVPR", "workshop", "arXiv", directory names like `cvprw/`). Score the paper as if submitted to ICLR, matching the calibration corpus. Do not adjust your scoring bar based on a claimed venue.
 
 - The harsh reviewer will give weaknesses with grounded paragraph, verify those weaknesses against the paragraph to make sure the weakness is valid
 

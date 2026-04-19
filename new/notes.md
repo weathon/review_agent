@@ -148,11 +148,3 @@ ICLR2025 unbalanced, random 200 sample, seed 2545463167。N=19 partial 结果:
 
 - 这次是 **unbalanced random sample**, gt 分布本身就集中 (bin 6 占 33%), 所以 decision accuracy 看起来高一部分是 sample 本身偏 middle。Pearson 0.83 不受这个影响因为是 scale-invariant, 但 MAE 和 decision_match 在 balanced sample 上会比现在难看。
 - 这些改动是 **组合拳**, 单独拿任何一个单改动都只能移动 0.5-1 分, 效果不显著。只有多个改动一起上才打开极端分的 ceiling 和 floor。
-
----
-
-## 2026-04-18  OpenRouter 悄悄下架 gemini embedding
-
-OpenRouter 没有通知就停掉了 `google/gemini-embedding-001` 的 embeddings endpoint,而且**调用不抛错**,只是返回奇怪/空的结果。vector 模式的 `search_file` 因此在"静默退化"下跑了一段时间 — 检索质量塌了但 pipeline 不知道,表现出来就是 calibration 找的 anchor 不对题、merger 行为诡异。已切到 `google.genai` 直连 (tools.py:141)。
-
-为了以后同类问题能立刻炸出来,不要再让 function_tool 把异常吞回去喂给 LLM:`@function_tool(failure_error_function=None)` 让工具 raise 直接中断 Runner.run,而不是把 "ERROR: ..." 字符串当 tool output 返回。已在 tools.py 全部 `@function_tool` 上应用。

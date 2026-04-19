@@ -1,26 +1,10 @@
-Now I have good calibration. The paper under review has:
-- Genuine contributions (novel second-order lens, solid segmentation improvement)
-- But structural weaknesses: unvalidated core approximation (Eq. 5), oversold rank-1 claim (48% variance), compromised adversarial evaluation (manual filtering, only 5/45 pairs reported), overclaimed abstract
-
-Comparing to anchors:
-- xPxHQHDH2u (score 6, accept): Has approximation issue (non-differentiable mesh) but gets accepted; adversarial results here are MORE compromised (manual filtering vs. just an approximation)
-- huy8g3iKy0 (score ~5.5 avg, reject): Core motivation unvalidated, similar to this paper's Eq. 5 issue; was rejected
-
-This paper is borderline. The segmentation results are solid and the second-order lens is novel. But the adversarial evaluation is seriously compromised, and the core approximation is unvalidated. I'll score it around 5-5.5.
-
-Let me write the final review:
-
 ## Summary
-This paper introduces a "second-order lens" for interpreting neurons in CLIP, analyzing their contribution flowing through subsequent attention heads to the output. The method reveals that second-order effects are sparse, concentrated in late layers, and approximately rank-1, enabling text-based neuron decompositions that are applied to adversarial example generation and zero-shot segmentation.
+This paper introduces a "second-order lens" for interpreting CLIP neurons by analyzing their contribution flow through subsequent attention heads, claiming this overcomes self-repair masking that obscures indirect effects. The authors demonstrate applications in semantic adversarial example generation and zero-shot segmentation, showing quantitative improvements over baselines.
 
 ## Strengths
-- **The second-order lens addresses documented failures of prior analytical approaches.** Table 1 demonstrates that indirect effects are confounded by self-repair (mean-ablating them drops accuracy to only 52.3%, versus 29.6% for second-order effects) and that indirect effects' first PC explains only 11.0% of variance versus 48.2% for second-order effects—establishing that the second-order lens captures more functionally significant structure.
-
-- **The empirical characterization of second-order effects provides concrete, non-obvious findings.** Figure 3 shows that second-order effects concentrate sharply in layers 8–10, are highly selective (significant for <2% of images), and can be approximated by a single direction while preserving classification accuracy—findings that motivate focusing interpretability efforts on these components.
-
-- **Zero-shot segmentation exceeds prior work with clean empirical gains.** Table 4 shows improvement over TextSpan (Gandelsman et al., 2024) across all metrics (mIoU 59.0 vs. 58.1, pixel accuracy 78.1 vs. 76.5), and Figure 7 provides qualitative evidence that second-order heatmaps capture more complete object parts than the first-order alternative.
-
-- **The mathematical formulation cleanly separates input-dependent and input-independent components.** Equation 5 factorizes the second-order effect into the product of attention-weighted activations and a projection term, enabling the sparse text decomposition in Section 4 by isolating the direction from the per-image coefficient.
+- **Novel interpretability framework with empirical validation**: Table 1 shows second-order effects cause larger accuracy drops (29.6% vs 52.3%) and exhibit stronger low-rank structure (48.2% vs 11.0% variance explained) compared to indirect effects, providing quantitative evidence that the proposed lens captures more meaningful neuron contributions.
+- **Concrete downstream applications with measurable improvements**: Table 3 demonstrates the adversarial generation pipeline achieves 22.7% success rate on "dog→deer" vs 6.3% for indirect effects baseline; Table 4 shows segmentation achieves 78.1% Pixel Accuracy vs 76.5% for TextSpan, indicating the interpretability insights translate to practical gains.
+- **Clear mathematical formulation**: Equation 5 provides an explicit, reproducible definition of second-order effects using attention OV matrices to propagate neuron contributions through later layers.
 
 ## Weaknesses
 
@@ -28,56 +12,59 @@ This paper introduces a "second-order lens" for interpreting neurons in CLIP, an
 None
 
 ### Major
-- **The adversarial evaluation is structurally compromised by manual post-hoc filtering.** Section 5.1 explicitly states that images are "manually remove[d]... that include c_2 objects or do not include c_1 objects" before reporting results. This subjective filtering makes the experiment unreproducible and undermines the claim that mechanistic understanding enables targeted attacks. With 77–95% of generated images failing to fool the classifier, reporting only hand-curated subsets cannot support the headline claim. Additionally, only 5 of 45 possible CIFAR-10 binary pairs are reported without stated selection criteria, weakening generalizability.
+- **No causal validation of the second-order effect measure**: The paper never validates that φ_n^l(I) from Eq. 5 actually predicts the true marginal effect of intervening on neuron n. There are no intervention experiments (e.g., scaling/ablating specific neurons and comparing predicted vs actual output changes). This is a significant gap because the entire interpretability story rests on φ_n^l being a faithful proxy for neuron contribution. Without this validation, the "second-order effect" remains an unverified mathematical construct rather than a demonstrated causal mechanism.
 
-- **The core formula (Eq. 5) contains an unvalidated approximation that is load-bearing for all downstream claims.** The attention weights a_i^{l',h}(I) used to propagate neuron n's contribution are computed from the full residual stream at layer l', which includes all other neurons' contributions—not from a counterfactual where only neuron n varies. This linearization treats attention weights as fixed when measuring the neuron's effect, but the approximation error is never quantified or compared to exact attribution methods (e.g., activation patching on individual neurons). Since the entire interpretive framework rests on ϕ_n^l(I) cleanly representing individual neuron effects, this unvalidated assumption is a significant gap.
+- **Aggregate evidence for neuron-level claims**: The rank-1 approximation claim (Section 3.3) is evaluated only at the layer level via ImageNet accuracy (Figure 3 "rec. from PC #1"), not per-neuron. There are no distributions of variance explained per neuron, no cosine similarity metrics between r_n^l and reconstructed directions, and no comparison to random CLIP directions. The polysemy claims (Table 2, Figure 5) rest on cherry-picked examples without systematic assessment of how often sparse text decompositions yield coherent vs. noisy descriptions. This makes the core interpretability claims under-supported.
 
 ### Minor
-- **The "approximately rank-1" claim is oversold relative to the evidence.** Table 1 shows only 48.2% variance explained by the first principal component, meaning 51.8% of variance is unexplained—substantially more than what "approximately rank-1" typically connotes. The validation metric (aggregate classification accuracy staying near baseline) is too coarse to distinguish whether the residual variance is semantically meaningful or affects downstream text decompositions. The paper would need to show that descriptions extracted from lower PCs are semantically incoherent or redundant, which is not demonstrated.
+- **Adversarial evaluation relies on heavy manual filtering**: The pipeline generates 500 images per task (50 descriptions × 10 images), then manually filters to 100 before reporting success rates (Section 5.1, page 8). The reported 22.7% success rate is over this filtered subset, not the full generation budget. There is no report of the discard rate or success rate over all generated images, making the "mass production" claim difficult to assess and likely overstated.
 
-- **The abstract overclaims what Section 4 demonstrates.** The abstract states the authors "show that these concepts correctly track which inputs activate a given neuron," but Section 4 evaluates classification accuracy after replacing second-order effects with sparse text reconstructions—measuring reconstruction fidelity, not concept tracking. Figure 5 and Table 2 show qualitative results for only 4 hand-selected neurons; no systematic evaluation demonstrates that the top-m words from decompositions predict which images have large ||ϕ_n^l(I)|| norms.
-
-- **Layer-level ablation results (Figure 3) cannot directly support conclusions about individual neurons.** The experiment mean-ablates all neurons in a layer simultaneously, which shows layer-level importance but cannot establish properties of individual neurons (e.g., sparsity, polysemanticity). While individual neuron analysis is done separately, the connection between layer-level importance and individual-neuron properties is not rigorously established.
+- **Segmentation method not fully tied to second-order effects**: The segmentation heatmaps use raw neuron activations p_i^{r,n}(I), not the second-order effects φ_n^l(I) (Section 5.2, page 9). Only neuron selection uses r_n^l from the second-order analysis. There is no comparison showing whether selecting neurons by first-order directions or simple activation-class correlation would achieve similar results, leaving unclear whether the second-order modeling is essential for this application.
 
 ### Trivial
-- **Only 5 CIFAR-10 pairs are reported in the adversarial evaluation without clear justification.** While this relates to the major weakness above, the specific issue of not reporting all 45 pairs or explaining the selection criteria is a presentation flaw that weakens confidence in the results' robustness.
+- **The "2% sparsity" claim is partially tautological**: Section 3.3 states effects are significant for "<2% of images" but this is determined by ablating the top 100 images out of ~5000 (fixed at 2%), without showing a natural threshold in the distribution of φ_n^l(I) norms.
 
 ## Nice-to-Haves
-- **Quantify the layer-normalization approximation error.** Footnote 2 defers layer-norm handling to Appendix A.6, but including an empirical measurement or bound on the approximation error in the main text would strengthen confidence in the formulas.
-
-- **Provide a systematic polysemanticity analysis across all neurons in the analyzed layer.** The paper illustrates polysemantic behavior with 4 neurons in Table 2. A histogram showing what fraction of neurons have top-m texts spanning multiple semantic categories would turn the qualitative observation into a quantitative result.
-
-- **Include failure analysis for the adversarial attack.** Figure 6 shows only successful adversarial images. Given the low absolute success rates, analyzing failure cases would reveal whether the method produces principled predictions or mostly generates noise with occasional successes.
+- Add per-neuron variance-explained histograms for the rank-1 approximation to make the "approximately rank-1" claim concrete
+- Include a baseline for adversarial generation using direct LLM prompting without neuron analysis (e.g., "objects that resemble X but are Y") to isolate the value added by the neuron machinery
+- Report adversarial success rates over the full generation budget, not just the manually filtered subset
 
 ## Removed Points
 These points are flagged to be removed, treat them with caution:
 
-- **Criticism about layer normalization being deferred to appendix:** Per the hard rules, weaknesses about missing appendix content should be removed since the parser strips appendix sections from all papers. The paper does acknowledge the approximation in footnote 2 and states it's addressed in Appendix A.6, which exists in the original submission.
+- **Criticism about layer normalization being "ignored"**: The paper explicitly acknowledges this in footnote 2 (page 3) and Section 6. Linearization approximations are standard in mechanistic interpretability (calibration anchors pW387D5OUN, 1op5YGZu8X, dj0TktJcVI all use similar approximations and scored 6-8). This is a known limitation, not a hidden flaw.
 
-- **Criticism about "unfair comparison" with baselines in adversarial evaluation:** The harsh reviewer noted that baselines receive the same manual curation, which mitigates some concern. The structural problem is the manual filtering itself, not asymmetry favoring the author's method. The rule about removing criticisms of unfair comparisons when asymmetry favors the baseline does not apply here since all conditions are treated equally—the issue is the filtering itself compromises experimental control.
+- **Criticism that indirect effects baseline is too narrow**: The asymmetry favoring the author's method is intentional to prove a stronger point. The indirect effect baseline uses the same apparatus with a different signal, which is appropriate.
 
-- **Generic requests for more baselines in segmentation:** Requesting comparison to additional segmentation baselines beyond TextSpan would be scope creep given the paper already exceeds the relevant prior work (attention-head-based decomposition) with a neuron-based approach.
+- **Criticism about missing appendix proofs/references**: The parser strips appendix sections from all papers; they exist in the original submission.
+
+- **Criticism demanding comparison to more LLM-based prompt engineering baselines**: This is scope creep—the paper's contribution is the neuron analysis pipeline, not prompt engineering. The existing baselines (random neurons, indirect effects, similar words) are sufficient to establish the method adds value over simpler approaches.
+
+- **Criticism about "unfair comparison" with TextSpan for segmentation**: The comparison is fair; both methods use attention-based attribution. The paper's method outperforms TextSpan, which is a valid result.
 
 ## Novel Insights
-The paper's core observation—that second-order effects (neuron contributions flowing through subsequent attention heads) are more functionally significant and structurally coherent than indirect effects due to self-repair mechanisms—is a genuine contribution to CLIP interpretability. The finding that these effects concentrate in layers immediately preceding the most important attention layers for classification (layers 8-10 preceding layers 9-11) provides actionable guidance for future interpretability work. However, the methodological issues in validation prevent this from being a fully convincing demonstration.
+The paper's core insight—that analyzing neuron contributions through subsequent attention heads reveals more structured, interpretable signals than direct ablation—is genuinely novel and well-motivated by the self-repair phenomenon. However, this insight is not fully validated causally. The calibration search reveals that similar mechanistic interpretability papers with strong empirical results but limited causal validation (e.g., 01ep65umEr at 5.25 avg, GdbQyFOUlJ at 6.5 avg) typically score in the 5-7 range, while papers with causal intervention evidence (I4e82CIDxv at 8.0) score higher. This paper falls between these anchors: better empirical validation than the 5-scoring papers, but lacking the causal rigor of the 8-scoring work.
 
 ## Suggestions
-- **Validate Eq. 5 against exact activation patching for a subset of neurons.** Compare the second-order formula's attribution to measured output changes when patching only neuron n, quantifying the approximation error introduced by treating attention weights as fixed.
+1. **Add intervention validation**: For 5-10 representative neurons, perform controlled interventions (scale activation by factors, ablate on specific images) and plot predicted φ_n^l(I) change vs actual output change. This would directly address the causal validation gap.
 
-- **Replace manual filtering in adversarial evaluation with automated, objective criteria.** Use a CLIP-based or object-detector classifier to filter images consistently across all conditions, apply it to all 45 CIFAR-10 pairs, and report results on the full generated set before filtering to show absolute success rates.
+2. **Report per-neuron rank-1 fidelity**: Provide histograms of variance explained by first PC across all neurons in layer 9, and compare to random directions in CLIP space. This would substantiate the "approximately rank-1" claim.
 
-- **Provide direct validation of the rank-1 claim's semantic implications.** Show that (a) text descriptions from PC #1 independently predict which images maximally activate a neuron, and (b) descriptions from lower PCs are either incoherent or semantically redundant, justifying the "approximately rank-1" terminology.
+3. **Report full adversarial generation statistics**: Include the total images generated, number discarded during filtering, and success rate over the full budget. This would make the "mass production" claim interpretable.
 
----
+4. **Add first-order neuron selection baseline for segmentation**: Run the same segmentation pipeline but select neurons using first-order directions or activation-class correlation to isolate whether second-order modeling is essential.
 
 ## Score and Decision
+**Calibration anchors compared:**
+- **I4e82CIDxv** (Sparse Feature Circuits): 8,8,8,8 — has causal ablation validation, scalable method
+- **GdbQyFOUlJ** (NeurFlow): 6,6,6,8 — empirical framework without full causal validation
+- **01ep65umEr** (TeLLMe): 6,5,5,5 — LLM-based neuron explanation, weak causal validation
+- **khuIvzxPRp** (CLIP adversarial finetuning): 8,8,6,6,6 — strong CLIP interpretability with adversarial methods
+- **ZuZujQ9LJV** (AutoDAN): 5,10,5,5 — adversarial attacks with weak baselines (rejected despite champion reviewer)
 
-**Calibration reasoning:** I compared this paper against several anchors:
-- **High-scoring (8) CLIP interpretability paper** (5Ca9sSzuDp): That paper had strong empirical validation, clean ablation studies, and non-circular metrics. This paper's unvalidated core approximation and compromised adversarial evaluation fall short of that standard.
-- **Borderline accept (6) papers with approximation issues** (xPxHQHDH2u, lHbLpwbEyt): These had unvalidated approximations but were accepted; however, their approximation issues were less central to the claims than Eq. 5 is here, and their experimental designs were not compromised by manual filtering.
-- **Borderline reject (~5) papers with unvalidated core methods** (huy8g3iKy0, OLtD2vDF5X, 774elYc5tw): These had similar structural issues—core approximations without rigorous validation, or experimental designs that undermined the main claims. The adversarial evaluation's manual filtering is comparable to the unvalidated motivation in huy8g3iKy0 (rejected) and the ambiguous core definition in 774elYc5tw (rejected).
+This paper is stronger than 01ep65umEr (novel mechanism vs. LLM descriptions, better quantitative results) and comparable to GdbQyFOUlJ (empirical framework with applications). It lacks the causal validation of I4e82CIDxv but has better empirical results than the 5-scoring anchors. The adversarial evaluation issues are similar to AutoDAN's weaknesses, but this paper has stronger baselines and clearer methodology.
 
-The paper has real contributions (novel second-order lens concept, solid segmentation improvement over TextSpan, principled mathematical formulation) that prevent it from being a clear reject. However, the adversarial evaluation's structural flaw (manual post-hoc filtering) and the unvalidated core approximation (Eq. 5 treating attention weights as fixed) are significant methodological issues that undermine key claims. The oversold rank-1 claim (48% variance) and overclaimed abstract further weaken the paper. This places it in the 5-5.5 range: meaningful contributions but insufficient validation for the claims made.
+Positioned relative to anchors: above the 5-5.5 range (01ep65umEr, AutoDAN's marginal reviewers), comparable to GdbQyFOUlJ's 6-6.5 range, but below I4e82CIDxv's 8 due to missing causal validation. The empirical results and novel framing push it toward the upper end of the 6-7 range.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

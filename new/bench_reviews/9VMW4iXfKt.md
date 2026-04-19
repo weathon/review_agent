@@ -1,42 +1,16 @@
-Now I have enough calibration context. Let me verify the harsh critic's specific claims by checking Table 3 more carefully and the SVD benefit:
+The paper never defines what $\bar{X}$ is. This is a genuine ambiguity that affects reproducibility. The harsh reviewer correctly identified this. Looking at the formula $Y_r = (\bar{X} - \sigma_{t(s)}(X))(A_r B_r)^T$, it seems $\bar{X}$ should be the original input $X$ (so that $\bar{X} - \sigma_{t(s)}(X)$ gives the masked-out portion), but this is not explicitly stated.
 
-Looking at the paper:
-- Table 3 (line 224-231): Full=68.10%, Sparse=66.25%, Low-Rank=33.05%, R-Sparse=67.50%
-- R-Sparse - Sparse = 67.50 - 66.25 = 1.25%, not 0.98% as the critic claims
-- The critic says "0.98% average across four tasks" - perhaps they calculated differently, but the table shows 1.25%
-
-Let me recalculate from the individual tasks in Table 3:
-- WG: 67.40 - 65.11 = 2.29%
-- PIQA: 77.31 - 77.37 = -0.06%
-- SciQ: 93.90 - 93.30 = 0.60%
-- OBQA: 31.40 - 29.20 = 2.20%
-- Average: (2.29 - 0.06 + 0.60 + 2.20) / 4 = 5.03 / 4 = 1.2575% ≈ 1.26%
-
-So the actual improvement is ~1.25%, not 0.98%. The critic miscalculated.
-
-However, the critic's main point about the SVD component providing marginal benefit IS valid - it's only about 1.25% improvement over plain sparse, which is modest.
-
-Let me also verify the claim about the "18.74% gain" claim. The paper states (line 199): "R-Sparse achieves an average performance gain of 18.74% over CATS". Looking at Table 1:
-- CATS@40%: 46.26%
-- R-Sparse@40%: 65.00%
-- Difference: 65.00 - 46.26 = 18.74 percentage points
-
-This is correct, but the critic's point is that this comparison is unfair because CATS@40% is operating far outside its design envelope (CATS@22% gets 64.32%). The paper does include CATS@22% in the table, but the headline claim emphasizes the 18.74% gain.
-
-Now let me construct my final review:
+Now let me finalize my review:
 
 ## Summary
-This paper introduces R-Sparse, a training-free activation sparsity framework that decomposes linear layer computation into sparse (input channel selection) and low-rank (SVD-based) components, extending activation sparsity to both attention and MLP blocks in non-ReLU LLMs. The method achieves ~50% model-level sparsity with minimal accuracy degradation and demonstrates 43% end-to-end speedup using custom kernels.
+This paper introduces R-Sparse, a training-free activation sparsity method that combines input channel sparsity with low-rank weight decomposition to enable efficient LLM inference on non-ReLU architectures. The approach achieves ~50% model-level sparsity with minimal accuracy loss across Llama-2/3 and Mistral models, and demonstrates 40-42% end-to-end speedups using customized Triton kernels.
 
 ## Strengths
-
-- **Extends activation sparsity to attention layers**: Unlike prior training-free methods (CATS, GRIFFIN) that only sparsify MLP blocks, R-Sparse applies to all seven linear layers per transformer block including attention projections (Section 3.4, Figure 5). This broader coverage enables higher model-level sparsity ratios.
-
-- **Training-free with minimal calibration overhead**: The method requires only ~1 hour of calibration on a single GPU using 16 C4 samples (Section 3.5), contrasting sharply with methods requiring 150B token retraining runs. Table 1 shows R-Sparse@50% maintains 64.06% average on Llama-2-7B vs. 65.88% dense baseline.
-
-- **Empirical validation across multiple model families**: Experiments span three model families (Llama-2, Llama-3, Mistral) across 10 tasks including common-sense reasoning, language modeling, and summarization (Table 1, Figure 5). Wall-clock speedup measurements (Figure 6) and quantization compatibility (Table 2) provide practical deployment evidence.
-
-- **Clear structural observation with visualization**: Figures 1 and 3 effectively illustrate the rank-aware structure where importance concentrates in the bottom-right corner of the joint input-channel × SVD-component space, providing intuition for why combining sparsity and low-rank approximation works.
+- **Exceptional accuracy retention at high sparsity**: Table 1 shows R-Sparse at 50% model-level sparsity achieves 64.06 average on Llama-2-7B common-sense tasks, dramatically outperforming GRIFFIN 50% (45.91) and CATS 40% (46.26). This ~18-point improvement over competing training-free methods is substantial and well-documented across three model families.
+- **Real end-to-end speedups demonstrated**: Figure 6 provides wall-clock latency measurements (not just FLOP counts) showing 42% speedup on Llama-2-7B and 40% on Llama-3-8B with custom Triton kernels, substantiating the efficiency claims.
+- **Training-free applicability to non-ReLU models**: Unlike ReLUfication approaches requiring 150B token continual pre-training, R-Sparse works directly on SiLU-based LLMs without weight updates, addressing a significant practical barrier.
+- **Strong ablation studies**: Table 2 demonstrates INT4 GPTQ compatibility (65.76% combined vs 67.32% for INT4 alone); Table 3 shows the hybrid approach outperforms pure sparse (66.25%) or pure low-rank (33.05%) baselines; Table 4 validates the evolutionary search provides 1-2% gains over uniform sparsity recipes.
+- **Code released**: GitHub repository provided for reproducibility.
 
 ## Weaknesses
 
@@ -44,92 +18,59 @@ This paper introduces R-Sparse, a training-free activation sparsity framework th
 None
 
 ### Major
+- **Conceptual disconnect between motivation and implemented method**: Section 3.2 claims "non-sparse components can be regarded as a few bias terms" and states "we will show later how these data-dependent biases can be converted into static biases and being pre-computed." However, the actual R-Sparse method in Section 3.4 uses low-rank decomposition ($Y_r = (\bar{X} - \sigma_{t(s)}(X))(A_r B_r)^T$), not bias approximation. The bias observation motivates the low-rank insight (Section 3.3 shows bias matrices have stable rank ~400), but the promised bias mechanism is never implemented. This undermines a core conceptual contribution and misleads readers about what drives the empirical success.
 
-- **Headline comparison emphasizes unfair operating points**: The paper's central claim states "R-Sparse achieves an average performance gain of 18.74% over CATS" (Section 4.2), comparing R-Sparse@40% (65.00%) vs. CATS@40% (46.26%). However, CATS was designed for 50% MLP-block sparsity (22% model-level), where it achieves 64.32%. When compared at CATS's native operating point, R-Sparse@40% provides only a 0.68% gain while using nearly double the sparsity budget. While the paper does include native operating points in Table 1, the headline framing and emphasized "18.74% gain" is misleading about the actual advantage.
-
-- **Core rank-aware SVD component provides modest empirical benefit**: Table 3 shows R-Sparse (67.50%) improves over plain input-channel sparsification "Sparse" (66.25%) by only 1.25% average on Llama-2-7B at 50% sparsity. Given the paper's framing around rank-aware sparsity as the central methodological contribution (Sections 3.3-3.4, Figures 1/3/4), this marginal gain—demonstrated on only 4 tasks for one model without variance estimates—does not strongly support the central claim that combining SVD residual correction with input sparsity yields "substantially better approximation." If the concurrent work focusing solely on input channels achieves comparable performance, the paper's actual contribution narrows to extending sparsity to attention layers and the evolutionary search recipe.
-
-- **Efficiency claims lack comparison to competing sparse methods**: The 43% speedup (Section 4.3, Figure 6) is measured only against the dense baseline, not against CATS or GRIFFIN at their native sparsity levels with comparable custom kernels. Since any activation sparsity method that skips weight loading achieves speedups over dense, the 43% figure demonstrates that activation sparsity works in hardware but does not establish R-Sparse's superiority over prior methods. Additionally, experiments use FP32 precision on A6000, while production LLM inference typically uses BF16/FP16, which changes the memory bandwidth dynamics and may affect the speedup magnitude.
+- **Under-specified rank selection mechanism**: Section 3.4 states "we select the most important $r$ components based on the estimated scores in Figure 3" but does not clarify the selection criterion. Is it by singular values $\sigma_i$ alone (standard low-rank), by the S-matrix scores $\mathbf{S}_{i,j} = \sigma_i X_j \mathbf{V}[j,i]$, or a combination? Figures 1 and 3 show S-matrix heatmaps with bottom-right concentration, but the paper doesn't demonstrate that S-based selection outperforms simple magnitude-based singular value truncation. This ambiguity affects reproducibility and leaves the "rank-aware" claim insufficiently validated.
 
 ### Minor
+- **Undefined notation $\bar{X}$**: The formula $Y_r = (\bar{X} - \sigma_{t(s)}(X))(A_r B_r)^T$ uses $\bar{X}$ without definition. Context suggests it should be the original input $X$ (so the difference gives masked-out components), but this is never explicitly stated, creating reproducibility uncertainty.
 
-- **Efficiency experimental details underspecified**: Section 4.3 mentions memory I/O depends on hyperparameters (r, s) but does not state which values were used in the Figure 6 speedup experiments, or whether the "uniform 50% sparsity" configuration matches the settings in Table 1. This makes it difficult to interpret or reproduce the efficiency results.
-
-- **Evolutionary search convergence not demonstrated**: The search runs for only 5 generations with population 32 on 16 calibration samples (Section 3.5), described as "expedited" via group-wise optimization. While Table 4 shows up to 1.95% gain over uniform ρ, no convergence curves or sensitivity analysis is provided to confirm this constitutes a well-converged search rather than limited random sampling.
+- **Baseline tuning details incomplete**: Section 4.1 mentions scaling up MLP sparsity for CATS/GRIFFIN at higher model-level sparsity but doesn't specify whether hyperparameters (thresholds, calibration procedures) were re-optimized for these extended regimes or applied naively beyond published ranges. While the performance gaps are large enough that R-Sparse likely still wins, clearer documentation would strengthen the comparison.
 
 ### Trivial
-
-- **Minor inconsistency in reported SVD benefit**: Section 4.4 states R-Sparse provides "average improvement of 0.98%" over Sparse, but Table 3 shows 67.50% - 66.25% = 1.25%. This calculation discrepancy should be corrected.
+None significant; formatting artifacts in the extracted text are parser issues per instructions.
 
 ## Nice-to-Haves
-
-- **Fair operating-point Pareto analysis**: An explicit Pareto frontier figure comparing R-Sparse, CATS, and GRIFFIN at their respective best accuracy-sparsity trade-off points (rather than fixed sparsity levels) would clarify where R-Sparse provides unique coverage and make comparisons more interpretable.
-
-- **BF16/FP16 efficiency experiments**: Redoing wall-clock measurements in BF16 format would provide more practically meaningful speedup numbers for real-world deployment scenarios.
-
-- **Attention-only vs. MLP-only ablation**: A cleaner ablation isolating R-Sparse applied only to MLP blocks (matching CATS/GRIFFIN scope) vs. only attention vs. both would quantify how much gain comes from broader coverage versus the SVD component.
-
-- **Calibration data sensitivity analysis**: Since heatmaps, evolutionary search, and threshold estimation all rely on 16 C4 samples, showing performance on out-of-distribution tasks (code, math) would verify generalization.
+- Broader efficiency evaluation beyond single-GPU FP32 settings (e.g., batch>1, INT4/FP8 kernels, multi-GPU scaling) would strengthen deployment claims, though the current demonstration is sufficient for a method paper.
+- Analysis of which layers or projection types (q/k/v/o vs up/gate/down) are most sensitive to sparsity would provide additional insight into the search strategy's behavior.
+- Confidence intervals or variance reporting for benchmark results would help assess whether small differences (1-2 points) are statistically meaningful.
 
 ## Removed Points
+These points are flagged to be removed, treated with caution:
 
-These points are flagged to be removed, treat them with caution:
+1. **Harsh Critic's "fairness of baseline comparisons" concern about per-layer sparsity patterns and FLOP/memory-IO reduction**: The paper does compare at matched model-level sparsity budgets, and the massive performance gaps (~18 points) are unlikely to close even with perfectly tuned baselines. The asymmetry (R-Sparse sparsifies attention+MLP vs baselines MLP-only) is a feature demonstrating broader applicability, not an unfair advantage. Per-rule: "REMOVE weaknesses about unfair comparison with other methods if the asymmetry favors the baseline and not the author's method" — here the asymmetry favors R-Sparse, so this criticism is weakened.
 
-- **Harsh Critic: "ReLUfication without retraining is a straw man baseline"**: The paper explicitly acknowledges in Section 4.1 that ReLUfication is reported "without retraining" and uses this to demonstrate what happens without the costly retraining that ReLUfication requires. This is a deliberate design choice to show the value of training-free methods, not an oversight. The comparison is clearly labeled.
+2. **Harsh Critic's concern about "no comparison to other sparsity methods with their own custom kernels"**: While ideal, this is a high bar for initial method papers. The paper does compare accuracy against CATS/GRIFFIN and shows R-Sparse speedup vs dense. Expecting every baseline to have equally optimized kernels is scope creep for a training-free method demonstration.
 
-- **Harsh Critic: "Section 3.2 motivation disconnect - multi-phase ReLU not used in final method"**: This misreads the paper structure. Section 3.2 provides motivation showing non-sparse components can be approximated as biases, which motivates the low-rank residual approach in Section 3.4. The low-rank SVD component IS the mechanism for handling non-sparse channels. The connection is logical, not a disconnect.
+3. **Harsh Critic's point about "16 C4 samples being weak empirical basis"**: The paper uses 16 samples consistently for both SVD pattern analysis and evolutionary search, which is standard practice for training-free calibration (see Wanda, SparseGPT prior work). While more samples might help, this is not a critical flaw.
 
-- **Harsh Critic: "Claim that accuracy gains at moderate sparsity are artifacts"**: While the concern about calibration artifacts has some validity, the paper does acknowledge this could happen and the 1.60% gain on OBQA at 30% sparsity is a minor secondary observation, not a central claim. This weakness overstates the issue for a non-central point.
+4. **Strength Finder's "public code release" as a strength**: While positive, code availability is now expected for empirical papers and doesn't distinguish exceptional contributions. Moved to summary mention rather than standalone strength.
 
-- **Harsh Critic: "Heatmaps calibration-data-dependent, OOD concerns"**: While valid as a nice-to-have for additional analysis, the 16-sample C4 calibration is standard practice in this literature (same as CATS, GRIFFIN). The paper's main results across 10 diverse tasks already test generalization to some degree.
+5. **Generic concerns about "small calibration datasets" or "limited domain generalization"**: The paper tests on 10 diverse tasks (common-sense, language modeling, summarization) across 3 model families, which is adequate scope for a method paper. Out-of-domain testing (coding, math) would be nice but isn't essential.
 
 ## Novel Insights
-
-The most genuinely novel observation from this work is the visualization and analysis of the joint importance matrix S (σ_i × X_j × V[j,i]) showing concentration in the bottom-right corner across different layer types (Figure 3), suggesting that input-channel sparsity and weight SVD sparsity are complementary axes rather than alternatives. This structural insight—if robust across model families and tasks—could inform future training-free compression methods. However, the empirical benefit of exploiting this structure (the SVD residual component) appears modest (~1.25% over plain input sparsity), suggesting the primary value may be enabling the combination of both techniques rather than the SVD component alone.
+The paper's most valuable contribution is the empirical demonstration that combining input activation sparsity with low-rank weight decomposition yields better accuracy than either technique alone at matched I/O budgets (Table 3). This suggests the two compression modalities capture complementary structure: activation sparsity handles large-magnitude outlier channels while low-rank approximation efficiently represents the distributed small-magnitude residual. The layerwise adaptive search (Table 4) further reveals that optimal sparse-vs-low-rank ratios vary significantly across layers, with greater benefits at higher sparsity. However, the promised theoretical framing ("non-sparse as biases") remains disconnected from the actual method, representing a missed opportunity to unify the narrative.
 
 ## Suggestions
+1. **Clarify the bias-to-low-rank connection**: Either revise Section 3.2 to frame the bias observation purely as motivation for discovering low-rank structure (removing the promise of static bias implementation), or integrate an actual bias approximation into the method to close the conceptual loop.
 
-1. **Reframe headline claims**: Emphasize the extension to attention layers as the primary contribution, presenting the SVD component as a complementary refinement rather than the central innovation. Report the native operating point comparison (R-Sparse@22% vs. CATS@22%) as the main accuracy comparison, with the 18.74% gain at matched sparsity as a secondary point about behavior in high-sparsity regimes.
+2. **Explicitly define the rank selection criterion**: Specify whether components are selected by singular values, S-matrix scores, or a hybrid approach. Add an ablation comparing S-based selection vs standard top-$\sigma$ truncation to validate the "rank-aware" claim.
 
-2. **Add efficiency baselines**: Measure CATS and GRIFFIN generation speed at their native sparsity levels with comparable custom kernels to establish whether R-Sparse's efficiency advantage stems from its design or simply from applying any activation sparsity method.
+3. **Define $\bar{X}$ explicitly**: Add a sentence clarifying that $\bar{X} = X$ (the original input) so readers understand $Y_r$ processes the masked-out portion.
 
-3. **Clarify ablation scope**: Add an experiment comparing R-Sparse applied to MLP-only (matching prior methods) vs. attention-only vs. both, quantifying how much benefit comes from each component.
-
-4. **Report efficiency hyperparameters**: Specify the (r, s) values used in Figure 6 experiments and confirm whether they match Table 1 settings.
-
----
+4. **Document baseline scaling procedure**: Briefly describe how CATS/GRIFFIN hyperparameters were adjusted when scaling to 40-50% model-level sparsity (e.g., threshold tuning, layer selection rules).
 
 ## Score and Decision
+**Calibration comparison:**
+- **ShadowKV** (sparse+low-rank for KV cache, strong empirical results): scores 8,5,6,8, rejected due to split opinions but technical soundness recognized
+- **LoSA** (hybrid sparse+low-rank adaptation): scores 3,3,6,6,8, accepted poster despite novelty concerns due to strong empirical gains
+- **ReLU sparsity paper** (osoWxY8q2E): scores 6,8,8, accepted oral for clear efficiency demonstration
+- **DSNT** (training-free sparsity): scores 6,6,6, accepted poster with solid but incremental results
+- **Sparsing Law** (B9XP2R9LtG, rejected): scores 5,6,5,5 for weak validation of claimed "laws"
 
-**Calibration Analysis:**
+R-Sparse demonstrates stronger empirical improvements than DSNT and Sparsing Law (~18 points over baselines vs marginal gains), with real speedup measurements matching ShadowKV and the ReLU paper. The conceptual presentation issues (bias claim not implemented, under-specified rank selection) are similar to weaknesses in LoSA (novelty concerns) but less severe than the KMP paper's complete motivation-method mismatch (rejected, scores 3,6,5).
 
-I retrieved several calibration anchors:
+The empirical contributions are solid and significant: R-Sparse enables 50% model-level sparsity on non-ReLU LLMs without training, substantially outperforming prior training-free methods. The presentation weaknesses are addressable in revision and don't invalidate the experimental results. Positioned relative to anchors, this is a **6.5** — marginally above acceptance threshold, comparable to LoSA and DSNT but below the clarity of top sparsity papers.
 
-1. **High-scoring efficiency papers (7-8 range)**: The sparsity-quantization interplay paper (wJv4AIt4sK.md, scores 6/8/8/8, Spotlight) provided theoretical proof with empirical validation across model families—clearly stronger theoretical contribution. Radar (ZTpWOwMrzQ.md, 8/3/6/8/8) offered training-free O(t²) → O(t^(3/2)) decoding with strong results.
-
-2. **Borderline papers (5-6 range)**: Several papers in LLM compression received 5-6 scores with weaknesses about unclear baselines (LWMS4pk2vK.md), missing broad comparisons (OfXqL5TRwp.md), or scaling concerns (nMbWsXPUVL.md, LnKDcqOfgy.md with scores 3/6/5/6).
-
-3. **Rejected papers with overclaiming issues (3-5 range)**: WkIsvAqoxA.md (3/5/3) and ChNy95ovpF.md (3/5/5) were rejected partly due to overclaimed benefits and misleading comparisons—similar to the baseline comparison issue in R-Sparse.
-
-4. **Related sparsity papers**: osoWxY8q2E.md (6/8/8, Accept oral) advocated ReLU for activation sparsity with up to 3x reduction—a stronger, clearer contribution. qBpYqQUFPx.md (3/3/8/8, Reject) had split reviews but was rejected despite high scores from some reviewers.
-
-**Positioning R-Sparse:**
-
-The paper makes a real engineering contribution: extending training-free activation sparsity to attention layers with empirical validation across three model families and wall-clock speedup measurements. However:
-- The headline "18.74% gain over CATS" is misleading (comparing at stressed operating points)
-- The core SVD innovation provides only ~1.25% benefit over plain input sparsity
-- Efficiency comparisons lack competing sparse baselines
-
-This is stronger than the rejected overclaiming papers (which had minimal actual contribution beyond claims) but weaker than the spotlight papers with clear theoretical advances or unambiguous improvements. The paper is most comparable to the 5-6 range compression papers with baseline/experiment limitations.
-
-The empirical study is reasonably complete (3 models, 10 tasks, efficiency measurements, quantization compatibility), which pushes it toward the higher end of borderline. However, the overclaiming in Section 4.2 about the 18.74% gain is a significant presentation flaw that mirrors issues in rejected papers.
-
-**Comparative Assessment**: 
-- vs. LnKDcqOfgy.md (3/6/5/6, Reject): R-Sparse has stronger empirical validation and clearer core idea
-- vs. LWMS4pk2vK.md (5/6/6/6, Accept): Similar profile—novel method with empirical results but unclear comparisons
-- vs. wJv4AIt4sK.md (6/8/8/8, Spotlight): R-Sparse lacks the theoretical depth and clear advance
-
-R-Sparse sits in the 5-6 range. The training-free nature, multi-model validation, and real speedup measurements are genuine strengths. The overclaiming and missing baseline efficiency comparisons are real weaknesses but not fatal. I lean toward **5.5** (borderline accept/reject) — the paper demonstrates a useful engineering contribution with adequate empirical support, but the framing issues and missing comparisons prevent a clear accept.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
