@@ -22,6 +22,7 @@ NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
 MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
 SUBAGENT_MODEL = os.environ.get("SUBAGENT_MODEL", MERGER_MODEL)  # calibration_search subagent (OpenAI merger path)
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
+FEATHERLESS_BASE_URL = os.environ.get("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
@@ -163,6 +164,10 @@ def resolve_model(spec: str | None):
     if spec.startswith("ollama:"):
         name = spec[len("ollama:"):]
         client = AsyncOpenAI(api_key="ollama", base_url=OLLAMA_BASE_URL)
+        return OpenAIChatCompletionsModel(model=name, openai_client=client)
+    if spec.startswith("featherless:"):
+        name = spec[len("featherless:"):]
+        client = AsyncOpenAI(api_key=os.getenv("FEATHERLESS_API_KEY"), base_url=FEATHERLESS_BASE_URL)
         return OpenAIChatCompletionsModel(model=name, openai_client=client)
     return spec
 

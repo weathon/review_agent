@@ -1,51 +1,106 @@
-I have read the paper and reviewed the critiques. I will now produce the final authoritative review.
+Now let me run calibration searches for different score ranges.Now I have enough information to write the consolidated review. Let me compile it based on reading the full paper and calibrating against anchor papers.---
 
 ## Summary
-This paper introduces RetinexGDP, a training-free framework for personalized low-light image enhancement (LLIE) that integrates Retinex domain knowledge with a pre-trained diffusion model. The method uses a novel Gaussian Total Variation (TV) layer to estimate illumination in a zero-shot manner, followed by a patch-wise DDIM inversion and sampling process conditioned on the reflectance. Text-guided personalization is achieved through a modified directional CLIP loss, allowing users to steer the enhancement style without retraining.
+
+RetinexGDP proposes a zero-shot, training-free, text-guided personalized low-light image enhancement (LLIE) method. It decomposes low-light images using a novel single Gaussian convolutional TV layer for Retinex illumination estimation, then performs personalized enhancement via a pre-trained diffusion model (GDP) guided by directional CLIP loss and patch-wise DDIM inversion. The distinguishing claim is that users can steer enhancement style through free-text prompts without retraining or collecting preference images.
+
+---
 
 ## Strengths
-- **Novel Simplified Illumination Estimation:** The replacement of deep Deep Image Prior (DIP) networks with a single Gaussian convolutional layer combined with a TV proximity operator (Section 3.1, Eq. 3) is a pragmatic design choice. Figure 3 demonstrates that this approach yields consistent illumination maps compared to the erratic results obtained with random vanilla kernels, effectively addressing the variability issue in zero-shot decomposition.
-- **Training-Free Text Personalization:** The paper successfully addresses the lack of personalization in existing zero-shot LLIE methods. By integrating CLIP guidance into the diffusion sampling process, the model allows for flexible style control via free-form text prompts (Figure 6), producing diverse visual styles (e.g., "Summer sunset," "Blue sky") from a single input without requiring retraining or reference image databases.
-- **Effective Patch-wise Strategy for Arbitrary Resolutions:** The implementation of patch-wise DDIM inversion and sampling (Section 3.2, Figure 9) mitigates memory constraints and enables the processing of high-resolution images. The ablation in Figure 9 provides visual evidence that this strategy preserves structure and reduces artifacts compared to processing without patching.
-- **Competitive Performance Among Training-Free Methods:** Table 2 shows that RetinexGDP outperforms other training-free baselines like RetinexDIP and NeuralBR on paired datasets (LOL and VELOL), and even surpasses the trained CLIP-LIT model on PSNR, demonstrating the efficacy of the generative diffusion prior.
+
+- **Novel problem formulation and architecture (Section 3):** The combination of zero-shot Retinex decomposition via a single Gaussian TV layer with text-guided diffusion sampling is a genuinely new pipeline for LLIE. No prior work enables text-driven personalization in a fully training-free LLIE setting.
+
+- **Gaussian TV layer provides consistent illumination estimation (Figure 3, Section 3.1):** The paper demonstrates concretely that vanilla convolutional kernels produce inconsistent illumination maps across runs (Fig. 3a), whereas the proposed Gaussian TV layer gives deterministic, piecewise-smooth results (Fig. 3b). This is a clear, well-motivated technical contribution over prior DIP-based zero-shot Retinex methods.
+
+- **Patch-wise DDIM inversion enables arbitrary resolution (Figure 9, Section 3.2):** The patch-wise strategy with overlapping regions and weighted averaging is a practical engineering contribution. Figure 9 directly demonstrates that removing this strategy causes structural distortion and artifacts in dark regions.
+
+- **Retinex stage provides measurable improvement (Table 2):** The ablation between GDP (13.93 PSNR on LOL) and RetinexGDP (15.66 PSNR) cleanly isolates the benefit of the Retinex decomposition stage. This is the clearest evidence-based claim in the paper.
+
+---
 
 ## Weaknesses
 
+### Fatal
+None that entirely invalidate the paper's architecture.
+
 ### Major
-- **Misaligned Evaluation Protocol for Personalization:** The paper claims to perform *text-guided personalized* enhancement, yet the primary quantitative evaluation relies on reference-based metrics (PSNR, SSIM) against ground truth images that represent a neutral, standard enhancement style. Any stylization that deviates from the ground truth (e.g., color grading shifts from "summer sunset" text) is inherently penalized by these distortion metrics. Table 3 explicitly acknowledges that adding text guidance degrades quality metrics (NIQE increases from 5.44 to 6.47), yet the paper continues to claim "competitive performance" based on these metrics. This contradiction undermines the quantitative support for the personalization claim, as the evaluation framework is measuring fidelity to a non-personalized ground truth rather than the success of the stylistic guidance.
-- **Methodological Ambiguity in Directional CLIP Loss Modification:** The paper cites Gal et al. (2022) for "directional CLIP loss" but explicitly modifies the loss formulation by removing the source text prompt (Section 3.2.1, Eq. 9). The original directional loss aligns the change in image embeddings with the change in text embeddings ($\Delta V_{img} \leftrightarrow \Delta V_{txt}$), which is crucial for preventing semantic drift by constraining the *direction* of change. By removing the source prompt and aligning only the image change to a single target text embedding, the optimization objective shifts from directional transfer to maximizing similarity to a target concept. While the authors empirically motivate this by claiming the source prompt misaligns with the reflectance component, this modification risks uncontrolled content alteration or semantic drift, which is not adequately guarded against in the loss formulation.
+
+- **The paper's central contribution — text guidance — demonstrably degrades all measured image quality metrics (Table 3), with no quantitative evidence it achieves its intended goal.** Table 3 shows that adding text instruction to L_recon alone causes NIQE to worsen from 5.44 to 6.47 (an 18.9% degradation), NIQMC to fall from 5.03 to 4.81, and CPCQI to drop from 1.05 to 0.69. In the full model (L_recon + L_per + text), the NIQE degradation is milder (5.58 → 5.63), but NIQMC and CPCQI still decline. The paper dismisses this as a "slight drop in performance" — an accurate description only for the full-model case and a significant mischaracterization for the L_recon-only case. More critically, no quantitative metric measures whether text guidance actually achieves style personalization. There is no CLIP-similarity score between the output and target prompt, no user study, and no side-by-side comparison against a neutral (non-text-guided) baseline in Figure 6. The paper therefore presents a contribution that (a) degrades image quality metrics and (b) has zero quantitative evidence it accomplishes its stated purpose.
+
+- **Quantitative NIQE performance is poor across most tested datasets (Table 1).** RetinexGDP ranks among the worst methods on NIQE in 5 of 7 no-reference benchmark datasets: ExDark (4.80, worst), Fusion (5.22, worst by wide margin), LIME (5.54, near-worst), VV (4.10), NPEA (4.21). The abstract's claim that RetinexGDP "achieves performance comparable to state-of-the-art models" is contradicted by its own Table 1 data. The body text is more measured ("does not achieve the top performance"), but the abstract remains an overclaim that misrepresents the method's actual standing.
+
+- **Table 2's comparison is structurally limited for the claims it supports.** Table 2 excludes all of the strongest supervised models from Table 1 (URetinexNet, SNR, DCCNet, UHDFour, DiffusionLL) from the paired LOL/VELOL evaluation, while headlining a "26.39% higher PSNR than CLIP-LIT." CLIP-LIT achieves only 12.39 dB PSNR on LOL — it is not optimized for reconstruction quality. Supervised models trained on LOL typically achieve significantly higher PSNR than RetinexGDP's 15.66 dB. The selective baseline set in Table 2 — limited to training-free methods and CLIP-LIT — inflates the apparent gap and prevents honest comparison.
 
 ### Minor
-- **Imprecise Mathematical Description of the Gaussian Kernel:** Section 3.1 states that "the coefficients of this Gaussian filter are sampled from a normal distribution with mean 0 and variance $\sigma^2$." A kernel sampled from a zero-mean distribution would sum approximately to zero, functioning as a high-pass filter (edge detection) rather than the low-pass smoothing kernel required for illumination estimation. It is likely the authors intend to describe a kernel constructed from a Gaussian probability density function (which has non-negative coefficients summing to 1), but the current phrasing is mathematically contradictory to the claimed functionality and the visual results in Figure 3b. This needs correction to avoid misleading readers about the filtering mechanism.
-- **Extreme Loss Scaling Factors:** The experimental setup specifies scaling factors of $\lambda_{recon}=5000$ and $\lambda_{clip}=7000$. These values are orders of magnitude higher than typical gradient guidance scales used in diffusion editing (usually 1.0–10.0). Such extreme scaling suggests that the diffusion prior gradients may be vanishing or that the loss terms have unnormalized magnitudes. Without an analysis of gradient norms or loss landscapes, it is unclear whether these scales represent a stable equilibrium or if the style/reconstruction gradients are simply overpowering the diffusion denoising signal, potentially leading to instability.
-- **Reproducibility Details on Backbone Architecture:** The paper states experiments were conducted on a single TITAN X GPU (12GB VRAM) using the "pretrained unconditional guided diffusion model as our backbone Dhariwal & Nichol (2021)." The ADM models proposed in that work (e.g., 256x256) are typically memory-intensive. While the patch-wise strategy reduces memory requirements, the paper does not specify which exact ADM variant or checkpoint is used (e.g., 64x64 vs larger), nor does it detail how the 12GB constraint accommodates the diffusion model alongside the optimization steps. This omission makes independent reproduction of the hardware feasibility difficult.
+
+- **Modified directional CLIP loss lacks ablation support (Section 3.2.1).** The paper removes the source text prompt from Gal et al.'s directional CLIP loss, claiming "there appears to be a misalignment between natural language descriptions and the reflectance component." This is a design choice, not an experimentally validated one. No ablation compares the standard formulation vs. the modified single-source version. Given that the loss formulation is the core mechanism for text guidance, validating this design choice is important.
+
+- **The paper describes a 18.9% NIQE degradation in Table 3 as "slight"** (Section 4.3). This mischaracterization in the ablation analysis undermines reader trust in the authors' self-assessment.
 
 ### Trivial
-- **Terminology for Corrected Reflectance:** The paper refers to $R$ as "corrected reflectance" after applying gamma correction to the illumination, but mathematically $R = S \oslash I^\gamma$. This is strictly division by corrected illumination, not a correction of the reflectance itself. While the term "corrected reflectance" is used consistently, the naming could be more precise to reflect that it is the reflectance derived from the gamma-corrected illumination.
-- **Figure 2 Caption Ambiguity:** The caption for Figure 2 lists "I" as the output, but the text and Eq. 3 label the illumination as $I$ and the reflectance as $R$. The diagram flow should clearly distinguish between the illumination map $I$ and the final reflectance $R$ derived from it.
+
+- Table 1 lists 10 baselines in the "Baseline Implementations" section but Table 1 itself contains 12 methods (LightenDiffusion and FourierDiff are unlisted). A brief note explaining the additional comparisons would clarify this.
+
+---
 
 ## Nice-to-Haves
-- **User Study for Personalization Quality:** Incorporating a human preference study or CLIP-based text-image alignment scoring would provide more convincing evidence of the personalization capability, as it would directly measure the success of text-guided style transfer rather than relying on distortion metrics that penalize deviations.
-- **Failure Case Analysis:** Providing examples where text guidance leads to undesirable artifacts, such as color bleeding, texture loss, or excessive stylization that compromises the original structure, would help define the boundaries of the method's reliability.
+
+- A **CLIP-score-based evaluation** of style adherence (cosine similarity between output and target text prompt vs. a non-text baseline) would directly quantify whether text guidance works as claimed.
+- A **user study** evaluating personalization quality — even small (10-20 participants, 5-10 image pairs) — would substantially strengthen the personalization claim.
+- **Side-by-side comparison in Figure 6** between text-guided and neutral (same model, no text prompt) outputs would make visible whether text guidance produces meaningful style variation.
+- **Failure mode analysis** for text guidance (conflicting prompts, ambiguous descriptions) would bound the method's practical scope.
+- **Ablation of modified CLIP loss** (with vs. without source prompt removal) to validate the design decision in Eq. (9).
+
+---
 
 ## Removed Points
-- **Criticism regarding the existence/release of Dhariwal & Nichol (2021) backbone:** Removed. The paper cites a real, available model. Questions about its physical feasibility on hardware are addressed in the reproducibility weakness, but claims of it being "unavailable" or "unverifiable" are unfounded.
-- **Criticism regarding missing Appendix/Proofs:** Removed per guidelines; appendix content exists in the original submission.
-- **Criticism about minor typos/formatting in equations:** Removed per guidelines regarding formatting artifacts.
-- **Nitpicks about specific baseline omissions in Table 1:** Removed. The baselines included (RetinexDIP, NeuralBR, CLIP-LIT) are standard and sufficient to benchmark the zero-shot/training-free claim.
-- **Weakness regarding the "zero-shot" claim being classical image processing:** Weakened/Removed. While the Gaussian TV layer is simple, its integration as a differentiable proxy for illumination estimation within a training-free Retinex framework is a valid engineering contribution, not merely repackaging.
+
+*These points are flagged to be removed — treat them with caution.*
+
+- **Harsh Critic Point: "The Gaussian TV combination is not novel."** The critic claimed that Gaussian filtering + TV proximity is "well-understood." However, the paper does not claim novelty for those components individually — it claims novelty in applying them as a single deterministic training-free layer for Retinex decomposition within a diffusion-based zero-shot enhancement pipeline. The novelty is architectural integration, not the components themselves. Removed as a strawman.
+
+- **Harsh Critic Point: "RetinexDIP is a broken baseline (8.59 dB) and percentage improvements are uninformative."** The critic argues that "82.3% higher PSNR" vs. a weak baseline is uninformative. However, RetinexDIP is the most methodologically similar baseline (zero-shot, training-free, Retinex-based), making it a legitimate comparison point for establishing the contribution of the Retinex+diffusion integration. The concern about weak baselines is already handled under the Major weakness about Table 2. Not separately retained.
+
+- **Strength Finder's claim that the method "delivers on the claim of comparable to state-of-the-art."** This conflicts with verified Major weakness #2 above. Removed per the rule that when a strength and weakness disagree, the weakness wins.
+
+---
 
 ## Novel Insights
-This paper offers a compelling simplification of the zero-shot LLIE pipeline by demonstrating that a hand-crafted Gaussian TV layer can substitute for complex, slow-to-optimize DIP networks in illumination estimation. The integration of this Retinex prior with a pre-trained diffusion model allows for a unique "best of both worlds" approach: the efficiency and physical grounding of Retinex decomposition combined with the high-fidelity generative capability of diffusion priors. The work highlights that personalization in low-light enhancement does not strictly require retraining on preference datasets if a strong generative prior and flexible text guidance are leveraged effectively at inference time.
+
+The core genuinely novel observation—beyond the paper's stated contributions—is the diagnostic finding that image quality metrics (NIQE, NIQMC, CPCQI) are structurally unable to capture personalization-related quality dimensions. Text guidance sacrifices objective perceptual fidelity to achieve stylistic variation, yet no alternative metric is proposed or evaluated for this trade-off. This gap suggests that the field needs dedicated evaluation protocols for text-guided personalized enhancement, distinct from those used for pure enhancement fidelity — and that publishing such a system without those protocols leaves the core claim unverifiable.
+
+---
 
 ## Suggestions
-- **Clarify the Gaussian Kernel Formulation:** Correct the description in Section 3.1 to accurately reflect that the kernel coefficients are derived from a Gaussian function (positive, normalized weights) rather than sampled from a zero-mean normal distribution.
-- **Adopt Personalization-Aware Metrics:** Supplement PSNR/SSIM with metrics that better reflect text-guided personalization, such as the CLIP similarity score between the output image and the text prompt, or a human evaluation study assessing style adherence and visual quality.
-- **Detail Backbone Specs and Hyperparameters:** Explicitly state the ADM variant used (resolution, parameter count) and provide justification for the high loss scaling factors (e.g., gradient magnitude analysis or normalization details) to aid reproducibility and trust.
-- **Discuss the CLIP Loss Trade-off:** Expand the discussion in Section 3.2.1 to acknowledge that removing the source prompt alters the directional constraint and include a qualitative comparison showing how the modified loss preserves content compared to the full directional loss.
+
+1. **Quantify personalization effectiveness**: Compute CLIP-score similarity between the enhanced image embedding and the target text prompt, reported across multiple prompts and images, with the no-text baseline as a control.
+2. **Address the Table 3 framing**: Either justify why NIQE/NIQMC/CPCQI are not the right metrics for evaluating text-guided outputs (and propose an alternative), or acknowledge that text guidance genuinely trades off image quality for personalization flexibility.
+3. **Revise the abstract**: Replace "achieves performance comparable to state-of-the-art" with an accurate characterization that matches the body text and Table 1 data.
+4. **Add supervised SOTA to Table 2**: Include URetinexNet, SNR, DCCNet, DiffusionLL in the LOL/VELOL comparison to let readers calibrate the method's absolute performance.
+
+---
 
 ## Score and Decision
-I calibrated this paper against several anchors. Compared to **Reti-Diff** (Score 8), this paper has a novel training-free angle but weaker experimental rigor and clearer description issues. Compared to **PostEdit** (Score 6), which also proposes a training-free diffusion editing scheme, RetinexGDP has similar methodological novelty but suffers from a more significant evaluation mismatch (using PSNR for personalization) and less precise mathematical descriptions. Compared to **DiffIR2VR-Zero** (Reject, scores 5-6), which had missing baselines and structural issues, RetinexGDP is structurally sounder but still has the Major evaluation flaw. The paper makes a solid contribution to training-free personalization but is undermined by an evaluation protocol that penalizes its core feature and unclear methodological descriptions. It sits in the borderline range, with strengths in novelty and design but weaknesses in validation and clarity.
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+**Calibration anchors used:**
+- *Reti-Diff* (kxFtMHItrf, 8,8,8,6): Retinex + diffusion model for LLIE — but fully supervised, achieves SOTA, comprehensive evaluation. RetinexGDP is well below this bar.
+- *DiffIR2VR-Zero* (qpDqO7qa3R, 6,5,5,5): Zero-shot video restoration — also rejected, but has quantitative validation of its main claim and broadly competitive results.
+- *ZnmofqLWMQ* (3,3,5,3): Zero-shot image restoration with methodological gaps — rejected, similar issues to this paper but with different failure modes.
+- *3SqnZXg24T* (3,3,1,3): Low-light enhancement paper with weak baselines — rejected, weaker than this paper in terms of originality.
+
+RetinexGDP is clearly below the DiffIR2VR-Zero bar (6,5,5,5) because its primary novel contribution (text-guided personalization) has no quantitative validation and its ablation demonstrates the contribution degrades quality metrics. It is above 3SqnZXg24T and ZnmofqLWMQ because it has genuine architectural innovations (Gaussian TV layer, patch-wise inversion) and a real novel capability. The paper sits between these anchor clusters, closer to the borderline-reject range.
+
+**Evaluation dimensions:**
+- *Originality*: Moderate — the text-guided zero-shot LLIE direction is genuinely new
+- *Importance of research question*: Good — personalized enhancement is underexplored
+- *Soundness of claims*: Weak — central contribution degrades quality metrics; abstract overclaims
+- *Soundness of experiments*: Poor — personalization claim has no quantitative evaluation; Table 2 excludes key baselines
+- *Clarity of writing*: Acceptable — body text is more honest than abstract
+- *Value to research community*: Limited in current form — the method's core contribution cannot be verified
+
+**Final Score: 4.0 — Reject**
+
+The paper raises an interesting research question and has real engineering components, but the combination of (a) the main novelty demonstrably degrading image quality metrics, (b) the complete absence of quantitative evaluation for the personalization claim, and (c) poor absolute performance across the primary benchmarks makes the paper insufficient for acceptance in its current form.
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
