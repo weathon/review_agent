@@ -95,7 +95,14 @@ with open("prompts/cal_without.md", "r") as _f:
 
 def load_prompts(path, paper_access: str = PAPER_ACCESS_INJECTION, no_cal: bool = False):
     with open("prompts/" + path, "r") as f:
-        content = f.read()
+        raw_lines = f.readlines()
+    kept_lines = []
+    for lineno, line in enumerate(raw_lines, start=1):
+        if line.lstrip().startswith("&&"):
+            print(f"WARNING: ignoring commented line {lineno} in prompts/{path}: {line.rstrip()}")
+            continue
+        kept_lines.append(line)
+    content = "".join(kept_lines)
     content = content.replace("{{PAPER_ACCESS_INSTRUCTION}}", paper_access)
     cal_instruction = CAL_INSTRUCTION_WITHOUT if no_cal else CAL_INSTRUCTION_WITH
     content = content.replace("{{CALIBRATION_INSTRUCTION}}", cal_instruction)
