@@ -1,12 +1,26 @@
+Now I have sufficient information to write the final review. Let me compile everything.
+
+---
+
 ## Summary
-This paper introduces Quantum Parameter Adaptation (QPA), a quantum-classical hybrid framework that uses a parameterized quantum circuit (PQC) combined with a classical MLP mapping model to generate trainable parameters for parameter-efficient fine-tuning (PEFT) methods on LLMs. By exploiting the exponential Hilbert space dimension (N qubits → 2^N outputs), QPA claims polylogarithmic trainable parameter scaling. The method is evaluated on GPT-2 (80M) and Gemma-2 (2B) by generating parameters for LoRA, DoRA, Prefix-Tuning, and Feed-Forward Adapters—marking a ~1785× scale-up over prior quantum parameter generation work. While the paper demonstrates that QPA reduces trainable parameter counts while maintaining roughly comparable perplexity, the improvements are marginal and the experimental setup is notably restricted.
+
+This paper introduces Quantum Parameter Adaptation (QPA), which uses a parameterized quantum circuit (PQC) coupled with a classical MLP mapping model to generate parameters for parameter-efficient fine-tuning (PEFT) methods (LoRA, DoRA, PT, FFA) in LLMs. The key motivation is that the Hilbert space of the PQC grows exponentially with qubit count, enabling O(polylog(m)) parameters to index m target parameters. QPA is evaluated on GPT-2 and Gemma-2 fine-tuned on WikiText-2, showing parameter reductions to 52% and 16.84% of standard LoRA respectively, with marginal perplexity improvements. This represents the largest-scale application of quantum parameter generation to date (0.52B target parameters vs. 0.28M in prior work).
+
+---
 
 ## Strengths
-- **First demonstration of quantum parameter generation at LLM scale (§1, Table 2):** Applying QPA to generate PEFT parameters for Gemma-2's lm_head (~0.52B parameters) represents a substantial scale-up over prior quantum parameter generation work limited to ~0.28M parameters. This is a genuine step forward for the subfield.
-- **Elegant polylogarithmic parameter scaling through Hilbert space exploitation (§3.1, Eq. 1–2):** The mathematical formulation from PQC measurement probabilities to PEFT parameters via a decoding MLP is rigorously defined, with correct chain-rule gradient derivation (Eq. 3). This is the core theoretical mechanism enabling parameter reduction.
-- **Batched parameter generation reducing qubit requirements (§3.2, Eq. 8):** The chunking strategy is a practical and clearly explained mitigation of simulator memory scaling, demonstrated concretely (30 qubits → 20 for a 10⁹-parameter model) and keeping qubit usage in the 4–11 range across all experiments (Fig. 4a).
-- **Broad PEFT method coverage (§4.1, Fig. 2–3, Table 2):** QPA is systematically demonstrated across four distinct PEFT families (LoRA, DoRA, Prefix-Tuning, Feed-Forward Adapters) on two different model sizes, showing architectural flexibility rather than fitting a single narrow use case.
-- **Purely classical inference (§1, Fig. 1c):** The decoupling of quantum computation from the inference phase is a meaningful design choice—once PEFT parameters are trained, no quantum hardware is needed at deployment.
+
+- **Scaling quantum parameter generation to LLM scale (Section 1, Table 2):** The paper is the first to apply quantum parameter generation to a 0.52B-parameter target layer (Gemma-2 lm_head), approximately 1785× larger than prior work. This constitutes a genuine milestone for the subfield.
+
+- **Decoupling inference from quantum hardware (Figure 1b/c, Section 1):** By using QNNs only during training and deploying entirely classical models at inference, QPA sidesteps the two main practical barriers of conventional QML — costly data encoding and quantum hardware dependency at inference. This is a clean and pragmatically important architectural insight.
+
+- **Batched parameter generation (Section 3.2, Eq. 8):** The chunking strategy — reducing qubit requirements from N = ⌈log₂ m⌉ to N = ⌈log₂(m/n_mlp)⌉ — is a practical innovation that makes the approach tractable for LLM-scale targets. The memory reduction by a factor of 1/n_mlp is clearly explained with a concrete example (30 → 20 qubits for 10⁹ parameters with n_mlp = 1024).
+
+- **Generality across PEFT methods (Figures 2–3, Table 2):** QPA is applied to four distinct methods (LoRA, DoRA, PT, FFA), demonstrating that the quantum parameter generation framework is not tied to a single adaptation strategy.
+
+- **Reasonable qubit requirements:** All experiments use 4–11 qubits (Figure 4a), consistent with near-term quantum hardware.
+
+---
 
 ## Weaknesses
 
@@ -15,55 +29,89 @@ None.
 
 ### Major
 
-- **Single-layer (`lm_head`) evaluation is an incomplete proxy for PEFT, limiting the paper's practical relevance to the PEFT community.** Section 4 (line 168): *"we simplify the PEFT setup by freezing all layers of Gemma-2 and GPT-2, and fine-tuning only the final linear layer, commonly referred to as the 'lmhead'."* Standard PEFT methods derive their value from adjusting attention projections and FFN layers across the full transformer backbone, not from optimizing a single output projection. The current setup reduces to training one linear layer (albeit with a quantum-generated parameterization), which bypasses the core representational learning and catastrophic forgetting challenges that motivate PEFT in the first place. Without experiments applying QPA to standard PEFT target modules (e.g., QKV attention projections), the claim that QPA "enhances PEFT methods" is under-supported. The parameter reduction numbers and perplexity curves, while internally consistent, do not demonstrate how QPA compares in the setting that PEFT practitioners actually care about.
+- **Missing classical hypernetwork baseline — the central quantum advantage claim is unsubstantiated.** The MLP mapping model (architecture [32, 64, 128, 128, 64, 32, n_mlp]) constitutes the overwhelming majority of QPA's trainable parameters. For N=10 qubits and L=8 layers, the PQC contributes 80 parameters, while the MLP contributes tens of thousands to hundreds of thousands depending on n_mlp. The quantum circuit's role is to produce one scalar (measurement probability) per basis-state call to the MLP. There is no demonstrated reason this scalar, derived from a quantum source, is more useful than the same scalar from an equivalently-sized classical function. The paper never compares QPA to a "classical QPA" baseline where the PQC is replaced by a small classical network of identical parameter count (N×L parameters), with all else held equal. Without this experiment, the paper cannot claim that quantum properties contribute anything beyond what a classical hypernetwork would provide. This is not a minor omission — it is the control experiment that would substantiate or refute the paper's core premise. The paper's framing ("quantum-enhanced parameter reduction," "leveraging quantum properties") is not supported by the evidence presented.
 
-- **Marginal, statistically unvalidated perplexity improvements do not robustly isolate the quantum contribution from the classical MLP mapping model.** The headline improvements are 0.75% for GPT-2 (1.583 vs. 1.595) and 0.07% for Gemma-2 (1.417 vs. 1.418)—both well within the typical variance of LLM fine-tuning (random seed sensitivity, optimizer dynamics, dataset sampling). The paper reports no multi-seed runs, no variance bars on Figures 2–4, and no statistical significance testing. More critically, there is no ablation against a classical hypernetwork with identical MLP architecture and comparable parameter budgets. Without this control, it is impossible to determine whether the gains stem from the quantum probability encoding or simply from the MLP's architecture and training dynamics. The absence of noise/shot-noise modeling (main text ignores quantum noise, defering to Appendix G) further weakens the claim of a genuine quantum advantage.
+- **Single-layer fine-tuning cannot support claims about practical PEFT.** Section 4 states: *"we simplify the PEFT setup by freezing all layers of Gemma-2 and GPT-2, and fine-tuning only the final linear layer, commonly referred to as the 'lmhead.'"* Standard PEFT practice (and all PEFT baselines cited: LoRA, DoRA, PT, FFA) applies modifications across all or most transformer layers (typically 12–40). Fine-tuning only the lm_head is an unusual setting that is not representative of real PEFT use cases. The extremely low perplexity values (Gemma-2 ≈ 1.42 on WikiText-2 even before any fine-tuning adaptation) suggest the model is already near-optimal on this data in its zero-shot state, making the measurement insensitive to fine-tuning method quality. The paper's third listed contribution — *"scaling up the size of existing quantum parameter generation studies"* by targeting a 0.52B-parameter layer — refers to the target layer *size*, not to running standard multi-layer PEFT. These are different things, and the abstract's framing of QPA as a "practical" and "scalable quantum-classical solution for fine-tuning LLMs" is overstated given that only one layer is ever tuned.
+
+- **Suspicious DoRA baselines.** Table 2 shows DoRA achieving perplexity 5.003 (GPT-2) and 5.504 (Gemma-2), while LoRA achieves 1.595 and 1.418 respectively — a 5× perplexity gap under identical rank and dataset conditions. DoRA, as described in its original paper, is generally competitive with or marginally better than LoRA at the same rank. Such a large discrepancy strongly suggests a bug in the DoRA implementation. If DoRA is mis-implemented, all QPA DoRA comparisons (Table 2, Figure 2 right panels) are invalid. The paper provides no discussion of this anomaly.
 
 ### Minor
 
-- **Polylogarithmic scaling claim partially obscures the MLP parameter budget.** The paper claims O(polylog(m)) trainable parameters for a target of m parameters (§3.1, line 97), but this refers only to the PQC parameters θ. When n_mlp grows (Section 3.2), the MLP's decoder parameters scale polynomially and can dominate the total trainable budget. Section 3.2 acknowledges this trade-off ("increases the number of parameters in the mapping model") but does not quantify it or present a rigorous total-parameter scaling analysis. A simple derivation of params(θ) + params(b) vs. target matrix size would substantially strengthen the scaling argument.
+- **Performance improvements are too small to interpret without variance estimates.** The headline results — 0.07% perplexity improvement for Gemma-2 and 0.75% for GPT-2 — are reported for single runs with no standard deviation, confidence interval, or multi-seed evaluation. Quantum circuit simulations with random initialization can produce variable results. Differences at this scale could easily be within noise, making it impossible to assess whether QPA's gains over LoRA are reliable.
 
-- **Training compute cost / wall-clock profiling is absent.** Classical state-vector simulation of 4–11 qubit circuits with exact gradients has a known O(2^N) memory and compute profile. The paper discusses memory (16 GB for 30 qubits, §3.2, line 130) but never reports actual GPU hours or training time for QPA vs. standard LoRA. If QPA takes 10× longer to train for a 16% parameter saving, practitioners would likely not adopt it.
+- **Training time overhead is not reported.** QPA requires simulating a quantum circuit (classically) at every forward pass. For L=8 and N=10, the system must simulate and differentiate through a 1024-dimensional quantum state. No wall-clock training time comparison is provided. This matters because QPA's practical appeal depends on total training efficiency, not just parameter count.
+
+- **The polylogarithmic compression claim partially breaks down in the batched setting.** Section 3.1 correctly claims that |θ| and |b| are both O(polylog(m)) for the original (n_mlp=1) formulation. However, in the batched setting (Section 3.2), the MLP's output layer grows to 32 × n_mlp. For n_mlp = 65536 (used in QPA FFA experiments), this layer alone adds >2M parameters — no longer polylogarithmic in the target parameter count m. The paper acknowledges the trade-off in Section 3.2 but does not revisit the polylogarithmic scaling claim for the batched regime used in all main experiments.
 
 ### Trivial
+- None that apply (per submission standards).
 
-- **Overstated deployment-readiness language in the conclusion.** Section 5 claims QPA *"ensures quantum benefits are leveraged during training without adding deployment complexities,"* but this glosses over unaddressed optimization challenges in QNN-LLM joint training (gradient mismatch, learning-rate scheduling across quantum and classical components). This is a minor presentational issue.
+---
 
 ## Nice-to-Haves
-- Visualizing the effective rank / singular value decay of QPA-generated weight matrices vs. standard LoRA would directly validate the paper's stated goal of exploring "intermediate rank" spaces.
-- Plotting training loss and gradient norm trajectories for both QNN and MLP components would reveal optimization dynamics that final perplexity alone cannot capture.
-- A formal convergence analysis for the non-convex joint optimization of PQCs and transformer weights would strengthen the theoretical foundation.
+
+- A direct ablation replacing the PQC with a fixed random projection of equal size (random basis embeddings) would test whether the *trainability* of the quantum circuit contributes, vs. just the architectural structure of having a small encoder feeding a larger MLP.
+- Downstream task evaluation (e.g., GLUE) after applying QPA in a proper multi-layer PEFT setting would significantly strengthen the practical claims.
+- Training time vs. parameter count curves to assess real-world efficiency trade-offs.
+- Multiple random seeds for the main Table 2 results.
+
+---
 
 ## Removed Points
-**These points are flagged to be removed; treat them with caution.**
 
-1. *"Exact noiseless simulation negates claimed computational efficiency and hardware relevance."* — While the reliance on classical exact simulation is a limitation, the paper explicitly acknowledges this in Section 4 and discusses noise/shot analysis in Appendix G. The O(2^N) scaling is also acknowledged by the authors (§3.2). This is a known trade-off of simulator-based QML papers and is not a fatal flaw for a submission demonstrating feasibility at scale. Weakened to the "Marginal improvements / missing ablation" point above.
+*These points are flagged for removal — treat them with caution:*
 
-2. *"QPA does not scale the trainable parameter count to 0.52B; it scales the target parameter size."* — The paper's contribution bullet (§1) says: *"scaling up the application of quantum parameter generation by fine-tuning up to the linear layer of the Gemma-2 (2B) model, where the target layer consists of 0.52B parameters."* The authors are clear that 0.52B is the target size, not the trainable count. The critic misread this.
+- **"Existence/availability of Gemma-2 doubted"** (not raised by reviewers here, but would be removed per hard rules — the paper provides a HuggingFace URL and specific release date: August 8, 2024).
 
-3. *"Claims about QPA being a 'scalable quantum-classical solution' are undermined because the training loop's computational profile is purely classical."* — The paper does not claim the training is quantum-native; the quantum parameter generation framework is explicitly defined as generating classical weights during training (Fig. 1b, §1.3). This criticism misunderstands the paper's own defined scope.
+- **"Barren plateau analysis is meaningless because MLP dominates"** (from harsh critic): Partially valid but overstated. The barren plateau analysis (Appendix H) is a standard QML sanity check on the quantum parameters θ specifically. The paper does not claim this analysis covers the full optimization landscape, only that the quantum circuit portion does not exhibit exponential gradient vanishing. This is a standard and appropriate analysis within the QML community. Downgraded to "not informative about overall QPA optimization behavior" — worth mentioning only as a note.
 
-4. *"Gradient variance analysis deferred to Appendix H leaves main text under-supported."* — The paper does include a barren plateau discussion in the main text (§4.2, lines 236–238) showing gradient variance does not exhibit exponential vanishing. Appendix deferment is standard for detailed analyses and is not a weakness (rule: REMOVE weaknesses about missing appendix content).
+- **"Quantum circuit simulation overhead makes training impractical"** (implied by harsh critic): Not verified by data in the paper. The paper does state that 30-qubit simulation would require ~16GB GPU memory and several seconds per circuit, and that the batching strategy avoids this. At 4–11 qubits, simulation is well within normal computational budgets. Without concrete timing data showing otherwise, this cannot be listed as a confirmed weakness.
 
-5. *Requesting larger datasets, more models, or additional baselines for completeness.* — These would strengthen the paper but are not core failures. The WikiText-2 benchmark is standard for this type of PEFT comparison, and the paper covers two model scales and four PEFT methods. Moved to Nice-to-Haves.
+- **"Abstract cherry-picks best-case comparisons"**: The paper does note that QPA does not consistently outperform PT and FFA (Section 4: "QPA does not outperform PT at lower parameter counts"). The abstract accurately states "comparable or improved performance" for LoRA specifically. This is not misleading enough to flag.
+
+---
 
 ## Novel Insights
-The paper occupies a meaningful niche in the intersection of quantum computing and LLM fine-tuning. Its most genuine contribution is demonstrating that quantum parameter generation—which had been confined to <1M-parameter models—can be practically scaled to half-billion-parameter targets via the chunking strategy. However, the work's fundamental tension is that the "quantum" contribution (a small PQC generating probability amplitudes) is almost entirely mediated by a classical MLP decoder, and without a classical hypernetwork ablation, it remains unclear what role—if any—the quantum circuit plays in the final representational quality. The evaluation being restricted to a single `lm_head` layer further distances the work from what the PEFT community actually studies. If QPA is applied to attention projections in future work and paired with a matched classical ablation, it could become a genuinely compelling contribution.
+
+The paper's most interesting insight — largely implicit — is the architectural decoupling enabled by the batched quantum-classical hypernetwork: by treating the quantum circuit's measurement probabilities as low-dimensional context vectors that are then amplified by a classical MLP, QPA creates a novel form of structured low-dimensional parameterization. This could be viewed as a quantum-initialized generative model for PEFT parameters. The most important open question raised (but not answered) by this work is whether the quantum circuit's inductive bias — constrained to produce probability distributions over 2^N basis states — provides any useful regularization for parameter generation compared to a free classical encoder of the same size. This question, if answered affirmatively with proper controls, would significantly strengthen the case for QPA.
+
+---
 
 ## Suggestions
-1. **Add a classical hypernetwork ablation.** Train a standard MLP (matching QPA's decoder architecture and parameter budget) that generates PEFT parameters from a learned latent vector or Gaussian noise. This is the most critical experiment needed to determine whether the quantum component contributes meaningfully.
-2. **Apply QPA to multi-layer PEFT targets.** Fine-tune QKV projections or FFN layers with QPA-generated parameters across multiple transformer layers, not just the `lm_head`, to demonstrate relevance to real PEFT workflows.
-3. **Report multi-seed experiments with variance.** Run QPA and baselines across at least 3 random seeds and report mean ± std for perplexity, so the marginal improvements can be assessed for statistical significance.
-4. **Profile wall-clock training time.** Report total GPU hours and memory consumption for QPA vs. standard LoRA at matched parameter counts.
+
+1. **Run the critical ablation**: Replace PQC with a classical MLP of N×L parameters (identical size), keep the mapping model unchanged, and compare results. This single experiment would either validate or invalidate the quantum advantage claim.
+2. **Fix or explain the DoRA baseline**: If DoRA's perplexity of ~5 vs. LoRA's ~1.5 is correct, explain why. If it reflects a bug, fix it and re-run all DoRA comparisons.
+3. **Run multi-layer PEFT** on at least one model to support the "practical LLM fine-tuning" claims. Even applying QPA to all attention layers of GPT-2 (12 layers) would be a step toward practical validation.
+4. **Report variance**: Run at minimum 3 seeds for the main Table 2 results, given that claimed improvements of 0.07–0.75% are extremely small.
+
+---
 
 ## Score and Decision
-I calibrated this paper against several anchors:
-- **Quantum-PEFT (dgR6i4TSng.md)**, accepted with scores ~6,6,6,6: similar quantum-inspired PEFT theme but with broader benchmark coverage and more convincing multi-task evaluation. The paper under review is notably narrower in its evaluation (single-layer lm_head).
-- **QNF-Net (gnexAe3kjx.md)**, rejected with mixed scores (6,1,8,5): a QML paper flagged for missing classical baselines, unclear logic, and overclaimed advantages—the current paper shares the missing-ablation weakness but has clearer methodology.
-- **cR5GTis5II.md (eQMARL)**, accepted (6,6,6): accepted despite "claimed advantages not conclusive" concerns, but that paper had cleaner evidence on its core task.
-- **3HPOtZxs5s.md**, withdrawn/rejected (3,3,3,3): a QML classifier with no clear quantum advantage, similar to the pattern here.
 
-The paper under review has a real step forward in scaling, but its restricted evaluation, marginal and unvalidated improvements, and missing classical ablation place it below the accepted Quantum-PEFT and near the boundary of borderline-QML papers. The major weaknesses are genuine but do not invalidate the paper entirely.
+**Calibration anchors consulted:**
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+1. *3HPOtZxs5s* (Hamiltonian Classifier for QML, scores 3,3,3,3, Rejected): Rejected for failing to prove quantum advantage over classical methods and not outperforming classical baselines. This paper has a nearly identical structural issue — the quantum advantage is unproven due to missing classical comparison — but has more novelty (LLM scale) and a cleaner practical story.
+
+2. *bQNiz6aid0* (Quantum Sequential Scattering, scores 5,5,1, Withdrawn): Marginally above threshold for individual reviewers due to theoretical novelty, but ultimately rejected for missing critical baselines and insufficient numerical experiments. Similar in profile to the paper under review.
+
+3. *GbgCRJedQ7* (SMT fine-tuning, scores 8,6,6,5,6, Accepted Poster): Accepted because it has strong empirical evaluation across multiple models and tasks with proper baselines. This paper falls significantly short — only one layer, two LLMs, no classical baseline.
+
+4. *RYrJqz44p4* (LoRA-Dash, scores 6,6,6,5, Accepted Poster): Accepted for a clean novel PEFT method with proper multi-layer LLM experiments. This paper's experimental scope is much more limited.
+
+**Assessment:**
+
+The paper's core quantum advantage claim is unsubstantiated (no classical hypernetwork baseline), experiments cover only single-layer fine-tuning (non-standard PEFT), DoRA baselines appear mis-implemented, and improvements are too small to assess without variance. The contribution most clearly supported by evidence is scaling quantum parameter generation to LLM size — an incremental but real engineering contribution.
+
+Compared to the anchor cluster: this paper falls between the rejected QML papers (3–5) and the borderline PEFT papers (5–6). The absence of the critical baseline and the restricted experimental scope pull it toward the lower end.
+
+**Originality:** Moderate — combining existing quantum parameter generation with PEFT is novel in scale, not in approach.  
+**Importance:** Limited at this stage — quantum advantage over a classical equivalent is not established.  
+**Claims vs. support:** Weak — core claims about quantum efficiency are not adequately supported.  
+**Experimental soundness:** Below standard — single-layer evaluation, no variance, suspicious baselines.  
+**Clarity:** Good — paper is clearly written and honest about simplifications.  
+**Value to community:** Low-to-moderate — useful as a proof-of-concept for scale, but not ready as a practical method.
+
+**Final Score: 4.0 — Reject**
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
