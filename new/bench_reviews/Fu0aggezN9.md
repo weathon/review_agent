@@ -1,20 +1,18 @@
-Now I have a comprehensive understanding of the paper and relevant calibration anchors. Let me compose the final review.
+Now I have a thorough understanding of the paper. Let me construct the final consolidated review.
 
 ## Summary
 
-The paper introduces graph-based Document Structure Analysis (gDSA), a novel task that requires models to jointly detect document layout elements and predict spatial/logical relations between them as a graph. To support this task, the authors construct the GraphDoc dataset (80K images, 4.13M relation annotations across 8 relation types) by extending DocLayNet with rule-based relation annotations. They also propose the Document Relation Graph Generator (DRGG), a plug-and-play relation head achieving 57.6% mAP_g@0.5 with InternImage+RoDLA.
+The paper introduces the graph-based Document Structure Analysis (gDSA) task, which extends traditional document layout analysis by requiring models to predict both document element locations and their structural relations (spatial and logical) in the form of a graph. To support this task, the authors construct the GraphDoc dataset, built on top of DocLayNet, with 80K document images and 4.13M relation annotations across 8 relation categories. They also propose the Document Relation Graph Generator (DRGG), a plug-and-play relation prediction module that attaches to standard encoder-decoder object detectors, achieving 57.6% mAP_g@0.5 as a baseline on the new benchmark.
 
 ## Strengths
 
-- **Novel and well-motivated task formulation**: gDSA unifies DLA, reading order prediction, and hierarchical structure analysis into a single graph-generation objective (Eq. 2, Fig. 2), which is conceptually cleaner than treating these as separate tasks. No prior dataset provides all of these simultaneously (Table 1 clearly shows GraphDoc is the only dataset covering graph modality with 8 relation types including both textual and non-textual elements).
+- **Novel and comprehensive task formulation**: The gDSA task unifies document layout analysis with structural relation prediction (spatial + logical) into a single graph-generation problem. Table 1 demonstrates that GraphDoc is the only dataset combining all six modalities (V, T, L, O, H, G) and supporting non-textual instances for graph structure analysis, filling a genuine gap in existing benchmarks.
 
-- **Large-scale dataset filling a genuine gap**: 80K images and 4.13M relation annotations is a substantial resource. Table 1 positions GraphDoc clearly against existing datasets, showing it is the first to combine visual, textual, layout, order, hierarchy, and graph modalities with non-textual instance support.
+- **Well-designed evaluation metrics (mR_g, mAP_g)**: The paper identifies that standard SGG top-k metrics are inadequate for documents (class imbalance, variable relation counts, multiple coexisting relations) and proposes threshold-based metrics that require correct instance detection before evaluating relations (Algorithm 1). This is a sensible and principled design choice.
 
-- **Per-category results are revealing and honest**: Table 3 transparently shows near-perfect spatial relations (99.0% for Left/Right) alongside the much more challenging logical relations (Reference at 16.8%), which is valuable information for the community.
+- **Dataset scale and diversity**: GraphDoc provides 4.13M relation annotations across 8 categories on 80K documents, providing sufficient training data. Building on DocLayNet ensures reliable base layout annotations and diverse document types (financial reports, manuals, scientific papers, legal documents).
 
-- **Plug-and-play design validated across multiple architectures**: Table 2 demonstrates DRGG integrated with 4 detectors and 4 backbones (12 configurations), showing consistent improvement with stronger backbones, which supports the generalizability of the module.
-
-- **Custom evaluation metrics addressing gDSA-specific challenges**: The proposed mR_g and mAP_g metrics (Algorithm 1) use threshold-based filtering rather than top-k, which is appropriate for documents with variable relation counts and severe class imbalance between spatial and logical relations.
+- **Plug-and-play DRGG architecture**: DRGG integrates with multiple existing detectors (DETR, Deformable DETR, DINO, RoDLA) without modifying the base architecture (Figure 5, Section 3.2), and Table 2 demonstrates this versatility across four detectors.
 
 ## Weaknesses
 
@@ -23,74 +21,69 @@ None.
 
 ### Major
 
-- **Headline metric inflated by near-trivial spatial relations; no separate reporting for logical relations** — Section 3.1.5 states spatial relations constitute 64.06% of all relation pairs. Table 3 shows Left/Right achieve 99.0% AP, which is expected because these relations follow directly from bounding box geometry (nearest neighbor in a given direction). The 57.6% mAP_g@0.5 headline is dominated by these easy spatial relations, while the semantically meaningful logical relations—Parent/Child at 45.5%, Sequence at 56.4%, and Reference at only 16.8%—tell a much less impressive story. The paper does not report mAP separately for spatial vs. logical relations, making the headline figure misleading about actual document understanding capability. This matters because the paper's core claim is that gDSA enables "a gradually deeper comprehension akin to human reading" (Abstract), which is undermined if the model's performance is almost entirely driven by geometric priors rather than semantic understanding.
+- **Unexplained extreme asymmetries in Table 3 undermine confidence in the evaluation**: For Deformable DETR, "Left" achieves 99.0% AP while "Right" achieves only 11.9%. For Swin+RoDLA, the asymmetry flips: "Left" is 33.7% while "Right" is 99.0%. Left and Right are directional counterparts on a plane; such extreme, model-dependent asymmetries are inexplicable without a bug in evaluation code, a systematic labeling bias, or some other artifact. The paper provides no explanation or even acknowledgment of these anomalies. Since spatial relations constitute 64% of all annotations, any systematic error in their evaluation invalidates a large portion of the claimed results. This must be resolved before the benchmark results can be trusted.
 
-- **Rule-based annotation pipeline without quantified quality assessment** — Section 3.1.4 explicitly states that all annotations are produced by a "heuristic rule-based relation annotation system" using pixel scanning, Recursive X-Y Cut, and rule-based hierarchy construction. The claim that "most of the results have been manually verified and refined" (Section 3.1.4) is vague and unquantified—no percentage verified, no error rates, no inter-annotator agreement. This matters because (a) models may learn to replicate the annotation rules rather than genuinely understanding document structure, and (b) the rule-based nature means the annotation quality ceiling is the quality of the heuristics, which is never established. While some document structure datasets (e.g., ReadingBank) also use algorithmic annotation, they typically provide analysis of annotation accuracy; this paper provides none.
+- **No rule-based baseline for gDSA establishes whether the task is non-trivial**: The annotations are generated entirely by heuristic rules (Section 3.1.4): spatial relations by nearest-neighbor pixel scanning, reading order by Recursive X-Y Cut, hierarchical structure by category-based heuristics, reference by text matching. Since 64% of relations are spatial (deterministic geometric computations), a rule-based baseline applying these same heuristics would likely match or exceed the model on spatial relations. Without such a baseline, it is impossible to assess whether DRGG learns anything beyond replicating the annotation rules, and the headline 57.6% mAP_g@0.5 cannot be interpreted meaningfully. This is essential for a dataset/benchmark paper.
 
-- **No rule-based baseline for the gDSA task** — Since the ground truth itself is generated by deterministic rules from bounding box geometry and text matching, a natural baseline would be to apply similar rules to detected bounding boxes. Without this baseline, we cannot assess whether DRGG learns anything beyond replicating the annotation heuristics. The paper compares only detector+DRGG variants against each other (Table 2), which shows that detection quality matters but does not establish that the learned relation prediction adds value over rule-based prediction given detected boxes. This is a critical gap because the paper's central claim—that DRGG "effectively addresses the gDSA task"—cannot be evaluated without it.
+- **Annotation quality is unquantified**: The paper states "most of the results have been manually verified and refined" (Section 3.1.4) but provides no inter-annotator agreement scores, no sampling methodology, no characterization of what fraction "most" represents, and no quality metrics for the verification process. For a dataset/benchmark paper where annotation quality is the primary contribution, this is a critical gap. The reader has no way to assess whether the rule-generated annotations are reliable enough to serve as ground truth.
 
 ### Minor
 
-- **Evaluation metric functions underspecified** — Algorithm 1 references $f_{mR}$ and $f_{mAP}$ functions that are never formally defined. While the algorithm describes the instance matching and thresholding procedure, the actual computation of mean recall and mean AP from the filtered sets is left implicit, making it harder to reproduce or compare against.
+- **Headline mAP_g@0.5 is dominated by near-trivial spatial relations**: The best model achieves 99.0% AP on Left/Right spatial relations but only 16.8–18.8% AP on Reference relations (arguably the most interesting and practically important relation type). The aggregate 57.6% mAP_g@0.5 thus misrepresents the genuine difficulty of the task. The paper should decompose results into spatial-only and logical-only components to give readers an accurate picture of where the challenge lies.
 
-- **DLA improvement claim from DRGG is small and unvalidated** — Table 2 shows RoDLA mAP improving from 80.5% to 81.5% when DRGG is added. This 1.0% improvement is presented as evidence that DRGG "enhances" detection, but without error bars or statistical significance tests, this could be noise. This claim should be made more cautiously.
+- **DRGG's claimed DLA improvement is marginal and untested for significance**: Adding DRGG to RoDLA with InternImage improves DLA mAP from 80.5% to 81.5% (Table 2)—a 1.0% gain within typical random variation, with no variance reported across runs. The paper should be more cautious about claiming DRGG "improves" DLA without establishing statistical significance.
 
-- **No comparison to alternative relation prediction approaches** — Beyond varying the detector backbone, there is no comparison to scene graph generation methods or document-specific structure prediction methods (e.g., models from HRDoc/Comp-HRDoc). While the task is new and direct comparison is difficult, even a simple adapted baseline from SGG would strengthen the evaluation. The "state-of-the-art performance" claim in Figure 1's caption is misleading since there is no prior state of the art for this exact task.
+- **Fundamental mismatch between annotation method and model capability for Reference relations**: Reference relations are constructed by matching annotation text (Section 3.1.4: "We match annotation texts to construct reference relation"), yet the model operates purely on visual input without text access. The 16.8% AP on Reference confirms this is a core limitation, not a minor one. The paper acknowledges the vision-only limitation but underplays its impact—the most distinctive relation type in the benchmark is largely undetectable by the proposed model.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- Report mAP separately for spatial vs. logical relations, and for logical relations only, to give a clear picture of where the model succeeds and fails on semantically meaningful relations.
-- Include a rule-based baseline that applies the annotation heuristics to detected bounding boxes, to establish a lower bound and assess whether DRGG learns beyond geometric pattern replication.
-- Quantify annotation quality: report the fraction of annotations manually verified, error rates found during verification, and what corrections were made. This would substantially strengthen the dataset's credibility.
-- Provide analysis of why Up/Down relations (49.0% AP) are so much harder than Left/Right (99.0% AP)—likely due to column vs. row ambiguity in multi-column layouts—which would inform both task design and future modeling directions.
+- A downstream task evaluation showing that predicted document graphs improve some application (e.g., information extraction, document QA) would substantiate the claim that gDSA enables "deeper comprehension."
+- A text-based or multimodal variant of DRGG would directly test whether the identified limitation on Reference relations is addressable.
+- Cross-page relation annotations would increase the practical utility of the dataset, as cross-page references are common in multi-page documents.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution:
+*These points were flagged for removal—treat them with caution:*
 
-- *"No error bars, confidence intervals, or statistical significance"* — Reproducibility nitpick removed per rules; single-run evaluation is standard for large-scale benchmark papers in this community.
+- **Up/Down minor asymmetries (Harsh Critic #2)**: The reviewer flagged ResNet Up=15.1%/Down=17.2% and Swin Up=18.8%/Down=19.8% as "unexplained inconsistencies." These are 1–2% differences between directional counterparts and are well within normal variation—not anomalous. Removed as a weakness.
 
-- *"All results appear to be on the validation set"* — Standard practice for dataset papers establishing baselines; no separate test set is common at this stage.
+- **No comparison to adapted SGG/document relation extraction methods (Harsh Critic #3 partial)**: The reviewer demanded comparisons to HRDoc's hierarchical approach or neural motif models. For a new task/dataset paper, the absence of directly comparable external methods is somewhat expected. The rule-based baseline gap (kept above) is the critical missing comparison; the absence of adapted SGG methods is a lesser concern.
 
-- *"Equations underspecified (L, P, U not defined)"* — The paper references supplementary Section C for additional details. Cannot verify whether appendix addresses this; removed per rules on missing appendix sections.
+- **DRGG architecture similarity to SGG methods (Harsh Critic Section-by-Section)**: The reviewer claimed the paper doesn't acknowledge the connection to scene graph generation. In fact, the paper discusses SGG in the related work (Section 2), evaluation metrics (Section 3.3), and explicitly states "Inspired by the graph generation from computer vision...we propose a graph-based task for document analysis" (Section 2). While deeper architectural comparison would strengthen the paper, the claim of no acknowledgment is overstated.
 
-- *"Plug-and-play only demonstrated with transformer-decoder architectures"* — The paper tests 4 different detectors and 4 backbones, which is a reasonable demonstration of general applicability. Demanding more architectures is a generic "add more models" request.
+- **Missing downstream task evaluation (Harsh Critic)**: While valuable, the paper's stated scope is task/dataset formulation and baseline establishment—not demonstrating downstream utility. Moved to nice-to-have.
 
-- *"Missing related works (e.g., HRDoc/Comp-HRDoc relation approaches)"* — Per rules, do not flag missing references.
+- **Missing text/multimodal variant (Harsh Critic)**: The paper explicitly scopes to vision-only and acknowledges this as a limitation. Moved to nice-to-have.
 
-- *"No ablation studies"* — Referenced as being in Appendix E; removed per rules on missing appendix.
+- **Cross-page relation limitation (Harsh Critic)**: The paper explicitly acknowledges this limitation (Section 5). This is not an undisclosed weakness.
 
-- *"Multimodal input limitation is the most critical next step"* — The paper already acknowledges this as a limitation in Section 5. Criticizing the absence of multimodal input is scope creep relative to the paper's stated contribution.
-
-- *"Algorithm 1 conflates detection and relation quality"* — This is by design: the gDSA task explicitly couples detection and relation prediction. Conflating these is a feature of the task definition, not a bug.
+- **Reproducibility concerns about hyperparameters, T_R thresholds (Harsh Critic)**: The paper provides implementation details and references Appendix F. Demands for justifying specific threshold choices and calibration analysis are standard nitpicks.
 
 ## Novel Insights
 
-The paper reveals an important tension in document structure analysis: when spatial relations are formulated as nearest-adjacent-neighbor problems (as they naturally are in Manhattan layouts), they become nearly trivial (~99% AP) for any reasonable detector, while logical relations like Reference remain extremely hard (16.8% AP) without textual content understanding. This suggests that future work should either (a) define spatial relations at a coarser or more semantically meaningful granularity rather than nearest-neighbor adjacency, or (b) explicitly decouple the evaluation of "spatial awareness" (which is largely a byproduct of detection quality) from "logical understanding" (which is the true frontier). The current formulation conflates the two, making headline metrics difficult to interpret.
+The Table 3 Left/Right asymmetry pattern—where different models fail on opposite directions—is more informative than simply noting the asymmetry exists. The fact that InternImage+RoDLA and ResNeXt+RoDLA achieve symmetric near-perfect Left/Right scores, while Deformable DETR and Swin+RoDLA show extreme opposite asymmetries, suggests this is not a dataset bias (which would affect all models similarly) but rather a model-specific convergence or evaluation artifact. This pattern could indicate that certain model architectures become trapped in suboptimal local minima that favor one spatial direction, or that there is an interaction between the model architecture and the evaluation pipeline that differentially affects directional predictions.
 
 ## Suggestions
 
-- **Report logical-only and spatial-only metrics** in a revised version, and include a simple rule-based baseline (nearest-neighbor spatial relations + text-matching reference detection applied to detected boxes) to establish the real performance gap between heuristic and learned approaches.
-- **Quantify the manual verification** in the annotation pipeline: even a random sample of 500 documents with human re-annotation would provide crucial evidence of annotation quality.
-- **Reframe the "state-of-the-art" claim** to acknowledge that this is a new task with no prior baselines; the contribution is establishing the first baseline, not surpassing prior work.
+- **Add a rule-based baseline**: Implement the same heuristics used in the annotation pipeline (nearest-neighbor spatial extraction, X-Y Cut reading order, category-based parent/child assignment) as an evaluation baseline. Report its performance alongside DRGG to establish the non-triviality of the gDSA task.
 
-## Score and Decision
+- **Explain the Table 3 asymmetries**: Investigate and report why Deformable DETR achieves 99.0% Left / 11.9% Right while Swin achieves 33.7% Left / 99.0% Right. At minimum, report the per-category distribution of relations in the dataset to rule out labeling bias, and verify the evaluation code produces symmetric results on synthetic symmetric data.
 
-**Calibration anchors:**
+- **Quantify annotation quality**: Report inter-annotator agreement on a sample, and characterize what fraction of rule-generated annotations survive manual verification unchanged. Even a small-sample study (e.g., 100–200 documents) would meaningfully address this gap.
 
-| Paper | Avg Score | Relation to this paper |
-|-------|-----------|----------------------|
-| DESIGN (8T7m27VC3S) | 4.0 (Reject) | Rule-based auto-labelling for 3D dense captioning; similar pattern of algorithmic ground truth generation without quality assessment. Rejected largely due to annotation concerns. This paper has a stronger task formulation and larger scale, but shares the rule-based annotation weakness. |
-| tBen (q3MYZQ3es8) | 4.0 (Reject) | Rule-generated benchmark with restricted application breadth. Rejected because synthetic/rule-based annotations limit benchmark value. GraphDoc is more applied but shares the same core concern. |
-| ADOPD (x1ptaXpOYa) | 6.5 (Accept poster) | Document understanding dataset with human-in-the-loop annotation and multiple task formulations. More rigorous annotation pipeline. GraphDoc has weaker annotation methodology but novel graph formulation. |
-| Dense Video Object Captioning (auZZ2gN0ZN) | 7.5 (Accept Spotlight) | New task + unified model + carefully designed metrics + strong zero-shot results. Much stronger contributions than GraphDoc across the board. |
-| ColPali/ViDoRe (ogjBpZ8uSi) | 5.25 (Accept poster) | New benchmark for visual document retrieval with no prior baselines. Accepted despite being a new task with limited baselines because the contribution was clear and well-executed. |
-| WeART (g8TF3gd01u) | 2.5 (Withdrawn) | Plug-and-play method + dataset with limited baselines and bias concerns. Much weaker than GraphDoc. |
+- **Decompose aggregate metrics**: Report mAP_g separately for spatial and logical relations so readers can interpret results without the distortion from near-trivial spatial predictions.
 
-GraphDoc sits between the rejected rule-based annotation papers (DESIGN, tBen at 4.0) and the accepted document dataset papers (ADOPD at 6.5, ColPali at 5.25). It has a genuinely novel task formulation and large scale that partial compensated papers lack, but its rule-based annotation without quality quantification and inflated headline metrics are substantive weaknesses. Compared to DESIGN (4.0), GraphDoc has a better-motivated task and broader scope, warranting a higher score. Compared to ADOPD (6.5), GraphDoc has weaker annotation methodology and less rigorous evaluation, warranting a lower score. The inflation of headline metrics by trivial spatial relations is a particularly meaningful concern that affects core claims.
+<context>
+**Paper summary**: The paper introduces the gDSA task (graph-based Document Structure Analysis), which extends document layout analysis by requiring models to predict both element locations and their structural relations as a graph. It constructs GraphDoc, a dataset built on DocLayNet with 80K images and 4.13M relation annotations across 8 categories (4 spatial: Up/Down/Left/Right; 4 logical: Parent/Child/Sequence/Reference). Annotations are generated via heuristic rules (nearest-neighbor pixel scanning for spatial, Recursive X-Y Cut for reading order, category heuristics for hierarchy, text matching for references) with claimed manual verification. The proposed DRGG module attaches to encoder-decoder detectors and predicts pairwise relations between object queries, achieving 57.6% mAP_g@0.5 as a baseline.
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+**Original reviewer signal**: Harsh Critic found fundamental problems (rule-based annotations trivialize the benchmark, Table 3 asymmetries suggest bugs, no external baselines). Strength Finder emphasized the novel task formulation, dataset comprehensiveness, and well-designed metrics. Direct disagreement on whether the paper provides sufficient evidence for its claims.
+
+**What was dropped and why**: (1) Up/Down minor differences (1-2%) flagged as "inconsistencies"—within normal variation, not anomalous. (2) Demands for SGG-method comparisons—paper does reference SGG in related work; for a new task, external method comparisons are less critical than the rule-based baseline. (3) Missing downstream evaluation—outside the paper's stated scope of task/dataset formulation. (4) Multimodal variant demand—paper explicitly scopes to vision-only and acknowledges the limitation. (5) Cross-page limitation—explicitly acknowledged by authors. (6) Reproducibility/threshold nitpicks—standard nitpicks not substantive weaknesses.
+
+**Cross-checks performed**: (1) Verified Table 3 asymmetries directly: Deformable DETR Left=99.0/Right=11.9 and Swin Left=33.7/Right=99.0 confirmed in paper text. These are genuinely unexplained and anomalous. (2) Verified "most of the results have been manually verified and refined" claim—appears only once (line 147) with no quantification. (3) Verified annotation pipeline is entirely rule-based (Section 3.1.4). (4) Verified Reference relations built by text matching while model is vision-only—confirmed mismatch. (5) Verified paper does discuss SGG in related work and evaluation metrics sections—reviewer's claim of no acknowledgment was overstated.
+
+**Review construction notes**: The three Major weaknesses (Table 3 asymmetries, no rule-based baseline, unquantified annotation quality) are independent and all bear on the core question of whether this benchmark is reliable and meaningful. The Table 3 anomaly is particularly concerning because the asymmetry flips direction by model, suggesting something beyond dataset bias. The rule-based baseline absence is critical because 64% of annotations are deterministic geometric computations. Annotation quality is standard table-stakes for dataset papers. Minor weaknesses note that the headline number is misleading and the DLA improvement claim is marginal.
+</context>
