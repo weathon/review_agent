@@ -1,9 +1,11 @@
+
 export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
-export HARSH_MODEL="claude_sdk:claude-sonnet-4-6"
-export MERGER_MODEL="claude_sdk:claude-sonnet-4-6"
+export HARSH_MODEL="gpt-5.4"
+export MERGER_MODEL="gpt-5.4"
+export SUBAGENT_MODEL="ollama:glm-5.1:cloud"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
-export OUTPUT_CSV="bench_scores_claude_sonnet.csv"
-export MERGE_LOG="pipeline_whole_claude.log"
+export OUTPUT_CSV="bench_scores_claude_gpt.csv"
+export MERGE_LOG="pipeline_whole_gpt.log"
 ollama serve & 
 # use balanced to see quality in the whole spectrum of scores
 export CONCURRENCY=1

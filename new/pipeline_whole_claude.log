@@ -36931,3 +36931,1365 @@ MY FINAL DECISION: <orange>Accept</orange>
 
 --- Decision ---
 Accept
+
+============================================================
+Paper: ../iclr2025/papers/l6QnSQizmN.txt
+Timestamp: 2026-04-21T01:22:23.918597
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13300 (cached=0) output=1663 (reasoning=0) total=14963 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13300 output=1663 total=14963
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: eff38482-fd44-439b-ac5f-5ae878af1a96
+    Cost (USD): 0.18822434999999998
+    Turns: 4
+    Duration: total=138797ms api=138764ms
+    Tokens: input=8 output=6745 cache_read=24147 cache_creation=21275
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 5638254a-6849-47fb-b7cc-0f11d53de299
+    Cost (USD): 0.3506876
+    Turns: 10
+    Duration: total=206366ms api=215916ms
+    Tokens: input=12 output=7937 cache_read=103140 cache_creation=35915
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5389
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a complete picture of the paper. Let me compose the full review.
+
+---
+
+# Review: Online Reinforcement Learning in Non-Stationary Context-Driven Environments
+
+---
+
+## Critical Issues
+
+**1. Mandatory discretization of MuJoCo action spaces invalidates key baseline comparisons — Structural**
+
+Section 5 ("Experiment Setup") discloses that "Gym environments were modified to accept discrete action space policies, as even prescient policies struggled to learn stable continuous space policies in the presence of contexts." This is a significant undisclosed methodological choice that structurally disadvantages continuous-action baselines. SAC is specifically architected for continuous action spaces — its key components (reparameterization trick, continuous entropy bonus, soft Q-learning updates) are not designed for discrete actions. Forcing SAC into a discretized action space is not equivalent to evaluating SAC under its intended operating mode. Similarly, CLEAR builds on PPO/continuous RL. DDQN is the only baseline natively designed for discrete actions.
+
+The justification — that prescient policies "struggled" with continuous actions in these modified environments — is itself alarming. A well-tuned SAC or TRPO trained offline with access to all context distributions on standard Mujoco control tasks should not struggle with continuous actions. That prescient agents failed suggests the modified environments are miscalibrated (wind forces possibly too large, context-augmented observation space poorly structured), not that discretization is the right response. The paper buries this in the experimental setup rather than treating it as the fundamental constraint it is. Because the action space modification may be the proximate cause of several baselines' poor performance rather than their inability to handle non-stationarity, the headline result — "LCPO outperforms all online baselines" — cannot be cleanly attributed to LCPO's CF-mitigation mechanism.
+
+**2. Normalized return CDF makes absolute advantage uninterpretable — Methodological gap**
+
+The primary evaluation metric (Section 5.1, Figure 3a) is a normalized return where 0 and 1 correspond to the minimum and maximum lifelong return across all agents, computed per-environment and per-context trace. This normalization has a structural defect: if several baselines catastrophically fail (e.g., SAC, CLEAR, and DDQN may fail partly due to the action space issue described above), the normalization compresses the range and makes LCPO look dominant even if its absolute advantage over the surviving baselines is modest. The straggler mitigation results in Table 1 are more interpretable: LCPO-Cons achieves 1048 ms tail latency versus the best prescient at 984 ms (a ~6.5% gap), while A2C achieves 1716 ms. The gymnasium results should similarly present absolute returns for at least one representative environment so the reader can assess practical magnitude.
+
+**3. OOD detection requires domain knowledge that is inconsistently acknowledged — Methodological gap**
+
+The paper presents LCPO's only requirement as "a similarity metric that can inform us if two contexts come from noticeably different distributions." In practice, two different OOD detectors are used: L2 distance over raw wind vectors (requiring the user to know which dimensions of the observation are the context), and Mahalanobis distance fitted to Gaussian context distributions (requiring a parametric distributional assumption). For the straggler mitigation task, "there exist domain-specific models for workload distributions" but Mahalanobis is used anyway. These choices depend on knowing what the context is and how it varies — knowledge that goes beyond the stated requirement. The paper does not evaluate what happens when the OOD detector is applied naively to a concatenated state-context vector without knowing which features are context (a true black-box setting). The sensitivity analysis in §5.2 varies only the threshold σ, not the OOD detector family. This understates the method's dependence on problem structure.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract/Introduction:** The abstract claims LCPO achieves results "on-par with a prescient agent trained offline across all context traces." In Figure 3a, the CDF curves for LCPO and "Best Prescient" are separated at almost every percentile — the prescient agent is consistently better. "Close to prescient" would be more accurate than "on-par." For the straggler task (Table 1), the gap is real but modest.
+
+**Section 3 (Related Work):** The omission of PPO (Schulman et al., 2017) as a baseline is conspicuous. PPO is arguably the most widely deployed on-policy algorithm and would be the natural candidate to extend analogously to LCPO's constrained optimization. Comparing to TRPO but not PPO is an odd choice given PPO's practical dominance. The paper includes TRPO because LCPO's optimization is structurally related to TRPO, but PPO should still appear as a standalone baseline for completeness.
+
+**Section 4.2 (Methodology):** The second-order approximation of the KL constraint in Equation (4) is well-justified by analogy to TRPO. However, the paper doesn't discuss the cost of maintaining and computing with the Hessian A as the model grows in parameter count. LCPO is reportedly ~1.5× slower than A2C in wallclock time (§F.2), which seems surprisingly modest — the conjugate gradient solve over a buffer of up to 200K OOD samples involves repeated Hessian-vector products, which can be expensive for large networks. The computational analysis is deferred to the appendix without a discussion of scaling concerns in the main text.
+
+**Section 5 (Evaluation), Straggler Mitigation:** The real-world evaluation uses workloads from a single production cluster from a single day in February 2018. Two workloads are tested. This is a limited real-world evaluation; the claim of broad applicability to production systems rests on very thin empirical ground. The direction is valuable, but the conclusion should be calibrated accordingly.
+
+**Section 5.2 (OOD Sensitivity):** Figure 3b shows that LCPO performance degrades noticeably as σ² increases from 0.25 to 12.0. The claim that "LCPO still maintains a lead over the A2C baseline across σ variations" is true but should be weighed against the fact that the difference between the best and worst LCPO threshold is larger than the difference between LCPO and some baselines at the median. The robustness claim is overstated.
+
+**Section 5.3 (Buffer Size):** Figure 4 shows LCPO needs as few as 500 samples to maintain performance for experiments of 8–20M steps. This is a genuine strength: 500/8M = 0.006% retention rate still works. The authors provide a plausible explanation (contexts don't change drastically at short intervals). An adversarial context trace (rapidly cycling) would be a useful stress test.
+
+**Section 6 (Limitations):** The acknowledgment of network capacity, exploration, and buffer management limitations is appropriate. The limitation that LCPO requires observed (non-latent) contexts is noted only in the conclusion, briefly, as "future work." Given that many real-world non-stationarities involve latent context, this is a more fundamental restriction than the discussion implies.
+
+---
+
+## Strengths
+
+- The motivating grid-world example (Section 4.1) cleanly isolates the CF mechanism with figures (1c–1e) that show exactly what breaks and why tabular RL doesn't suffer from it. This is instructive pedagogy.
+- The OOD vs. CPD contrast (Section 4.1, Figure 2) is well-argued. The demonstration that a small change in CPD threshold produces wildly different segmentations (Figure 2) is an effective empirical critique of the competing approach.
+- The breadth of baselines across three paradigms (regularization, task inference, rehearsal) plus on-policy and off-policy RL is commendable. Few papers in this space compare against this many competitors.
+- Reservoir sampling for buffer management is a clean, principled choice that maintains a uniform random sample of the full history and has analyzable statistical properties.
+- The real-world straggler mitigation evaluation is a meaningful departure from purely synthetic benchmarks; using actual production traces adds credibility.
+- The ablations in §5.2–5.3 address the two most natural questions about the method (threshold sensitivity, buffer size sensitivity) and give quantitative answers.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Continuous action space evaluation for at least one environment.** The entire MuJoCo evaluation uses discretized actions. The paper should either (a) include one standard continuous-action MuJoCo experiment showing LCPO works there too, or (b) provide a rigorous analysis of why discretization was necessary and what it implies for the comparison. Without this, the claim that LCPO outperforms SAC and CLEAR is not convincing — these algorithms are not in their intended operating regime.
+
+2. **PPO as a baseline.** PPO is the dominant on-policy algorithm and should be included. More importantly, an "LCPO-PPO" variant (replacing A2C/TRPO with a clipped objective instead of the KL constraint) would clarify how much of LCPO's performance comes from the anchoring mechanism versus the underlying optimizer choice.
+
+3. **Adversarial or rapidly-cycling context traces.** All four synthetic traces use relatively smooth or infrequent changes. An experiment with rapidly oscillating contexts (where the buffer will contain OOD samples from contexts revisited many times) would stress-test reservoir sampling and the OOD constraint simultaneously.
+
+### Deeper Analysis Needed
+
+1. **Disentangling the sources of improvement.** It is unclear how much of LCPO's gain over A2C comes from (a) the anchoring constraint, (b) the entropy regularization (auto-tuned), and (c) the TRPO-style constrained update on recent data. An ablation that removes only the OOD constraint (i.e., LCPO with W=∅, which collapses to TRPO with entropy tuning) would isolate the anchoring mechanism's contribution. This ablation is absent from the main paper.
+
+2. **Why do prescient agents fail with continuous actions?** The paper states this without explanation. Understanding this failure mode matters because it determines whether the benchmark is well-calibrated and whether the continuous-to-discrete conversion inadvertently favors LCPO's architecture.
+
+### Visualizations & Case Studies
+
+1. **Per-environment, per-context-trace performance breakdown.** Figure 3a aggregates across all environments and traces. A table showing each (environment, trace) cell — even just for the top baselines — would reveal whether LCPO's advantage is consistent across environments or driven by a subset. Tables 5 and 6 are in the appendix but should be summarized visually in the main paper.
+
+### Obvious Next Steps
+
+1. **Latent context extension.** The paper acknowledges this limitation at the end. A brief demonstration that LCPO can be composed with a context inference module (e.g., from the latent context inference literature cited in §3) would substantially broaden the paper's applicability and is the most obvious extension.
+
+---
+
+## Overall Assessment
+
+LCPO addresses a genuine and practically important problem — catastrophic forgetting in online, on-policy RL under non-stationary contexts — and proposes a clean algorithmic solution: constrain policy updates so they don't change outputs on OOD-sampled past experiences. The method is well-motivated, the connection to TRPO is transparent, and the evaluation is broader than most papers in this space. These are real strengths.
+
+However, two concerns limit confidence in the headline results. First, converting continuous MuJoCo environments to discrete action spaces places the primary continuous-action baselines (SAC, CLEAR, MBPO) in an unfavorable regime that is not their intended operating mode. Since this conversion is stated but not analyzed, it is impossible to determine how much of LCPO's apparent advantage over these baselines reflects genuine CF-mitigation versus the discretization penalty. Second, the normalized return CDF metric, while convenient for aggregation, obscures whether practical gains are large or small; the only environment with absolute numbers (Table 1) shows a more nuanced picture where A2C already performs comparably to LCPO on Workload 2. These issues don't invalidate LCPO's approach, but they mean the evidence as presented does not cleanly establish the paper's quantitative claims. The paper should be revised to either evaluate in continuous action spaces (adding a single continuous LCPO experiment would suffice) or provide a rigorous justification for discretization and reframe the comparison accordingly; and include the PPO baseline and an ablation isolating the anchoring contribution. In its current form, the experimental section makes stronger claims than the evidence supports.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Novel and well-motivated mechanism for combating catastrophic forgetting**: LCPO's core idea—constraining policy outputs on OOD samples from a replay buffer while optimizing returns on current data—is directly motivated by observing that tabular RL avoids forgetting because updates only affect relevant state-context rows (Figure 1d/e). The grid-world example elegantly illustrates why neural network policies forget and how LCPO's anchoring constraint approximates the tabular property, providing clear conceptual grounding for the approach.
+
+2. **OOD constraint is strictly weaker and more practical than task labels**: The paper explicitly argues and demonstrates (§4.1, Figure 2) that change-point detection and task labeling require piecewise-stationary, discrete context processes with well-defined boundaries, while OOD detection only requires a distance metric on context values. A subtle change in CPD sensitivity (σ from 3.1 to 3) causes 34 spurious change-points (Figure 2), whereas LCPO's L2 or Mahalanobis distance metric works on arbitrary context processes. This is a genuine conceptual advance over task-based methods like EWC or OGD.
+
+3. **Strong empirical performance across diverse environments and context traces**: Figure 3a shows LCPO outperforming all 11 online baselines across 6 gymnasium environments × 4 synthetic context traces, and Table 1 shows LCPO outperforming all baselines on 2 real-world production cloud workloads. LCPO is consistently closest to the prescient agent upper bound, achieving the paper's stated goal of minimizing the gap between online and prescient policies.
+
+4. **Formal constrained optimization formulation**: LCPO formalizes the anchoring intuition as a constrained optimization problem (Equation 1) with a KL-divergence constraint on OOD samples, solved via conjugate gradient and line search (Algorithm 1, lines 6-11). This provides a principled optimization procedure rather than a heuristic regularization penalty, and the dual-constraint line search (lines 9-10) pragmatically enforces both the anchoring and step-size constraints.
+
+### Supporting strengths
+
+1. **Robustness ablations**: Figure 3b and Table 1 show LCPO outperforms A2C across OOD thresholds (σ² from 0.25 to 12.0, and even with a "handicapped" Mahalanobis metric that cannot separate state from context). Figure 4 shows LCPO maintains performance with buffers as small as 500 samples (in traces of 8–20M steps). These ablations lend credibility to practical deployability.
+
+2. **Comprehensive baseline comparison spanning three categories**: The paper evaluates against regularization-based methods (Online EWC, Sliding OGD, BFDQN), task-inference methods (MBCD), and rehearsal/off-policy methods (CLEAR, PT-DQN, SAC, DDQN, MBPO), plus on-policy methods (A2C, TRPO). The consistent finding—that on-policy A2C is the strongest baseline and off-policy methods struggle due to instability—confirms the paper's motivation for developing an on-policy approach with constrained replay.
+
+3. **Real-world evaluation with production traces**: The straggler mitigation environment (Table 1) uses actual workload traces from a Microsoft production cloud cluster, showing LCPO reduces tail latency to within ~9% of the prescient upper bound (1048 vs. 984 for Workload 1), lending practical relevance beyond synthetic benchmarks.
+
+### Presentation / practical strengths
+
+1. **Code availability**: The paper provides source code at the listed repository, enabling reproducibility.
+
+2. **Consistent hyperparameters across all environments**: The paper states (§5) that the same LCPO hyperparameters are used in all environments and context traces, demonstrating that the method does not require per-environment tuning.
+
+## Summary
+
+LCPO is an online RL algorithm for non-stationary context-driven environments that combats catastrophic forgetting by constraining policy optimization to not change outputs on out-of-distribution (OOD) past experiences while maximizing returns on current data. The most important evidence supporting this contribution is the empirical demonstration across 6 environments and 6 context traces (including 2 real-world production workloads) where LCPO outperforms all 11 online baselines and remains closest to the prescient upper bound (Figure 3a, Table 1), while maintaining robustness to OOD threshold variations (Figure 3b) and small buffer sizes down to 500 samples (Figure 4).
+
+--- Merged Review ---
+Now let me read a couple of the anchor papers for more detail.Now I have all the information needed to write the final review.
+
+---
+
+## Summary
+
+LCPO (Locally Constrained Policy Optimization) is an online RL algorithm for non-stationary context-driven environments where catastrophic forgetting (CF) threatens lifelong performance. The core idea is to constrain policy updates so that outputs on OOD (out-of-distribution) past experiences do not change, effectively "anchoring" the policy while optimizing returns on current data — analogous to how tabular RL trivially avoids CF. The constrained optimization is solved via conjugate gradient and line search (structurally related to TRPO), with reservoir sampling for buffer management. LCPO is evaluated against 11 baselines across 6 environments including a real-world straggler mitigation task, and is shown to consistently outperform all online baselines while staying close to a prescient offline upper bound.
+
+---
+
+## Strengths
+
+- **Clean mechanistic motivation (Figure 1c–1e, §4.1):** The grid-world example precisely isolates why neural-network policies forget (updates affect all state-context rows) while tabular RL does not (updates are row-local). This makes the anchoring insight easy to understand and directly motivates the LCPO formulation.
+
+- **OOD vs. CPD distinction (§4.1, Figure 2):** The paper compellingly demonstrates that change-point detection is extremely sensitive to threshold selection — a change from σ=3.1 to σ=3 produces 34 spurious change-points — while OOD detection only requires a distance metric and is applicable to arbitrary (non-piecewise-stationary) context processes. This is a genuine conceptual advance over task-based approaches.
+
+- **Breadth of baseline comparison (§5, Figure 3a):** 11 baselines spanning regularization (EWC, OGD, BFDQN), task-inference (MBCD), rehearsal/off-policy (CLEAR, PT-DQN, SAC, DDQN, MBPO), and on-policy RL (A2C, TRPO). This coverage is more thorough than most CF/continual-RL papers and makes the evaluation convincing in breadth.
+
+- **Real-world evaluation with production traces (Table 1):** The straggler mitigation environment uses actual workload traces from a Microsoft production cluster, giving the method a concrete grounding outside synthetic benchmarks.
+
+- **Buffer efficiency (§5.3, Figure 4):** LCPO maintains competitive performance with as few as 500 samples out of 8–20M steps (0.006% retention). The principled justification (reservoir sampling ensures uniform random coverage) and empirical robustness are genuine strengths.
+
+- **Hyperparameter consistency:** The same LCPO hyperparameters are used across all environments and context traces, suggesting the method is not tuned per-environment.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Discretization of MuJoCo action spaces weakens the baseline comparison.** Section 5 states: *"Gym environments were modified to accept discrete action space policies, as even prescient policies struggled to learn stable continuous space policies in the presence of contexts."* This is a significant undisclosed methodological constraint. SAC, CLEAR, and MBPO are designed for continuous action spaces; converting all environments to discrete actions places these baselines outside their intended operating regime. The headline claim "LCPO outperforms all online baselines" is most meaningful for A2C and TRPO (the on-policy baselines), where both LCPO and the baselines are evaluated in the same discretized setting — that comparison is internally valid and is the most relevant one. However, the fact that even prescient policies failed with continuous actions suggests the wind-context augmentation may be poorly calibrated for standard MuJoCo. The paper references §F.3 as justification (appendix not available for review), but the main text does not adequately discuss what this implies for the generality of results. Including even one experiment with a continuous-action policy (or properly justifying why the discretization does not harm the conclusions) would significantly strengthen the paper.
+
+- **No ablation isolating the anchoring constraint's contribution.** The paper does not include an experiment that removes the OOD constraint while keeping all other LCPO components (entropy regularization, TRPO-style update, automatic entropy tuning). Such an ablation — essentially LCPO with W=∅ collapsing to "TRPO with entropy tuning" — is essential to confirm that the anchoring mechanism, rather than the entropy term or TRPO-style update, is responsible for LCPO's gains over A2C and TRPO. Without it, the source of the improvement is ambiguous.
+
+### Minor
+
+- **Abstract overstatement of prescient-level performance.** The abstract claims LCPO achieves results "on-par with a prescient agent trained offline across all context traces." However, Figure 3a's CDF shows a consistent gap between LCPO and the prescient agent at virtually every percentile; the body text correctly uses "close to." This discrepancy, while minor, is a meaningful overclaim that reviewers will notice.
+
+- **Real-world evaluation scope is limited.** The straggler mitigation experiments use workloads from a single production cluster on a single day in February 2018, with only two workloads tested. This is a thin empirical basis for claims about practical deployment in "computer systems environments." A2C also achieves 604 (±109) ms on Workload 2 vs. LCPO-Cons at 586 (±27) ms — these are within overlapping confidence intervals, making LCPO's advantage on that workload ambiguous.
+
+- **OOD sensitivity analysis varies only threshold, not detector family.** Figure 3b demonstrates robustness across σ² ∈ {0.25, …, 12.0}, but the sensitivity analysis does not vary the OOD detector family (e.g., L2 vs. Mahalanobis vs. a naive concatenated-feature detector). The paper shows the handicapped Mahalanobis still outperforms L2 (§5.2), which partially addresses this, but a structured sensitivity study over detector types would be more conclusive.
+
+### Trivial
+
+- The robustness claim in §5.2 — that "LCPO still maintains a lead over the A2C baseline across σ variations" — is technically true, but the paper does not note that the performance spread across thresholds is itself larger than the gap between LCPO and some baselines at certain percentiles.
+
+---
+
+## Nice-to-Haves
+
+- **PPO as a standalone baseline.** PPO (clipped objective) is the most widely deployed on-policy algorithm and would be a natural companion to TRPO in the comparisons. An "LCPO-PPO" variant would also clarify the contribution of the constrained optimization vs. the clipping mechanism.
+- **Adversarial context traces.** All four synthetic traces involve relatively smooth or infrequent changes. An adversarial trace with rapidly cycling contexts would stress-test reservoir sampling and the OOD constraint simultaneously, and would reveal whether LCPO's performance degrades gracefully.
+- **Latent context extension.** The paper acknowledges that LCPO requires observed contexts and lists latent context extension as future work (§3, §7). A brief sketch of how LCPO could compose with a context inference module would strengthen the paper's practical scope.
+- **Per-environment, per-trace breakdown in the main text.** Figure 3a aggregates across 5 environments × 4 traces. A summary table in the main text (even a condensed version of Tables 5 and 6) would show whether LCPO's advantage is consistent across settings or driven by a subset.
+
+---
+
+## Removed Points
+
+*These points were flagged as unreasonable or as violating the review rules. They are included here for transparency but should not carry weight.*
+
+- **"Normalized return CDF makes absolute advantage uninterpretable" (Harsh Critic):** The normalized return with 95% CIs across 25 seeds is a standard aggregation for multi-environment RL evaluation. Table 1 provides absolute numbers for the straggler setting. The concern about normalization compression is real but minor; the straggler A2C confidence intervals are large (±710 on Workload 1), making LCPO's improvement there still meaningful.
+
+- **"OOD detection requires domain knowledge inconsistently acknowledged" (Harsh Critic):** The paper's problem formulation explicitly assumes an *observed* context process — the context z_t is known at each step. Given this, knowing which features correspond to context is built into the problem setup, not an additional hidden assumption. Furthermore, §5.2 demonstrates that the "handicapped" Mahalanobis metric (applied without separating state from context) *outperforms* the standard L2 metric, directly refuting the claim that black-box OOD detection is unavailable or unaddressed.
+
+- **"Straggler Workload 2 A2C performs comparably" (Harsh Critic):** A2C achieves 604 (±109) ms vs. LCPO 586 (±27). While overlapping CIs are noted above as a Minor point, characterizing this as LCPO "already comparable" ignores that A2C's huge variance (±710 on Workload 1) makes it unreliable in practice — and the straggler environment is about tail latency stability.
+
+- **Generic requests for confidence intervals in large-scale benchmarks** (implicit in several reviewer concerns): Moved to Nice-to-Haves standard.
+
+---
+
+## Novel Insights
+
+The clearest novel insight across the reviews is the contrast between OOD detection and change-point detection as a conceptual contribution: the paper shows that requiring only a distance metric on context space strictly subsumes the piecewise-stationarity and boundary-detection assumptions required by task-based CF methods. The grid-world pedagogical example and the CPD brittleness demonstration (Figure 2) together make this conceptual case more concretely than most CF papers, which tend to assume their setting rather than arguing for it. The reservoir-sampling buffer management, while not itself novel, is unusually well-motivated here because the statistical guarantee (uniform random sample of history) directly supports the OOD anchoring argument — if the buffer is a representative sample, the anchoring constraint covers the full context distribution seen so far.
+
+---
+
+## Suggestions
+
+1. **Include §F.3 in the main text (or an extended summary).** The justification for action space discretization is central to interpreting the experimental results, and deferring it entirely to the appendix is a significant weakness. At minimum, the main text should state whether discretization affects all baselines equally and whether any continuous-action experiment was attempted.
+
+2. **Add a TRPO-with-entropy ablation.** Run TRPO + automatic entropy tuning (without the OOD constraint) and compare to LCPO. This single experiment would isolate the anchoring mechanism's contribution, which is the paper's core claim.
+
+3. **Qualify the Workload 2 result honestly.** Acknowledge in the main text that A2C's Workload 2 result overlaps with LCPO's within confidence intervals, and explain why LCPO is still preferred (e.g., lower variance).
+
+4. **Revise the abstract.** Change "on-par with a prescient agent" to "close to a prescient agent," consistent with the body text.
+
+---
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Avg Human Score | Relevance |
+|---|---|---|
+| `/human_reviews/KAIqwkB3dT.md` | 7.0 (Accepted, Poster) | Most topically similar: continual RL, CF mitigation; comparable evaluation breadth. LCPO has more baselines and a real-world evaluation; KAIqwkB3dT has less discretization concern. |
+| `/human_reviews/m3xVPaZp6Z.md` | 7.5 (Accepted, Poster) | Policy rehearsal in RL dynamics; LCPO is comparable in breadth and clarity. |
+| `/human_reviews/1VeQ6VBbev.md` | 7.33 (Accepted, Poster) | Non-stationary MDP policy gradient; theoretical paper, less directly comparable. |
+| `/human_reviews/fTiU8HhdBD.md` | 5.75 (Rejected) | Online RL under distribution shift; weaker baseline comparison and narrower evaluation than LCPO. |
+| `/human_reviews/KIq6p9iv2q.md` | 5.75 (Rejected) | Plasticity in non-stationary RL; addresses a more narrowly scoped problem. |
+| `/human_reviews/FFvCjbhpDq.md` | 5.0 (Rejected) | CF in fine-tuned RL; fewer baselines, narrower scope. |
+| `/human_reviews/ZHTYtXijEn.md` | 2.33 (Rejected) | Continual learning CF prevention; fundamental methodological flaws. Well below LCPO. |
+| `/human_reviews/zEhTnQZB3D.md` | 2.33 (Rejected) | Continual RL with LLM guidance; weak empirical validation. Well below LCPO. |
+| `/human_reviews/N581Nje6fH.md` | 1.5 (Rejected) | Memory for RL; critically flawed. Well below LCPO. |
+
+**Positioning:** LCPO clearly outperforms the medium-tier anchors (5–5.75): it has a broader evaluation, more principled algorithm, and real-world grounding. It is comparable to the accepted poster papers in the 7–7.5 range (KAIqwkB3dT, m3xVPaZp6Z), though the action-space discretization concern and missing ablation distinguishing the anchoring contribution are real deductions relative to those papers.
+
+The two major weaknesses (discretization and missing ablation) are substantive enough to prevent confident acceptance at the top end, but neither invalidates the core contribution. The paper's strongest comparison — LCPO vs. A2C and TRPO in the same discretized setting — is internally valid and shows genuine improvement. The cluster of accepted poster papers averaging 7.0–7.5 is the right comparison band, and the identified weaknesses position this paper slightly below that cluster.
+
+**Final score: 6.0** — above the medium cluster (5–5.75), below the high cluster (7.5+). The paper makes a genuine contribution to a well-motivated problem with solid experiments, but requires at minimum a continuous-action experiment or rigorous discretization justification, and an ablation isolating the anchoring mechanism, before meeting the bar of the highest-scoring continual RL papers.
+
+**Decision: Weak Accept (Borderline)**
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/g1fkhbhHjL.txt
+Timestamp: 2026-04-21T01:28:00.887533
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=12945 (cached=0) output=1427 (reasoning=0) total=14372 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=12945 output=1427 total=14372
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 9b3c5798-2450-4e25-98fb-90605967bb75
+    Cost (USD): 0.1492209
+    Turns: 4
+    Duration: total=117781ms api=117725ms
+    Tokens: input=8 output=4915 cache_read=28148 cache_creation=17874
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 8cdcf030-2729-43f5-8a6c-db7bb1981dff
+    Cost (USD): 0.3495957499999999
+    Turns: 10
+    Duration: total=199688ms api=215422ms
+    Tokens: input=13 output=7059 cache_read=124651 cache_creation=37276
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4988
+
+--- Merged Inputs ---
+
+### Harsh Critic
+---
+
+## Review: "Black Sheep in the Herd: Playing with Spuriously Correlated Attributes for Vision-Language Recognition"
+
+---
+
+## Critical Issues
+
+### 1. SAS's primary mechanistic claim is not isolated from auxiliary-task regularization with synthetic data — Structural
+
+The central claim for SAS is that performance improves because the model is trained to *distinguish* spurious attributes from real categories, reducing reliance on spurious features. However, SAS also introduces 16 synthetic images per pseudo-category (matching the real shot count), generated by Stable Diffusion, plus an additional classification loss over these images. The paper never controls for the contribution of (a) simple data augmentation from extra synthetic images, or (b) auxiliary task regularization from any subsidiary task, regardless of whether pseudo-categories target spurious attributes specifically.
+
+The ablation in Table 4 varies the CBM threshold γ (i.e., how many spurious attributes are included) and shows a performance drop with too-high or too-low γ. But this still does not isolate the specific benefit of *spurious*-attribute pseudo-categories: the experiment does not compare against a control where pseudo-categories are constructed from *random* or *non-spurious* attributes, holding constant the synthetic data volume and auxiliary-loss structure. Without this control, the reader cannot rule out that SAS's gains derive from domain randomization / task regularization rather than from the claimed spurious-correlation mechanism. This is a structural issue: the experimental design cannot support the causal claim made in the abstract and introduction.
+
+*Concerns: Sections 3.4, 4.1, 4.2; Tables 2, 3, 4.*
+
+---
+
+### 2. The counter-group evaluation is circularly constructed — Structural
+
+The "adversarial" counter-group evaluation (Table 2) is the paper's primary direct evidence that SAS suppresses reliance on spurious features. The counter group is built by filtering test images that are semantically similar to the **SAP-identified** spurious attributes, retaining only images without them. But SAS is trained using the same SAP-identified spurious attributes. The evaluation is therefore not independent: both training (SAS) and test-set construction (counter group) are conditioned on the same SAP outputs. If SAP systematically over-labels certain attributes as spurious, SAS will learn to avoid exactly those features, and the counter group will be constructed around exactly those features — the two effects reinforce each other trivially. This setup measures "does SAS avoid what SAP calls spurious" rather than "does SAS improve robustness to genuinely spurious correlations." The improvement on counter groups (up to ~6%) cannot be attributed to genuine debiasing without an independent ground truth for what is spurious.
+
+*Concerns: Section 4.1, Table 2, Figure 4.*
+
+---
+
+### 3. SAP's MLLM-to-CBM pipeline is not validated at intermediate steps — Evidential
+
+SAP is the upstream module on which both SAP-based results and SAS depend. Its pipeline has two critical steps: (1) GPT-4V classifying attributes as core vs. non-core via Q1/Q2/Q3 questions, and (2) the CBM's adaptive threshold selecting high-influence non-core attributes as spurious. Neither step is validated:
+
+- There is no precision/recall analysis of GPT-4V's core/non-core distinction against any ground truth.
+- The CBM adaptive threshold uses the lowest weight of core attributes as a cutoff — but this depends on core attributes being correctly identified in step (1). If GPT-4V incorrectly labels a core attribute as non-core, the threshold collapses.
+- There is no comparison between "SAP-identified spurious attributes removed" and "human-identified spurious attributes removed" (Table 1 shows only the human-annotation oracle). Without this comparison, it is unknown how closely SAP approximates the oracle that motivates the paper.
+- There is no ablation isolating the MLLM step from the CBM step: does the CBM alone (applied to all attributes) achieve similar results?
+
+The claim that SAP "is the first approach to identifying spurious attributes in open-world settings without explicit human supervision" is not accompanied by any quantitative validation of the identification quality.
+
+*Concerns: Section 3.3, Equation 2.*
+
+---
+
+## Section-by-Section Notes
+
+**Section 3.2 (Motivation).** The manual annotation experiment (Table 1) uses the authors themselves to label spurious attributes, introducing uncontrolled subjectivity. The annotation procedure — sampling 5 images, examining heatmap activations, and judging whether an attribute belongs to "the main object" or "background" — is not reproducible without author involvement. The "spurious rate" column (SR) is derived from this subjective labeling. The improvements (e.g., ArGue: 66.07 → 67.69 on new categories) are presented as "significant" but vary considerably per dataset (Flowers102 new goes from 77.96 to 78.75, FGVCAircraft new goes from 38.80 to 41.60). The uneven gains are not discussed.
+
+**Section 3.4 (SAS).** The paper uses GPT-4V to identify spurious attributes, then ChatGPT to generate prompts for Stable Diffusion, and then SD to generate pseudo-category images. This pipeline has substantial variability and cost, and the paper's implementation details are partly deferred to the Supplementary Material. Specifically, the top-k selection for filtering noise attributes (Section 3.4, Synthetic Generation) is not detailed in the main text — k is not specified, and its sensitivity is not reported.
+
+**Section 4.1 (Main Results).** Figure 3 reports results averaged over 11 datasets and all baselines, which is a helpful summary but risks masking dataset-level inconsistencies. The detailed per-dataset results are deferred to the Supplementary Material and could not be reviewed here. The claim "over 2% improvement in most baselines" is aggregate and could hide cases where SAS hurts performance on specific datasets.
+
+**Section 4.2 (Ablation).** Table 3 varies the number of SD prompts (#p) from 1 to 7. Results improve from #p=1 to #p=5 then plateau. This is interpreted as evidence for diversity, but it could equally reflect more total synthetic data. The number of images generated per prompt (and hence the total image count) is not fixed across conditions.
+
+**Section 4.3 (Further Analysis).** The saliency map analysis (Figure 5) is qualitative and cherry-picked. The caption notes that PEFT+SAS attends more to the target object, but there is no quantitative measure of attention shift across a held-out set of images.
+
+---
+
+## Strengths
+
+1. **Empirically motivated problem**: The observation that spurious attributes constitute <7% of the attribute pool yet occupy two of the top-3 CBM weights in prediction (Figure 1) is a specific, well-illustrated finding that adds to the sparse literature on VLM failure modes.
+
+2. **Breadth of evaluation**: Testing against 11 baselines across 11 datasets and three generalization task settings is comprehensive. The plug-and-play integration across prompt tuning, adapter, and LoRA families is technically non-trivial.
+
+3. **CBM-based visualization**: Using CBMs to rank attribute influence (Figure 1) provides a more interpretable diagnostic than saliency maps alone, and the connection between CBM weight and spuriousness is a coherent conceptual framework.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Random pseudo-category control for SAS** (Section 3.4, Table 2): Train SAS with pseudo-categories defined by randomly sampled non-spurious attributes (holding synthetic data volume and number of pseudo-categories constant). Without this, it is impossible to determine whether the SAS gains come from the specific choice of spurious pseudo-categories or from auxiliary task regularization in general. This is the single most important missing experiment for the paper's claims.
+
+2. **SAP quality evaluation** (Section 3.3): Report precision and recall of SAP's spurious attribute identification against the manual annotation in Table 1. This is essential to establish that SAP approximates the oracle that motivates the method. Currently the paper shows manual removal works; it does not show that automated SAP recovery is comparable.
+
+3. **Oracle vs. SAP vs. No-removal comparison on base-to-new** (Sections 3.2, 3.3): Table 1 shows manual removal results. Adding SAP-removal results to the same table would directly answer the key question of how much of the oracle gain is recovered by automation.
+
+### Deeper Analysis Needed
+
+1. **Spurious attribute consistency across datasets**: The paper assumes spurious attributes identified from in-distribution shots generalize to OOD test sets. This assumption needs validation — attributes spurious in one domain may not be spurious in another, and the CBM is trained only on in-distribution data.
+
+2. **Effect of SAP on non-attribute-based PEFT methods**: SAS is claimed to be applicable to arbitrary PEFT methods, but SAS depends on SAP outputs. For methods that don't use attributes (e.g., CoCoOp), it is unclear where the attribute pool comes from; this deserves explicit discussion.
+
+### Visualizations & Case Studies
+
+1. **Failure modes of SAP**: Show examples where SAP incorrectly classifies a core attribute as spurious (false positives) or misses a genuine spurious attribute (false negatives), and discuss the downstream effects. This would make the method's limitations concrete.
+
+### Obvious Next Steps
+
+1. **Replacing GPT-4V with open-source MLLMs**: The method's practical applicability is limited by its dependence on GPT-4V. An experiment with LLaVA or another open-source MLLM would establish whether the approach is general or entangled with GPT-4V's specific capabilities.
+
+---
+
+## Overall Assessment
+
+The paper addresses a genuine and underexplored problem — that attribute pools used by VLM adaptation methods contain spuriously correlated attributes that the model over-relies on — and the motivating observation is well-illustrated. However, the paper fails to establish its central mechanistic claim: that SAS reduces spurious reliance (as opposed to simply benefiting from auxiliary-task regularization with synthetic data). The critical control experiment — applying SAS with random non-spurious pseudo-categories at matched data volume — is absent. Compounding this, the main independent evidence offered for the spurious-suppression mechanism (the counter-group evaluation in Table 2) is constructed from the same SAP labels used to train SAS, making the evaluation self-confirming rather than independent. SAP itself — the upstream module on which everything depends — is not quantitatively validated against the human-annotation oracle that motivates it. Together, these are structural gaps: the experimental apparatus as currently designed cannot distinguish between the proposed mechanism and several simpler explanations. The paper should not be accepted in its current form; the random-pseudo-category control and an SAP precision/recall analysis against the human oracle are necessary conditions for the core claims to be credible.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Identifies and validates the "Black Sheep" phenomenon with compelling evidence**: The paper demonstrates that although spurious attributes constitute less than 7% of the attribute pool, VLMs disproportionately rely on them. Table 1 shows removing these few attributes boosts new-category accuracy from 65.30%→67.66% (CPL) and 66.07%→67.69% (ArGue), while Figure 1 uses CBM-derived attribute weights to reveal that 2 of the top-3 attributes influencing predictions are spurious (e.g., "sea" and "lake" for fireboat).
+
+2. **SAS is a general, plug-and-play module with broad empirical effectiveness**: Figure 3 demonstrates consistent OOD accuracy improvements across three distinct generalization tasks (base-to-new, cross-dataset, domain generalization) over 11 datasets and 11 baselines, with average gains exceeding 2%. The method integrates into prompt tuning (CoCoOp, PromptSRC), adapters (CLIP-Adapter, Tip-Adapter), and attribute-based approaches (CPL, ArGue) without modifying their base architectures.
+
+3. **Counter-group evaluation convincingly demonstrates genuine debiasing rather than mere data augmentation**: Table 2 tests on a filtered "counter group" where spurious attributes are removed from test images. SAS improves accuracy on the counter group by up to ~6% over baselines (e.g., CPL: 79.91%→83.45%), far exceeding the gains on the standard test set, confirming that SAS reduces actual spurious correlation rather than simply benefiting from additional training data.
+
+### Supporting strengths
+
+1. **Adaptive thresholding strategy for SAP is well-motivated and validated**: Section 3.3 introduces an adaptive strategy that sets γ_c as the lowest core attribute weight per category, addressing the challenge of varying weight distributions. Table 4 shows this adaptive strategy achieves the best HM (80.38) compared to all fixed thresholds (best fixed: 79.81 at γ=0.4).
+
+2. **Qualitative saliency maps and CBM visualizations provide interpretable evidence**: Figure 5 shows that SAS shifts model attention from spurious features (e.g., utensils alongside chocolate cake, mouse with a laptop, road confounding a street sign) to the core objects, directly supporting the mechanistic claim that SAS suppresses spurious attribute influence.
+
+3. **Efficiency consideration via selective trick**: Table 5 shows that optimizing only 10% of categories reduces SAS training time substantially (CoCoOp: from 6h18m to 4h51m) while preserving most of the accuracy gain (1.11→0.92 for CoCoOp).
+
+4. **Ablation on pseudo-category diversity confirms design choice**: Table 3 shows that increasing the number of SD prompts from 1 to 5 steadily improves HM (78.87→80.38), validating that diverse representation of spurious attributes in pseudo categories is important for learning robust features.
+
+### Presentation / practical strengths
+
+1. **The paper addresses a real practical limitation**: The observation that LLM-generated attributes (like "trees" and "road" for mountain bike) and vocabulary-selected attributes contain spurious correlations is practically relevant and well-illustrated with concrete examples throughout (Figure 1, 2, 5).
+
+2. **Two complementary solutions target different scopes**: SAP filters spurious attributes at the language level (complementing attribute-based methods), while SAS mitigates spurious feature learning at the visual level (complementing all PEFT methods), together providing a more complete solution than either alone.
+
+## Summary
+
+The paper identifies and addresses the "Black Sheep" phenomenon in VLMs, where a small fraction of spurious attributes (<7% of the pool) disproportionately influence predictions and harm OOD generalization. The single most important piece of evidence is the counter-group evaluation in Table 2, which shows SAS improves accuracy by up to ~6% on adversarially filtered test samples where spurious attributes are absent, confirming genuine debiasing rather than mere data augmentation, complemented by Figure 3 showing consistent gains across 11 datasets, 3 tasks, and 11 PEFT baselines.
+
+--- Merged Review ---
+Now let me run calibration searches to anchor my score.Now I have sufficient information to write the final consolidated review.
+
+---
+
+## Summary
+
+This paper identifies a phenomenon termed "Black Sheep in the Herd": a small fraction (<7%) of spurious attributes in VLM attribute pools disproportionately dominate model predictions, harming out-of-distribution generalization. To address this, the authors propose (1) **Spurious Attribute Probing (SAP)**, which uses a MLLM (GPT-4V) and a Concept Bottleneck Model (CBM) to automatically identify spurious attributes and remove them from existing attribute-based methods; and (2) **Spurious Attribute Shielding (SAS)**, a plug-and-play auxiliary training module that introduces spurious-attribute pseudo-categories to discourage models from relying on spurious features. Both modules are evaluated across 11 datasets, 3 generalization tasks, and 11 PEFT baselines, with consistent gains in OOD accuracy.
+
+---
+
+## Strengths
+
+- **Well-illustrated and novel problem identification (Table 1, Figure 1):** The finding that spurious attributes occupy only <7% of the attribute pool yet rank in the top-3 CBM-weighted features is specific and compelling. Manually removing them yields +2.36% and +1.62% on new-category accuracy (CPL and ArGue, respectively), a clear motivating oracle result.
+
+- **Broad empirical evaluation:** Results are reported over 11 datasets, 3 generalization task settings, and 11 diverse PEFT baselines (prompt tuning, adapters, LoRA, attribute-based), demonstrating consistent OOD accuracy gains of over 2% on average. The plug-and-play integration without modifying base architectures is technically non-trivial.
+
+- **Adaptive threshold strategy validated (Table 4):** The adaptive γ strategy — setting γ_c as the lowest weight among core attributes — outperforms all fixed thresholds (HM 80.38 vs. best fixed 79.81), validating the design choice. The monotonic degradation at both extremes also provides partial evidence that spurious attribute identity matters beyond just data quantity.
+
+- **Efficiency analysis (Table 5):** The selective trick (optimizing only 10% of categories) reduces training overhead substantially (CoCoOp: 6h18m → 4h51m) while preserving most accuracy gain (+0.92 vs. +1.11), a practically useful contribution.
+
+- **Counter-group evaluation (Table 2):** SAS consistently improves more on the counter group than on the standard test set (up to ~6% counter-group gain vs. <1.5% on the full test), providing directional evidence that the model is learning to operate without spurious features present.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Missing control for SAS's core mechanistic claim (Sections 3.4, Table 4):** SAS introduces both (a) synthetic data (16 images per pseudo-category via Stable Diffusion) and (b) an auxiliary classification loss. The paper argues in Section 4.2 that performance degrades when γ is too high or too low, implying spurious-attribute identity matters. However, when γ=0.0, the pseudo-categories are constructed from *all non-core attributes* identified by SAP, not from random attributes. Consequently, there is no condition where pseudo-categories are formed from truly random or non-spurious attributes at matched data volume. Without this control, the reader cannot rule out that SAS's gains come from domain randomization / auxiliary-task regularization in general rather than from the specific mechanism of spurious-attribute pseudo-categories. This is the most important missing experiment, and it is needed to credibly support the central mechanistic claim.
+
+- **SAP's pipeline is not quantitatively validated against the human-annotation oracle (Section 3.3):** Table 1 demonstrates that manual removal of spurious attributes significantly improves generalization, motivating the paper. However, the paper never shows how closely SAP-automated removal approximates this oracle. There is no precision/recall analysis of GPT-4V's core/non-core classification, and no row in Table 1 (or equivalent table) showing SAP-removal results alongside manual-removal results. The paper establishes that the oracle works and that SAP produces spurious attributes, but leaves the critical gap — how much of the oracle's benefit is recovered by SAP — unaddressed. This is essential for establishing that SAP is a useful substitute for human annotation.
+
+### Minor
+
+- **Circularity in the counter-group construction (Section 4.1, Table 2):** The counter group is constructed by filtering test images with high semantic similarity to SAP-identified spurious attributes, and SAS is trained on the same SAP-identified attributes. While the counter-group results are still informative (the gap between counter-group and test-set gains is meaningful), the evaluation is not fully independent of the training signal. The authors should acknowledge this explicitly and discuss its implications.
+
+- **Number of images per SD prompt not fixed in Table 3 ablation (Section 4.2):** Table 3 varies the number of SD prompts from 1 to 7 and shows HM improves from 78.87 to 80.38. If each prompt generates a fixed number of images, varying prompt count also varies total synthetic data volume. The paper does not clarify whether total image count is controlled, making it ambiguous whether the gain reflects prompt diversity or data quantity.
+
+- **Manual annotation procedure not reproducible without authors (Section 3.2):** The motivating study in Table 1 relies on the authors manually reviewing 5 sampled images with heatmap activations per attribute. The procedure introduces uncontrolled subjectivity and is not reproducible without author involvement, limiting the interpretive value of Table 1 as a rigorous oracle. This does not undermine the overall paper, but it should be disclosed.
+
+### Trivial
+
+- **Qualitative evidence only for saliency shifts (Figure 5):** The saliency map analysis is cherry-picked and lacks quantitative measurement of attention shift across a held-out set. Reporting a metric (e.g., proportion of top-20% saliency mass on target object across a validation split) would strengthen this analysis.
+
+---
+
+## Nice-to-Haves
+
+- **Random pseudo-category control:** Adding a condition where SAS uses randomly sampled *non-spurious* attributes (matched on data volume and number of pseudo-categories) would definitively test whether the spurious-attribute specificity matters.
+
+- **Table showing SAP-removal vs. manual-removal on the same datasets:** Even approximate precision/recall of SAP would substantially strengthen the claim that it meaningfully approximates the human oracle. Adding a "SAP-SA" row to Table 1 is a natural experiment.
+
+- **Open-source MLLM ablation:** The method depends on GPT-4V; an experiment with an open-source MLLM (e.g., LLaVA) would clarify whether SAP generalizes beyond GPT-4V and expand practical applicability.
+
+- **Per-dataset breakdown of SAS gains:** Figure 3 averages over 11 datasets. Reporting per-dataset results in the main text (even selectively) would let readers identify cases where SAS may not help, making the contribution more informative.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Harsh Critic: Top-k selection not detailed in main text.** The paper explicitly defers this to Supp. Mat. A. Per policy, criticisms about missing appendix details are removed.
+
+- **Harsh Critic: Per-dataset results deferred to Supp. Mat.** Detailed per-dataset breakdowns are in the supplementary, which exists in the original submission. Removed.
+
+- **Harsh Critic: Implementation details (hyperparameters) not reproducible.** Removed per policy on nitpicks about implementation details deferred to supplementary.
+
+- **Harsh Critic: GPT-4V / ChatGPT / SD pipeline cost and variability.** While a practical concern, the paper does provide implementation details and uses a fixed setup. This does not constitute a methodological flaw.
+
+- **Strength Finder: "The paper addresses a real practical limitation" (generic strength).** Removed as generic without a specific table/figure citation.
+
+---
+
+## Novel Insights
+
+The paper surfaces a genuinely underappreciated failure mode in attribute-based VLM adaptation: the attribute pool itself is contaminated by a small fraction of spuriously correlated concepts that CBMs assign outsized weight to, creating a "black sheep" dynamic where few attributes dominate and hurt OOD generalization. The dual-module framework — one operating at the language representation level (SAP) and one at the visual feature learning level (SAS) — is a structurally coherent response to the two distinct pathways through which spurious attributes harm generalization. The insight that CBM weights can serve as a quantitative proxy for spurious correlation strength, enabling an adaptive per-category threshold, is technically non-obvious and well-motivated by the observed weight distribution variability across categories.
+
+---
+
+## Suggestions
+
+1. Add a "random pseudo-category" control to Table 4 (or a new ablation table) to isolate the value of spurious-attribute specificity in SAS.
+2. Add a "SAP-removal" row to Table 1 to directly quantify how much of the manual-oracle gain SAP recovers.
+3. Report precision/recall of SAP against the manual annotations used in Table 1 (even approximately), either in the main text or a clearly referenced appendix.
+4. Clarify whether total image count is controlled when varying #p in Table 3, and if not, add a matched-data-volume condition.
+5. Acknowledge and briefly discuss the circularity between counter-group construction and SAS training in Section 4.1.
+
+---
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Avg Human Score | Relation to this paper |
+|---|---|---|
+| MetaCoCo (spurious correlation FSC benchmark) | 7.0 (Accept poster) | Topically related; identifies spurious correlations in FSC but proposes only a benchmark, not a method; comparable empirical breadth |
+| AttrVR (attribute-based VR for CLIP) | 6.0 (Accept poster) | Same scope — attribute-based VLM adaptation; similar breadth of evaluation; comparable methodological rigor and similar types of unaddressed weaknesses |
+| kIP0duasBb (test-time adaptation for CLIP) | 6.67 (Accept) | Overlapping topic; stronger theoretical grounding but narrower evaluation |
+| rCaA79Obsj (circular evaluation issue) | 5.20 (Reject) | Paper rejected primarily for circular evaluation — a concern that is present here but less central and less severe |
+| EKfcngSxwD (VLM parameter adaptation, missing ablations) | 4.67 (Reject) | Rejected for lack of ablation isolating contributions; this paper has more ablation coverage |
+| Low-scoring anchors (avg <3) | 1.5–2.33 | Fundamentally flawed or trivial contributions; this paper is clearly above these |
+
+**Positioning:** The paper is most similar to AttrVR (avg 6.0) in scope, novelty level, and strength of evaluation. It has a slightly more novel problem framing (the "black sheep" phenomenon is better-motivated than AttrVR's descriptive/distinctive attribute split) and broader empirical validation (more baselines and tasks). However, it has real methodological gaps — most notably the missing random-pseudo-category control and the unvalidated SAP pipeline — that are comparable in severity to the weaknesses flagged in medium-scoring papers. The circular evaluation concern, while valid, is less severe than in the paper scored 5.20 (where it fundamentally undermined the benchmark). This paper's evidence remains directionally informative. The paper does not rise to the level of MetaCoCo (7.0) or the 7.5+ papers, which had both more rigorous evaluation and fewer structural gaps.
+
+**Final score: 6.0**
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/cDdeTXOnAK.txt
+Timestamp: 2026-04-21T01:32:46.052714
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13606 (cached=0) output=1598 (reasoning=0) total=15204 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13606 output=1598 total=15204
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: bac18d3a-ee03-4c54-9166-081d8ae2ff71
+    Cost (USD): 0.1938747
+    Turns: 5
+    Duration: total=105226ms api=105172ms
+    Tokens: input=9 output=5226 cache_read=34534 cache_creation=28026
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: da3e99ed-0b3b-431f-a931-4fb6dad268d7
+    Cost (USD): 0.32821275000000005
+    Turns: 11
+    Duration: total=159619ms api=175361ms
+    Tokens: input=13 output=7010 cache_read=128364 cache_creation=32517
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5221
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a complete picture of the paper. Let me write the review.
+
+---
+
+# Review: AutoCoder — Enhancing Code LLM with AIEV-INSTRUCT
+
+---
+
+## Critical Issues
+
+### 1. The headline claim is reversed by HumanEval+ — a structural flaw (Table 1)
+
+**Structural.** The paper's central claim, stated in the abstract, Figure 1, and Section 5.1, is that AutoCoder "surpasses GPT-4 Turbo 2024-04-09 and GPT-4o 2024-08-06" on HumanEval (90.9% vs 90.2%). But Table 1 also reports HumanEval+ scores, and the comparison there tells the opposite story: GPT-4 Turbo achieves 86.6%, while AutoCoder achieves only 78.0% — a gap of 8.6 percentage points in GPT-4 Turbo's favor.
+
+HumanEval+ is not a harder dataset — it is the *same 164 problems* from HumanEval, with additional test cases per problem to reduce false positives. A model that truly solves a problem correctly should perform similarly on both. AutoCoder drops ~13 percentage points from HumanEval to HumanEval+; GPT-4 Turbo drops only ~3.6 percentage points. This is a textbook pattern of shallow correctness: the model generates code that passes the limited original HumanEval test cases but fails on broader validation. The headline result is an artifact of HumanEval's under-testing, not a genuine capability advantage. The paper cannot claim to beat GPT-4 Turbo when a minimally more rigorous version of the same benchmark reverses the conclusion by nearly 9 percentage points.
+
+This is not a framing problem — the claim is factually wrong under the more rigorous evaluation the paper itself provides.
+
+### 2. The headline gap is statistically meaningless (Section 5.1, Table 1)
+
+**Structural.** HumanEval contains 164 problems. AutoCoder achieves 90.9% and GPT-4 Turbo achieves 90.2%, a difference of 0.7 percentage points — roughly 1–2 problems. The paper reports no variance across runs, no confidence intervals, and no statistical significance tests. For a benchmark of this size, a 1-problem difference is well within sampling noise. Claiming to "surpass" a model based on this margin is not scientifically defensible. This problem compounds Issue 1: the headline claim rests on an evaluation that is both too coarse to detect the difference claimed and contradicted by the same paper's own HumanEval+ data.
+
+### 3. Self-Learning Stage contribution is undemonstrated (Section 3.1)
+
+**Evidential.** One of the two stated research questions the paper addresses is whether "instead of relying on expensive closed-source teacher models, can we enable our student model to learn autonomously?" The Self-Learning Stage (where the trained model replaces GPT-4 Turbo as both questioner and programmer) is the purported answer. However, the ablation in Figure 6 compares Base / Base+ST / Base+MT / Base+EFMT — none of these conditions isolates the Self-Learning Stage. There is no experiment comparing: (a) Teaching Stage only vs. (b) Teaching Stage + Self-Learning Stage. Without this, the paper cannot establish whether self-learning adds anything, or whether the performance comes entirely from the GPT-4-Turbo-generated Teaching Stage data. The claim of reduced dependence on proprietary models is therefore unsupported.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract and Introduction.** The abstract claim of surpassing GPT-4 Turbo and GPT-4o is the first and most prominent statement in the paper, and as shown above, it is refuted by the paper's own HumanEval+ numbers. The introduction correctly identifies the problem of student models being limited by teacher accuracy, but the proposed fix — self-learning — is never validated in the experiments.
+
+**Section 3.1 (AIEV-INSTRUCT Architecture).** The condition for transitioning to the Self-Learning Stage is performance on an internal test set "split from every 2,000 data entries" generated by the pipeline itself. This test set is not independent — it is generated by the same GPT-4 Turbo teacher under the same prompts, creating a distribution match that would naturally favor the model trained on that data. The resulting pass/fail criterion for switching stages is unreliable.
+
+**Section 3.2 (Dataset Accuracy Theoretical Analysis).** The paper states that a theoretical analysis exists in Appendix B showing $\mathcal{A}_{\text{evol}} < \mathcal{A}_{\text{oss}} < \mathcal{A}_{\text{AIEV}}$. The main body provides no substance for this — it is merely asserted. Even granting that the appendix contains the derivation, a theoretical bound on dataset accuracy does not substitute for an empirical comparison of dataset quality through held-out evaluation.
+
+**Section 3.2 (Decontamination).** The paper removes only 113 entries via Levenshtein distance with a 90% similarity threshold. This threshold is very high (near-exact match only). Problems that share task structure but differ in surface form would not be caught. Given that the seed data is derived from Magicoder-OSS-Instruct and Magicoder-Evol-Instruct — themselves inspired by open-source code — there is a meaningful risk of functional contamination of HumanEval-adjacent problems that the threshold would miss.
+
+**Section 4.1 (Code Interpreter).** The claim that "AutoCoder is the only model that supports automatically installing external packages in the Code Interpreter" as of September 2024 is asserted without a systematic evaluation. The evidence is a demo video (in supplementary materials) and a qualitative comparison with GPT-4o/GPT-4 Turbo. No benchmark or structured set of test cases is used. This is the weakest piece of evidence in the paper for what is presented as a distinct contribution.
+
+**Section 5.1 (Python Text-to-Code, Table 1).** The MBPP result (82.5%) is presented as strong, but Claude 3.5 Sonnet achieves 90.5% and Llama3.1-405B achieves 88.6%, neither of which AutoCoder approaches. The framing "leading among models with 33B parameters or fewer" is accurate but buries the lede that on a second major benchmark, AutoCoder is not competitive with top closed-source models.
+
+**Section 5.4 (LiveCodeBench, Table 4).** AutoCoder (33B) scores 25.4%, below Qwen2-72B-Instruct (30.1%) — a smaller model — and well below all closed-source models. On Medium difficulty problems, the AutoCoder beat over DeepSeek-Coder-Instruct-33B is 3.7 points (12.3% vs 8.6%), which is a real improvement at this scale but does not support general superiority claims.
+
+**Section 5.5 (Ablation, Figure 6).** The ablation is the most credible part of the paper. The data shows that Base+EFMT (AutoCoder's full dataset) significantly outperforms Base+MT, especially on DS-1000 (33B: 44.2% → 47.0%) and HumanEval (33B: 81.3% → 91.4%). The HumanEval jump from 81.3% to 91.4% for the 33B model is large and striking. This suggests AIEV-INSTRUCT's execution-verified multi-turn data does offer something over plain multi-turn data — but the ablation conflates the execution feedback mechanism with the unit-test mechanism and the self-learning stage, so no individual component's contribution is isolated.
+
+---
+
+## Strengths
+
+- **The AIEV-INSTRUCT mechanism is well-motivated.** Using execution feedback to filter and correct generated code during data creation addresses a real problem with distillation-only approaches. The two-agent architecture (questioner / programmer) with a Docker execution environment is concrete and implementable.
+- **The ablation in Figure 6 cleanly shows the value of execution-verified multi-turn data** over single-turn and unverified multi-turn alternatives, using the same base model across all conditions.
+- **The Code Interpreter extension** — allowing bash commands for package installation — is a practically useful contribution even if not rigorously evaluated. The architectural decision (injecting bash special tokens into the fine-tuning data) is clear.
+- **Evaluation breadth** — the paper tests across HumanEval(+), MBPP(+), MultiPL-E, DS-1000, and LiveCodeBench, providing a reasonable multi-dimensional picture rather than relying solely on HumanEval.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Self-Learning Stage ablation.** Without a comparison of Teaching Stage–only training vs. Teaching Stage + Self-Learning Stage, the paper's second key claim (autonomous learning, reduced reliance on proprietary models) is entirely unsubstantiated. This experiment would either validate or invalidate the second research question.
+
+2. **HumanEval+ breakdown by problem.** Given the 13-point drop from HumanEval to HumanEval+, the paper needs a diagnostic of *which* problems AutoCoder passes on HumanEval but fails on HumanEval+. This would clarify whether the issue is test-case coverage gaming, distributional mismatch, or something systematic about the model.
+
+3. **GPT-4o 2024-08-06 on HumanEval+.** Table 1 shows "–" for this entry. Since GPT-4o is the primary comparison point for the headline claim, its HumanEval+ score must be included for a complete comparison.
+
+### Deeper Analysis Needed
+
+1. **What does the self-learning stage actually generate?** If self-generated data degrades in diversity or quality (since the model is generating questions and answers about its own strengths), the self-learning loop could be harmful or neutral. The paper never examines the distribution of self-generated vs. teacher-generated data.
+
+2. **Statistical validity of the main result.** The paper needs confidence intervals or variance across multiple inference runs on HumanEval (164 problems), where single-problem variance dominates. The 90.9% vs 90.2% margin needs to be placed in statistical context.
+
+### Visualizations & Case Studies
+
+1. **A failure case analysis comparing HumanEval vs. HumanEval+ failures** would directly address whether the headline result is an artifact of benchmark saturation. For each problem where AutoCoder passes HumanEval but fails HumanEval+, showing the generated code and the failing test case would demonstrate where the model's correctness breaks down.
+
+### Obvious Next Steps
+
+1. **Code Interpreter benchmark.** The package-installation capability deserves a proper evaluation: a curated set of tasks requiring external package installs, tested across multiple models (including agents built on GPT-4o), with pass/fail counts. The current demo video is not scientific evidence for the "only model" claim.
+
+---
+
+## Overall Assessment
+
+The paper introduces a data-generation pipeline (AIEV-INSTRUCT) that is genuinely motivated and produces measurable improvements over single-turn and non-execution-verified alternatives, as the ablation in Figure 6 shows. This is the paper's real contribution. However, the headline claim — that AutoCoder surpasses GPT-4 Turbo and GPT-4o — is not supported and is in fact contradicted by the paper's own data: on HumanEval+, the same 164 problems with more test cases per problem, GPT-4 Turbo (86.6%) outperforms AutoCoder (78.0%) by 8.6 percentage points. The 0.7% margin on standard HumanEval represents roughly one problem on a 164-item benchmark with no reported variance; it is not a reliable basis for any comparative claim. Both the abstract and the introduction lead with this inverted result. The self-learning stage — framed as a primary contribution that reduces dependence on closed-source models — has no ablation supporting it. The Code Interpreter capability is real but validated only with a demo video. The paper should not be accepted in its current form: the central comparative claim is structurally wrong under the paper's own more rigorous evaluation, and the second major claim (self-learning) has no supporting evidence.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Execution verification in AIEV-INSTRUCT meaningfully improves data quality over prior distillation methods**: Unlike SELF-INSTRUCT/EVOL-INSTRUCT/OSS-INSTRUCT which rely solely on teacher model outputs, AIEV-INSTRUCT validates every code sample via an external executor. The ablation in Figure 6 provides direct evidence: for the 33B model, adding execution feedback (Base+EFMT) yields +10.1 points on HumanEval over multi-turn without feedback (91.4 vs. 81.3), and +2.8 points on DS-1000 (47.0 vs. 44.2), demonstrating that execution-verified feedback is the key differentiator beyond just multi-turn dialogue.
+
+2. **Self-learning stage breaks the teacher accuracy ceiling**: The two-stage pipeline (Teaching → Self-learning) addresses a fundamental limitation of distillation—student models being bounded by teacher accuracy. Once AutoCoder surpasses GPT-4 Turbo on the test set (Section 3.1, lines 209-215), it replaces the teacher for subsequent data generation, enabling potential accuracy gains beyond the teacher. This is a conceptually distinct contribution from prior work that is locked into using a fixed teacher model.
+
+3. **AutoCoder-33B outperforms GPT-4 Turbo and GPT-4o on HumanEval pass@1 (90.9% vs. 90.2%)**: Table 1 shows this result on the standard HumanEval benchmark, with the same model also achieving 78.0% on HumanEval+ (which has more test cases, reducing false positives). The model also leads among sub-70B models on MBPP+ (70.6%) and is competitive on LiveCodeBench Medium difficulty (12.3%, surpassing DeepSeek-Coder-Instruct-33B at 8.6% in Table 4).
+
+### Supporting strengths
+1. **Comprehensive and diverse evaluation across seven benchmarks**: The paper evaluates on HumanEval(+), MBPP(+), MultiPL-E (6 languages), DS-1000 (7 data science libraries), and LiveCodeBench, covering Python code generation, multilingual generation, data science, and challenging competition problems. This breadth makes the performance claims more robust than a single-benchmark result.
+
+2. **Code interpreter with automatic external package installation**: AutoCoder extends the code interpreter to support bash commands for installing external packages (Section 4.1, Figure 5), a capability absent from GPT-4 Turbo and GPT-4o interpreters. The dataset post-processing adds special tokens around bash commands and code blocks, teaching the model when and how to issue installation instructions.
+
+3. **Careful data decontamination**: Section 3.2 describes decontamination against HumanEval, MBPP, DS-1000, and MultiPL-E using Levenshtein distance (removing 113 entries with >90% similarity), reducing concerns about benchmark leakage inflating results.
+
+4. **Effective dataset at 169K samples with multi-turn execution feedback**: Figure 4 shows that AutoCoder-AIEV-Instruct has 241K dialogue turns across 169K samples, including 150K multi-turn turns that capture package installations, execution errors, and error analyses—richer context than the single-turn Magicoder datasets and more execution-grounded than Code-Feedback.
+
+### Presentation / practical strengths
+1. **Clean ablation isolating the contribution of execution-verified feedback**: Figure 6 systematically compares Base → Base+ST (single-turn) → Base+MT (multi-turn) → Base+EFMT (execution feedback multi-turn), making it easy to attribute performance gains to each component.
+
+2. **Practical cost analysis provided**: The paper notes that generating 6,500 high-quality entries with GPT-4 Turbo costs ~$1,000 (Section 1), motivating the self-learning stage that reduces reliance on paid API calls.
+
+## Summary
+
+The paper introduces AIEV-INSTRUCT, a code instruction dataset generation method that uses agent interaction with external execution verification, and AutoCoder, the 33B model trained on the resulting 169K-sample dataset. The single most important piece of evidence is the ablation in Figure 6, which shows that execution-verified multi-turn data (Base+EFMT) improves HumanEval pass@1 by +10.1 points over multi-turn data without execution feedback for the 33B model (91.4 vs. 81.3), validating that the core methodological innovation—grounding code generation in execution outcomes rather than relying solely on teacher model correctness—delivers substantial gains.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Now I have enough information to write the consolidated review.
+
+---
+
+## Summary
+AutoCoder introduces AIEV-INSTRUCT, a two-agent pipeline that generates code instruction-tuning data with external execution verification via Docker, then trains a 33B code LLM on the resulting 169K-sample dataset. The method involves a *Teaching Stage* (using GPT-4 Turbo as teacher) and a *Self-Learning Stage* (the student replaces the teacher once it surpasses it on an internal test set), aiming to reduce dependence on proprietary models. AutoCoder achieves 90.9% on HumanEval, touted as surpassing GPT-4 Turbo and GPT-4o, and extends code interpreter functionality with automatic external package installation.
+
+---
+
+## Strengths
+- **Execution-verified data generation (Figure 6) provides the paper's strongest evidence**: The ablation cleanly shows Base → Base+ST → Base+MT → Base+EFMT, with the 33B model jumping from 81.3% (multi-turn without execution feedback) to 91.4% on HumanEval via execution-verified feedback, and from 44.2% to 47.0% on DS-1000. This directly supports the core methodological claim that execution-verified multi-turn data outperforms both single-turn and unverified multi-turn alternatives.
+
+- **Comprehensive multi-benchmark evaluation**: The paper evaluates on HumanEval(+), MBPP(+), MultiPL-E (6 languages), DS-1000 (7 libraries), and LiveCodeBench, spanning Python, multilingual, data science, and competitive programming tasks — a wide enough profile to provide credible evidence beyond single-benchmark performance.
+
+- **Concrete and practical architectural contribution**: The two-agent (questioner/programmer) setup with Docker-based code execution and Prompt 1–5 formulation is clearly specified and reproducible. The Code Interpreter extension — injecting special tokens around bash/code blocks to enable external package installation — is a useful practical capability.
+
+- **Ablation cleanly isolates execution feedback's contribution**: The Base+MT vs. Base+EFMT comparison (Figure 6) controls for multi-turn structure and isolates the value of execution feedback specifically, which is the paper's core claim.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **The headline comparative claim is contradicted by the paper's own data.** The abstract and introduction state AutoCoder "surpasses GPT-4 Turbo 2024-04-09 and GPT-4o 2024-08-06" as its primary result. Table 1 shows AutoCoder achieves 90.9% on standard HumanEval versus GPT-4 Turbo's 90.2% — a margin of 0.7 percentage points on 164 problems (~1 problem). However, the same Table 1 also shows AutoCoder scores 78.0% on HumanEval+ versus GPT-4 Turbo's 86.6% — an 8.6 pp *deficit* under the more rigorous evaluation (same 164 problems, augmented test cases per problem). AutoCoder drops ~13 pp from HumanEval to HumanEval+; GPT-4 Turbo drops only ~3.6 pp. This pattern is a textbook sign of shallow correctness that passes limited test cases but not broader validation. The paper acknowledges the HumanEval+ scores but does not note that they reverse the headline comparison — the claim "surpasses GPT-4 Turbo" is only accurate under the weaker evaluation and is directly falsified by the stronger evaluation that the paper itself reports.
+
+- **The Self-Learning Stage — framed as a primary contribution — has no supporting ablation.** The paper's second stated research question is whether "instead of relying on expensive closed-source teacher models, can we enable our student model to learn autonomously?" The Self-Learning Stage is the proposed answer. The ablation in Figure 6 compares Base / Base+ST / Base+MT / Base+EFMT, but none of these conditions isolates what the Self-Learning Stage adds over the Teaching Stage alone. There is no "Teaching Stage only" vs. "Teaching Stage + Self-Learning Stage" comparison. As a result, the claim of reduced proprietary model dependence is entirely unsupported by experimental evidence; all observed gains could stem from the GPT-4-Turbo-generated Teaching Stage data.
+
+- **The 0.7 pp HumanEval margin is statistically indefensible on a 164-problem benchmark.** The paper reports no variance across runs, no confidence intervals, and no significance testing. A difference of one problem is well within run-to-run sampling noise. Claiming to "surpass" a model based on this margin is not scientifically defensible, especially given that the more rigorous evaluation reverses the conclusion entirely.
+
+### Minor
+
+- **Code Interpreter "only model" claim lacks rigorous evidence.** Section 4.1 claims "as of September 2024, AutoCoder is the only model that supports automatically installing external packages in the Code Interpreter." The evidence is a demo video in supplementary materials. No benchmark, structured test set, or systematic comparison across multiple models is provided. This is the weakest claim in the paper and should either be dropped or supported with structured evaluation.
+
+- **DS-1000 and LiveCodeBench results show clear limitations not discussed.** On DS-1000 (Table 3), AutoCoder-33B (47.2%) remains well below GPT-4 Turbo (53.9%). On LiveCodeBench (Table 4), AutoCoder-33B (25.4%) is below Qwen2-72B-Instruct (30.1%), a larger model. The framing focuses on comparisons within the ≤33B tier but does not candidly address the gap to top closed-source models beyond HumanEval.
+
+- **Decontamination threshold of 90% may allow functional contamination.** Only 113 entries were removed (Section 3.2). Given that seed data derives from Magicoder-OSS-Instruct and Magicoder-Evol-Instruct — themselves seeded from open-source code — problems that share task structure but differ in surface-level wording would not be caught. This is especially relevant for HumanEval-adjacent problems.
+
+### Trivial
+- Table 1 shows "–" for GPT-4o on HumanEval+, which is the primary comparison model; this missing entry weakens the comparison table.
+
+---
+
+## Nice-to-Haves
+- An ablation comparing "Teaching Stage only" vs. "Teaching Stage + Self-Learning Stage" would directly validate (or falsify) the second stated contribution.
+- A structured Code Interpreter benchmark — a curated set of tasks requiring external package installation, tested across multiple models — would replace the demo video with scientific evidence.
+- Reporting confidence intervals or multiple-run variance on HumanEval would contextualize the 0.7 pp headline margin.
+- A diagnostic of HumanEval vs. HumanEval+ per-problem failure patterns would clarify whether the 13 pp drop is systematic or incidental.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed — treat them with caution.*
+
+- **Harsh Critic — "Internal test set is not independent"**: The internal split from every 2,000 generated entries is used as a *switching criterion* (Teaching vs. Self-Learning Stage), not as a benchmark for scientific reporting. The switching criterion's reliability is a minor methodological detail, not a structural flaw. Removed as nitpick.
+
+- **Harsh Critic — "Theoretical analysis in appendix is mere assertion"**: Per the hard rules, the appendix exists in the original submission. Criticizing the main body for referring to appendix derivations is a formatting/structure nitpick, not a substantive flaw. Removed.
+
+- **Harsh Critic — "MBPP buries the lede that AutoCoder is not competitive with top models"**: AutoCoder achieves 82.5% on MBPP — this is described accurately by the paper as "leading among models with 33B parameters or fewer." The claim is scoped correctly. Claude 3.5 Sonnet at 90.5% is a much larger/proprietary model; the comparison is not deceptive. Removed as scope creep.
+
+- **Strength Finder — "Self-learning stage breaks the teacher accuracy ceiling" (standalone strength)**: This is listed as a strength, but the ablation does not confirm it — there is no experiment showing the self-learning stage specifically contributed to surpassing the teacher. This strength is dropped as it conflicts with the verified major weakness. Moved here.
+
+---
+
+## Novel Insights
+
+The most interesting observation across the reviews — confirmed by Table 1 — is the HumanEval vs. HumanEval+ discrepancy: AutoCoder's 13 pp drop (90.9% → 78.0%) versus GPT-4 Turbo's 3.6 pp drop (90.2% → 86.6%) directly measures how much each model's HumanEval score is inflated by test-case scarcity. This suggests that standard HumanEval may be reaching saturation for competitive models and no longer reliably discriminates capability: a model can rank first on HumanEval and last among the same group on HumanEval+. The paper inadvertently provides one of the clearest demonstrations in the literature of why HumanEval+ should be the primary evaluation metric rather than HumanEval.
+
+---
+
+## Suggestions
+1. **Reframe the headline claim around HumanEval+, not standard HumanEval.** The paper could honestly claim AutoCoder is the best open-source model ≤33B on HumanEval+ (78.0% vs. 75.0% for DeepSeek-Coder-Instruct-33B) without the misleading implication of beating GPT-4 Turbo overall.
+2. **Add a Teaching-only vs. Teaching+Self-Learning ablation** using a fixed budget of data entries to validate the self-learning stage's contribution.
+3. **Replace the demo video for Code Interpreter** with even a small structured evaluation: 20–30 tasks requiring specific external packages, with pass/fail counts for AutoCoder vs. GPT-4o.
+4. **Add statistical context to the main result**: report variance across 3–5 temperature=0 runs, or a bootstrap confidence interval for the 90.9% figure.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Path | Avg Human Score | Comparison to this paper |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/mw1PWNSWZP.md` (OctoPack) | 7.33, Accept spotlight | Code instruction tuning with CommitPack; solid data contribution, clean ablations, accurate claims. AutoCoder's AIEV-INSTRUCT contribution is comparable in novelty but weaker in claim accuracy. |
+| `/home/wg25r/review_agent/human_reviews/UnUwSIgK5W.md` (WizardCoder) | 6.25, Accept poster | Code Evol-Instruct; similar scope and contribution level. AutoCoder has similar ablation quality but substantially worse claim calibration. |
+| `/home/wg25r/review_agent/human_reviews/rO8QOHrCeA.md` (GIFT4Code) | 4.50, Reject | Execution-derived feedback for code; rejected for missing baselines and unclear motivation. AutoCoder has better baselines and clearer motivation. |
+| `/home/wg25r/review_agent/human_reviews/MpCxUF8x61.md` (GLAN) | 5.25, Reject | Synthetic instruction tuning; borderline contribution with moderate execution. |
+| `/home/wg25r/review_agent/human_reviews/cPmLjxedbD.md` | 1.00, Reject | No experiments at all; irrelevant low anchor. |
+| `/home/wg25r/review_agent/human_reviews/N8Oj1XhtYZ.md` | 8.5, Accept | High-quality systems paper with rigorous evaluation; AutoCoder falls far short on claim integrity. |
+
+**Positioning**: The paper's genuine methodological contribution (execution-verified multi-turn data pipeline, Figure 6 ablation) is at the WizardCoder / OctoPack level in terms of originality and empirical support. However, the two primary headline claims — (1) surpassing GPT-4 Turbo and GPT-4o, and (2) the self-learning stage reducing proprietary dependence — are both poorly supported: claim (1) is directly reversed by the paper's own HumanEval+ data, and claim (2) has no ablation. This is more severe than WizardCoder's weaknesses. The paper sits between GIFT4Code (4.5, rejected) and WizardCoder (6.25, accepted), closer to GIFT4Code due to the misleading headline and unvalidated secondary contribution.
+
+**Final score: 4.5**
+
+The real AIEV-INSTRUCT contribution is worth publishing, but the paper in its current form makes its two strongest claims on insufficient or contradictory evidence. The score reflects that the core methodological insight is genuine but the framing and validation are below the bar for ICLR acceptance.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/cQ25MQQSNI.txt
+Timestamp: 2026-04-21T01:39:41.988881
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=14694 (cached=0) output=1647 (reasoning=0) total=16341 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=14694 output=1647 total=16341
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: efacd6eb-d8c6-44cc-9e5d-fffeafcec2f5
+    Cost (USD): 0.17542709999999997
+    Turns: 4
+    Duration: total=137952ms api=137910ms
+    Tokens: input=8 output=6220 cache_read=25227 cache_creation=19876
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 1b0db435-0956-4827-9964-fb078a25cc74
+    Cost (USD): 0.44231604999999996
+    Turns: 13
+    Duration: total=265083ms api=282472ms
+    Tokens: input=556 output=10468 cache_read=205162 cache_creation=40204
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.6177
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a full picture of the paper. Let me write the review.
+
+---
+
+# Review: *Certainly Uncertain: A Benchmark and Metric for Multimodal Epistemic and Aleatoric Awareness*
+
+---
+
+## Critical Issues
+
+**1. The epistemic/aleatoric distinction is conceptually misapplied throughout the paper. [Structural]**
+
+The paper's central organizing framework hinges on the epistemic (reducible, knowledge-based) vs. aleatoric (irreducible, inherent randomness) split from Bayesian uncertainty theory. In that literature, aleatoric uncertainty cannot be reduced by gathering more data — it reflects fundamental randomness (e.g., quantum measurements, coin flips). The paper's "Temporal" sub-category — represented by the example "Will the airplane encounter turbulence in its flight?" — is *not* aleatoric in this sense. Turbulence is predictable in principle with sufficient atmospheric data; from an image it is simply *unobservable*. This is textbook epistemic uncertainty (missing information). Similarly, "Ambiguity awareness" — "Which engine is currently working?" — arises from missing visual evidence, not from irreducible randomness. The paper applies the epistemic/aleatoric labels to a coarser observable/unobservable-from-image distinction, which is a different concept entirely. Because the taxonomy is the foundational contribution from which the five sub-categories, data construction strategy, and evaluation split (Table 5 reports separately on "LAVE_Epist" and "LAVE_Aleat" metrics) all derive, this is not a framing choice that can be patched with a revised related-work paragraph. The conceptual error propagates into every claim about the benchmark's structure.
+
+**2. Unanswerability ground truth for 62% of the data is established from captions, not images. [Structural]**
+
+110K of the 178K samples (knowledge, complexity, temporal, ambiguity categories) are created by prompting GPT-4 with DOCCI text captions. GPT-4 is instructed to generate a question answerable from the caption and an "unanswerable" question — unanswerable relative to *what is written in the caption*. The models under evaluation, however, see the actual image, which contains information not captured in any caption (lighting conditions, precise object geometry, background details). A question GPT-4 classifies as "unanswerable from the caption" may be visually answerable. This makes the ground truth labels systematically wrong for a non-negligible fraction of examples, but the fraction cannot be estimated because no human audit was performed on the caption-sourced training or test splits. Human validation was limited to the extraneous test set only (4.8K items from 6K, §2.2), and the reported >93% validity rate for other splits (Appendix Table 7) is described with no methodological detail about who verified it or how many items were sampled. The paper's claim that "VLMs perform poorly on our benchmark" (§3.3) cannot be separated from the possibility that models are correctly answering visually-grounded questions that GPT-4 wrongly labeled IDK.
+
+**3. Confidence-weighted accuracy is validated circularly on the same experiment family it purports to evaluate. [Structural]**
+
+The metric is validated in Figure 4 by showing it correlates positively with LAVE_idk accuracy and negatively with ECE. The Figure 4 caption states explicitly: "data-points in this plot are from evaluation results on extraneous split of different model variants in our experiments." This means the metric's validation set is the models the paper trains. Correlation with existing metrics on a small population of model variants from a single training regime is insufficient evidence that the metric generalizes. More fundamentally, the confidence estimate P(pred) is computed by asking the model to answer whether its own prediction is correct (the "yes" token probability). This conflates the measurement instrument with the phenomenon being measured: the inability to self-assess correctness is precisely what makes these models poorly calibrated, and a metric that depends on accurate self-assessment cannot be used to measure that inability. A model that hallucinates confidently will self-report high P("yes") for incorrect predictions, producing *negative* confidence-weighted accuracy — which is desirable behavior for the metric — but this is only coincidentally aligned with what the metric is supposed to reward, and would break down as soon as a model is systematically overconfident in IDK responses.
+
+---
+
+## Section-by-Section Notes
+
+**§2.1 Taxonomy.** The definition of "Complexity awareness" is especially unclear. The paper defines it as recognizing when "a question is difficult because it involves many parts," yet the example in Figure 1 shows an answerable question ("What objects create a juxtaposition in the image?" → "Airplane and barbed wires"). If the correct response is an actual answer rather than IDK, then complexity awareness is not an uncertainty type in the same sense as the others — it is a task difficulty dimension. The taxonomy therefore conflates instances where IDK is correct (the majority of the benchmark) with instances where a complex-but-answerable question is paired with its answer. This creates an internal inconsistency: how are complexity-aware IDK questions defined and separated from just hard answerable questions?
+
+**§2.2 Data Construction — GQA split.** The paper states that 53K GQA instances were added to the training split by perturbing images and changing answers to "I don't know." This is a major design choice with no discussion of bias: GQA questions are generated from scene graphs, and the "extraneous" unanswerable questions are produced by removing the scene graph object with LaMa inpainting. It is not verified that (a) the LaMa inpainting reliably produces images for which the original question is unanswerable (inpainting artifacts could be informative), or (b) the resulting images look realistic enough that a model's response generalizes to natural images. The quality check (one author reviewing a subset of the VQAv2-derived test items) does not address GQA training samples at all.
+
+**§2.3 LAVE_idk metric.** The dual-stage IDK normalization (using LAVE itself to determine if a prediction counts as IDK before scoring) creates a dependency on the Mistral-7B evaluator's own ability to recognize IDK expressions. If Mistral-7B is inconsistent in this normalization, it introduces noise into the primary accuracy measure. No inter-rater reliability or ablation of the normalizer's accuracy is reported.
+
+**§3.1 Training setup.** The DPO baseline uses contrastive pairs from CERTAINLYUNCERTAIN directly, but the choice of "preferred" vs. "rejected" response (IDK vs. non-IDK, or vice versa) is not documented. For questions that are *answerable*, the IDK response should be rejected; for unanswerable questions, the IDK response should be preferred. Whether the DPO pairs are constructed with this distinction or uniformly is unclear and consequential.
+
+**§3.3 Fine-tuning results.** Table 5 and Table 6 show a real cost: when fine-tuning on CERTAINLYUNCERTAIN data only (without mixing with LLaVA instruction data), VQAv2 accuracy drops from 77.26 to 69.77 (LoRA-SFT) and from 76.94 to 49.95 (Instruct-tuning). The paper attributes the non-degradation result to mixing datasets, but frames it as "maintains performance on standard VQA benchmarks." This is misleading; pure fine-tuning on the proposed dataset causes a ~7-27% absolute accuracy drop on standard VQA. On AMBER, SFT with any data combination degrades performance (87.7 → 81.3 or lower). The discussion acknowledges the AMBER result but frames it as a future direction rather than a limitation of the current approach.
+
+**§3.3, Table 4.** There is no random baseline reported. The dataset contains roughly equal IDK and non-IDK questions (76.6K vs. 76.6K in train; 12.3K vs. 12.5K in test). A model that always outputs IDK would achieve ~50% on IDK questions and ~0% on non-IDK questions — this baseline would clarify whether models at 44–66% LAVE accuracy are doing anything useful beyond bias.
+
+**§2.3, Confidence-weighted accuracy formula (Eq. 2).** The formula awards `LAVE_idk × P(pred)` for correct answers but penalizes `P(pred)` (not `1 − P(pred)`) for incorrect ones. This means a model with very low P(pred) for all answers — uniformly uncertain — is penalized very little for being wrong and rewarded very little for being right, making it difficult to distinguish from a well-calibrated model. The metric's sensitivity to the absolute scale of P(pred) is not analyzed, and since P(pred) is normalized only over the "yes"/"no" token pair, the distribution of these probabilities across model families may not be comparable.
+
+---
+
+## Strengths
+
+- The construction of contrastive image pairs via inpainting (extraneous category) is a technically interesting approach. Obtaining visually near-identical image pairs where one is answerable and one is not, without relying on artificial masking artifacts, addresses a genuine limitation in prior work (UNK-VQA's copy-paste approach).
+- Table 2's comparison across existing refusal/hallucination benchmarks is useful for positioning, and the coverage of five fine-grained uncertainty sub-types is broader than prior work.
+- The observation in §2.2 that VLMs fail to answer their own GPT-4/GPT-4V-generated uncertain questions (the "generative AI paradox") is an interesting empirical finding that stands independently of the benchmark's validity issues.
+- Fine-tuning experiments span three distinct training paradigms (SFT, R-tuning, DPO) and multiple baselines, providing reasonable breadth for the experimental section.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Random baseline in Table 4.** Without a "always say IDK" or "always give an answer" baseline, the reported numbers cannot be interpreted as evidence of poor performance. Add this — it takes one model query and is necessary to calibrate the finding that "VLMs perform poorly."
+
+2. **Cross-model validation of confidence-weighted accuracy.** The metric is validated on model variants from the authors' fine-tuning pipeline. To credibly claim the metric generalizes, apply it to the full set of VLMs in Table 4 (14 models with different architectures), correlate with ECE measured independently, and report the coefficient across this broader, heterogeneous population.
+
+3. **Ablation isolating image-vs-caption-sourced data.** Given that 62% of the data comes from caption prompting and 38% from image inpainting, an ablation trained separately on each source and evaluated on each test split is essential to determine which source actually drives improvement. Currently the mechanism of improvement is unattributable.
+
+### Deeper Analysis Needed
+
+1. **Verification that caption-sourced "unanswerable" questions are actually unanswerable from the image.** A human study sampling ~200 caption-sourced IDK questions, showing the actual image (not the caption) to annotators and asking them to answer, would directly test the key assumption of the benchmark's validity. Without this, the ground truth labels for 110K samples are unverified.
+
+2. **Why does fine-tuning hurt AMBER?** The AMBER degradation occurs across all Qwen-VL-Chat fine-tuning conditions, including mixing with LLaVA data. This is attributed without analysis to "lack of IDK questions on attributes and relations." A diagnostic showing which AMBER sub-category degrades and why is needed to make this explanation credible.
+
+### Visualizations & Case Studies
+
+1. **Error analysis on model failures in Table 4.** The paper identifies that models score poorly, but does not show *how* they fail — do they mostly answer IDK questions with confident wrong answers, or do they also refuse answerable questions? A confusion matrix (answer/IDK × predicted answer/IDK) per sub-category would reveal whether the benchmark is primarily a refusal-recall or refusal-precision problem.
+
+### Obvious Next Steps
+
+1. **Validation of the taxonomy through annotation agreement.** The five sub-categories (knowledge, complexity, extraneous, temporal, ambiguity) are defined by the authors and implemented by GPT-4, but no inter-annotator agreement study shows that these categories are meaningfully distinct to human judges. If two annotators cannot reliably assign the same category to a given question, the taxonomy does not represent a genuine ontological decomposition.
+
+---
+
+## Overall Assessment
+
+The paper addresses a real and important problem — VLMs are poorly calibrated and default to confident answers even for unanswerable questions — and assembles a large dataset to study it. However, the three structural issues identified above are not individually fixable within the current submission framework. The foundational taxonomy misapplies the epistemic/aleatoric distinction in a way that is not merely terminological: it drives the data construction, evaluation splits, and claimed analytical findings. The validity of the majority of the benchmark's unanswerability labels rests on an unverified assumption that what GPT-4 cannot answer from a caption is also unanswerable from the image. The proposed new metric is circularly validated on the same experimental population in which it is used. Taken together, these issues mean the paper's central evidential claims — that existing VLMs perform poorly on this benchmark, and that fine-tuning on this data is beneficial — cannot be cleanly separated from confounds introduced by the benchmark's construction and evaluation methodology. The paper should not be accepted in its current form. Revision would require, at minimum, a rigorous human audit of caption-sourced labels, a corrected or more carefully scoped taxonomy, and independent validation of the confidence-weighted accuracy metric across a diverse model population not produced by the authors' own training pipeline.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Systematic, fine-grained taxonomy of multimodal uncertainty**: The paper introduces a novel taxonomy that decomposes uncertainty into epistemic (Knowledge, Complexity, Extraneous) and aleatoric (Temporal, Ambiguity) categories (§2.1, Figure 1), going beyond prior benchmarks that treat unanswerability as a single monolithic category (Table 2 comparison with UNK-VQA, TDIUC).
+
+2. **Large-scale contrastive dataset with dual construction pipelines**: The 178K-sample dataset is constructed via two complementary methods—image inpainting for extraneous uncertainty and caption-based GPT-4 generation for other categories—yielding contrastive pairs where the same question is answerable on one image but unanswerable on another (§2.2, Table 1 showing 76.6K/76.6K IDK/Non-IDK train pairs). This is more systematic than prior work (e.g., UNK-VQA uses image masking/copying; TDIUC pairs unrelated questions with images).
+
+3. **Confidence-weighted accuracy metric that jointly captures correctness and calibration**: Equation 2 defines the metric as a weighted combination that rewards correct confident predictions and penalizes incorrect confident ones, explicitly addressing the shortcoming that existing metrics capture either accuracy or calibration but not both (Table 3). Figure 4 empirically validates that the metric is positively correlated with LAVE_idk accuracy and negatively correlated with ECE—the latter being a stronger negative correlation than plain accuracy has with ECE.
+
+4. **Comprehensive empirical evidence that current VLMs struggle with uncertainty and that fine-tuning on CERTAINLYUNCERTAIN improves awareness**: Table 4 shows GPT-4V achieves only 71.70% LAVE accuracy and all models show large gaps between LAVE accuracy and confidence-weighted accuracy (e.g., LLaVA-1.6-34B: 66.60% vs. 32.47%), indicating poor calibration. Table 5 shows that SFT with CERTAINLYUNCERTAIN substantially improves confidence-weighted accuracy (from 0.47 to 49.35 for LLaVA-1.5-7B) and reduces ECE (from 0.79 to 0.31 for Qwen-VL-Chat). Table 6 demonstrates positive transfer to refusal benchmarks (UNK-VQA: 41.32→59.70), some hallucination benchmarks (POPE: 81.30→86.31), and maintained VQAv2 performance (77.32 vs. 72.96 baseline).
+
+### Supporting strengths
+
+1. **Creative image inpainting pipeline for generating extraneous uncertainty**: The three-step pipeline using saliency identification, Grounded-SAM masking, and LaMa inpainting (§2.2, Figure 2) produces more natural contrastive images than prior approaches that use crude masking or object copying, as noted in the comparison with UNK-VQA (§2.2).
+
+2. **Generative AI paradox observation**: Figure 3 demonstrates that GPT-4V fails to answer its own generated unanswerable questions, providing an interesting empirical finding that supports the motivation—current VLMs fundamentally lack awareness of uncertainty even when they themselves construct the uncertain scenarios.
+
+3. **Dual-stage LAVE_idk evaluation protocol**: Equation 1 introduces a practical adaptation of LAVE for open-ended VQA with unanswerable questions, handling the diversity of IDK expressions through a normalization step before scoring, which addresses a real evaluation challenge.
+
+4. **Quality control through human filtering**: The authors manually validate the extraneous test set, filtering ~1.2K out of 6K samples to ensure quality, and report >93% valid sample rates for other splits (§2.2), acknowledging and addressing the risks of model-dependent data generation.
+
+### Presentation / practical strengths
+
+1. **Multiple training strategy comparisons**: The paper evaluates SFT, R-tuning, and DPO (§3.1, Table 5), providing practical guidance for how best to use the dataset, showing SFT is most effective for learning IDK behavior.
+
+2. **Cross-benchmark evaluation**: The paper evaluates transfer across 7 external datasets covering refusal (UNK-VQA, TDIUC), hallucination (MM-Hal, POPE, AMBER), and standard VQA (VQAv2, VizWiz) (Table 6), demonstrating that improvements generalize beyond the proposed benchmark.
+
+## Summary
+
+The paper introduces CERTAINLYUNCERTAIN, a 178K-sample benchmark for evaluating multimodal epistemic and aleatoric awareness in VLMs, along with a confidence-weighted accuracy metric. The most important evidence supporting this contribution is the comprehensive experimental evaluation: Table 4 reveals that even GPT-4V achieves only 71.70% accuracy and all VLMs exhibit severe miscalibration (e.g., confidence-weighted accuracy far below LAVE accuracy), while Tables 5 and 6 demonstrate that fine-tuning on CERTAINLYUNCERTAIN consistently improves both calibration (ECE reduction from 0.79 to 0.31) and uncertainty awareness across multiple training strategies, with positive transfer to refusal and hallucination benchmarks without degrading standard VQA performance.
+
+--- Merged Review ---
+Now let me run calibration searches to properly score this paper:Now I have sufficient information to write the final review.
+
+---
+
+## Summary
+
+CERTAINLYUNCERTAIN introduces a 178K-sample VQA benchmark for evaluating multimodal uncertainty awareness in vision-language models (VLMs), organized around a five-category taxonomy distinguishing epistemic (Knowledge, Complexity, Extraneous) and aleatoric (Temporal, Ambiguity) uncertainty. The benchmark is constructed via two complementary pipelines—image inpainting for the Extraneous category and caption-prompted GPT-4 generation for the other four categories—forming contrastive answerable/unanswerable pairs. The paper also proposes a confidence-weighted accuracy metric, presents evaluations of 15+ VLMs, and demonstrates through SFT/R-tuning/DPO experiments that fine-tuning on this data improves uncertainty awareness while largely maintaining standard VQA performance.
+
+---
+
+## Strengths
+
+- **Large-scale contrastive benchmark with fine-grained taxonomy** (§2.1, Table 1): The 178K-sample dataset is substantially larger than comparable benchmarks (TUBench: ~2K, UNK-VQA: 10K, Table 2), covers five distinct uncertainty sub-categories, and is designed as contrastive pairs—a methodological choice that supports studying the boundary between answerable and unanswerable questions.
+
+- **Creative inpainting pipeline for the Extraneous category** (§2.2, Figure 2): The three-step saliency identification → Grounded-SAM masking → LaMa inpainting pipeline produces visually natural contrastive image pairs without crude artifacts, advancing over the image-masking or object-copying approach in UNK-VQA.
+
+- **Comprehensive fine-tuning experiments with generalization evidence** (§3.1–3.3, Tables 5–6): Three training paradigms (SFT, R-tuning, DPO) are evaluated, and fine-tuning shows positive transfer to external refusal (UNK-VQA: 41.32 → 59.70), standard VQA (VQAv2 maintained at 77.32 with data mixing), and hallucination benchmarks (POPE: 81.30 → 86.31), not merely in-distribution improvements.
+
+- **Confidence-weighted accuracy metric addresses a real gap** (§2.3, Eq. 2, Table 3): Existing metrics measure either correctness (accuracy, F1) or calibration (ECE) but not both simultaneously. The proposed metric rewards confident correct predictions and penalizes confident incorrect ones, and Figure 4 empirically shows it is positively correlated with LAVE_idk accuracy and *more* negatively correlated with ECE than plain accuracy—a useful property for calibration-aware evaluation.
+
+- **Generative AI paradox as a novel empirical finding** (§2.2, Figure 3): The observation that GPT-4V fails to answer questions it itself generated demonstrates an interesting failure mode of current VLMs and independently motivates the benchmark, regardless of the taxonomy choices.
+
+---
+
+## Weaknesses
+
+### Fatal
+
+None — the paper's core finding that VLMs are poorly calibrated and poorly handle uncertain questions is robustly supported across 15 models, multiple metrics, and external benchmarks.
+
+### Major
+
+- **Caption-sourced ground truth validity for 62% of the data**: 110K of 178K samples (Knowledge, Complexity, Temporal, Ambiguity categories) are generated by prompting GPT-4 with DOCCI text captions—an IDK label is assigned for questions GPT-4 determines to be unanswerable *from the caption*. However, models under evaluation see the actual image, which contains information not captured in any caption. A question labeled IDK from caption text may be visually answerable. The paper reports a ">93% valid sample rate" for other splits (Appendix Table 7), but the methodology for this estimate—how many items were sampled, who reviewed them, and whether reviewers saw images or captions—is not described in the main text. The extraneous split (38% of data) does have human validation, but the remaining 62% is unverified at the image level. This matters because the paper's central claim that "VLMs perform poorly on CERTAINLYUNCERTAIN" partly rests on these labels being correct. That said, the external transfer results (UNK-VQA, TDIUC, POPE, VizWiz), which use entirely independent labels, do support the core finding robustly.
+
+- **Complexity awareness category creates internal inconsistency in the taxonomy**: The paper defines Complexity awareness as "recognizing when a question is difficult because it involves many parts," yet the accompanying example in Figure 1 shows an *answerable* question ("What objects create a juxtaposition?" → "Airplane and barbed wires"). The paper notes "for simplicity all answers in this figure are normalized to 'I don't know'"—but if the correct response for complexity-type questions is sometimes a real answer, not IDK, then this category is not an *uncertainty type* in the same sense as the others. It is unclear how the benchmark separates complex-but-answerable instances from complex-but-IDK ones, and how models are evaluated when the correct response is a legitimate answer.
+
+### Minor
+
+- **The epistemic/aleatoric labels are applied in a non-standard way**: The paper maps "Temporal" (future events) and "Ambiguity" (multiple interpretations) to aleatoric uncertainty, while in standard Bayesian uncertainty theory aleatoric uncertainty means irreducible inherent randomness (like quantum measurements or coin flips). Temporal uncertainty about future events ("Will the airplane encounter turbulence?") is principally *epistemic* in Bayesian terms—it would resolve with sufficient future data. The paper's definitions (§2.1) are internally consistent and workable, but using the canonical epistemic/aleatoric labels introduces confusion and invites scrutiny that the taxonomy doesn't fully survive. The authors could clarify that their usage is domain-adapted.
+
+- **Confidence-weighted metric validated only on in-pipeline model variants** (Figure 4 caption explicitly states: "data-points in this plot are from evaluation results on extraneous split of different model variants in our experiments"): Correlation with ECE and LAVE accuracy is shown on a small, homogeneous population (fine-tuned Qwen-VL-Chat variants). The metric's generalizability across the full set of architecturally diverse VLMs in Table 4 is not demonstrated.
+
+- **Significant VQAv2 accuracy drops with pure fine-tuning** (Table 6): Training on CERTAINLYUNCERTAIN-only causes VQAv2 to drop from 77.26 to 69.77 (LoRA-SFT) and from 76.94 to 49.95 (Instruct-tuning). The paper emphasizes that data-mixing addresses this, which it does (77.32 with Ours+LLaVA), but readers should be aware that the proposed dataset requires mixing with general instruction-following data to avoid standard VQA degradation. AMBER also drops uniformly across all Qwen-VL-Chat fine-tuning conditions (87.7 → 81.3 or lower), a limitation acknowledged but not analytically diagnosed.
+
+- **No random or trivial baseline in Table 4**: The benchmark is roughly balanced (76.6K IDK / 76.6K non-IDK in train). Without a "always answer IDK" or "always answer" baseline, it is difficult to interpret absolute accuracy figures (models range from 44% to 72%). A trivial baseline would anchor whether models at 44–66% LAVE accuracy are doing anything substantively beyond exhibiting bias.
+
+- **DPO pair construction not documented**: §3.1 describes DPO as using contrastive pairs from CERTAINLYUNCERTAIN, but does not specify how preferred vs. rejected responses are assigned. For answerable questions, the IDK response should be rejected; for unanswerable questions, it should be preferred. Whether this distinction is applied or pairs are constructed uniformly is consequential and unstated.
+
+### Trivial
+
+- The GQA-sourced 53K training samples augment the training split by simply changing answers to IDK, but no verification that the corresponding image perturbations actually render questions unanswerable is reported. Since these are training-only samples, the impact on evaluation is indirect, but the practice is worth noting.
+
+---
+
+## Nice-to-Haves
+
+- A human study sampling ~200 caption-sourced IDK questions and showing the actual images to annotators (not the captions) would directly validate the key assumption for the 62% of data without human image-level review.
+- An ablation comparing models trained solely on caption-sourced vs. image-sourced data and evaluated separately would help identify which data source drives the fine-tuning gains.
+- A confusion matrix (answer vs. IDK × predicted answer vs. IDK) per sub-category would reveal whether models fail primarily at refusing unanswerable questions or at correctly answering answerable ones—important for understanding what the fine-tuning actually teaches.
+- Broader validation of the confidence-weighted accuracy metric across all 14 open-source VLMs in Table 4 (not just fine-tuned variants) would strengthen the metric's claim to generality.
+
+---
+
+## Removed Points
+
+*These points are flagged as removed. Treat them with caution.*
+
+- **Harsh Critic §3.1: DPO preferred/rejected framing is intentionally asymmetric**: The paper uses "preferred" = IDK for unanswerable and "preferred" = correct answer for answerable within the contrastive pairs. While documentation is sparse (see Minor weakness above), the DPO setup's logic follows directly from the contrastive pair construction, so the critique overstates the ambiguity. Partially retained as a Minor weakness about documentation only.
+
+- **Harsh Critic: Confidence metric's P(pred) breaks down if model is overconfident in IDK**: The critique argues P(pred) = P("yes") that the model's own answer is correct cannot measure miscalibration because it relies on accurate self-assessment. However, the paper follows prior work (Whitehead et al., 2022) precisely in using this approach, and Figure 4 shows empirically it correlates with ECE as expected. This is a valid theoretical concern for future work but does not invalidate the metric's empirical utility.
+
+- **Harsh Critic: LAVE_idk normalization introduces noise from Mistral-7B evaluator**: The two-stage normalization is inherently imperfect, but this is a general challenge for LLM-as-judge evaluation that is not specific to this paper. The paper follows the LAVE methodology (Mañas et al., 2024) which has demonstrated strong human correlation; calling this out as a standalone weakness is a generic concern that applies to any paper using LLM evaluation.
+
+- **Harsh Critic: Inpainting artifacts may make GQA questions remain answerable**: A legitimate low-priority concern, but GQA samples are used only for training (not testing), and the paper has validated the evaluation split separately. The concern about training data quality applies broadly and is not unique to this construction.
+
+- **Harsh Critic: "Generative AI paradox" framing is interesting but trivially explained by the fact GPT-4 cannot see the image when creating questions for image-based categories**: Partially true but the paper carefully notes this observation for the caption-based GPT-4/GPT-4V pipeline (Figure 3 shows GPT-4V failing to answer its own GPT-4V-generated questions), which is a genuine paradox.
+
+- **Strength Finder: Multiple training strategy comparisons as a "presentation strength"**: Dropped — this is a methodological contribution, not a presentation strength. It is already credited under Strengths (comprehensive fine-tuning experiments).
+
+---
+
+## Novel Insights
+
+The most genuinely novel observation is the "generative AI paradox": GPT-4V, when prompted to both generate uncertain questions *and* answer them, fails at the answering task even though it designed the questions. This points to an asymmetry between the model's generative knowledge (what kinds of things are uncertain) and its deployed inference behavior (confidently hallucinating answers to those same questions). This asymmetry has implications beyond benchmarking—it suggests that knowledge of uncertainty categories is insufficient for calibrated refusal behavior, and that explicit refusal training (as demonstrated in the fine-tuning experiments) is necessary even for frontier models. The dataset also reveals that recent strong open-source VLMs (Qwen2-VL-72B, LLaVA-OV-72B, InternVL2-76B) perform no better than older, smaller LLaVA-1.6 variants on uncertainty awareness despite large leaps on standard benchmarks, suggesting that standard benchmark scaling does not transfer to uncertainty awareness.
+
+---
+
+## Suggestions
+
+1. Conduct image-level human validation on a random sample of ~500 caption-sourced IDK questions to provide concrete evidence for the validity of the 62% of samples currently relying only on caption-derived labels.
+2. Report a trivial baseline (always-IDK, always-answer) in Table 4 to calibrate the absolute performance numbers.
+3. Add a brief ablation in Table 5/6 splitting the training data into caption-sourced vs. image-sourced contributions to identify which source drives improvement.
+4. Clarify the taxonomy note about epistemic/aleatoric terminology (especially for Temporal and Ambiguity) with a brief remark acknowledging the broader terminological debate, and justify the adopted definitions for the vision-language domain.
+5. Document DPO pair construction (preferred/rejected assignment logic) in §3.1.
+6. Extend Figure 4 correlation validation to the full heterogeneous VLM population in Table 4 to strengthen the confidence-weighted accuracy metric's generalizability claim.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper | Path | Avg Human Score | Comparison |
+|---|---|---|---|
+| TUBench (unanswerable VQA benchmark for LVLMs) | `UHHOAe1uIS.md` | 5.25 (Reject) | Closest topical match; ~35× smaller, no training experiments, no new metric; CERTAINLYUNCERTAIN is clearly stronger in scope |
+| LUMA (multimodal uncertainty benchmark) | `lh0iTFCD1y.md` | 4.0 (Withdrawn) | Weaker benchmark with simulated data, no VLM fine-tuning; CERTAINLYUNCERTAIN is substantially stronger |
+| Visual Data-Type Understanding (VLM robustness benchmark) | `WyEdX2R4er.md` | 8.0 (Poster Accept) | Strong benchmark with 39-model evaluation, novel framing, rigorous methodology; CERTAINLYUNCERTAIN does not match its methodological rigor or the cleanness of its experimental conclusions |
+| MMIE (large-scale multimodal benchmark) | `HnhNRrLPwm.md` | 8.0 (Oral Accept) | 20K benchmark with rigorous construction; CERTAINLYUNCERTAIN has weaker ground truth validation |
+
+**Reasoning:** CERTAINLYUNCERTAIN is clearly above TUBench (5.25) in scale, training contributions, and metric novelty, but does not reach the 8.0 tier due to the major concern about the validity of 62% of labels (caption-sourced, not image-validated), the Complexity category inconsistency, and the limited metric validation. The paper's most important empirical claims survive partial label noise given the external benchmark transfer results, but the uncertainty about label quality is non-negligible. Considering the anchor cluster, a score of **5.5** is appropriate—meaningfully above TUBench given the richer contributions, but below the strong accepts given the methodological concerns.
+
+**Originality**: Moderate — the problem of uncertain VQA is known; the contribution is primarily the scale, fine-grained taxonomy, training experiments, and metric.  
+**Importance**: High — uncertainty awareness in VLMs is an important and underexplored problem.  
+**Claim support**: Partial — core claims hold for the extraneous category but are murkier for 62% of the benchmark.  
+**Experimental soundness**: Moderate — broad but with the random-baseline gap and in-pipeline metric validation.  
+**Clarity**: Good — the paper is well-organized and clearly written.  
+**Community value**: Moderate-to-high — if the dataset is released and the caption-sourced labels are validated, it would be a useful resource.
+
+**Final Score: 5.5 (Borderline Reject)**
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/sruGNQHd7t.txt
+Timestamp: 2026-04-21T01:48:50.103946
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=11234 (cached=0) output=1701 (reasoning=0) total=12935 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=11234 output=1701 total=12935
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 05ac1230-f0e3-41ef-a33b-f229c5b9d83e
+    Cost (USD): 0.1605144
+    Turns: 4
+    Duration: total=125750ms api=125704ms
+    Tokens: input=8 output=6150 cache_read=25618 cache_creation=16148
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 3ee8d822-de94-408d-9c3f-f896d61eeba1
+    Cost (USD): 0.43981715
+    Turns: 7
+    Duration: total=364475ms api=402021ms
+    Tokens: input=739 output=9904 cache_read=67091 cache_creation=26633
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.6003
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a thorough read of the paper. Let me write the review.
+
+---
+
+# Review: "Privacy-Preserving of Deep Learning Queries by Domain Shifting"
+
+---
+
+## Critical Issues
+
+**Issue 1 — The privacy evaluation metric does not measure privacy. [Structural]**
+
+The paper's central claim is that domain shifting "preserves privacy." The only quantitative privacy metric used is SSIM² between the original image and the encoded image (Table 2, model-specific) or between some combination of class labels and encoded images (Table 4, model-agnostic — itself described in a way that makes no sense, since SSIM is an image similarity metric, not a label-to-label metric). Neither variant measures what an adversary can actually learn.
+
+Low SSIM between original and encoded images establishes that encoded images look visually different from originals. It says nothing about whether an adversary with the oracle model and a corpus of encoded queries can reconstruct the original image, infer its class through statistical analysis, or learn the encoder mapping. For a privacy claim to be credible, the paper needs either a formal information-theoretic bound (e.g., mutual information between original and encoded inputs is bounded) or an adversarial evaluation (e.g., reconstruction attack, membership inference). Neither is present. The paper has performed a visual distortion measurement and called it a privacy guarantee. This is not a semantic quibble — it invalidates the headline claim.
+
+**Issue 2 — The secret key for in-place domain shifting has ≈ log₂(M) bits of entropy, making it trivially weak. [Structural]**
+
+The model-agnostic scheme's entire security rests on the random permutation offset $i \in \{0, 1, \ldots, M-1\}$, as given in Equation (3). For a 10-class dataset, this is a secret drawn uniformly from a set of size 10 — approximately 3.3 bits of entropy. The paper treats this offset as a one-time random draw but does not clarify whether it is refreshed per query. If the same $i$ is reused across multiple queries (which the framework implies, since the decoder uses the known $i$ consistently), an honest-but-curious adversary observing encoded queries can recover $i$ by correlating oracle model outputs with the uniform distribution over M values — requiring on average only a few queries. The paper does not acknowledge this, analyse it, or propose a mitigation. This makes the claimed privacy protection of the model-agnostic scheme trivially defeatable in any realistic multi-query setting, which is exactly the cloud service scenario being studied.
+
+**Issue 3 — Equation (1) contains a notation error that corrupts the stated obfuscation objective. [Structural]**
+
+Equation (1) defines the obfuscation loss as:
+$$L_{ob} = \mathbb{E}_{x \sim p_{data}(x)} \left( SSIM^2[f(x), EN(x)] \right)$$
+where $f(x)$ is the oracle model's output (classification scores / logits) and $EN(x)$ is the encoded image. The surrounding text (Section 4.2) explicitly states that "the obfuscation is measured through SSIM between real input $x$ and obfuscated input $x^{ob} = EN(x)$." Thus the equation should be $SSIM^2[x, EN(x)]$. Using $f(x)$ is dimensionally inconsistent (logit vectors vs. images) and conceptually meaningless. This error propagates into the SSIM computation in Equation (2), whose variables $\mu_{f(x)}$, $\sigma_{f(x)}^2$, and $\sigma_{f(x),EN(x)}$ are defined relative to the incorrect substitution. The actual training may have used the correct quantity, but the paper's formal statement of the objective is wrong. For a method paper where the training objectives are the core technical contribution, this cannot be dismissed as a typo.
+
+**Issue 4 — The whitebox threat model is internally inconsistent. [Structural]**
+
+Section 3 specifies that whitebox users "have access to the internal model parameters, including detailed logit scores, and can calculate gradients." The model-specific (out-of-place) encoder is built using "a few multi-head attention layers or convolution layers of the oracle model to extract useful features" (Section 5.1). This means the user needs a local copy of the oracle model's architecture and weights to build their privacy-protecting encoder. But if the user possesses the oracle model locally, the entire scenario of querying a third-party cloud service to avoid running the model themselves collapses — they could just run the oracle model locally on their private data. The threat model for the whitebox case is therefore self-defeating: the protection only applies in a scenario that the protection itself makes unnecessary.
+
+---
+
+## Section-by-Section Notes
+
+**Section 4.2 (Model-Specific Transform Training):** The joint loss $L_{fid} + \alpha L_{ob}$ with $\alpha = 0.01$ is described as a tuning parameter that "generally produce[s] good training," with no ablation over $\alpha$, no analysis of the fidelity-privacy tradeoff curve, and no justification for fixing $\alpha = 0.01$ across all datasets and architectures. Given that fidelity and obfuscation are competing objectives, this tradeoff is the central design choice of the method and receives no systematic treatment.
+
+**Section 4.3 (Model-Agnostic Transform Training):** The class-uniformity argument for privacy (Section 4.3, penultimate paragraph before 4.3.1) only demonstrates that the *class label* of the encoded image is uninformative about the original class. It says nothing about whether the *visual content* of the encoded image carries information about the original. A T-shirt encoded as a coat will still share body-shape and texture information with the original T-shirt. This residual content leakage is never analyzed.
+
+**Section 4.3.2 (GAN + DDPM):** The paper introduces Stable Diffusion v1-4 as the DDPM backbone without justification of this choice. More importantly, this introduces a 4-second per-image encoding overhead (Table 4), making the pipeline 400–4000× slower than the oracle model alone for complex datasets. The paper lists this as a latency number without acknowledging that a 4-second overhead per query is practically prohibitive for real-time or high-throughput cloud AI services.
+
+**Section 5.1, Table 2:** Experiments ⑦ and ⑧ (cross-architecture: ConvNeXt encoder with Swin Transformer oracle, and vice versa) show fidelity drops to 77.22% and 80.09%, respectively, compared to 86.86% and 87.36% for matched architectures. The paper notes this result without explanation. The degradation implies that the model-specific encoder has baked in architectural assumptions of the matched oracle model, and doesn't generalize even to close architectural relatives — further undermining any practical claim about whitebox deployability.
+
+**Section 5.2, Table 4:** Accuracy drops on CIFAR-10 (88.91% → ~80.2%, roughly −8.7 pp) and ImageNet-20 (88.55%/84.12% → 75.10%/70.40%, roughly −13.4/−13.7 pp) are substantial and underreported. The paper calls these "some accuracy drops" without any analysis of what causes them or whether they are fundamental to the approach. A 13-percentage-point accuracy loss is not a minor "trade-off."
+
+**Section 5.3 (Overhead):** The comparison to HE/MPC latency (Liu et al., 2017; Juvekar et al., 2018; Nie et al., 2024) is misleading. Those approaches offer cryptographic privacy guarantees; this approach offers heuristic obfuscation with no formal bound. Comparing inference times without acknowledging the difference in the *security guarantee being purchased* is not a fair comparison.
+
+**Section 3 (Threat Model):** The threat model is an "honest-but-curious" adversary. The paper never specifies what the adversary's *goal* is: recovering the original image? Inferring the class label? Linking multiple queries to the same user? Without specifying the adversary's objective and computational capabilities, it is impossible to evaluate whether the proposed method succeeds at the stated goal.
+
+---
+
+## Strengths
+
+- The paper identifies a genuinely underexplored problem: user-side privacy protection for inference queries that does not require service-provider cooperation. The framing of encoder-decoder pairs as the mechanism for obfuscation is conceptually clean.
+- The distinction between model-specific (whitebox, out-of-place) and model-agnostic (blackbox, in-place) approaches is well-motivated, and the impossibility argument for model-agnostic out-of-place shifting (Section 4.3) is sound.
+- Table 2 results for model-specific training on MNIST show that the framework can achieve near-lossless classification utility (fidelity ≥ 96%) with SSIM² values as low as ~10⁻⁸, demonstrating technical feasibility on simple data.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Adversarial reconstruction attack**: Without testing whether an adversary can reconstruct or classify original images from encoded ones (even with a simple image-to-image network trained on encoded/original pairs), the privacy claim is entirely unsubstantiated. This is the single most important missing experiment.
+
+2. **Statistical de-anonymization attack for in-place shifting**: Test whether an adversary seeing $k$ encoded queries (for $k = 10, 50, 100$) can recover the permutation offset $i$ through the oracle model's output statistics. Without this, the 3.3-bit key entropy concern is unresolved.
+
+3. **Fidelity-privacy tradeoff curve**: Vary $\alpha$ systematically and plot fidelity vs. SSIM across at least one non-trivial dataset. The single operating point at $\alpha = 0.01$ tells the reader nothing about how the method scales.
+
+### Deeper Analysis Needed
+
+1. **Content leakage in in-place shifting**: GAN/diffusion encoders that translate a T-shirt to a coat may preserve body contours, textures, and fine-grained visual features from the original. An analysis of what information (beyond class label) persists in encoded images is required for any privacy claim to hold.
+
+2. **Formal privacy definition**: The paper should specify what formal property (e.g., $\epsilon$-differential privacy on the class label, $k$-anonymity, indistinguishability under a defined adversary) the method aims to achieve. Without this, "privacy is preserved" is an empty assertion.
+
+### Visualizations & Case Studies
+
+1. **Nearest-neighbor retrieval test**: Given an encoded image, retrieve the most similar images from the training set by SSIM, pixel distance, and feature distance. If original images appear as top retrievals, the privacy claim fails. This is a simple and direct visual test.
+
+### Obvious Next Steps
+
+1. **Per-query fresh randomization and key management**: If $i$ is refreshed per query and kept secret, the scheme is stronger. The paper should discuss the key management requirements explicitly, since the security of the entire model-agnostic scheme reduces to the secrecy of this low-entropy value.
+
+---
+
+## Overall Assessment
+
+The paper addresses a legitimate problem — user-controlled privacy for inference queries — and the encoder-decoder abstraction is a reasonable starting point. However, four structural problems prevent it from being accepted in its current form. The privacy evaluation is built entirely on SSIM, which is a distortion metric not a privacy metric; no evidence is provided that an adversary cannot learn the original input or label from encoded queries. The model-agnostic scheme's secret (the permutation offset) has at most ~3.3 bits of entropy, making it trivially recoverable by an adversary in a multi-query cloud service setting. Equation (1) contains a dimension-inconsistent error in the stated training objective. And the whitebox setting requires the user to possess the oracle model locally, which negates the privacy motivation for that setting entirely. These are not gaps that additional experiments can paper over — the first two concern whether the method provides any meaningful privacy at all, and the third concerns the correctness of the method as formally stated. The paper should not be accepted in its current form.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **User-centric privacy framework requiring no server-side modifications**: Unlike HE/MPC approaches that require the service provider to implement cryptographic protocols, this paper's framework is entirely user-side. Section 3 explicitly states "users have no control over the DNN model and cannot modify it in any way," and the encoder/decoder pair is trained on public data independently (Section 4). This is a practically important distinction from prior work like CryptoNets, Delphi, and MPC-based schemes.
+
+2. **Extremely low SSIM² values confirming strong input obfuscation for the model-specific approach**: Table 2 reports SSIM² as low as 1.94×10⁻⁸ (MNIST/ViT, row ③) and consistently below 2.48×10⁻⁵ across all configurations, demonstrating that encoded images bear virtually no structural similarity to originals.
+
+3. **High fidelity preservation in the model-specific approach**: The fidelity scores in Table 2 closely track oracle accuracy, e.g., 98.21% fidelity vs. 98.55% oracle accuracy on MNIST/ViT (row ③), and 87.36% vs. 78.81% on Tiny-ImageNet (row ⑥, even exceeding oracle baseline), confirming that privacy does not come at high utility cost for out-of-place shifting.
+
+4. **Orders-of-magnitude inference speed advantage over HE/MPC baselines**: Section 5.3 reports 0.5ms total on MNIST vs. 481ms from Juvekar et al. (2018) and 3.58s from Liu et al. (2017); 1.2ms on CIFAR-10 vs. 472s and 9.74s respectively. Even the model-agnostic DDPM-based approach at ~4.12s (Table 4) is faster than the 5s reported in Nie et al. (2024).
+
+5. **Model-agnostic generalization validated across different oracle architectures**: Table 4 demonstrates that the same encoder/decoder pair (trained without oracle knowledge) works across architectures—e.g., the GAN-based MNIST encoder achieves 97.28% with MLP oracle (①) and 97.49% with ViT oracle (②), and the GAN+DDPM ImageNet encoder works with both ViT_H_14 (75.10%, ⑦) and Swin_V2_B (70.40%, ⑧).
+
+### Supporting strengths
+
+1. **Elegant permutation-based decoder guarantee**: Equations 3 and 4 provide a simple, provably correct decoding mechanism for the model-agnostic approach: y' = y^{ob} − i (mod M). This ensures perfect recovery of the true class label given knowledge of the randomly selected permutation plan, making the decoder both interpretable and formally sound.
+
+2. **Uniform class distribution ensuring no class-level leakage**: Figure 3 provides empirical evidence via pie charts showing that for each source class in Fashion-MNIST, the encoded images are distributed approximately uniformly across all 10 target classes, preventing any inference of the original class from the encoded image alone—a key privacy property of the model-agnostic approach.
+
+3. **Practical GAN+DDPM architecture choice for scaling to complex datasets**: Section 4.3.2 describes a hybrid architecture where the GAN maps inputs to class-conditional embedding vectors and the DDPM (Stable-Diffusion-v1-4) generates high-quality images, solving the image quality problem that pure GANs face on complex datasets. This engineering choice is validated by the CIFAR-10 and ImageNet results in Table 4.
+
+4. **Two complementary access-level approaches systematically covering the design space**: The paper develops both out-of-place (whitebox, Section 4.2) and in-place (blackbox, Section 4.3) domain shifting with clear reasoning about why each is appropriate for its access level—including the argument in Section 4.3 that out-of-place shifting is incompatible with model-agnostic use because different oracles disagree on non-significant-domain inputs.
+
+### Presentation / practical strengths
+
+1. **Comprehensive evaluation across 5 datasets and 8+ oracle architectures**: Tables 1–4 cover MNIST, Fashion-MNIST, CIFAR-10, Tiny-ImageNet, and ImageNet (20-class subset) with diverse model types (MLP, CNN, ViT, Swin, ConvNeXt), providing broad empirical coverage.
+
+## Summary
+
+The paper introduces a user-side privacy-preserving inference framework based on domain shifting, offering two complementary approaches: model-specific (out-of-place, whitebox) and model-agnostic (in-place, blackbox). The single most important piece of evidence supporting this contribution is the combination of near-zero SSIM² values (e.g., 1.94×10⁻⁸ for MNIST model-specific) confirming strong privacy, alongside high fidelity scores (e.g., 98.21% vs. 98.55% oracle) confirming utility preservation—all achieved at inference times orders of magnitude faster than HE/MPC alternatives (0.5ms vs. 481ms on MNIST).
+
+--- Merged Review ---
+Now let me do calibration searches to anchor my scoring.Now I have all the information I need to write the final review. Let me synthesize everything.
+
+---
+
+## Summary
+
+The paper introduces a user-side privacy-preserving framework for cloud-based deep learning inference through "domain shifting." Users encode their inputs before querying a remote DNN, then decode the obfuscated outputs to recover the original classification. Two approaches are proposed: model-specific out-of-place shifting (whitebox access, using a trained encoder/decoder pair with oracle model architecture) and model-agnostic in-place shifting (blackbox access, using GAN or GAN+DDPM to map inputs to visually different but legitimate domain images). Experiments span MNIST, Fashion-MNIST, CIFAR-10, Tiny-ImageNet, and ImageNet-20 across multiple oracle architectures.
+
+---
+
+## Strengths
+
+- **User-side-only privacy framework**: The paper correctly identifies a practical gap — existing HE/MPC schemes require server-side modifications, while this approach requires none. Section 3 formalizes this distinction well, and it represents a genuinely underexplored angle for inference privacy.
+
+- **Model-agnostic generalization demonstrated across oracle architectures**: Table 4 shows the same GAN encoder working across MLP and ViT oracles on MNIST (97.28% vs. 97.49% fidelity) and across ViT_H_14 and Swin_V2_B on ImageNet, validating the model-agnostic claim.
+
+- **High fidelity with near-zero SSIM² for model-specific approach**: Table 2 reports SSIM² as low as 1.94×10⁻⁸ (MNIST/ViT, row ③) alongside 98.21% fidelity, and even super-oracle fidelity on Tiny-ImageNet (e.g., 87.36% vs. 78.81% oracle for Swin, row ⑥). This demonstrates technical feasibility.
+
+- **Logical necessity argument for in-place model-agnostic design**: Section 4.3 provides a principled impossibility argument explaining why out-of-place shifting cannot be model-agnostic (different oracles give inconsistent predictions on non-domain inputs), motivating the in-place design. This is a sound theoretical grounding.
+
+- **Significant inference speed advantage**: Section 5.3 reports 0.5ms (MNIST, model-specific) and 1.2ms (CIFAR-10) vs. 481ms–3.58s for HE/MPC; the GAN-only model-agnostic is similarly fast at ~0.35ms overhead.
+
+---
+
+## Weaknesses
+
+### Fatal
+*None — the paper's core ideas are sound and the experiments confirm that the encoder-decoder pipelines work. However, see Major weaknesses below, which together substantially undermine the privacy claims.*
+
+### Major
+
+- **SSIM is not a privacy metric — the headline privacy claim is unverified.** The paper's sole quantitative privacy evidence is SSIM² between original and encoded images (Table 2) and an SSIM-based uniformity measure for the model-agnostic setting (Table 4). SSIM measures visual distortion, not information leakage. A low SSIM between x and EN(x) means the encoded image looks different, but says nothing about whether an adversary can reconstruct the original image, infer its class via statistical analysis of multiple queries, or learn the encoder mapping. No reconstruction attack, membership inference test, or inversion attack of any kind is presented. For a paper submitted to a privacy track, the absence of adversarial evaluation is a critical gap: "privacy is preserved" based on SSIM alone is not a defensible claim. The most important missing experiment is: given a set of (EN(x), y^ob) pairs, can an adversary trained on public data recover x or its class label?
+
+- **The formal training objective in Equation (1) contains a type error that propagates through the method description.** The surrounding text (Section 4.2) states explicitly that obfuscation is measured "through SSIM between real input x and obfuscated input x^ob = EN(x)." However, Equation (1) writes $L_{ob} = \mathbb{E}[SSIM^2(f(x), EN(x))]$ where f(x) is the oracle model's classification output (a scalar class label or logit vector). Equation (2) then defines $\mu_{f(x)}$ as the "mean intensity values of the original input f(x)" — which is dimensionally inconsistent since f(x) is not an image. The paper almost certainly implemented SSIM(x, EN(x)) correctly in practice, but the formal statement of the training objective — the core technical contribution — is wrong as written. For a method paper where the training loss is central, this error in the formalization is not a trivial typo.
+
+- **No formal privacy definition or adversary model.** Section 3 specifies the adversary as "honest-but-curious" but never specifies the adversary's goal (reconstruct x? infer class of x? link multiple queries to the same user?) or computational capabilities. Without a formal privacy objective, it is impossible to evaluate whether the method succeeds. The claim "no class information about x can be inferred from x^ob alone" (Section 4.3) is stated but never tested even empirically, let alone proved.
+
+### Minor
+
+- **Whitebox threat model requires clarification.** The paper states users have "whitebox access" including "access to the internal model parameters, including detailed logit scores... and can calculate gradients." Section 5.1 then describes building the encoder using "a few multi-head attention layers or convolution layers of the oracle model." If this requires full oracle model weights locally, the threat model is nearly self-defeating: a user who can run oracle model layers locally could also just run the full model locally, making cloud querying unnecessary. The paper should clarify whether only the architecture (not the trained weights) is used for the encoder structure, or whether the whitebox encoder uses the oracle's actual trained layers.
+
+- **Significant accuracy drops on complex datasets are underreported.** Table 4 shows ~8.7pp drop on CIFAR-10 (88.91% → ~80.2%) and ~13-14pp drop on ImageNet-20 (88.55%/84.12% → 75.10%/70.40%) for the model-agnostic GAN+DDPM approach. These are described as "some accuracy drops" without analysis of root causes or whether they are fundamental to the GAN+DDPM translation quality. A 13pp accuracy penalty would likely be unacceptable in practice and the paper does not address this.
+
+- **Cross-architecture fidelity degradation is unexplained.** Table 2 rows ⑦–⑧ (cross-architecture: ConvNeXt encoder with Swin oracle and vice versa) show fidelity drops to 77.22% and 80.09%, compared to 86.86% and 87.36% for matched architectures. The paper notes these results but provides no explanation. This suggests the model-specific encoder encodes architecture-specific assumptions that don't generalize even to closely related architectures — an important practical limitation.
+
+- **DDPM overhead of ~4 seconds per image is not practically viable for high-throughput services.** The paper acknowledges the 4.12s overhead but frames it positively against HE/MPC baselines. However, 4 seconds per query is 400–4000× slower than the oracle itself for complex datasets, which would be prohibitive in any real-time or production cloud service. The comparison to HE/MPC (which also provides cryptographic guarantees that this work does not) is misleading without acknowledging the security-guarantee asymmetry.
+
+### Trivial
+
+- The obfuscation loss in Eq. (1) should use x (original input) rather than f(x) (oracle output) — this equation-level notation error should be corrected regardless of whether the implementation was correct.
+
+---
+
+## Nice-to-Haves
+
+- **Fidelity-privacy tradeoff curve**: Varying α across at least one non-trivial dataset and plotting fidelity vs. SSIM² would characterize the operating range of the method far better than a single operating point at α = 0.01.
+- **Statistical de-anonymization experiment**: For the model-agnostic scheme, test whether an adversary seeing k encoded queries can recover i (the permutation offset) for different values of k. Even if i is refreshed per query, this would establish an empirical bound on how many queries are safe.
+- **Content leakage analysis**: For in-place shifting, analyze whether encoded images (e.g., T-shirt → coat) preserve body-shape, texture, or fine-grained visual features from the original. If significant visual content persists, the privacy protection is weaker than class-label shuffling implies.
+- **Formal privacy framing**: Even an informal information-theoretic argument (e.g., mutual information between x and EN(x) is bounded by some quantity) would substantially strengthen the paper's positioning.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **[Harsh Critic Issue 2 — "3.3-bit key entropy makes the scheme trivially breakable"]**: The paper states "Our encoder first generates a random number i from the set 0, 1, ..., M-1 with equal probability" — this implies per-query fresh randomization. With fresh i per query, the adversary sees independent (EN_i(x), y^ob) pairs where each uses a different unknown i, so i cannot be recovered by correlating multiple queries (each has its own independent i). The critic's attack scenario ("same i is reused") is not what the paper describes. The real content-leakage concern (that visual features of x persist in EN(x)) is kept as a Nice-to-Have above, but the specific entropy-counting argument is unfair to the scheme as described. — **Removed.**
+
+- **[Harsh Critic Issue 4 — Whitebox setting "self-defeating"]**: This is kept but weakened above (moved to Minor). The critic's framing is too strong — the whitebox setting can be interpreted as using public architectural knowledge, not necessarily full local model weights. — **Partially retained as a Minor clarification request.**
+
+- **[Strength Finder — "Comprehensive evaluation across 5 datasets and 8+ oracle architectures as a standalone strength"]**: This is accurate and mentioned in context throughout, but it is a supporting detail, not a novel insight. Absorbed into the Major weakness about accuracy drops and cross-architecture degradation. — **Absorbed elsewhere.**
+
+---
+
+## Novel Insights
+
+The most genuinely novel aspect of the paper is the logical argument in Section 4.3 that model-agnostic out-of-place shifting is *impossible*: since different oracle models disagree on non-domain inputs, no universal decoder can exist for out-of-place encoded inputs. This impossibility motivates in-place shifting and explains why the two-approach framework (model-specific/model-agnostic) is a necessary dichotomy rather than an arbitrary choice. This reasoning is clean and original. However, the empirical privacy evaluation falls short of the theoretical ambition — the framework would benefit substantially from adversarial evaluation aligned with this formal reasoning.
+
+---
+
+## Suggestions
+
+1. **Add at minimum one adversarial experiment**: Train a simple inversion network on (EN(x), x) pairs from a public dataset, then test it on held-out encoded queries. If the inversion network fails to recover x or its class label, this is meaningful evidence of privacy. If it succeeds, the paper's claim is falsified.
+2. **Fix Equation (1)**: Replace f(x) with x throughout the SSIM loss formulation and Eq. (2).
+3. **Clarify key management**: Explicitly state whether i is drawn fresh per query (which makes the scheme secure in the output space) or reused across queries (which degrades security dramatically).
+4. **Clarify whitebox access**: State whether the model-specific encoder uses the oracle's trained weights or only its architecture. If the former, discuss the practical availability assumption.
+5. **Reframe the overhead comparison**: When comparing latency with HE/MPC, note that those methods provide cryptographic security guarantees that this work does not, so the comparison is at different security levels.
+
+---
+
+## Score and Decision
+
+**Calibration anchors consulted:**
+
+| Path | Avg Human Score | Comparison to this paper |
+|---|---|---|
+| `/human_reviews/SX2Z5tgiUu.md` (PrivateChat) | 4.00 (Reject) | Most similar: user-side encryption/obfuscation for cloud AI queries, rejected for weak threat model and SSIM-based privacy evaluation instead of cryptographic guarantees |
+| `/human_reviews/lPJUQsSIxm.md` (DCT-CryptoNets) | 6.33 (Accept) | HE-based inference with latency improvements — provides formal cryptographic guarantees; much stronger privacy evaluation foundation |
+| `/human_reviews/mUMvr33FTu.md` (CipherPrune) | 6.25 (Accept) | MPC-based private Transformer inference — formal security + solid engineering contributions |
+| `/human_reviews/HMe5CJv9dQ.md` (DP similarity) | 7.50 (Accept) | Strong theoretical DP contributions with rigorous proofs — clearly above this paper |
+| `/human_reviews/cPmLjxedbD.md` (low-scoring) | 1.00 (Reject) | No experiments, no methodology — clearly below this paper |
+| `/human_reviews/OXIIFZqiiN.md` (low-scoring) | 1.50 (Reject) | LLM-generated nonsense — clearly below this paper |
+| `/human_reviews/JKpk2p4O99.md` (unlearnable examples) | 5.25 (Borderline) | Input-perturbation based privacy scheme at similar scope level |
+
+**Rationale:** This paper is most analogous to PrivateChat (score 4.0): both propose user-side obfuscation for cloud AI queries, both rely on heuristic/non-cryptographic privacy metrics (SSIM, embedding similarity) rather than formal adversarial evaluation, and both have weak threat models. This paper is somewhat broader empirically (5 datasets, 8+ oracles vs. PrivateChat's narrower scope), and the formal impossibility argument in Section 4.3 is a genuine theoretical contribution that PrivateChat lacks. However, the privacy evaluation gap is equally severe, the Eq. (1) notation error is unique to this paper, and the accuracy drops on complex datasets are significant and underanalyzed. The score-6 papers in this domain (DCT-CryptoNets, CipherPrune) provide cryptographic guarantees and rigorous privacy analysis — this paper falls substantially short of that bar. Placing between PrivateChat (4.0) and the borderline input-perturbation paper (5.25), with the severity of the privacy evaluation gap pulling toward the lower end: **4.0**.
+
+**Axis evaluation:**
+- *Originality*: Moderate — the encoder-decoder framing for user-side privacy is a genuine and clean idea, but not deeply novel
+- *Importance of research question*: High — user-side privacy for inference is practically important
+- *Claim support*: Weak — the central privacy claim lacks adversarial evaluation; the core training objective has a notation error
+- *Soundness of experiments*: Moderate — fidelity experiments are sound but privacy "experiments" use SSIM rather than adversarial tests
+- *Clarity of writing*: Fair — the general structure is clear but the formal notation in Section 4.2 is internally inconsistent
+- *Value to research community*: Low-to-moderate — the framing and GAN+DDPM architecture are interesting contributions, but without proper privacy evaluation the paper cannot be used as a reliable reference
+
+**Decision: Reject.** The paper addresses an important problem and demonstrates that the encoder-decoder approach can preserve utility, but it does not establish that the approach preserves privacy in any meaningful adversarial sense. The lack of adversarial evaluation and the use of SSIM as a privacy metric are fundamental gaps for a paper whose headline contribution is privacy preservation. These are not gaps resolvable in a rebuttal — they require additional experiments.
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.0
+
+--- Decision ---
+Reject
