@@ -20,7 +20,8 @@ os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
 MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
-SUBAGENT_MODEL = os.environ.get("SUBAGENT_MODEL", MERGER_MODEL)  # calibration_search subagent (OpenAI merger path)
+SCORER_MODEL = os.environ.get("SCORER_MODEL", MERGER_MODEL)
+SUBAGENT_MODEL = os.environ.get("SUBAGENT_MODEL", SCORER_MODEL)  # calibration_search subagent (OpenAI scorer path)
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
 FEATHERLESS_BASE_URL = os.environ.get("FEATHERLESS_BASE_URL", "https://api.featherless.ai/v1")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
@@ -146,60 +147,43 @@ neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neut
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
 
-CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
-You have these tools:
-- search_file(query, n, mode, low_score=0, high_score=10): BM25 or vector search over human reviews, pre-filtered by the reviewer avg-score range. mode='vector' or 'bm25'. Set low_score/high_score to anchor to a band (e.g. low_score=7 for strong papers, high_score=3 for weak ones).
-- read_file(abs_path, start_line, end_line): read lines from a human review file.
-- grep_file(pattern, abs_path): substring search inside a single file.
+def _load_merger_instructions():
+    """Load merger.md with PAPER_ACCESS placeholder filled in (file-based access)."""
+    with open("prompts/merger.md", "r") as f:
+        raw = f.read()
+    # Strip &&-commented lines, same as load_prompts.
+    kept = []
+    for lineno, line in enumerate(raw.splitlines(keepends=True), start=1):
+        if line.lstrip().startswith("&&"):
+            print(f"WARNING: ignoring commented line {lineno} in prompts/merger.md: {line.rstrip()}")
+            continue
+        kept.append(line)
+    content = "".join(kept).replace("{{PAPER_ACCESS_INSTRUCTION}}", PAPER_ACCESS_FILE)
+    return content + "\n\n" + timeline
 
-Workflow:
-1. Run 1-3 search_file calls to find candidate reviews matching the request. Use vector search for semantic queries and bm25 for literal keyword matches.
-2. Optionally skim promising candidates with read_file to confirm they match (especially to verify score/decision if the request specifies a score range).
-3. Return a list of matching papers. For each: the absolute file path and ONE sentence describing why it matches (the key weakness/strength/topic/score that makes it relevant).
-
-Output format (strict):
-- <abs_path>: <one-sentence reason, mentioning human score and decision if known>
-- <abs_path>: <one-sentence reason>
-...
-
-Constraints:
-- Return 3-8 papers, not more.
-- Do not produce a review, do not give calibration advice, do not compare the retrieved papers to the paper under review. The main agent handles all reasoning — you just retrieve.
-- Keep the whole response under 300 words.
-- Cap yourself at 6 tool calls total.
-- Search exactly for what the main agent asked. Do not broaden or narrow the request on your own.
-"""
 
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
 else:
-    _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
-    if _NO_CAL:
-        _merger_tools = [read_file, grep_file]
-    else:
-        _calibration_subagent = Agent(
-            name="Calibration Search",
-            instructions=CALIBRATION_SUBAGENT_INSTRUCTIONS,
-            tools=[search_file, read_file, grep_file],
-            model=resolve_model(SUBAGENT_MODEL),
-        )
-        _calibration_tool = _calibration_subagent.as_tool(
-            tool_name="calibration_search",
-            tool_description="Retrieve calibration anchors from the human-review corpus. Send a short retrieval request (topic / weakness / strength / score range). Returns a list of paper paths each with a one-sentence summary. Does not do calibration reasoning — just retrieves.",
-            max_turns=12,
-        )
-        _merger_tools = [read_file, grep_file, _calibration_tool]
     merger = Agent(
         name="Merger",
-        instructions=_merger_instructions,
+        instructions=_load_merger_instructions(),
         model=resolve_model(MERGER_MODEL),
-        tools=_merger_tools,
+        tools=[read_file, grep_file],
     )
     _MERGER_SDK_MODEL = None
 
-# scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
+
+# ── Scorer agent (calibration + scoring) ─────────────────────────────
+if SCORER_MODEL.startswith("claude_sdk:"):
+    scorer_agent = None
+    _SCORER_SDK_MODEL = SCORER_MODEL[len("claude_sdk:"):]
+else:
+    from scorer import build_scorer_agent
+    scorer_agent = build_scorer_agent(resolve_model, SCORER_MODEL, SUBAGENT_MODEL, _NO_CAL)
+    _SCORER_SDK_MODEL = None
 
 
 # ── Constants ────────────────────────────────────────────────────────
@@ -267,41 +251,50 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
 
     print("  Phase 2: Merger ...")
+    merger_prompt_body = (
+        f"Here is the paper being reviewed (extracted from PDF — formatting "
+        f"artifacts are parser issues, not paper problems).\n\n"
+        f"Paper path: {paper_path_abs} — use read_file (in chunks) or grep_file to read it.\n\n"
+        f"Here are the raw reviewer inputs:\n\n{chr(10).join(labeled)}\n\n"
+        f"Now produce the final consolidated review following your instructions — including the "
+        f"<context>...</context> block at the end for the downstream Scorer. "
+        f"Remember: many of the harsh critic's points may be nonsensical or overly "
+        f"picky — cross-check everything against the actual paper before including it."
+    )
     if _MERGER_SDK_MODEL is not None:
         from claude_merger import run_merger_claude_sdk
-        merger_prompt = (
-            f"Here is the paper being reviewed (extracted from PDF — formatting "
-            f"artifacts are parser issues, not paper problems):\n\n"
-            f"Paper path: {paper_path_abs}, read it in chunks.\n\n"
-            f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
-            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
-            f"Now produce the final consolidated review following your instructions. "
-            f"Remember: many of the harsh critic's points may be nonsensical or overly "
-            f"picky — cross-check everything against the actual paper before including it."
-        )
         paper_dir = str(Path(paper_path_abs).parent)
-        merged_review, merger_sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        merged_review, merger_sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt_body, paper_dir)
         sdk_usages["Merger"] = merger_sdk_usage
         agent_usages["Merger"] = None  # SDK usage tracked separately below
     else:
-        # OpenAI Agent SDK merger: grant read/grep access to the paper's dir and
-        # point the merger at the paper via path (not inline).
         from tools import allow_path
         allow_path(str(Path(paper_path_abs).parent))
-        merger_prompt = (
-            f"Here is the paper being reviewed (extracted from PDF — formatting "
-            f"artifacts are parser issues, not paper problems).\n\n"
-            f"Paper path: {paper_path_abs} — use read_file (in chunks) or grep_file to read it.\n\n"
-            f"Human reviews directory (for calibration): {HUMAN_REVIEW_DIR}\n\n"
-            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
-            f"Now produce the final consolidated review following your instructions. "
-            f"Remember: many of the harsh critic's points may be nonsensical or overly "
-            f"picky — cross-check everything against the actual paper before including it."
-        )
-        merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
+        merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt_body)
         agent_usages["Merger"] = merger_usage
-    scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
-    decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
+
+    print("  Phase 3: Scorer ...")
+    if _SCORER_SDK_MODEL is not None:
+        from scorer import run_scorer_claude_sdk
+        paper_dir = str(Path(paper_path_abs).parent)
+        scorer_text, scorer_sdk_usage = await run_scorer_claude_sdk(
+            _SCORER_SDK_MODEL,
+            merged_review=merged_review,
+            human_review_dir=HUMAN_REVIEW_DIR,
+            paper_dir=paper_dir,
+            no_cal=no_cal,
+        )
+        sdk_usages["Scorer"] = scorer_sdk_usage
+        agent_usages["Scorer"] = None
+    else:
+        from scorer import run_scorer_openai
+        scorer_text, scorer_usage = await run_scorer_openai(
+            scorer_agent, merged_review, HUMAN_REVIEW_DIR, run_agent_with_retry
+        )
+        agent_usages["Scorer"] = scorer_usage
+
+    scorer_output = float(scorer_text.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in scorer_text else -1
+    decision = (scorer_text.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in scorer_text else "N/A"
 
     total_input = total_output = total_tokens = 0
     token_lines = []
@@ -358,10 +351,17 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             log_f.write(f"\n--- Claude SDK Usage ---\n" + "\n".join(sdk_lines) + "\n")
         log_f.write(f"\n--- Merged Inputs ---\n\n{chr(10).join(labeled)}\n")
         log_f.write(f"\n--- Merged Review ---\n{merged_review}\n")
+        log_f.write(f"\n--- Scorer Reasoning ---\n{scorer_text}\n")
         log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
         log_f.write(f"\n--- Decision ---\n{decision}\n")
 
-    return {"merged_review": merged_review, "scorer_output": scorer_output, "decision": decision, "sdk_usages": sdk_usages}
+    return {
+        "merged_review": merged_review,
+        "scorer_text": scorer_text,
+        "scorer_output": scorer_output,
+        "decision": decision,
+        "sdk_usages": sdk_usages,
+    }
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -635,6 +635,8 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
     with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
         f.write(result["merged_review"])
+        if result.get("scorer_text"):
+            f.write(f"\n\n---\n## Scorer Reasoning\n\n{result['scorer_text']}\n")
         f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "")
         if accept_info is not None:
             exact_rate, exact_n, win_rate, win_n, percentile, pct_n = accept_info

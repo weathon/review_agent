@@ -145,20 +145,18 @@ DO differentiate between papers of varying quality clearly.
 Do evaluate the paper on these axis using language first, do not be afraid to be harsh if the paper is very weak and do not be afraid to be nice if the paper is actually good:
 Originality, importance of research question addressed, whether the claims are well supported, soundness of experiments, clarity of writing, and value to the research community
 
-## Score and Decision
-After you finish writing a review, assign a score to the review. 
+Do NOT assign a numeric score and do NOT output any accept/reject decision. A downstream Scorer agent will do that from your review plus the context block below.
 
-{{CALIBRATION_INSTRUCTION}}
+## Context for Scorer
 
-If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
+After the review above, append a single block that the Scorer will read. This is the Scorer's only window into what the reviewers originally said and what you dropped and why — make it genuinely useful for calibration, not a summary of the review itself.
 
-Do NOT be afraid to give very high (>8) or very low (<4) scores when the
-paper warrants it. 
+Wrap the whole block in `<context>...</context>` tags. Inside, include (concisely — aim for under ~400 words total):
 
-Score round to .5 or .0. 
-&& **Be careful to score between 4-6, you should consider scoring it above 6 or below 4 unless the paper is truely in the middle.**
+- **Original reviewer signal**: one-line summaries of the Harsh Critic's and Strength Finder's overall takes, and any direct disagreement between them.
+- **What was dropped and why**: the most load-bearing removals from the raw reviews (e.g. a seemingly-major weakness that you verified against the paper and found to be a misread). The Scorer needs this to understand why the final weakness list may look shorter or milder than the raw critic would suggest.
+- **Cross-checks performed**: any spots where you went back to the paper to verify or refute a claim, and what you found.
+- **Severity read**: one or two sentences on whether the surviving weaknesses are fatal/major vs. minor/trivial, and whether any single weakness threatens the paper's core claim. This is a judgement to pass to the Scorer, not a score.
+- **Anything else load-bearing**: e.g. scope constraints the paper explicitly declared, unusual evaluation norms in the paper's subfield, signs of genuine novelty or signs the work is borderline — whatever you think would change the Scorer's calibration if it knew.
 
-
-IMPORTANT: At the very end of your response, you MUST write exactly this line (using a pineapple XML tag):
-MY FINAL SCORE: <pineapple>score</pineapple>
-MY FINAL DECISION: <orange>Accept/Reject</orange>
+Do not put numeric scores, decisions, or pineapple/orange tags anywhere — those are the Scorer's job.
