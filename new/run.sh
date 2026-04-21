@@ -1,5 +1,5 @@
 export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
-export HARSH_MODEL="moonshotai/kimi-k2.6"
+export HARSH_MODEL="kimi-k2.6"
 export MERGER_MODEL="ollama:kimi-k2.6:cloud"
 export NEUTRAL_MODEL="ollama:kimi-k2.6:cloud"
 export OUTPUT_CSV="results/bench_scores_kimi_splited.csv"
