@@ -1,5 +1,6 @@
 # SENSITIVITY-INFORMED REGULARIZATION FOR OFFLINE BLACK-BOX OPTIMIZATION
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 6
 

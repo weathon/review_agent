@@ -1,5 +1,6 @@
 # TeamCraft: A Benchmark for Embodied Multi-Agent Systems in Minecraft
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 1
 

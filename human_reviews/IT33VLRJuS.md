@@ -1,5 +1,6 @@
 # Recovering Time-Varying Networks From Single-Cell Data
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 3
 

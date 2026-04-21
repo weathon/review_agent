@@ -1,5 +1,6 @@
 # Better Safe than Sorry: Pre-training CLIP against Targeted Data Poisoning and Backdoor Attacks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 8, 3
 

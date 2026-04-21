@@ -1,5 +1,6 @@
 # An Open Quantum Chemistry Property Database of 120 Kilo Molecules with 20 Million Conformers
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

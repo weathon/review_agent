@@ -1,5 +1,6 @@
 # AutoAgents: A Framework for Automatic Agent Generation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

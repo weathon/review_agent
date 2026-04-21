@@ -1,5 +1,6 @@
 # Rethinking Multi-domain Generalization with A General Learning Objective
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 5, 5
 

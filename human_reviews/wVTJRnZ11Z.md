@@ -1,5 +1,6 @@
 # When GNNs meet symmetry in ILPs: an orbit-based feature augmentation approach
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 5
 

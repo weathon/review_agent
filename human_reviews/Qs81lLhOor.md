@@ -1,5 +1,6 @@
 # HGAMLP: A Scalable Training Framework for Heterogeneous Graph Learning
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5
 

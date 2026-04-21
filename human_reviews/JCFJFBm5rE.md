@@ -1,5 +1,6 @@
 # SurfDesign: Effective Protein Design on Molecular Surfaces
 
+- Avg Score: 6.40
 - Decision: Reject
 - Scores: 6, 5, 5, 8, 8
 

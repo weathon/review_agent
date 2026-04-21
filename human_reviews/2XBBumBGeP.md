@@ -1,5 +1,6 @@
 # sRGB Real Noise Modeling via Noise-Aware Sampling with Normalizing Flows
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

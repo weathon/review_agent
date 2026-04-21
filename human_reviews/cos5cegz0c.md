@@ -1,5 +1,6 @@
 # LLaMA Rider: Spurring Large Language Models to Explore the Open World
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 6, 6
 

@@ -1,5 +1,6 @@
 # Physics Informed Neurally Constructed ODE Networks (PINeCONes)
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 3, 6, 3, 3, 3
 

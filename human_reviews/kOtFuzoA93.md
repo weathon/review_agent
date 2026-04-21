@@ -1,5 +1,6 @@
 # Novel Kernel Models and Uniform Convergence Bounds for Neural Networks Beyond the Over-Parameterized Regime
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3
 

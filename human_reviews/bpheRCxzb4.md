@@ -1,5 +1,6 @@
 # Measuring Information in Text Explanations
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 5, 5, 8, 8
 

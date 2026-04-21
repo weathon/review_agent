@@ -1,5 +1,6 @@
 # Pooling And Attention: What Are Effective Designs For LLM-Based Embedding Models?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

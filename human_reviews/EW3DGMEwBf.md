@@ -1,5 +1,6 @@
 # Selective Perception: Learning Concise State Descriptions for Language Model Actors
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # GMAI-VL & GMAI-VL-5.5M: A Large Vision-Language Model and  A Comprehensive Multimodal Dataset Towards General Medical AI
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

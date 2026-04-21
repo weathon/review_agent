@@ -1,5 +1,6 @@
 # SITReg: Multi-resolution architecture for symmetric, inverse consistent, and topology preserving image registration using deformation inversion layers
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

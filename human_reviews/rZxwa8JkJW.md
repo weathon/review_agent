@@ -1,5 +1,6 @@
 # Fusing Visual and Textual Cues for Sequential Image Difference Captioning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

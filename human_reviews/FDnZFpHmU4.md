@@ -1,5 +1,6 @@
 # Determine-Then-Ensemble: Necessity of Top-k Union for Large Language Model Ensembling
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

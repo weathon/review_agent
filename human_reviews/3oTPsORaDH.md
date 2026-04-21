@@ -1,5 +1,6 @@
 # SEGNO: Generalizing Equivariant Graph Neural Networks with Physical Inductive Biases
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6
 

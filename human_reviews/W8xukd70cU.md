@@ -1,5 +1,6 @@
 # Data Center Cooling System Optimization Using Offline Reinforcement Learning
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 5
 

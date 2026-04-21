@@ -1,5 +1,6 @@
 # IceFormer: Accelerated Inference with Long-Sequence Transformers on CPUs
 
+- Avg Score: 5.40
 - Decision: Accept (poster)
 - Scores: 6, 6, 3, 6, 6
 

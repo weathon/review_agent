@@ -1,5 +1,6 @@
 # Follow-Up Differential Descriptions: Language Models Resolve Ambiguities for Image Classification
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 5
 

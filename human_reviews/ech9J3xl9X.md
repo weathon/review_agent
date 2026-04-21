@@ -1,5 +1,6 @@
 # Narrow Transformer: Mono-lingual Code SLM for Desktop
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

@@ -1,5 +1,6 @@
 # Rethinking the bert-like pretraining for dna sequences
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

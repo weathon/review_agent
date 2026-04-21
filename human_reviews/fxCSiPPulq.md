@@ -1,5 +1,6 @@
 # One Training Fits All: Addressing Model-Heterogeneity Federated Learning via Architecture Probing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

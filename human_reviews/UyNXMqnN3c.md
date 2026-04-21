@@ -1,5 +1,6 @@
 # DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation
 
+- Avg Score: 8.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 10, 8
 

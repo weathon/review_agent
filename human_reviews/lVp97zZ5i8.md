@@ -1,5 +1,6 @@
 # TempMe: Video Temporal Token Merging for Efficient Text-Video Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

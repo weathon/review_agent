@@ -1,5 +1,6 @@
 # Less is More: Fewer Interpretable Region via Submodular Subset Selection
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 6, 8
 

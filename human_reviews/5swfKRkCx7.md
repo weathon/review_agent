@@ -1,5 +1,6 @@
 # Two Heads are Better than One: Retrieval Augmented LLM for Question Answering with External Knowledge Attention
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

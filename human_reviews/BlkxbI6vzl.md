@@ -1,5 +1,6 @@
 # A Fast and Provable Algorithm for Sparse Phase Retrieval
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

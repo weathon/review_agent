@@ -1,5 +1,6 @@
 # Discrete GCBF Proximal Policy Optimization for Multi-agent Safe Optimal Control
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

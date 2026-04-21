@@ -1,5 +1,6 @@
 # Probabilistic Sampling-Enhanced Temporal-Spatial GCN: A Scalable Framework for Transaction Anomaly Detection in Ethereum Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 5, 1
 

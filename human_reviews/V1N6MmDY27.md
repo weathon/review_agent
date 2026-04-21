@@ -1,5 +1,6 @@
 # Towards Fully Autonomous Driving with Automated Commonsense Reasoning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 5, 1
 

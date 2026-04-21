@@ -1,5 +1,6 @@
 # Physics-enhanced Neural Operator: An Application in Simulating Turbulent Transport
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Unraveling the Shift of Visual Information Flow in MLLMs: From Phased Interaction to Efficient Inference
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5, 5
 

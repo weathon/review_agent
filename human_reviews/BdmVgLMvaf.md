@@ -1,5 +1,6 @@
 # Adaptive teachers for amortized samplers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 5
 

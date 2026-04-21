@@ -1,5 +1,6 @@
 # Multi-Agent Decision S4: Leveraging State Space Models for Offline Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # NeurFlow: Interpreting Neural Networks through Neuron Groups and Functional Interactions
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

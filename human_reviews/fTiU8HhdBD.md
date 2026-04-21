@@ -1,5 +1,6 @@
 # A Unified Framework for Reinforcement Learning under Policy and Dynamic Shifts
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 6, 6, 3
 

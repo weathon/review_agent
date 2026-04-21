@@ -1,5 +1,6 @@
 # Headless Language Models: Learning without Predicting with Contrastive Weight Tying
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

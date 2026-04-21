@@ -1,5 +1,6 @@
 # Accurate and Scalable Graph Neural Networks via Message Invariance
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Improving Group Connectivity for Generalization of Federated Deep Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

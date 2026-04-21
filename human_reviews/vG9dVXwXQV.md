@@ -1,5 +1,6 @@
 # Pre-Trained Vision-Language Model Selection and Reuse for Downstream Tasks
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 6, 5
 

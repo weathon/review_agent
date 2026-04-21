@@ -1,5 +1,6 @@
 # Polyrating: A Cost-Effective and Bias-Aware Rating System for LLM Evaluation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

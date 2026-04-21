@@ -1,5 +1,6 @@
 # Class-Wise Generalization Error: An Information-Theoretic Analysis
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

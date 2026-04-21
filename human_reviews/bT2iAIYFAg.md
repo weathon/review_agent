@@ -1,5 +1,6 @@
 # Vector Segmented and Recombined Adaptation for Scalable and Efficient Model Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

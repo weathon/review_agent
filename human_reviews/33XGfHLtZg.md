@@ -1,5 +1,6 @@
 # Conformal Risk Control
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8, 6, 6
 

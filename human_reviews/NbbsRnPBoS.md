@@ -1,5 +1,6 @@
 # Faster Gradient Descent in Deep Linear Networks: The Advantage of Depth
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

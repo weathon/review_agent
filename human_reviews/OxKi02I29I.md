@@ -1,5 +1,6 @@
 # Understanding Long Videos with Multimodal Language Models
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6
 

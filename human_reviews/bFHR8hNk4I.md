@@ -1,5 +1,6 @@
 # MeshMask: Physics-Based Simulations with Masked Graph Neural Networks
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6
 

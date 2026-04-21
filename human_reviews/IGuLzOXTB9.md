@@ -1,5 +1,6 @@
 # Are LLMs Prescient? A Continuous Evaluation using Daily News as the Oracle
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

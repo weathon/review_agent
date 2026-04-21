@@ -1,5 +1,6 @@
 # An Empirical Analysis of Uncertainty in Large Language Model Evaluations
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6
 

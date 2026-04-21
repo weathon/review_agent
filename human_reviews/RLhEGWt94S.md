@@ -1,5 +1,6 @@
 # Rethinking Modality Alignment in Multi-Modal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

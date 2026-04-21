@@ -1,5 +1,6 @@
 # The Map Equation goes Neural
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 1, 3
 

@@ -1,5 +1,6 @@
 # Visual Perception in Text Strings
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

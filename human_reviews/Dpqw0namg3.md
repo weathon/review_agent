@@ -1,5 +1,6 @@
 # LAM Simulator: Advancing Large Action Model Training for Agent via Online Exploration and Feedback Simulation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

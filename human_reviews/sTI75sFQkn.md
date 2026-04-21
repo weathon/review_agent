@@ -1,5 +1,6 @@
 # dFCExpert: Learning Dynamic Functional Connectivity Patterns with Modularity and State Experts
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 1
 

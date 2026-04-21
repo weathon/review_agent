@@ -1,5 +1,6 @@
 # ACAV-1M: Data Curation and Benchmarking for Audio-Visual Representation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 5, 3, 3
 

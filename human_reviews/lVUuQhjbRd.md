@@ -1,5 +1,6 @@
 # AltDev: Achieving Real-Time Alignment in Multi-Agent Software Development
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

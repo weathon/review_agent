@@ -1,5 +1,6 @@
 # Episodic Memory Theory for the Mechanistic Interpretation of Recurrent Neural Networks
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 1, 6, 5, 5
 

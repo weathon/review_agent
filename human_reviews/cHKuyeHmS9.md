@@ -1,5 +1,6 @@
 # Cycle-Consistent Learning for Joint Layout-to-Image Generation and Object Detection
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5
 

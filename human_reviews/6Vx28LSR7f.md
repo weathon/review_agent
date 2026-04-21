@@ -1,5 +1,6 @@
 # Compositional 4D Dynamic Scenes Understanding with Physics Priors for Video Question Answering
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

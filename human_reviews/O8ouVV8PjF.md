@@ -1,5 +1,6 @@
 # CNN Kernels Can Be the Best Shapelets
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 6, 5
 

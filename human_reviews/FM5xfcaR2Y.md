@@ -1,5 +1,6 @@
 # Post-hoc bias scoring is optimal for fair classification
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 8
 

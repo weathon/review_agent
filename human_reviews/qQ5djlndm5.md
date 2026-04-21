@@ -1,5 +1,6 @@
 # StoryGPT-V: Large Language Models as Consistent Story Visualizers
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

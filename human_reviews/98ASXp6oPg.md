@@ -1,5 +1,6 @@
 # Self-Explained Keywords Empower Large Language Models for Code Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 3, 8
 

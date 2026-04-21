@@ -1,5 +1,6 @@
 # A Hybrid Loss Framework for Decomposition-based Time Series Forecasting Methods: Balancing Global and Component Errors
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 1
 

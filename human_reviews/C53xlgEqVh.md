@@ -1,5 +1,6 @@
 # Vec-Tok Speech: Speech Vectorization and Tokenization for Neural Speech Generation
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 3, 5, 5, 8, 5
 

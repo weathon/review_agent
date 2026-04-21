@@ -1,5 +1,6 @@
 # U-shaped and Inverted-U Scaling behind Emergent Abilities of Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

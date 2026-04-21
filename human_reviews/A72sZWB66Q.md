@@ -1,5 +1,6 @@
 # HyperDet: Generalizable Detection of Synthesized Images by Generating and Merging A Mixture of Hyper LoRAs
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5, 1
 

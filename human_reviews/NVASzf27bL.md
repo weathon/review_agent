@@ -1,5 +1,6 @@
 # Unispeaker: A unified speech generation model for multimodality-driven voice control
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 8
 

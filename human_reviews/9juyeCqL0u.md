@@ -1,5 +1,6 @@
 # Causal Order: The Key to Leveraging Imperfect Experts in Causal Inference
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 8
 

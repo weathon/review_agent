@@ -1,5 +1,6 @@
 # Analyzing Neural Network Based Generative Diffusion Models via Convexification
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

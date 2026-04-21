@@ -1,5 +1,6 @@
 # AgentVerse: Facilitating Multi-Agent Collaboration and Exploring Emergent Behaviors
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

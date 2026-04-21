@@ -1,5 +1,6 @@
 # Auto-RAG: Autonomous Retrieval-Augmented Generation for Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

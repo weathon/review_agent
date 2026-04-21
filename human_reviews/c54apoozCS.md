@@ -1,5 +1,6 @@
 # On Statistical Rates of Conditional Diffusion Transformers: Approximation,  Estimation and Minimax Optimality
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

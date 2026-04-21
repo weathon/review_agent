@@ -1,5 +1,6 @@
 # Computationally Efficient RL under Linear Bellman Completeness for Deterministic Dynamics
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Enhancing Human-AI Collaboration Through Logic-Guided Reasoning
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 6
 

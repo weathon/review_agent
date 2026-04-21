@@ -1,5 +1,6 @@
 # Catastrophic Jailbreak of Open-source LLMs via Exploiting Generation
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 6
 

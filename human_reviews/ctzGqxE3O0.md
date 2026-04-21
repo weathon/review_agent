@@ -1,5 +1,6 @@
 # BID: Broad Incremental for Android Malware Detection
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

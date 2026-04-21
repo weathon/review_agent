@@ -1,5 +1,6 @@
 # Close the Gap: Lightweight Image Captioning via Retrieval Augmentation
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 5, 3
 

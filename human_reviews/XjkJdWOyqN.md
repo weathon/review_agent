@@ -1,5 +1,6 @@
 # Are Large Language Models Really Robust to Word-Level Perturbations?
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

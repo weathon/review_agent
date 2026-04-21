@@ -1,5 +1,6 @@
 # MapSelect: Sparse & Interpretable Graph Attention Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

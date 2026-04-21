@@ -1,5 +1,6 @@
 # Unsupervised Radar Point Cloud Enhancement Using Diffusion Model as Prior without Paired Traning Data
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

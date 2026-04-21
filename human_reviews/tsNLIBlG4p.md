@@ -1,5 +1,6 @@
 # Analysis of a class of stochastic component-wise soft-clipping schemes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6, 5, 3
 

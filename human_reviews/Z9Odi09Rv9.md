@@ -1,5 +1,6 @@
 # Fast and Noise-Robust Diffusion Solvers for Inverse Problems: A Frequentist Approach
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 8, 5, 3, 3
 

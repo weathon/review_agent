@@ -1,5 +1,6 @@
 # JPEG-LM: LLMs as Image Generators with Canonical Codec Representations
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 6, 8
 

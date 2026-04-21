@@ -1,5 +1,6 @@
 # Procedural Fairness Through Addressing Social Determinants of Opportunity
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

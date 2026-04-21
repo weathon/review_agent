@@ -1,5 +1,6 @@
 # Epi-attention : Adaptive Context-Aware Attention for Dynamic Feature Relevance in Neural Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 3
 

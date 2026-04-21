@@ -1,5 +1,6 @@
 # On the Expressiveness of Rational ReLU Neural Networks With Bounded Depth
 
+- Avg Score: 7.40
 - Decision: Accept (Spotlight)
 - Scores: 5, 8, 8, 8, 8
 

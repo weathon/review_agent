@@ -1,5 +1,6 @@
 # Energy-based Model Training Objective Robust to Inaccurate SGLD Samples
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

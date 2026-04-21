@@ -1,5 +1,6 @@
 # Multi-Label Generalized Zero Shot Chest Xray Classification  Using Feature Disentanglement and Multi-Modal Dictionaries
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3
 

@@ -1,5 +1,6 @@
 # Sentinel: Multi-Patch Transformer with Temporal and Channel Attention for Time Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

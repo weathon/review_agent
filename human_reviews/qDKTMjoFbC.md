@@ -1,5 +1,6 @@
 # BurstAttention: An Efficient Distributed Attention Framework for Extremely Long Sequences
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 5
 

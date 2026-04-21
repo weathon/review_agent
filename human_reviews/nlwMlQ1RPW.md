@@ -1,5 +1,6 @@
 # LD-SDM: Language-Driven Hierarchical Species Distribution Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

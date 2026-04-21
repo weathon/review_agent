@@ -1,5 +1,6 @@
 # Wasn’t Me: Enabling Users to Falsify Deepfake Attacks
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

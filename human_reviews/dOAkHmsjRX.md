@@ -1,5 +1,6 @@
 # Budgeted Online Continual Learning by Adaptive Layer Freezing and Frequency-based Sampling
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

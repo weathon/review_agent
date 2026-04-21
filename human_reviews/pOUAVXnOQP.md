@@ -1,5 +1,6 @@
 # STAF: Sinusoidal Trainable Activation Functions for Implicit Neural Representation
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 8, 5
 

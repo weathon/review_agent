@@ -1,5 +1,6 @@
 # One QuantLLM for ALL: Fine-tuning Quantized LLMs Once for Efficient Deployments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 6, 6, 1
 

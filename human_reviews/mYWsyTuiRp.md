@@ -1,5 +1,6 @@
 # Analyzing Feed-Forward Blocks in Transformers through the Lens of Attention Maps
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 8
 

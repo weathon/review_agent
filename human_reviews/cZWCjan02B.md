@@ -1,5 +1,6 @@
 # Flash Inference: Near Linear Time Inference for Long Convolution Sequence Models and Beyond
 
+- Avg Score: 6.83
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 5, 8
 

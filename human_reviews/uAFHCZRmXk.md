@@ -1,5 +1,6 @@
 # Two Effects, One Trigger: On the Modality Gap, Object Bias, and Information Imbalance in Contrastive Vision-Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

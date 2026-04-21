@@ -1,5 +1,6 @@
 # Linear combinations of latents in generative models: subspaces and beyond
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 5
 

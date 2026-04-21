@@ -1,5 +1,6 @@
 # $F^3Set$: Towards Analyzing Fast, Frequent, and Fine-grained Events from Videos
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8
 

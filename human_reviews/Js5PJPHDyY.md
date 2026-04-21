@@ -1,5 +1,6 @@
 # A Hard-to-Beat Baseline for Training-free CLIP-based Adaptation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Image Inpainting via Iteratively Decoupled Probabilistic Modeling
 
+- Avg Score: 6.25
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 5
 

@@ -1,5 +1,6 @@
 # GALA: Geometry-Aware Local Adaptive Grids for Detailed 3D Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

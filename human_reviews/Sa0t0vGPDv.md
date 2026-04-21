@@ -1,5 +1,6 @@
 # FARS: FSM-Augmentation to Make LLMs Hallucinate the Right APIs
 
+- Avg Score: 6.67
 - Decision: Reject
 - Scores: 8, 6, 6
 

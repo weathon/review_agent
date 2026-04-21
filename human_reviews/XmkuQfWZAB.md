@@ -1,5 +1,6 @@
 # On Provable Benefits of Policy Learning from Human Preferences in Contextual Bandit Problems
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 3, 8
 

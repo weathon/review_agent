@@ -1,5 +1,6 @@
 # MUSTARD: Mastering Uniform Synthesis of Theorem and Proof Data
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Profiler: Black-box AI-generated Text Origin Detection via Context-aware Inference Pattern Analysis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

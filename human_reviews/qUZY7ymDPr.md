@@ -1,5 +1,6 @@
 # PPLLaVA: Varied Video Sequence Understanding With Prompt Guidance
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 6, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # A Sinkhorn-type Algorithm for Constrained Optimal Transport
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Manifold Learning via Foliations, and Knowledge Transfer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # MixNAM: Advancing Neural Additive Models with Mixture of Experts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

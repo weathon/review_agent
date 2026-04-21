@@ -1,5 +1,6 @@
 # Uncertainty-Aware Counterfactual Explanations using Bayesian Neural Nets
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 1, 5
 

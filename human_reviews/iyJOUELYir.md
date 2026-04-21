@@ -1,5 +1,6 @@
 # CoRNStack: High-Quality Contrastive Data for Better Code Retrieval and Reranking
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

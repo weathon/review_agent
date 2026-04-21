@@ -1,5 +1,6 @@
 # Diffusion Transformers for Tabular Data Time Series Generation
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6
 

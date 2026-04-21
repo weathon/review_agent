@@ -1,5 +1,6 @@
 # P-MapNet: Far-seeing Map Constructer Enhanced by both SDMap and HDMap Priors
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

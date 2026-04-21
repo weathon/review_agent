@@ -1,5 +1,6 @@
 # Fast Unsupervised Deep Outlier Model Selection with Hypernetworks
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5, 3
 

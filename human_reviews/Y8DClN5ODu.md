@@ -1,5 +1,6 @@
 # Demonstration Distillation for Efficient In-Context Learning
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # PPTSER: A Plug-and-Play Tag-guided Method for Few-shot Semantic Entity Recognition on Visually-rich Documents
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 8, 6
 

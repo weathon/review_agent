@@ -1,5 +1,6 @@
 # RT-Trajectory: Robotic Task Generalization via Hindsight Trajectory Sketches
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8
 

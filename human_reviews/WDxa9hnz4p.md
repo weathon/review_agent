@@ -1,5 +1,6 @@
 # Auto-Demo Prompting: Leveraging Generated Outputs as Demonstrations for Enhanced Batch Prompting
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

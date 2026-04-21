@@ -1,5 +1,6 @@
 # Revisiting Source-Free Domain Adaptation: a New Perspective via Uncertainty Control
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5
 

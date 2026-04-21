@@ -1,5 +1,6 @@
 # Syntactic Representations Enable Interpretable Hierarchical Word Vectors
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

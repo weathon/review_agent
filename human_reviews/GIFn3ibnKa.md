@@ -1,5 +1,6 @@
 # Explore To Mimic: A Reinforcement Learning Based Agent To Generate Online Signatures
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 1, 5, 5
 

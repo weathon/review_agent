@@ -1,5 +1,6 @@
 # DiffBody: Human Body Restoration by Imagining with Generative Diffusion Prior
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

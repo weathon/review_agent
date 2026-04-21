@@ -1,5 +1,6 @@
 # MSLC: Monte Carlo Tree Search Sampling Guided Local Construction for Solving Large-Scale Traveling Salesman Problem
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

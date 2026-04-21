@@ -1,5 +1,6 @@
 # DeeDiff: Dynamic Uncertainty-Aware Early Exiting for Accelerating Diffusion Model Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

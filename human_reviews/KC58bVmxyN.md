@@ -1,5 +1,6 @@
 # A Cognitive Model for Learning Abstract Relational Structures from Memory-based Decision-Making Tasks
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 5
 

@@ -1,5 +1,6 @@
 # Unsupervised Learning via Network-Aware Embeddings
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 1
 

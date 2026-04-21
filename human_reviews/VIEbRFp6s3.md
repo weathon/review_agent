@@ -1,5 +1,6 @@
 # Off-the-Grid MARL: Datasets with Baselines for Offline Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 6
 

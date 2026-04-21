@@ -1,5 +1,6 @@
 # Towards Control-Centric Representations in Reinforcement Learning from Images
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 8, 3
 

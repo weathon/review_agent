@@ -1,5 +1,6 @@
 # Tracking the Change of Knowledge Through Layers in Neural Networks
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 6, 3
 
@@ -139,7 +140,8 @@ Section 3 begins with an arbitrary function $v: \mathbb{R}^n \rightarrow \mathbb
 This doesn't make sense in certain contexts e.g. binary data (MNIST) or tokenized data (e.g., language modeling)
 
 > Although there are $2^n$ different AND interactions, Ren et al. (2023b) have proven that under some common conditions1, most well-trained DNNs only encode a small number of AND interactions S ∈ Ωand salient with salient effects Iand(S|x) on the network output,
-subject to |Ωand salient|  2n
+subject to |Ωand salient| 
+ 2n
 
 While it may be the case that only a small fraction of the $2^n$ possible AND interactions are expressed, the theorem of Ren doesn't say that the non-zero sparse subset can be efficiently found. It could be that 10 out of 2^784 interactions in MNIST are expressed, but good luck finding them.
 

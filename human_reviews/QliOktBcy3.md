@@ -1,5 +1,6 @@
 # MPCache: MPC-Friendly KV Cache Eviction for Efficient Private LLM Inference
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 3, 6
 
@@ -80,7 +81,8 @@ Thanks for this contribution. I have 2 questions:
 
 Question 1: In Section 4.3, Hierarchical KV Cache Clustering, could you specify the number of levels (n) selected for clustering in your experiments? Additionally, Figure 6 would benefit from further explanation—could you expand on the section?
 
-Question 2: In Figure 8, I noticed a lower commonality score between layers 6 and 12. Could you explain what might cause this dip? Also, is there any observed performance degradation when applying the sharing strategy in these layers? Any insights into this effect would be helpful.
+Question 2:
+In Figure 8, I noticed a lower commonality score between layers 6 and 12. Could you explain what might cause this dip? Also, is there any observed performance degradation when applying the sharing strategy in these layers? Any insights into this effect would be helpful.
 
 ### Soundness
 3

@@ -1,5 +1,6 @@
 # Scalable Diffusion for Materials Generation
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 6
 

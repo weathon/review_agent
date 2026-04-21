@@ -1,5 +1,6 @@
 # Generalization for Least Squares Regression with Simple Spiked Covariances
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 5, 5, 3, 5
 

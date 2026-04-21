@@ -1,5 +1,6 @@
 # CodeCloak: A Method for Mitigating Code Leakage by LLM Code Assistants
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

@@ -1,5 +1,6 @@
 # Flow Matching for Posterior Inference with Simulator Feedback
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 6, 6, 3, 3, 3
 

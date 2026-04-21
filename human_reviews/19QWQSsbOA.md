@@ -1,5 +1,6 @@
 # Multi-scale Conditional Generative Modeling for Microscopic Image Restoration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

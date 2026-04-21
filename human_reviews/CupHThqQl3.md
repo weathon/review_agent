@@ -1,5 +1,6 @@
 # It's About Time: Temporal References in Emergent Communication
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 5, 6
 

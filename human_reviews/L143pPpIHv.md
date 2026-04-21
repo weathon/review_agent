@@ -1,5 +1,6 @@
 # CURIOSITY IS THE PATH TO OPTIMIZATION
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3
 

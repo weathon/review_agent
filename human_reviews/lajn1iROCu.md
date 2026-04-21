@@ -1,5 +1,6 @@
 # SRL: Scaling Distributed Reinforcement Learning to Over Ten Thousand Cores
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

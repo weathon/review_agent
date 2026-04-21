@@ -1,5 +1,6 @@
 # Everything is Editable: Extend Knowledge Editing to Unstructured Data in Large Language Models
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 3, 8
 

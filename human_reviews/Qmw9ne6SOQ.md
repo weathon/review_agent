@@ -1,5 +1,6 @@
 # Localizing and Editing Knowledge In Text-to-Image Generative Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 5
 

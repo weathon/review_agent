@@ -1,5 +1,6 @@
 # Consistent4D: Consistent 360° Dynamic Object Generation from Monocular Video
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 10, 6, 6, 6, 6
 

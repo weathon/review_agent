@@ -1,5 +1,6 @@
 # TopGQ: Post-Training Quantization for GNNs via Topology Based Node Grouping
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

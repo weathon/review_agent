@@ -1,5 +1,6 @@
 # Unifying Model-Based and Model-Free Reinforcement Learning with Equivalent Policy Sets
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

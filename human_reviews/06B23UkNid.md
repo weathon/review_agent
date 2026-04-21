@@ -1,5 +1,6 @@
 # MV-CLAM: Multi-View Molecular Interpretation with Cross-Modal Projection via Language Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

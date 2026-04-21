@@ -1,5 +1,6 @@
 # BarLeRIa: An Efficient Tuning Framework for Referring Image Segmentation
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

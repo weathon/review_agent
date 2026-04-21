@@ -1,5 +1,6 @@
 # Mastering Syntax, Unlocking Semantics: A Mathematically Provable Two-stage Learning Process in Transformers
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

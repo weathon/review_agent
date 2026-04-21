@@ -1,5 +1,6 @@
 # $\epsilon$-VAE: Denoising as Visual Decoding
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 5, 5, 8, 5, 8
 

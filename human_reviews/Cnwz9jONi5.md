@@ -1,5 +1,6 @@
 # Rethinking Reward Model Evaluation: Are We Barking up the Wrong Tree?
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 5, 8, 8, 8
 

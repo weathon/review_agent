@@ -1,5 +1,6 @@
 # FlashSampling: Fast and Memory-Efficient Exact Sampling with Group-Gumbel-Max
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

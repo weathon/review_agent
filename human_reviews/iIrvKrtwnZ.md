@@ -1,5 +1,6 @@
 # HuRi : Humanoid Robots Adaptive Risk-ware Distributional Reinforcement Learning for Robust Control
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 8, 5
 

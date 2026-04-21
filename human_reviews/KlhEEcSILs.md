@@ -1,5 +1,6 @@
 # Reducing distortions in Real World Image Super Resolution using Attention
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

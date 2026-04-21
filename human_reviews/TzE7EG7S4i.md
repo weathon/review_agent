@@ -1,5 +1,6 @@
 # High-Dimensional Geometric Streaming for Nearly Low Rank Data
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 8, 3
 

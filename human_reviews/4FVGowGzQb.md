@@ -1,5 +1,6 @@
 # Learning from negative feedback, or positive feedback or both
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 5, 8, 8
 

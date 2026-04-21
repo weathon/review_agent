@@ -1,5 +1,6 @@
 # Skill-Conditioned Policy Optimization with Successor Features Representations
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 8, 5
 

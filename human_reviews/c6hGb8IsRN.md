@@ -1,5 +1,6 @@
 # Fed-REACT: Federated Representation Learning for Heterogeneous Time Series Data
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

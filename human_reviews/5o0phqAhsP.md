@@ -1,5 +1,6 @@
 # Learning under Temporal Label Noise
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6
 
@@ -101,7 +102,8 @@ The paper proposes a model to incorporate varying noise rates for time-series cl
 3
 
 ### Summary
-The paper discusses the problem of learning from time series classification task, where the label noise can vary over time. Each instance is a sequence over T time steps, where at iteration $t$ we have access to the features at time $t$, and a noisy label $\tilde y_t$ obtained from the true label $y_t$. Each of this instance is i.i.d., and the assumption is that the true label $y_t$ at time $t$ only depends on the past features $x_{1:t}$, and the noisy labels are conditionally independent to the features given by the true labels. In particular, the authors assume there exists a noise mapping $Q_t$ that describes the noise process at time $t$. They propose a novel method to learn a classifier that maps sequences $x_{1:t}$ to a label $y$. This model simultaneously approximates the noisy mapping $Q_t$ (Eq 3), that is used to approximate the true labels, which are used during training
+The paper discusses the problem of learning from time series classification task, where the label noise can vary over time.
+Each instance is a sequence over T time steps, where at iteration $t$ we have access to the features at time $t$, and a noisy label $\tilde y_t$ obtained from the true label $y_t$. Each of this instance is i.i.d., and the assumption is that the true label $y_t$ at time $t$ only depends on the past features $x_{1:t}$, and the noisy labels are conditionally independent to the features given by the true labels. In particular, the authors assume there exists a noise mapping $Q_t$ that describes the noise process at time $t$. They propose a novel method to learn a classifier that maps sequences $x_{1:t}$ to a label $y$. This model simultaneously approximates the noisy mapping $Q_t$ (Eq 3), that is used to approximate the true labels, which are used during training
 
 ### Strengths
 Learning from time series data is an interesting problem. The paper addresses a challenging problem, where the label noise can change over time, and it is well-motivated. Overall, the introduction of the paper and the experimental sections are well-written and easy to follow. I found the use of the minimum-volume simplex assumption as an objective to solve the problem to be intriguing.
@@ -112,13 +114,19 @@ Learning from time series data is an interesting problem. The paper addresses a 
 - Appendix B looks dissociated to the main paper. First of all, three assumptions are introduced (they seems related to the 2 assumptions used in the main paper. In this case, why re-introduce them, and why do we use 3 assumptions rather than 2?). Most of the proofs are just a sequence of mathematical equations with text. Lines 810 to 840 are just a sequence of equations without text (maybe do a table?). The proof of Proposition 1 does not appear, which is only the theoretical result in the main paper (is Theorem 3 the proof of Proposition 1? Why does it have  different notation?).
 - Section G.2 is empty. Page 25 to 47 include a sequence of a lot of figure without almost no text. I recommend the authors to only include the figures that are used to “say” something, together with a text explaination.
 
- The technical section is also sometimes unclear.  
+
+The technical section is also sometimes unclear.
+
+
 
 Notations is sometimes unclear. What is q_t in line 140? According to the notation defined in the paper $\mathcal{X} \subseteq \mathbb{R}^{d \times T}$, but the function $h_{\theta}$ that has domain $\mathcal{X}$ can also have an input matrix $d \times t$. 
- 
+
+
 There is no comment on the assumptions 1 and 2 (except that they are two standard assumptions). I believe a few lines commenting on those assumptions would be helpful.
 
-In lines 259-261, why is the Frobenius norm a convex surrogate for the volume? (A citation is also probably needed).  
+In lines 259-261, why is the Frobenius norm a convex surrogate for the volume? (A citation is also probably needed).
+
+
 
 In Line 260, should $R_t$ be defined over $\tilde{y}$ rather than $y$?
 
@@ -127,11 +135,17 @@ In Line 260, should $R_t$ be defined over $\tilde{y}$ rather than $y$?
 ### Questions
 See also weakness.
 
-The model does not use the noisy label in the prediction (the predictor h_{\theta} only depends on x_{1:t}).  I believe it would be interesting to include the noisy label in the prediction of the true label (i.e., if the noisy label is always accurate, can we use it for prediction? I understand this is a slightly different setting, as the goal of the paper is to learn a predictor).   
+The model does not use the noisy label in the prediction (the predictor h_{\theta} only depends on x_{1:t}).  I believe it would be interesting to include the noisy label in the prediction of the true label (i.e., if the noisy label is always accurate, can we use it for prediction? I understand this is a slightly different setting, as the goal of the paper is to learn a predictor).
+
+
+
 
 The fact that we learn a noisy label structure Q_w(t) that is “continual” over time seems implicit in Eq. (3). However, it is not clear what the difference is between Eq(3) and the model discussed in “discontinuous estimation”. It seems to me that $t$ is an integer, and $Q_w(t)$ could be completely different than $Q_w(t+1)$ in principle (what is the temporal relationship discussed in line 274)
 
-It is a bit unclear how Section 2, in particular section 2.2, is related to the proposed method in Section 3. It seems to me, that the “loss of the classifier” is embedded in the constraint of Equation 2. Lines 233-234 says that Eq(2) minimizes the forward temporal loss as in Def 2, but this loss does not actually appear on Equation 2.   
+It is a bit unclear how Section 2, in particular section 2.2, is related to the proposed method in Section 3. It seems to me, that the “loss of the classifier” is embedded in the constraint of Equation 2. Lines 233-234 says that Eq(2) minimizes the forward temporal loss as in Def 2, but this loss does not actually appear on Equation 2.
+
+
+
 
 Typos: 277 continuuity
 

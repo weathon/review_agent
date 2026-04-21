@@ -1,5 +1,6 @@
 # Differentiable Optimization of Similarity Scores Between Models and Brains
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5
 

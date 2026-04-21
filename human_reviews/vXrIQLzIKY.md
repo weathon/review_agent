@@ -1,5 +1,6 @@
 # Xformer: Hybrid X-Shaped Transformer for Image Denoising
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 6
 

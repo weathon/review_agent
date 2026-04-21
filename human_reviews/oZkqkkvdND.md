@@ -1,5 +1,6 @@
 # Support is All You Need for Certified VAE Training
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6
 

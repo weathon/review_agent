@@ -1,5 +1,6 @@
 # CHG Shapley: Efficient Data Valuation and Selection towards Trustworthy Machine Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

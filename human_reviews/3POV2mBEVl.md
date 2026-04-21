@@ -1,5 +1,6 @@
 # Principal Component Analysis for Cross-Sectionally Correlated Pricing Errors
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

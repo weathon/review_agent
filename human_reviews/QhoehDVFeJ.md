@@ -1,5 +1,6 @@
 # Efficient Meshy Neural Fields for Animatable Human Avatars
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

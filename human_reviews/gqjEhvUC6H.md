@@ -1,5 +1,6 @@
 # Data De-Duplication and Semantic Enhancement for Contrastive Language-Image Pre-training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

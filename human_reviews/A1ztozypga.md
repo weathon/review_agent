@@ -1,5 +1,6 @@
 # Hymba: A Hybrid-head Architecture for Small Language Models
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

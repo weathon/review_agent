@@ -1,5 +1,6 @@
 # Polynomial Width is Sufficient for Set Representation with High-dimensional Features
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 5
 

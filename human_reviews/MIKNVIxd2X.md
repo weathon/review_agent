@@ -1,5 +1,6 @@
 # Sequential Indeterminate Probability Theory for Multivariate Time Series Forecasting
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 3
 

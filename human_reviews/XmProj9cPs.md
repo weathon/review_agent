@@ -1,5 +1,6 @@
 # Spider 2.0: Evaluating Language Models on Real-World Enterprise Text-to-SQL Workflows
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Sparkles: Unlocking Chats Across Multiple Images for Multimodal Instruction-Following Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

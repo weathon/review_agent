@@ -1,5 +1,6 @@
 # Multi-Level Contrastive Learning for Dense Prediction Task
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 3
 

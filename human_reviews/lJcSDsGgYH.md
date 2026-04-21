@@ -1,5 +1,6 @@
 # Large Language Model Confidence Estimation via Black-Box Access
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

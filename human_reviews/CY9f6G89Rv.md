@@ -1,5 +1,6 @@
 # High-dimensional Bayesian Optimization via Semi-supervised Learning with Optimized Unlabeled Data Sampling
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

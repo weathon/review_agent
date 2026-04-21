@@ -1,5 +1,6 @@
 # Dual RL: Unification and New Methods for Reinforcement and Imitation Learning
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 10, 6, 8, 6
 

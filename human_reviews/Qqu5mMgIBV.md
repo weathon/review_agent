@@ -1,5 +1,6 @@
 # Castor: Causal Temporal Regime Structure Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

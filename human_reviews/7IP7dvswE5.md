@@ -1,5 +1,6 @@
 # Rare-Mark-Aware Next Event Prediction In Marked Event Streams
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 6, 3
 

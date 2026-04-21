@@ -1,5 +1,6 @@
 # CARPRT: Class-Aware Prompt Reweighting for Pre-Trained Vision-Language Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

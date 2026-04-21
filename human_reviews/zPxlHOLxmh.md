@@ -1,5 +1,6 @@
 # From Counseling Transcript to Mind Map: Leveraging LLMs for Effective Summarization in Mental Health Counseling
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 1, 3
 

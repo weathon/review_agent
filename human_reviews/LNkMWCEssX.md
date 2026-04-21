@@ -1,5 +1,6 @@
 # Towards Domain Adaptive Neural Contextual Bandits
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Graph Generation with Destination-Predicting Diffusion Mixture
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 6, 8
 

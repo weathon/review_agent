@@ -1,5 +1,6 @@
 # xLSTM-Mixer: Multivariate Time Series Forecasting by Mixing via Scalar Memories
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 5, 3, 6
 

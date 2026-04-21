@@ -1,5 +1,6 @@
 # If Optimizing for general parameters in chemistry is useful, why is it hardly done?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

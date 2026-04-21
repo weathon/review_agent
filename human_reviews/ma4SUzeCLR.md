@@ -1,5 +1,6 @@
 # Detecting Problematic Questions to Support Math Word Problem Design
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

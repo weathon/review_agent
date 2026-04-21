@@ -1,5 +1,6 @@
 # OASIS Uncovers: High-Quality T2I Models, Same Old Stereotypes
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 8, 10, 6
 

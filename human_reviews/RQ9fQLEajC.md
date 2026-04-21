@@ -1,5 +1,6 @@
 # Routoo: Learning to Route to Large Language Models Effectively
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 3, 5
 

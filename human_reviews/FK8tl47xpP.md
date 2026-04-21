@@ -1,5 +1,6 @@
 # Greedy Learning to Optimize with Convergence Guarantees
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 6, 5, 6
 

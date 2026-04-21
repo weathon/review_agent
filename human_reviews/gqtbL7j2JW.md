@@ -1,5 +1,6 @@
 # You Only Submit One Image to Find the Most Suitable Generative Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

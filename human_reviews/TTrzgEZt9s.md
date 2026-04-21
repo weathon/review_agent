@@ -1,5 +1,6 @@
 # Distributionally Robust Optimization with Bias and Variance Reduction
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Markovian Transformers for Informative Language Modeling
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 10, 6, 6, 5
 

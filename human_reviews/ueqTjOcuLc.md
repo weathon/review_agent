@@ -1,5 +1,6 @@
 # Exploring Collaboration Mechanisms for LLM Agents: A Social Psychology View
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 8, 1
 

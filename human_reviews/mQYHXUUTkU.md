@@ -1,5 +1,6 @@
 # BrainSCUBA: Fine-Grained Natural Language Captions of Visual Cortex Selectivity
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

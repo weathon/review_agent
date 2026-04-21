@@ -1,5 +1,6 @@
 # Deep Generalized Prediction Set Classifier and Its Theoretical Guarantees
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5
 

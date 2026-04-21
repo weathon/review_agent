@@ -1,5 +1,6 @@
 # Cross-Modal Alignment via Variational Copula Modelling
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 6, 6
 

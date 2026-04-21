@@ -1,5 +1,6 @@
 # DOS: Dreaming Outlier Semantics for Out-of-distribution Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 3, 6
 

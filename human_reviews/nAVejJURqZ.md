@@ -1,5 +1,6 @@
 # TimeSuite: Improving MLLMs for Long Video Understanding via Grounded Tuning
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 6, 6
 

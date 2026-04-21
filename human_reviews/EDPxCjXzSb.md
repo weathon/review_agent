@@ -1,5 +1,6 @@
 # Vision-by-Language for Training-Free Compositional Image Retrieval
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 5, 6, 6
 

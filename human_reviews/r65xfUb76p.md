@@ -1,5 +1,6 @@
 # UniversalNER: Targeted Distillation from Large Language Models for Open Named Entity Recognition
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 3, 8
 

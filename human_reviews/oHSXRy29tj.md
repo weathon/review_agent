@@ -1,5 +1,6 @@
 # Hierarchical overlapping clustering: cost function, algorithm and scalability
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 5, 6, 3, 6
 

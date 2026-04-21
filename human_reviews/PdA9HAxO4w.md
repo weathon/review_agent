@@ -1,5 +1,6 @@
 # One Perturbation is Enough: On Generating Universal Adversarial Perturbations against Vision-Language Pre-training Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

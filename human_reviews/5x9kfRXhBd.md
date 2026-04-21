@@ -1,5 +1,6 @@
 # Spatial-temporal Graph Attention Network for Forex Forecasting with Hierarchical Transformer
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 1, 3, 3
 

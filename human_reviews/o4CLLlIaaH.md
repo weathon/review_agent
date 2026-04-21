@@ -1,5 +1,6 @@
 # Learning Robust Generalizable Radiance Field with Visibility and Feature Augmented Point Representation
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

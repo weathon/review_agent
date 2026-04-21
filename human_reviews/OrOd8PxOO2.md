@@ -1,5 +1,6 @@
 # Universal Humanoid Motion Representations for Physics-Based Control
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8
 

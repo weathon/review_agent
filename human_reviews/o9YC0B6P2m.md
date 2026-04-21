@@ -1,5 +1,6 @@
 # Scaling Law with Learning Rate Annealing
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # Corgi$^2$: A Hybrid Offline-Online Approach To Storage-Aware Data Shuffling For SGD
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

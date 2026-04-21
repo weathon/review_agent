@@ -1,5 +1,6 @@
 # MaRS: A Fast Sampler for Mean Reverting Diffusion based on ODE and SDE Solvers
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

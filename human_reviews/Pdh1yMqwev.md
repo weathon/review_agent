@@ -1,5 +1,6 @@
 # Adaptive Priors from Learning Trajectories for Function-Space Bayesian Neural Networks
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 5, 5, 1, 3
 

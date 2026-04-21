@@ -1,5 +1,6 @@
 # GPT-Driver: Learning to Drive with GPT
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

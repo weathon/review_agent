@@ -1,5 +1,6 @@
 # Convex and Bilevel Optimization for Neuro-Symbolic Inference and Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 

@@ -1,5 +1,6 @@
 # Distribution Shift-Aware Prediction Refinement for Test-Time Adaptation
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

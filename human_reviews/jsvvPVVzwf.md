@@ -1,5 +1,6 @@
 # What Makes a Good Prune? Maximal Unstructured Pruning for Maximal Cosine Similarity
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 1, 8, 5
 

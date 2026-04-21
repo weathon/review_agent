@@ -1,5 +1,6 @@
 # Reweighted Solutions for Weighted Low Rank Approximation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

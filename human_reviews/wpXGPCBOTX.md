@@ -1,5 +1,6 @@
 # Sparsistency for inverse optimal transport
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 6
 

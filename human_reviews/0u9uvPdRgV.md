@@ -1,5 +1,6 @@
 # Semi-supervised Diffusion Solver for Travelling Salesman Problem
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

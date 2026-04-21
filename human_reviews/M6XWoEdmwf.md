@@ -1,5 +1,6 @@
 # AMAGO: Scalable In-Context Reinforcement Learning for Adaptive Agents
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

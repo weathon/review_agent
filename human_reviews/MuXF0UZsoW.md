@@ -1,5 +1,6 @@
 # Optimizing Detection Techniques for High-Precision Icon Recognition in Sparse Feature Spaces
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1, 3
 

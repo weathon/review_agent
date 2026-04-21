@@ -1,5 +1,6 @@
 # Towards Effective Discrimination Testing for Generative AI
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 5, 3
 

@@ -1,5 +1,6 @@
 # Towards the Characterization of Representations Learned via Capsule-based Network Architectures
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

@@ -1,5 +1,6 @@
 # NatureLM-audio: an Audio-Language Foundation Model for Bioacoustics
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 3, 5, 8
 

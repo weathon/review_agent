@@ -1,5 +1,6 @@
 # Kernelised Normalising Flows
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 8
 

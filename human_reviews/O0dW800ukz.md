@@ -1,5 +1,6 @@
 # Multimodal Distillation of Protein Sequence, Structure, and Function
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

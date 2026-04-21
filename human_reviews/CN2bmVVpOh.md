@@ -1,5 +1,6 @@
 # Transformer Mechanisms Mimic Frontostriatal Gating Operations When Trained on Human Working Memory Tasks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

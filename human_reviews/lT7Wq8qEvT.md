@@ -1,5 +1,6 @@
 # Distributionally Robust Surface Reconstruction from Sparse Point Clouds
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 5, 5
 

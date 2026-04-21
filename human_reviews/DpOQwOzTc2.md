@@ -1,5 +1,6 @@
 # Combining Denoised Neural Network and Genetic Symbolic Regression for Memory Behavior Modeling via Dynamic Asynchronous Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Vector Quantization By Distribution Matching
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 5, 6
 

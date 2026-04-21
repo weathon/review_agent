@@ -1,5 +1,6 @@
 # Who’s Harry Potter? Approximate Unlearning for LLMs
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 8
 

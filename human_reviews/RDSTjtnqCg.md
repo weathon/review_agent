@@ -1,5 +1,6 @@
 # Scaling for Training Time and Post-hoc Out-of-distribution Detection Enhancement
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # A Time Series is Worth Five Experts: Heterogeneous Mixture of Experts for Traffic Flow Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # A Generic Class-agnostic Object Counting Network with Adaptive Offset Deformable Convolution
 
+- Avg Score: 4.83
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 3, 5, 5
 

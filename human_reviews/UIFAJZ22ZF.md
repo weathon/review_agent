@@ -1,5 +1,6 @@
 # The 3D-PC: a benchmark for visual perspective taking in humans and machines
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

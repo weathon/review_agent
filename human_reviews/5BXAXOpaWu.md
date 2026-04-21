@@ -1,5 +1,6 @@
 # Image2Sentence based Asymmetrical Zero-shot Composed Image Retrieval
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

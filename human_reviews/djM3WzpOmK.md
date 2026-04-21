@@ -1,5 +1,6 @@
 # Neural Snowflakes: Universal Latent Graph Inference via Trainable Latent Geometries
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 8
 

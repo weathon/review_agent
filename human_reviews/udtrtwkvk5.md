@@ -1,5 +1,6 @@
 # Subspace Optimiztion for Large Language Models with Convergence Guarantees
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

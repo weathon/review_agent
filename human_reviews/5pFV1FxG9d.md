@@ -1,5 +1,6 @@
 # Improving Discrete Optimisation Via Decoupled Straight-Through Gumbel-Softmax
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

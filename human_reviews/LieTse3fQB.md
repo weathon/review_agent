@@ -1,5 +1,6 @@
 # GaussianFocus: Constrained Attention Focus for 3D Gaussian Splatting
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

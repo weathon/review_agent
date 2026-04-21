@@ -1,5 +1,6 @@
 # Data augmentation guided Decouple Knowledge Distillation for low-resolution fine-grained image classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

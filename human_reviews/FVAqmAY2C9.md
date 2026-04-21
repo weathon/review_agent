@@ -1,5 +1,6 @@
 # Towards Faster and Stronger Deep Earth Mover's Distance for Few-Shot Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Provable Causal State Representation under Asynchronous Diffusion Model for POMDPs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 5, 8
 

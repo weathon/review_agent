@@ -1,5 +1,6 @@
 # Unleashing the Power of Annotation: Enhancing Semi-Supervised Learning through Unsupervised Sample Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

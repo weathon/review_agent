@@ -1,5 +1,6 @@
 # Dual Diffusion Model for One-Shot High-Fidelity Talking Head Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

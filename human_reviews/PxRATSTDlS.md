@@ -1,5 +1,6 @@
 # Predicting the Energy Landscape of Stochastic Dynamical System via  Physics-informed Self-supervised Learning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

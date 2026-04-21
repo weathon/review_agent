@@ -1,5 +1,6 @@
 # AutoScale: Automatic Prediction of Compute-optimal Data Compositions for Training LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 8, 6
 

@@ -1,5 +1,6 @@
 # Meta-learning Representations for Learning from Multiple Annotators
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

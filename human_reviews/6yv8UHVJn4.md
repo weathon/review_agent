@@ -1,5 +1,6 @@
 # Towards Optimal Regret in Adversarial Linear MDPs with Bandit Feedback
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

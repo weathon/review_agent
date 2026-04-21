@@ -1,5 +1,6 @@
 # SynHING: Synthetic Heterogeneous Information Network Generation for Graph Learning and Explanation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

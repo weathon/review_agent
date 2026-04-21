@@ -1,5 +1,6 @@
 # Exploring Complex Trade-offs in Information Bottleneck through Multi-Objective Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 1, 3, 5, 5
 

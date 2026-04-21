@@ -1,5 +1,6 @@
 # Adapting Large Language Models for Content Moderation: Pitfalls in Data Engineering and Supervised Fine-tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

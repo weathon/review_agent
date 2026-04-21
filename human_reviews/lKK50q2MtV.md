@@ -1,5 +1,6 @@
 # TokenFlow: Consistent Diffusion Features for Consistent Video Editing
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # IDEAL: Influence-Driven Selective Annotations Empower In-Context Learners in Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 3, 5, 8
 

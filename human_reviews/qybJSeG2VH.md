@@ -1,5 +1,6 @@
 # Achieving Minimax Optimal Sample Complexity of Offline Reinforcement Learning: A DRO-Based Approach
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

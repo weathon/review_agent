@@ -1,5 +1,6 @@
 # Can Agent Learn Robust Locomotion Skills without Modeling Environmental Observation Noise?
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 3, 8
 

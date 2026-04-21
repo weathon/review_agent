@@ -1,5 +1,6 @@
 # Calibrating Video Watch-time Predictions with Credible Prototype Alignment
 
+- Avg Score: 6.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 8, 5
 

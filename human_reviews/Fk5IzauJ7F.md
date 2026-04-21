@@ -1,5 +1,6 @@
 # Candidate Label Set Pruning: A Data-centric Perspective for Deep Partial-label Learning
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

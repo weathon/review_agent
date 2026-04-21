@@ -1,5 +1,6 @@
 # DomainFusion: Generalizing To Unseen Domains with Latent Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # Dense Representation Learning for a Joint-Embedding Predictive Architecture
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # Learning Disease Progression Models That Capture Health Disparities
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Sentiment-Enhanced Stock Price Prediction: A Novel Ensemble Model Approach
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

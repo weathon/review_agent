@@ -1,5 +1,6 @@
 # Gradient Inversion Transcript: A Generative Model to Reconstruct Training Data by Gradient Leakage
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

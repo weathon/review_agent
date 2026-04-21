@@ -1,5 +1,6 @@
 # Accelerating Error Correction Code Transformers
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 3, 8, 8, 5, 6, 6
 

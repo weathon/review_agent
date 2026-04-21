@@ -1,5 +1,6 @@
 # ShadowKV: KV Cache in Shadows for High-Throughput Long-Context LLM Inference
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 5, 6, 8
 

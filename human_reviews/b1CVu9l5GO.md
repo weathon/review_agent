@@ -1,5 +1,6 @@
 # TraceVLA: Visual Trace Prompting Enhances Spatial-Temporal Awareness for Generalist Robotic Policies
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

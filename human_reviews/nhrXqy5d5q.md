@@ -1,5 +1,6 @@
 # KinFormer: Generalizable Dynamical Symbolic Regression for Catalytic Organic Reaction Kinetics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 3, 8, 5, 8
 

@@ -1,5 +1,6 @@
 # FasterCache: Training-Free Video Diffusion Model Acceleration with High Quality
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 5
 

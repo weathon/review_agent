@@ -1,5 +1,6 @@
 # Enhancing Group Fairness in Online Settings Using Oblique Decision Forests
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 5, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # DiffSplat: Repurposing Image Diffusion Models for Scalable Gaussian Splat Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

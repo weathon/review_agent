@@ -1,5 +1,6 @@
 # LIFe-GoM: Generalizable Human Rendering with Learned Iterative Feedback Over Multi-Resolution Gaussians-on-Mesh
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

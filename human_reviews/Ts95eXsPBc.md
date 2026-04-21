@@ -1,5 +1,6 @@
 # Spatially-Aware Transformers for Embodied Agents
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 8
 

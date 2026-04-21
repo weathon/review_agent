@@ -1,5 +1,6 @@
 # Dream to Adapt: Meta Reinforcement Learning by Latent Context Imagination and MDP Imagination
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

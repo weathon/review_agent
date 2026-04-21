@@ -1,5 +1,6 @@
 # Efficient Continuous Video Flow Model for Video Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # The Utility and Complexity of In- and Out-of-Distribution Machine Unlearning
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6, 8
 

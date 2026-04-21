@@ -1,5 +1,6 @@
 # MAGNet: Motif-Agnostic Generation of Molecules from Scaffolds
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 5, 8, 8, 8
 

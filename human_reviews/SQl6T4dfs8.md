@@ -1,5 +1,6 @@
 # Koopman Universal Neural Dynamic Operator: Achieving Fully Explicit Expression Identification for Nonlinear Dynamical Systems
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 1
 

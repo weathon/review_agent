@@ -1,5 +1,6 @@
 # Mixture of Attentions For Speculative Decoding
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Personalized Federated Learning With Similarity Information Supervisor
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 3
 

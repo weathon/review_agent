@@ -1,5 +1,6 @@
 # Understanding the Generalization of In-Context Learning in Transformers: An Empirical Study
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

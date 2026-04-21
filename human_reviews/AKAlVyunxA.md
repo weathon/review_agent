@@ -1,5 +1,6 @@
 # SHINE: Shielding Backdoors in Deep Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

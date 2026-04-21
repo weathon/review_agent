@@ -1,5 +1,6 @@
 # AutoCast++: Enhancing World Event Prediction with Zero-shot Ranking-based Context Retrieval
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 3, 8
 

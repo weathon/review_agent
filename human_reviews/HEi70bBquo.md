@@ -1,5 +1,6 @@
 # Signal Dynamics in Diffusion Models: Enhancing Text-to-Image Alignment through Step Selection
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

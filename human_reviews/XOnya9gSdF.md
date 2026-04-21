@@ -1,5 +1,6 @@
 # Consistent algorithms for multi-label classification with macro-at-$k$ metrics
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # FairDropout: Using Example-Tied Dropout to Enhance Generalization for Minority Groups
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

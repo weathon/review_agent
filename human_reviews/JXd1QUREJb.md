@@ -1,5 +1,6 @@
 # Complete and Lipschitz continuous invariants of graphs under geometric isomorphism in R^n
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 3, 8, 1, 6
 

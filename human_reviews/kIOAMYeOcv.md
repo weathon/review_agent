@@ -1,5 +1,6 @@
 # Improving Visual Grounding with Pixel-Word Correlation and Cross-layer Regularization
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

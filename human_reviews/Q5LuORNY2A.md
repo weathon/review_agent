@@ -1,5 +1,6 @@
 # Implicit NNs are Almost Equivalent to Not-so-deep Explicit NNs for High-dimensional Gaussian Mixtures
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 3, 5
 

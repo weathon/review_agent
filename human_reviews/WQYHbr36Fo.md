@@ -1,5 +1,6 @@
 # Mind Your Augmentation: The Key to Decoupling Dense Self-Supervised Learning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

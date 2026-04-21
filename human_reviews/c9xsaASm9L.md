@@ -1,5 +1,6 @@
 # Enhancing Neural Training via a Correlated Dynamics Model
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 10, 5, 3, 8
 

@@ -1,5 +1,6 @@
 # Monte Carlo guided Denoising Diffusion models for Bayesian linear inverse problems.
 
+- Avg Score: 8.50
 - Decision: Accept (oral)
 - Scores: 6, 10, 8, 10
 

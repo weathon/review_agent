@@ -1,5 +1,6 @@
 # Gradient Descent Provably Solves Nonlinear Tomographic Reconstruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 3, 6
 

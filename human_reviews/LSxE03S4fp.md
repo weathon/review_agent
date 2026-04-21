@@ -1,5 +1,6 @@
 # Learn to Achieve Out-of-the-Box Imitation Ability from Only One Demonstration
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

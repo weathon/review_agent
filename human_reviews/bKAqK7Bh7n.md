@@ -1,5 +1,6 @@
 # MF-LAL: Drug Compound Generation Using Multi-Fidelity Latent Space Active Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 3, 8, 5, 5
 

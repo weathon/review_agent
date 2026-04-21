@@ -1,5 +1,6 @@
 # DRESSing Up LLM: Efficient Stylized Question-Answering via Style Subspace Editing
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6
 

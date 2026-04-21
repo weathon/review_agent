@@ -1,5 +1,6 @@
 # Preserving Deep Representations in One-Shot Pruning: A Hessian-Free Second-Order Optimization Framework
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5, 8
 

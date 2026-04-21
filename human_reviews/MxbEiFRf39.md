@@ -1,5 +1,6 @@
 # NNsight and NDIF: Democratizing Access to Open-Weight Foundation Model Internals
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

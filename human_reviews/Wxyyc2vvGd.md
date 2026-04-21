@@ -1,5 +1,6 @@
 # CL-Calib: Enhancing Post-training Quantization Calibration through Contrastive Learning
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5
 

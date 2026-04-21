@@ -1,5 +1,6 @@
 # An Effective Theory of Bias Amplification
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

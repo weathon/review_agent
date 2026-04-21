@@ -1,5 +1,6 @@
 # KAAN: Kolmogorov-Arnold Activation Network --- a Flexible Activation Enhanced KAN
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

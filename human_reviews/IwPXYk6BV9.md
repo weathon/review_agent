@@ -1,5 +1,6 @@
 # Enhancing Learning with Label Differential Privacy by Vector Approximation
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

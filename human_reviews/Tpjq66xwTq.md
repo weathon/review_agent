@@ -1,5 +1,6 @@
 # Real-time design of architectural structures with differentiable mechanics and neural networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

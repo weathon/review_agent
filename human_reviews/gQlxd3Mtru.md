@@ -1,5 +1,6 @@
 # Learning stochastic dynamics from snapshots through regularized unbalanced optimal transport
 
+- Avg Score: 8.67
 - Decision: Accept (Oral)
 - Scores: 8, 8, 10
 

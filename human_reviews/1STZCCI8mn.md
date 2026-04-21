@@ -1,5 +1,6 @@
 # CNS-Bench: Benchmarking Model Robustness Under Continuous Nuisance Shifts
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6, 6
 

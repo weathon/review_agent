@@ -1,5 +1,6 @@
 # Rethinking Data Selection at Scale: Random Selection is Almost All You Need
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 6
 

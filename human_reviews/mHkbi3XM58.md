@@ -1,5 +1,6 @@
 # Conditional density estimation for video prediction with score-based models
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 1, 1, 5, 6
 

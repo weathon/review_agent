@@ -1,5 +1,6 @@
 # Online Reward-Weighted Fine-Tuning of Flow Matching with Wasserstein Regularization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

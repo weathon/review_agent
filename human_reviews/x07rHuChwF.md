@@ -1,5 +1,6 @@
 # Euclid: Supercharging Multimodal LLMs with Synthetic High-Fidelity Visual Descriptions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

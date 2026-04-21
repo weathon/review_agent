@@ -1,5 +1,6 @@
 # Assessing Large Language Models on Climate Information
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

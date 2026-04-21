@@ -1,5 +1,6 @@
 # A CLIP-Powered Framework for Robust and Generalizable Data Selection
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

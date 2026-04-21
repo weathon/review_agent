@@ -1,5 +1,6 @@
 # Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

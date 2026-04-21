@@ -1,5 +1,6 @@
 # Data Shapley in One Training Run
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 10
 

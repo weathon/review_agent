@@ -1,5 +1,6 @@
 # FLASK: Fine-grained Language Model Evaluation based on Alignment Skill Sets
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

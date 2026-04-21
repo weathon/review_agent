@@ -1,5 +1,6 @@
 # ClipGrader: Leveraging Vision-Language Models for Robust Label Quality Assessment in Object Detection
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 3, 6, 3, 6
 

@@ -1,5 +1,6 @@
 # Dual-level Prototypes Guidance for Single-frame Temporal Action Localization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

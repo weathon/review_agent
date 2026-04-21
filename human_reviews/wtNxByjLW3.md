@@ -1,5 +1,6 @@
 # Identify Dominators: The Key To Improve Large-Scale Maximum Inner Product Search
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 1, 6, 5, 6
 

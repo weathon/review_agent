@@ -1,5 +1,6 @@
 # Fantastic Gains and Where to Find Them: On the Existence and Prospect of General Knowledge Transfer between Any Pretrained Model
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 5
 

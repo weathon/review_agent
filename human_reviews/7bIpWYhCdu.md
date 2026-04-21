@@ -1,5 +1,6 @@
 # FILI: Syntax Repair By Learning From Own Mistakes
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

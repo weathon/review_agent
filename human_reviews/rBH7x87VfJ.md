@@ -1,5 +1,6 @@
 # Random Sparse Lifts: Construction, Analysis and Convergence of finite sparse networks
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 5, 8
 

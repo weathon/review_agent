@@ -1,5 +1,6 @@
 # Moral High Ground: A text-based games benchmark for moral evaluation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 5, 1
 

@@ -1,5 +1,6 @@
 # Variance-aware Regret Bounds for Stochastic Contextual Dueling Bandits
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 8
 

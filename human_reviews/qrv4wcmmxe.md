@@ -1,5 +1,6 @@
 # Zero-shot Human-Object Interaction Detection via Conditional Multi-Modal Prompts
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 8, 5
 

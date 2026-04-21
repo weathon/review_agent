@@ -1,5 +1,6 @@
 # Graph-Supported Dynamic Algorithm Configuration for Multi-Objective Combinatorial Optimization
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

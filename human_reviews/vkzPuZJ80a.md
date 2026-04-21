@@ -1,5 +1,6 @@
 # Accelerating Retrieval-augmented Language Model Serving with Speculation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

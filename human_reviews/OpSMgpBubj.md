@@ -1,5 +1,6 @@
 # Adapting CLIP for DETR-based Object Detection
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 8
 

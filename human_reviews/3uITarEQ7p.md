@@ -1,5 +1,6 @@
 # Differentially Private Model Compression via Selective Pretraining
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 5, 3
 

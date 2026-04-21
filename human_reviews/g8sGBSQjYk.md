@@ -1,5 +1,6 @@
 # On the Parameterization of Second-Order Optimization Effective towards the Infinite Width
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Individual Fairness as an Extension of Group Fairness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

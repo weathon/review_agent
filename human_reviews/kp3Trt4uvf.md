@@ -1,5 +1,6 @@
 # AuToMATo: An Out-Of-The-Box Persistence-Based Clustering Algorithm
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

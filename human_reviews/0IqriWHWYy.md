@@ -1,5 +1,6 @@
 # Watch Out!! Your Confidence Might be a Reason for Vulnerability
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

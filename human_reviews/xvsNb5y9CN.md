@@ -1,5 +1,6 @@
 # Sample-Imagined Generator: Efficient Virtual Sample Generation Method for Off-policy Reinforcement Learning with Sparse Rewards
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

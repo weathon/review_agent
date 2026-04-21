@@ -1,5 +1,6 @@
 # A Framework for Finding Local Saddle Points in Two-Player Zero-Sum Black-Box Games
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

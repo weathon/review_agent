@@ -1,5 +1,6 @@
 # CBQ: Cross-Block Quantization for Large Language Models
 
+- Avg Score: 7.60
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 8, 10, 8
 

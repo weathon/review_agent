@@ -1,5 +1,6 @@
 # Counting Graph Substructures with Graph Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

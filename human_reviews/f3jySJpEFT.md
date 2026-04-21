@@ -1,5 +1,6 @@
 # Lasso Bandit with Compatibility Condition on Optimal Arm
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8
 

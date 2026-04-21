@@ -1,5 +1,6 @@
 # Zero-shot Concept Bottleneck Models via Sparse Regression of Retrieved Concepts
 
+- Avg Score: 4.83
 - Decision: Reject
 - Scores: 5, 3, 5, 5, 6, 5
 

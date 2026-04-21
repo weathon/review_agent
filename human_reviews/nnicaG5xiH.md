@@ -1,5 +1,6 @@
 # Interpretable Meta-Learning of Physical Systems
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 8
 

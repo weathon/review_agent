@@ -1,5 +1,6 @@
 # On Expert Estimation in Hierarchical Mixture of Experts: Beyond Softmax Gating Functions
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

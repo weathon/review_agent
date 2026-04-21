@@ -1,5 +1,6 @@
 # OpenRCA: Can Large Language Models Locate the Root Cause of Software Failures?
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 8
 

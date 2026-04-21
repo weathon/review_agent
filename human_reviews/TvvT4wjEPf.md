@@ -1,5 +1,6 @@
 # Towards Practical Large-Scale Privacy-Preserving Recurrent Neural Networks
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

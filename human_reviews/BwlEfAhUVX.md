@@ -1,5 +1,6 @@
 # SEED-X: Multimodal Models in Real World
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 3
 

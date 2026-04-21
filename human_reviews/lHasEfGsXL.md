@@ -1,5 +1,6 @@
 # LightHGNN: Distilling Hypergraph Neural Networks into MLPs for 100x Faster Inference
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

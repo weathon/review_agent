@@ -1,5 +1,6 @@
 # Overcoming Missing Label Vocabulary in Black-Box Discrete Prompt Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

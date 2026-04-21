@@ -1,5 +1,6 @@
 # Knowledge Distillation with Perturbed Loss: From a Vanilla Teacher to a Proxy Teacher
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

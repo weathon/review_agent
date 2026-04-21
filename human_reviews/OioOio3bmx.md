@@ -1,5 +1,6 @@
 # k-Odd One Clear (k-OOC), a novel GPU kernel that improves quantization accuracy and speed of GPTQ algorithm
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

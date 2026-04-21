@@ -1,5 +1,6 @@
 # YoooP: You Only Optimize One Prototype per Class for Non-Exemplar Incremental Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

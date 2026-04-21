@@ -1,5 +1,6 @@
 # Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 6
 

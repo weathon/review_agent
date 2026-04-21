@@ -1,5 +1,6 @@
 # Multi-fidelity Deep Symbolic Optimization
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 5, 8, 5, 3
 

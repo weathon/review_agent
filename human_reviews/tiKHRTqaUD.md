@@ -1,5 +1,6 @@
 # Handling Cost and Constraints with Off-Policy Deep Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

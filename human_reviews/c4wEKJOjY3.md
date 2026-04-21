@@ -1,5 +1,6 @@
 # Out-of-distribution Generalization for Total Variation based Invariant Risk Minimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 3, 6, 5, 6
 

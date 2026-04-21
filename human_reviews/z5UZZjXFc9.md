@@ -1,5 +1,6 @@
 # Rethinking Fairness Representation in Multi-Task Learning: a Performance-Informed Variance Reduction Approach
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 6
 

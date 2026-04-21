@@ -1,5 +1,6 @@
 # Reaction Graph: Toward Modeling Chemical Reactions  with 3D Molecular Structures
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 3, 8, 6, 5, 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Indirect Gradient Matching for Adversarial Robust Distillation
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

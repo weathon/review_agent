@@ -1,5 +1,6 @@
 # Learning from Integral Losses in Physics Informed Neural Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

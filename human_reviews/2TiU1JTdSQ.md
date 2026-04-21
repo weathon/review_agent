@@ -1,5 +1,6 @@
 # Selective LoRA for Domain-Aligned Dataset Generation in Urban-Scene Segmentation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # How do agents invest strategically under persistent improvement?
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 5
 

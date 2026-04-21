@@ -1,5 +1,6 @@
 # H2O-SDF: Two-phase Learning for 3D Indoor Reconstruction using Object Surface Fields
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 6
 

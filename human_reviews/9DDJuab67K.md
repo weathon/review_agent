@@ -1,5 +1,6 @@
 # Unimodal-driven Distillation in Multimodal Emotion Recognition with Dynamic Fusion
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5, 3
 

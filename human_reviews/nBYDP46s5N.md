@@ -1,5 +1,6 @@
 # Policy Gradient without Boostrapping via Truncated Value Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Imbalanced data robust online continual learning based on evolving class aware memory selection and built-in contrastive representation learning
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

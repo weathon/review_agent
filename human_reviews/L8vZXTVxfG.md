@@ -1,5 +1,6 @@
 # Towards Fine-tuning-free Few-shot Classification: A Purely Self-supervised Manner
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 
@@ -160,7 +161,8 @@ As mentioned in the paper, the proposed approach is a fine-tuning free approach,
 2. The performance boost doesn’t look substantial on 1-shot setting, also 5-shot evaluation seems to be missing that could help the readers evaluate the efficacy of the approach.
 
 
-3. An ablation on the backbone of the model used (resnet18, conv4), how does this translate to the proposed VQVAE architecture. What are the number of parameters used in the VQVAE approach compared to other baseline, are the number comparable? Keeping the comparable number of parameters for the backbone and same input image resolution size could provide a clearer picture to the readers. 
+3. An ablation on the backbone of the model used (resnet18, conv4), how does this translate to the proposed VQVAE architecture. What are the number of parameters used in the VQVAE approach compared to other baseline, are the number comparable? Keeping the comparable number of parameters for the backbone and same input image resolution size could provide a clearer picture to the readers.
+
 
 
 Some minor typos/suggestion:

@@ -1,5 +1,6 @@
 # Enhancing Airside Monitoring: Multi-view Approach for Accurate Aircraft Distance-To-Touchdown Estimation in Digital Towers
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 3, 1
 

@@ -1,5 +1,6 @@
 # The Renaissance of Classic Feature Aggregations for Visual Place Recognition in the Era of Foundation Models
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Pairwise Elimination with Instance-Dependent Guarantees for Bandits with Cost Subsidy
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

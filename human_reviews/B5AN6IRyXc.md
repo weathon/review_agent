@@ -1,5 +1,6 @@
 # MMG-VL: A Vision-Language Driven Approach for Multi-Person Motion Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5, 3
 

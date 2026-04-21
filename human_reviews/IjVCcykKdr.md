@@ -1,5 +1,6 @@
 # RetriBooru: Leakage-Free Retrieval of Conditions from Reference Images for Subject-Driven Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

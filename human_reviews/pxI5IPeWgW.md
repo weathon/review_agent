@@ -1,5 +1,6 @@
 # ODE Discovery for Longitudinal Heterogeneous Treatment Effects Inference
 
+- Avg Score: 6.80
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 5, 8, 8
 

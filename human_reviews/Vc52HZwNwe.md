@@ -1,5 +1,6 @@
 # Gradient-free Proxy for Efficient Language Model Search
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 5, 3
 

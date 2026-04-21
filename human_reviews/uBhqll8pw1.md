@@ -1,5 +1,6 @@
 # On Inherent 3D Reasoning of VLMs in Indoor Scene Layout Design
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

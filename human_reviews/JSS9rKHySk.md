@@ -1,5 +1,6 @@
 # On the Role of General Function Approximation in Offline Reinforcement Learning
 
+- Avg Score: 6.80
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 6, 6
 

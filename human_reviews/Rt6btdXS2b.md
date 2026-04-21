@@ -1,5 +1,6 @@
 # Continuous Indeterminate Probability Neural Network
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 8, 3
 

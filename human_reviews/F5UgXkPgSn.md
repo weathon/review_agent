@@ -1,5 +1,6 @@
 # Fusion over the Grassmannian for High-Rank Matrix Completion
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

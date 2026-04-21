@@ -1,5 +1,6 @@
 # Thermodynamic Natural Gradient Descent
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 3
 

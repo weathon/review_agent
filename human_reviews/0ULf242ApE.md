@@ -1,5 +1,6 @@
 # From Context to Concept: Concept Encoding in In-Context Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 6, 5
 

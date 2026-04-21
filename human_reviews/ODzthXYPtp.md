@@ -1,5 +1,6 @@
 # Clustering on Skewed Cost Distributions
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 8, 5, 5, 5
 

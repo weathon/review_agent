@@ -1,5 +1,6 @@
 # The mechanistic basis of data dependence and abrupt learning in an in-context classification task
 
+- Avg Score: 9.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 10, 10
 

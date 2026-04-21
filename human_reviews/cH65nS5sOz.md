@@ -1,5 +1,6 @@
 # Subgraph Federated Learning for Local Generalization
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 10, 6, 8, 6, 8
 

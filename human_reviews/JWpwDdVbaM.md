@@ -1,5 +1,6 @@
 # ARM: Refining Multivariate Forecasting with Adaptive Temporal-Contextual Learning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

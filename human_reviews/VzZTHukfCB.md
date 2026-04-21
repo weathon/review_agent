@@ -1,5 +1,6 @@
 # SeaS: Few-shot Industrial Anomaly Image Generation with Separation and Sharing Fine-tuning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 5, 8
 

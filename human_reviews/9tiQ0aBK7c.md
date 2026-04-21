@@ -1,5 +1,6 @@
 # TopoSD: Topology-Enhanced Lane Segment Perception with SDMap prior
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 6
 

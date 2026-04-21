@@ -1,5 +1,6 @@
 # G2D2: Gradient-guided Discrete Diffusion for image inverse problem solving
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

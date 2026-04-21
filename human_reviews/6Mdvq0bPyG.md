@@ -1,5 +1,6 @@
 # EfficientQAT: Efficient Quantization-Aware Training for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

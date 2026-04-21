@@ -1,5 +1,6 @@
 # Beyond Surface Structure: A Causal Assessment of LLMs' Comprehension ability
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

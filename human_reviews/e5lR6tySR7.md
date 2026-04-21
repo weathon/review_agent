@@ -1,5 +1,6 @@
 # Transformer-Based Large Language Models Are Not General Learners: A Universal Circuit Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 6, 1
 

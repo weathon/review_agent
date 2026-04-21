@@ -1,5 +1,6 @@
 # Imprecise Label Learning: A Unified Framework for Learning with Various Imprecise Label Configurations
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

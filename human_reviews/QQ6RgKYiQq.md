@@ -1,5 +1,6 @@
 # MovingParts: Motion-based 3D Part Discovery in Dynamic Radiance Field
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

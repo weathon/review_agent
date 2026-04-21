@@ -1,5 +1,6 @@
 # Quo Vadis, Motion Generation? From Large Language Models to Large Motion Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 6, 6, 8
 

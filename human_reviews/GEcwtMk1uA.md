@@ -1,5 +1,6 @@
 # Identifying the Risks of LM Agents with an LM-Emulated Sandbox
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8
 

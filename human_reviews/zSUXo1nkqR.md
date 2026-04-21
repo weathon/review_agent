@@ -1,5 +1,6 @@
 # TreeX: Generating Global Graphical GNN Explanations via Critical Subtree Extraction
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5
 

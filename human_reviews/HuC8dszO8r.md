@@ -1,5 +1,6 @@
 # Model-free reinforcement learning with noisy actions for automated experimental control in optics
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

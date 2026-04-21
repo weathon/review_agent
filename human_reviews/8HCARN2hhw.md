@@ -1,5 +1,6 @@
 # Learning with a Mole: Transferable latent spatial representations for navigation without reconstruction
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

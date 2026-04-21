@@ -1,5 +1,6 @@
 # ContraSim: Contrastive Similarity Space Learning for Financial Market Predictions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # The Breakdown of Gaussian Universality in Classification of High-dimensional Linear Factor Mixtures
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 3
 

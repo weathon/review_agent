@@ -1,5 +1,6 @@
 # Prompt Infection: LLM-to-LLM Prompt Injection within Multi-Agent Systems
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 5
 

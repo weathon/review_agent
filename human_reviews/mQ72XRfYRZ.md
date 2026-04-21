@@ -1,5 +1,6 @@
 # A Hierarchical Bayesian Model for Few-Shot Meta Learning
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 6, 6, 8
 

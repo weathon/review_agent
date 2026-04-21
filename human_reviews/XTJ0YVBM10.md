@@ -1,5 +1,6 @@
 # What is a good question? Task-oriented asking with fact-level masking
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6
 

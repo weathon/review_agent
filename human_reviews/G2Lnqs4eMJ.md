@@ -1,5 +1,6 @@
 # Optimal Neural Network Approximation for High-Dimensional Continuous Functions
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 5, 1, 1
 

@@ -1,5 +1,6 @@
 # KLIP: Keyword-Guided Language-Image Pretraining for Data-Efficient Domain-Specific Image Captioning
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3, 6
 

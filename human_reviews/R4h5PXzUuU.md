@@ -1,5 +1,6 @@
 # Reflexive Guidance: Improving OoDD in Vision-Language Models via Self-Guided Image-Adaptive Concept Generation
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 3
 

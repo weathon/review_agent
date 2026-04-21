@@ -1,5 +1,6 @@
 # Rethinking LLM Unlearning Objectives: A Gradient Perspective and Go Beyond
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 3, 6, 8
 

@@ -1,5 +1,6 @@
 # A Single Swallow Does Not Make a Summer: Understanding Semantic Structures in Embedding Spaces
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 5
 

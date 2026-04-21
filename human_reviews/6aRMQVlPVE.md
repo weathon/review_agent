@@ -1,5 +1,6 @@
 # Rank-adaptive spectral pruning of convolutional layers during training
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

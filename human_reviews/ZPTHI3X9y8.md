@@ -1,5 +1,6 @@
 # From Pixels to Tokens: Revisiting Object Hallucinations in Large Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 5, 6
 

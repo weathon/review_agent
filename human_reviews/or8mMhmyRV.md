@@ -1,5 +1,6 @@
 # MaestroMotif: Skill Design from Artificial Intelligence Feedback
 
+- Avg Score: 7.75
 - Decision: Accept (Oral)
 - Scores: 8, 10, 8, 5
 

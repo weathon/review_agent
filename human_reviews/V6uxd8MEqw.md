@@ -1,5 +1,6 @@
 # Advancing Prompt-Based Methods for Replay-Independent General Continual Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # P-Align: Self-Alignment in Physical Dynamical System Modeling
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3
 

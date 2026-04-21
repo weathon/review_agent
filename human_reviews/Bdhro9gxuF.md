@@ -1,5 +1,6 @@
 # The Advancement in Stochastic Zeroth-Order Optimization: Mechanism of Accelerated Convergence of Gaussian Direction on Objectives with Skewed Hessian Eigenvalues
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

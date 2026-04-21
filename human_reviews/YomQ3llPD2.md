@@ -1,5 +1,6 @@
 # From Feature Visualization to Visual Circuits:  Effect of Model Perturbation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

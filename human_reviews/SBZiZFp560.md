@@ -1,5 +1,6 @@
 # Towards Efficient Vision-Language Tuning: More Information Density, More Generalizability
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

@@ -1,5 +1,6 @@
 # DisenBooth: Identity-Preserving Disentangled Tuning for Subject-Driven Text-to-Image Generation
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 6
 

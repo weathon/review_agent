@@ -1,5 +1,6 @@
 # Novel Quadratic Constraints for Extending LipSDP beyond Slope-Restricted Activations
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

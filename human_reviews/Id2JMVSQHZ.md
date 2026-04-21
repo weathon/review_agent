@@ -1,5 +1,6 @@
 # Universal Semantic Disentangled Privacy-preserving Speech Representation Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # Hierarchy-aware Biased Bound Loss Function for Hierarchical Text Classification
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

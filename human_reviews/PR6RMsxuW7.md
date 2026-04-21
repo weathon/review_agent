@@ -1,5 +1,6 @@
 # Integrating Planning and Deep Reinforcement Learning via Automatic Induction of Task Substructures
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 5
 

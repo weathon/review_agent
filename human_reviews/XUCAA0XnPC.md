@@ -1,5 +1,6 @@
 # Ensembler: Combating model inversion attacks using model ensemble during collaborative inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Towards Understanding Memory buffer based Continual Learning
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 3
 

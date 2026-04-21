@@ -1,5 +1,6 @@
 # Combating the Generalization-Forgetting Trade-off in Continual Learning: A Cautious Passive Low-Rank Approach
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 3, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # AIR-BENCH 2024: A Safety Benchmark based on Regulation and Policies Specified Risk Categories
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 10, 8, 6
 

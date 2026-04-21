@@ -1,5 +1,6 @@
 # Does Deep Active Learning Work in the Wild?
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 3
 

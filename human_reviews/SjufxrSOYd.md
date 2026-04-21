@@ -1,5 +1,6 @@
 # Higher-Order Graphon Neural Networks: Approximation and Cut Distance
 
+- Avg Score: 8.00
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 8, 8
 

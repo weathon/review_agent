@@ -1,5 +1,6 @@
 # SPOT: Scalable 3D Pre-training via Occupancy Prediction for Autonomous Driving
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

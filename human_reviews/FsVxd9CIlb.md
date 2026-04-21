@@ -1,5 +1,6 @@
 # AttEXplore: Attribution for Explanation with model parameters eXploration
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 

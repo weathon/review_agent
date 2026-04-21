@@ -1,5 +1,6 @@
 # SEE: See Everything Every Time - Broader Light Range Image Enhancement via Events
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

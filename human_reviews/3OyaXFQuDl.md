@@ -1,5 +1,6 @@
 # Smaller, Weaker, Yet Better: Training LLM Reasoners via Compute-Optimal Sampling
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

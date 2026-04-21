@@ -1,5 +1,6 @@
 # Exploring Deep Learning Parameter Space with a-GPS: Approximate Gaussian Proposal Sampler
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

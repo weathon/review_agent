@@ -1,5 +1,6 @@
 # OpenMathInstruct-2: Accelerating AI for Math with Massive Open-Source Instruction Data
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

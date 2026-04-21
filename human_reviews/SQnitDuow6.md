@@ -1,5 +1,6 @@
 # Value-Incentivized Preference Optimization: A Unified Approach to Online and Offline RLHF
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 5
 

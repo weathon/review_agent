@@ -1,5 +1,6 @@
 # Improving Visual Commonsense in Language Models via Multiple Image Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 8, 3
 

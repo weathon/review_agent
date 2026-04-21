@@ -1,5 +1,6 @@
 # Self-contradictory Hallucinations of Large Language Models: Evaluation, Detection and Mitigation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

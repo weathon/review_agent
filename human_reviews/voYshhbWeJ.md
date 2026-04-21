@@ -1,5 +1,6 @@
 # EndoAssistant: A Large-scale Vision-Language Dataset for Endoscopic Surgery Understanding from Open-Source Videos
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

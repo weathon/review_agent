@@ -1,5 +1,6 @@
 # Fast RoPE Attention: Combining the Polynomial Method and Fast Fourier Transform
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 8
 

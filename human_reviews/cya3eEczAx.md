@@ -1,5 +1,6 @@
 # Adaptive Proximal Gradient Optimizer: Addressing Gradient Inexactness in Predict+Optimize Framework
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 1, 3, 1
 

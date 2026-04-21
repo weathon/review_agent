@@ -1,5 +1,6 @@
 # Efficacy of Language Model Self-Play in Non-Zero-Sum Games
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

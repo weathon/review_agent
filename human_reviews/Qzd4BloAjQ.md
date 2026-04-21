@@ -1,5 +1,6 @@
 # SGD with memory: fundamental properties and stochastic acceleration
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

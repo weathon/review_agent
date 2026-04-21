@@ -1,5 +1,6 @@
 # Towards Graph Foundation Models: Learning Generalities Across Graphs via Task-trees
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

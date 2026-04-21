@@ -1,5 +1,6 @@
 # Beyond The Rainbow: High Performance Deep Reinforcement Learning On A Desktop PC
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 6, 5, 8
 

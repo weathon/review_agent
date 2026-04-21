@@ -1,5 +1,6 @@
 # Unmasking Transformers: A Theoretical Approach to Data Recovery via Attention Weights
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 3
 

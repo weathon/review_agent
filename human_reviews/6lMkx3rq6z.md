@@ -1,5 +1,6 @@
 # Exploring Source View Capability: Improve Generalizable 3D Reconstruction with Multi-view Context from Source Views
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

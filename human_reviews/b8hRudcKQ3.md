@@ -1,5 +1,6 @@
 # Performance Adjustment for Federated Learning Marketplace
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

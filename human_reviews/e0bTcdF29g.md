@@ -1,5 +1,6 @@
 # Natural GaLore: Accelerating GaLore for memory-efficient LLM Training and Fine-tuning
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 3, 5
 

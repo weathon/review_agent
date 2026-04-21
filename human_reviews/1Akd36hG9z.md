@@ -1,5 +1,6 @@
 # Enhancing Offline Reinforcement Learning with an Optimal Supported Dataset
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 8, 5
 

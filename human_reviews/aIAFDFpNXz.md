@@ -1,5 +1,6 @@
 # Cradle: Empowering Foundation Agents towards General Computer Control
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 8, 5, 5
 

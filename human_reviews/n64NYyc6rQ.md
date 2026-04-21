@@ -1,5 +1,6 @@
 # Towards Semantic Equivalence of Tokenization in Multimodal LLM
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8, 6
 

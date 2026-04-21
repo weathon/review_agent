@@ -1,5 +1,6 @@
 # QERA: an Analytical Framework for Quantization Error Reconstruction
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6, 6
 

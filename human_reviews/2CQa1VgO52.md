@@ -1,5 +1,6 @@
 # Enhancing Deep Symbolic Regression via Reasoning Equivalent Expressions
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 5
 

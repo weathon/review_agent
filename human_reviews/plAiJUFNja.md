@@ -1,5 +1,6 @@
 # Graph-Enhanced Learning for Predicting Optimal Drug Combinations Using Contrastive Embedding
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

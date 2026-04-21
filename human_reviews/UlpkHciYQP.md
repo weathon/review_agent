@@ -1,5 +1,6 @@
 # Adversarial Training for Defense Against Label Poisoning Attacks
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 3, 6, 3, 6
 

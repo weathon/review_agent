@@ -1,5 +1,6 @@
 # SimBa: Simplicity Bias for Scaling Up Parameters in Deep Reinforcement Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Out-of-Distribution Detection by Leveraging Between-Layer Transformation Smoothness
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 5
 

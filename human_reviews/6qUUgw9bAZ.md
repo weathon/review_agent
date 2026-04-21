@@ -1,5 +1,6 @@
 # Learning How Hard to Think: Input-Adaptive Allocation of LM Computation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

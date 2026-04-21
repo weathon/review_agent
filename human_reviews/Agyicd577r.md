@@ -1,5 +1,6 @@
 # BatchPrompt: Accomplish more with less
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 6
 

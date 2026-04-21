@@ -1,5 +1,6 @@
 # PIED: Physics-Informed Experimental Design for Inverse Problems
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

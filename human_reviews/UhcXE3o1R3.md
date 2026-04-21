@@ -1,5 +1,6 @@
 # Apollo: Zero-shot MultiModal Reasoning with Multiple Experts
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

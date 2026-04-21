@@ -1,5 +1,6 @@
 # Rethinking and Improving Autoformalization: Towards a Faithful Metric and a Dependency Retrieval-based Approach
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8, 6
 

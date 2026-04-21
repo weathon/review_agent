@@ -1,5 +1,6 @@
 # CuPID: Leveraging Masked Single-Lead ECG Modelling for Enhancing the Representations
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 1
 

@@ -1,5 +1,6 @@
 # Neural-Symbolic Recursive Machine for Systematic Generalization
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 3, 8, 6
 

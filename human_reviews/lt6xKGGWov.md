@@ -1,5 +1,6 @@
 # Feature selection with neural estimation of mutual information
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

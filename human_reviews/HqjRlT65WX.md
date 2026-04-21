@@ -1,5 +1,6 @@
 # Refine Knowledge of Large Language Models via Adaptive Contrastive Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 
@@ -104,7 +105,8 @@ This paper tries to mitigate the hallucination problem of large language models 
 [2] Into the Unknown Unknowns: Engaged Human Learning through Participation in Language Model Agent Conversations, Jiang et al., EMNLP 2024.
 
 ### Weaknesses
-1. Even though the results look strong by looking at the Truthful Rate, I am not sure whether the proposed Truthful Rate is well-defined. Given the denominators of IK-IK Rate and IK-IDK Rate are different, I don't think it's rigorous to add them together as the final score. An alternative could be treating answering "I don't know" to those answerable questions as correct and computing the overall accuracy on the full dataset. Also, why the IK-IK rate for Mistral-7B-Instruct-v0.1 drops drastically compared to IDK-prompting? This is a bit concerning as it indicates after Adaptive Contrastive Learning, the model may not be useful anymore.
+1. Even though the results look strong by looking at the Truthful Rate, I am not sure whether the proposed Truthful Rate is well-defined. Given the denominators of IK-IK Rate and IK-IDK Rate are different, I don't think it's rigorous to add them together as the final score. An alternative could be treating answering "I don't know" to those answerable questions as correct and computing the overall accuracy on the full dataset. Also, why the IK-IK rate for Mistral-7B-Instruct-v0.1 drops drastically compared to IDK-prompting? This is a bit concerning as it indicates after
+Adaptive Contrastive Learning, the model may not be useful anymore.
 2. i am unsure what's the major takeaway of Section 5.3. Does the accuracy under repeated samplings represent the concept of "confidence"? Actually, the paper mentions the term of "confidence" when introducing the motivation of the proposed method. It would be interesting to see whether the proposed method can draw a more rigorous connection of model's confidence in its generation.
 3. The presentation for the paper can be further improved. See my detailed comments below.
 

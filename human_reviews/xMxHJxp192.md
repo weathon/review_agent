@@ -1,5 +1,6 @@
 # DeltaGNN: Graph Neural Network with Information Flow Control
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 5
 

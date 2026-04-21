@@ -1,5 +1,6 @@
 # FENNs: A Resource-Efficient, Adaptive, Privacy-Preserving Decentralized Learning Framework
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 3
 

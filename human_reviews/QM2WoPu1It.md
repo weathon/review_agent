@@ -1,5 +1,6 @@
 # HelloBench: Evaluating Long Text Generation Capabilities of Large Language Models
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5
 

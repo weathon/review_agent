@@ -1,5 +1,6 @@
 # 3D-GOI: 3D GAN Omni-Inversion for Multifaceted and Multi-object Editing
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

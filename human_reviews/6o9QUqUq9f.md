@@ -1,5 +1,6 @@
 # Unveiling Causal Relationships Among Candidate Output Tokens in Large Language Models: Towards Interpretability and Control
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

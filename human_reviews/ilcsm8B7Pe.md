@@ -1,5 +1,6 @@
 # End-to-End Conformal Prediction for Trajectory Optimization
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 5, 5
 

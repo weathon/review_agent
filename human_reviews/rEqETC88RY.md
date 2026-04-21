@@ -1,5 +1,6 @@
 # LLM Bandit: Cost-Efficient LLM Generation via Preference-Conditioned Dynamic Routing
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

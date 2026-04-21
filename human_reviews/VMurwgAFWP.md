@@ -1,5 +1,6 @@
 # Designing Mechanical Meta-Materials by Learning Equivariant Flows
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 5
 

@@ -1,5 +1,6 @@
 # Evaluating the Unseen: A Novel Framework for Assessing Unsupervised Concept Bottleneck Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 5
 

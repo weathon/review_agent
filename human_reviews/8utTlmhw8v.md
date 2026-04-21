@@ -1,5 +1,6 @@
 # Learning Nash Equilibria in Rank-1 Games
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 5
 

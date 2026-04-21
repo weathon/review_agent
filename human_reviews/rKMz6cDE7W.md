@@ -1,5 +1,6 @@
 # One Pass Streaming Algorithm for Super Long Token Attention Approximation in Sublinear Space
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

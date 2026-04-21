@@ -1,5 +1,6 @@
 # Adaptive Sparse Allocation with Mutual Choice \& Feature Choice Sparse Autoencoders
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

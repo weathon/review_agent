@@ -1,5 +1,6 @@
 # TimeAutoDiff: Generation of Heterogeneous Time Series Data via Latent Diffusion Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 5
 

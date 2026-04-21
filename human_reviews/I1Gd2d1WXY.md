@@ -1,5 +1,6 @@
 # Adaptive Resolution Residual Networks
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

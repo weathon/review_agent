@@ -1,5 +1,6 @@
 # KVTQ: Compressing the KV Cache to Hardware Efficient Ternary Digits by Fine-Grained Dynamic Quantization
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 6, 3, 5, 3
 

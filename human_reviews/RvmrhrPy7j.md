@@ -1,5 +1,6 @@
 # Causal Inference Using LLM-Guided Discovery
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

@@ -1,5 +1,6 @@
 # MVSFormer++: Revealing the Devil in Transformer's Details for Multi-View Stereo
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 5, 8, 6
 

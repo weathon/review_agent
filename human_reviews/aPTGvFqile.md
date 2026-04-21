@@ -1,5 +1,6 @@
 # Mitigate the Gap: Improving Cross-Modal Alignment in CLIP
 
+- Avg Score: 6.29
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 6, 6, 6
 

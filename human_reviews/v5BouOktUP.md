@@ -1,5 +1,6 @@
 # Multivariate Time-series Forecasting with SPACE: Series Prediction Augmented by Causality Estimation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

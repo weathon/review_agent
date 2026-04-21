@@ -1,5 +1,6 @@
 # Tackling Underestimation Bias in Successor Features by Distributional Reinforcement Learning
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5
 

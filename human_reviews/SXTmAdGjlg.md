@@ -1,5 +1,6 @@
 # Adaptive Bilevel Optimization
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 6, 3, 5, 3, 6
 

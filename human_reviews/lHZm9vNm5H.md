@@ -1,5 +1,6 @@
 # Efficient ConvBN Blocks for Transfer Learning and Beyond
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

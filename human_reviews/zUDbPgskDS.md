@@ -1,5 +1,6 @@
 # Crystals with Transformers on Graphs, for predictions of crystal material properties
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 6, 3, 3, 1
 

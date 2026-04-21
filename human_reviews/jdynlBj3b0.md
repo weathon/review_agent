@@ -1,5 +1,6 @@
 # Can Class-Priors Help Single-Positive Multi-Label Learning?
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 3, 8, 8
 

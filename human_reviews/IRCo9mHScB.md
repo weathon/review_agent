@@ -1,5 +1,6 @@
 # OMS: One More Step Noise Searching to Enhance Membership Inference Attacks for Diffusion Models
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

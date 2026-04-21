@@ -1,5 +1,6 @@
 # Swift-FedGNN: Federated Graph Learning with Low Communication and Sample Complexities
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Long-Term Impacts of Model Retraining with Strategic Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

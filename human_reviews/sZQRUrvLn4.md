@@ -1,5 +1,6 @@
 # Graph Neural Networks Can (Often) Count Substructures
 
+- Avg Score: 6.40
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 6, 6, 8
 

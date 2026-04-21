@@ -1,5 +1,6 @@
 # Induction Rather Than Imagination: Generative Zero-Shot Learning Via Inductive Variational Autoencoder
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

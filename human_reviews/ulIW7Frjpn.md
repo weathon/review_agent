@@ -1,5 +1,6 @@
 # Large Language Models Are Stronger Entropy Models for Transform Coding
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

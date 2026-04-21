@@ -1,5 +1,6 @@
 # Self-Supervised Pseudodata Filtering for Improved Replay with Sub-Optimal Generators
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

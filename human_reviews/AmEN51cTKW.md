@@ -1,5 +1,6 @@
 # An Exact Solver for Satisfiability Modulo Counting with Probabilistic Circuits
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 8, 5, 3
 

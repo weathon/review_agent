@@ -1,5 +1,6 @@
 # On the Surprising Efficacy of Online Self-Improvement for Embodied Multimodal Foundation Models
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 5, 10, 5
 

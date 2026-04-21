@@ -1,5 +1,6 @@
 # MeteoRA: Multiple-tasks Embedded LoRA for Large Language Models
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5, 8
 

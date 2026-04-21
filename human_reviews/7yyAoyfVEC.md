@@ -1,5 +1,6 @@
 # Hypothesis- and Structure-based prompting for medical and business diagnosis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

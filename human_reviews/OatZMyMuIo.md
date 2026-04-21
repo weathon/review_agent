@@ -1,5 +1,6 @@
 # Causal Representation Learning and Inference for Generalizable Cross-Domain Predictions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

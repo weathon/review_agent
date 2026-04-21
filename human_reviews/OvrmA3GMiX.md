@@ -1,5 +1,6 @@
 # Learning Transferable Sub-goals by Hypothesizing Generalizing Features
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

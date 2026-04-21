@@ -1,5 +1,6 @@
 # AutoHall: Automated Hallucination Dataset Generation for Large Language Models
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

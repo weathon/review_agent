@@ -1,5 +1,6 @@
 # Label-free Node Classification on Graphs with Large Language Models (LLMs)
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

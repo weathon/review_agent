@@ -1,5 +1,6 @@
 # Enhancing Large Language Models in Coding Through Multi-Perspective Self-Consistency
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 5, 5, 6, 5
 

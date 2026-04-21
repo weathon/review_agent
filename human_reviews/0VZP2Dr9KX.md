@@ -1,5 +1,6 @@
 # Baseline Defenses for Adversarial Attacks Against Aligned Language Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 5, 3
 

@@ -1,5 +1,6 @@
 # FedORION: Aggregation-Assisted Proxyless Distillation for Heterogeneous Federated Learning
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

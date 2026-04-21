@@ -1,5 +1,6 @@
 # DB-GPT-Hub: Towards Open Benchmarking Text-to-SQL Empowered by Large Language Models
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

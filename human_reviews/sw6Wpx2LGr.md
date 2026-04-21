@@ -1,5 +1,6 @@
 # Mitigating Dialogue Hallucination for Large Vision Language Models via Adversarial Instruction Tuning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

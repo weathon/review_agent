@@ -1,5 +1,6 @@
 # QORA: Zero-Shot Transfer via Interpretable Object-Relational Model Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

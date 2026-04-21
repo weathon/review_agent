@@ -1,5 +1,6 @@
 # Consistent Symmetry Representation over Latent Factors of Variation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 3
 

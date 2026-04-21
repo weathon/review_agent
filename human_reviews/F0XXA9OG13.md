@@ -1,5 +1,6 @@
 # MediTab: Scaling Medical Tabular Data Predictors via Data Consolidation, Enrichment, and Refinement
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6
 

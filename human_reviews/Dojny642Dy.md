@@ -1,5 +1,6 @@
 # IVCR-200K: A Large-Scale Benchmark for Interactive Video Corpus Retrieval
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

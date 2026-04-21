@@ -1,5 +1,6 @@
 # Planning with MCTS: Enhancing Problem-Solving in Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

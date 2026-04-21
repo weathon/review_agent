@@ -1,5 +1,6 @@
 # Lewis's Signaling Game as beta-VAE For Natural Word Lengths and Segments
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 3
 

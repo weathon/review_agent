@@ -1,5 +1,6 @@
 # InterIDEAS: An LLM and Expert-Enhanced Dataset for Philosophical Intertextuality
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

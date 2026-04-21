@@ -1,5 +1,6 @@
 # ELCC: the Emergent Language Corpus Collection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # Transformers and slot encoding for sample efficient physical world modelling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # IDInit: A Universal and Stable Initialization Method for Neural Network Training
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

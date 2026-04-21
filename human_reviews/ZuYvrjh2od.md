@@ -1,5 +1,6 @@
 # ReForm-Eval: Evaluating Large Vision Language Models via Unified Re-Formulation of Task-Oriented Benchmarks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

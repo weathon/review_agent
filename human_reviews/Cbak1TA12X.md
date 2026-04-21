@@ -1,5 +1,6 @@
 # Adv3D: Generating 3D Adversarial Examples for 3D Object Detection in Driving Scenarios with NeRF
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # NV-Embed: Improved Techniques for Training LLMs as Generalist Embedding Models
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

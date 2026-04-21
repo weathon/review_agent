@@ -1,5 +1,6 @@
 # Automatically Identifying and Interpreting Sparse Circuits with Hierarchical Tracing
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1, 5, 3
 

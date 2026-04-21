@@ -1,5 +1,6 @@
 # Beyond Laplace and Gaussian: Exploring the Generalized Gaussian Mechanism for Private Machine Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 1, 3, 8, 5
 

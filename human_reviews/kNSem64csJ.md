@@ -1,5 +1,6 @@
 # FlexDrive: Toward Trajectory Flexibility in Driving Scene Reconstruction and Rendering
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5
 

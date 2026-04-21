@@ -1,5 +1,6 @@
 # R-CoT: Reverse Chain-of-Thought Problem Generation for Geometric Reasoning in Large Multimodal Models
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

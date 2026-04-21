@@ -1,5 +1,6 @@
 # Have the VLMs Lost Confidence? A Study of Sycophancy in VLMs
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

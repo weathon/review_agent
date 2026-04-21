@@ -1,5 +1,6 @@
 # Playing repeated games with Large Language Models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3, 3
 

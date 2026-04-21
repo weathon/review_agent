@@ -1,5 +1,6 @@
 # Unremovable Watermarks for Open-Source Language Models
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Precision and Recall Reject Curves for Classification
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 3, 1, 1
 

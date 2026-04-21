@@ -1,5 +1,6 @@
 # Recursive Cleaning for Large-scale Protein Data via Multimodal Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Grammar Reinforcement Learning: path and cycle counting in graphs with a Context-Free Grammar and Transformer approach
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 5, 6
 

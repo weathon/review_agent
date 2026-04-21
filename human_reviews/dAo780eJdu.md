@@ -1,5 +1,6 @@
 # CCA Merge: Merging Many Neural Networks with Canonical Correlation Analysis
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 3
 

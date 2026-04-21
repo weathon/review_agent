@@ -1,5 +1,6 @@
 # Test-time Adaptation against Multi-modal Reliability Bias
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 8
 

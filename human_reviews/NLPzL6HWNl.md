@@ -1,5 +1,6 @@
 # Improving LoRA in Privacy-preserving Federated Learning
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 6, 5, 5, 6
 

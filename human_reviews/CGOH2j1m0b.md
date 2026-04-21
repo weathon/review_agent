@@ -1,5 +1,6 @@
 # LipFed: Mitigating Subgroup Bias in Federated Learning with Lipschitz Constraints
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Logicbreaks: A Framework for Understanding Subversion of Rule-based Inference
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8, 6
 

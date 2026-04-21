@@ -1,5 +1,6 @@
 # Dynamic Representation of Optimal Transport via Ensemble Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

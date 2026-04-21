@@ -1,5 +1,6 @@
 # Deep Learning for Two-Sided Matching
 
+- Avg Score: 7.33
 - Decision: Reject
 - Scores: 6, 8, 8
 

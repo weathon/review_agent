@@ -1,5 +1,6 @@
 # PSHuman: Photorealistic Single-view Human Reconstruction using Cross-Scale Diffusion
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 6
 

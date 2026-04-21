@@ -1,5 +1,6 @@
 # LLM Detectors Still Fall Short of Real World: Case of LLM-Generated Short News-Like Posts
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Adaptive Curvature Step Size: A Path Geometry Based Approach to Optimization
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5, 6
 

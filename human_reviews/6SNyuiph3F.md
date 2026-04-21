@@ -1,5 +1,6 @@
 # Chat Vector: A Simple Approach to Equip LLMs With New Language Chat Capabilities
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

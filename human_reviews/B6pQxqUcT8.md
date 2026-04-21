@@ -1,5 +1,6 @@
 # ToolChain*: Efficient Action Space Navigation in Large Language Models with A* Search
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

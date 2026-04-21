@@ -1,5 +1,6 @@
 # Directed Structural Adaptation to Overcome Statistical Conflicts and Enable Continual Learning
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

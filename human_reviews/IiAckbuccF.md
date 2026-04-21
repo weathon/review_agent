@@ -1,5 +1,6 @@
 # Nonmyopic Bayesian Optimization in Dynamic Cost Settings
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

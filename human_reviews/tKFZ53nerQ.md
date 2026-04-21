@@ -1,5 +1,6 @@
 # Topic and Description Reasoning Generation based on User-Contributed Comments
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 

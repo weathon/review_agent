@@ -1,5 +1,6 @@
 # Grounded-VideoLLM: Sharpening Fine-grained Temporal Grounding in Video Large Language Models
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

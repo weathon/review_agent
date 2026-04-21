@@ -1,5 +1,6 @@
 # How much of my dataset did you use? Quantitative Data Usage Inference in Machine Learning
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8, 8
 

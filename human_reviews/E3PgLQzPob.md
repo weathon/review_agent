@@ -1,5 +1,6 @@
 # CSGO: Content-Style Composition in Text-to-Image Generation
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 5, 6, 5
 

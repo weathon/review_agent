@@ -1,5 +1,6 @@
 # EVA-Gaussian: 3D Gaussian-based Real-time Human Novel View Synthesis under Diverse Camera Settings
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

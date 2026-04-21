@@ -1,5 +1,6 @@
 # HyperHuman: Hyper-Realistic Human Generation with Latent Structural Diffusion
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 10
 

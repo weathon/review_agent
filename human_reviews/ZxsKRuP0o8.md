@@ -1,5 +1,6 @@
 # Meta-Tasks: Improving Robustness in Few-Shot Classification with Unsupervised and Semi-Supervised Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

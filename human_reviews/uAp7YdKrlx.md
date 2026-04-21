@@ -1,5 +1,6 @@
 # Time Series Missing Imputation with Multivariate Radial Based Function Neural Network
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5
 

@@ -1,5 +1,6 @@
 # Learning Pattern-Specific Experts for Time Series Forecasting Under Patch-level Distribution Shift
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 5, 5, 6, 6
 

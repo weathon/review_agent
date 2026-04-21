@@ -1,5 +1,6 @@
 # Escaping Saddle Point Efficiently in Minimax and Bilevel Optimizations
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

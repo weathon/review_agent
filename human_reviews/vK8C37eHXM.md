@@ -1,5 +1,6 @@
 # Sample what you can't compress
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 3, 3, 1, 3, 6
 

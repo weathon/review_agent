@@ -1,5 +1,6 @@
 # ZZEdit: ZigZag Trajectories of Inversion and Denoising for Zero-shot Image Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # From Link Prediction to Forecasting: Information Loss in Batch-based Temporal Graph Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

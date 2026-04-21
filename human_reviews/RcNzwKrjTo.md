@@ -1,5 +1,6 @@
 # Conformal Prediction Sets with Improved Conditional Coverage using Trust Scores
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

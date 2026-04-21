@@ -1,5 +1,6 @@
 # Unsupervised combinatorial optimization under complex conditions: Principled objectives and incremental greedy derandomization
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3
 

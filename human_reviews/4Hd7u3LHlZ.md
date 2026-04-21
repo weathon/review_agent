@@ -1,5 +1,6 @@
 # Primal-Dual Graph Neural Networks for General NP-Hard Combinatorial Optimization
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

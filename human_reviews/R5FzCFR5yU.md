@@ -1,5 +1,6 @@
 # Hybrid Numerical PINNs: On the effectiveness of numerical differentiation for non-analytic problems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 3, 1
 

@@ -1,5 +1,6 @@
 # Composing Recurrent Spiking Neural Networks using Locally-Recurrent Motifs and Risk-Mitigating Architectural Optimization
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

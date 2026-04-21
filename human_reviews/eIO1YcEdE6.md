@@ -1,5 +1,6 @@
 # Wolf: Accurate Video Captioning with a World Summarization Framework
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 5
 

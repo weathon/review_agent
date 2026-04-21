@@ -1,5 +1,6 @@
 # Catastrophic Cyber Capabilities Benchmark (3CB): Robustly Evaluating LLM Agent Cyber Offense Capabilities
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 8, 3
 

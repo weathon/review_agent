@@ -1,5 +1,6 @@
 # Novel View Acoustic Parameter Estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

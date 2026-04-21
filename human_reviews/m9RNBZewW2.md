@@ -1,5 +1,6 @@
 # Overcoming False Illusions in Real-World Face Restoration with Multi-Modal Guided Diffusion Model
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

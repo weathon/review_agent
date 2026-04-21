@@ -1,5 +1,6 @@
 # realSEUDO for real-time calcium imaging analysis
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

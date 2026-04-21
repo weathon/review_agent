@@ -1,5 +1,6 @@
 # DeepEMD: A Transformer-based Fast Estimation of the Earth Mover’s Distance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Memorisable Prompting: Preventing LLMs Forgetting False Positive Alarm
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1
 

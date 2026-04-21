@@ -1,5 +1,6 @@
 # Dynamic Pre-training: Towards Efficient and Scalable All-in-One Image Restoration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 1
 

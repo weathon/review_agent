@@ -1,5 +1,6 @@
 # Learning to Clarify: Multi-turn Conversations with Action-Based Contrastive Self-Training
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Codable Watermarking for Injecting Multi-Bits Information to LLMs
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Efficient Training of Multi-task Combinarotial Neural Solver with Multi-armed Bandits
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

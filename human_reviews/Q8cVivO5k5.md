@@ -1,5 +1,6 @@
 # Large-Batch, Iteration-Efficient Neural Bayesian Design Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 6, 3
 

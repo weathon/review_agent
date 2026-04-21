@@ -1,5 +1,6 @@
 # Augmenting Transformers with Recursively Composed Multi-grained Representations
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 6
 

@@ -1,5 +1,6 @@
 # Submodular Reinforcement Learning
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 6
 

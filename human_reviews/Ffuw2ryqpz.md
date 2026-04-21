@@ -1,5 +1,6 @@
 # Real3D: Towards Scaling Up Large Reconstruction Models with Real-World Images
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 
@@ -97,7 +98,8 @@ I will check other reviewer's comments and the author's feedback to adjust the p
 ### Weaknesses
 1. The paper seems to lack discussion on the role of synthetic data loss. From my understanding, the paper finetunes the TripoSR model using an Objaverse subset and a filtered monocular dataset, but the performance gains over TripoSR may stem from selected Objaverse subset and the monocular dataset. 
 Specifically, Table 5 analyzes the improvements brought by the monocular dataset (using Equ. 10). For instance, introducing clean data loss improves PSNR from 18.44 to 18.60, adding semantic guidance further increases PSNR to 18.81, and introducing curriculum pixel-level constraints raises it to 19.18. However, the analysis only focuses on $L_{SELF}$ as defined in Equ. 10. The question remains: if we finetune TripoSR using only the Objaverse subset (with $L_{RECON}$ only), will there still be improvements compared to TripoSR? If so, how do these gains compare to those from $L_{SELF}$? 
-Another example is the comparison between Real3D and TripoSR in Table 2, which shows limited improvements over TripoSR. How much of these gains are due to $L_{RECON}$, and how much is due to $L_{SELF}$ ?
+Another example is the comparison between Real3D and Tri
+poSR in Table 2, which shows limited improvements over TripoSR. How much of these gains are due to $L_{RECON}$, and how much is due to $L_{SELF}$ ?
 
 ### Questions
 Please refer to the Weaknesses section. If the authors could provide further clarification on these points, I would be open to reconsidering my rating. Thank you.

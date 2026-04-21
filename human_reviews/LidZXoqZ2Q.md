@@ -1,5 +1,6 @@
 # Direct Preference Optimization Using Sparse Feature-level Constraints
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

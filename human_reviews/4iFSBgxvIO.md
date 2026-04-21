@@ -1,5 +1,6 @@
 # Cached Multi-Lora Composition for Multi-Concept Image Generation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6
 

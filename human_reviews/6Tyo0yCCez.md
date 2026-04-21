@@ -1,5 +1,6 @@
 # FLEXOUNDIT: VARIABLE-LENGTH DIFFUSION TRANSFORMER FOR TEXT-TO-AUDIO GENERATION
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6, 3
 

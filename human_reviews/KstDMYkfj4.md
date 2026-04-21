@@ -1,5 +1,6 @@
 # On the Limitations of General Purpose Domain Generalisation Methods
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 3, 5, 5, 3
 

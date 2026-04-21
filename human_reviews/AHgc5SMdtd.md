@@ -1,5 +1,6 @@
 # MuSc: Zero-Shot Industrial Anomaly Classification and Segmentation with Mutual Scoring of the Unlabeled Images
 
+- Avg Score: 5.20
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 3, 6
 

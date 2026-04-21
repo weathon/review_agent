@@ -1,5 +1,6 @@
 # Learning Grounded Action Abstractions from Language
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 5, 6
 

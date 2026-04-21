@@ -1,5 +1,6 @@
 # Continual Learning via Continual Weighted Sparsity and Meta-Plasticity Scheduling
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

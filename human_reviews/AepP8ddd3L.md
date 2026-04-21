@@ -1,5 +1,6 @@
 # Retrieval Augmented Thought Process for Private Data Handling in Healthcare
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 6, 3, 3, 3, 6
 

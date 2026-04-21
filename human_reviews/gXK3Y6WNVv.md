@@ -1,5 +1,6 @@
 # Defects4C: Benchmarking C/C++ Faults to Assess LLM-Based Program Repair
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

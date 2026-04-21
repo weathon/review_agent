@@ -1,5 +1,6 @@
 # Meshtron: High-Fidelity, Artist-Like 3D Mesh Generation at Scale
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

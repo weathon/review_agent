@@ -1,5 +1,6 @@
 # SynerGPT: In-Context Learning for Personalized Drug Synergy Prediction and Drug Design
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3
 

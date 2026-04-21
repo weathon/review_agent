@@ -1,5 +1,6 @@
 # CellDJBench: Benchmark Datasets for Data-Driven Biological Fluid Simulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

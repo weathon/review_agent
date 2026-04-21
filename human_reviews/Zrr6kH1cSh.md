@@ -1,5 +1,6 @@
 # AdaSR: Adaptive Super Resolution for Cross Platform and Dynamic Runtime Environments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

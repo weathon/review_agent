@@ -1,5 +1,6 @@
 # Latent Trajectory Learning for Limited Timestamps under Distribution Shift over Time
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

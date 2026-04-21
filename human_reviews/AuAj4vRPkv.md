@@ -1,5 +1,6 @@
 # Transformers Provably Learn Two-Mixture of Linear Classification via Gradient Flow
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # How Capable Can a Transformer Become? A Study on Synthetic, Interpretable Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 6, 3
 

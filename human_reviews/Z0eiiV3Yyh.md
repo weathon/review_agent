@@ -1,5 +1,6 @@
 # FlexCAD: Unified and Versatile Controllable CAD Generation with Fine-tuned Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3
 

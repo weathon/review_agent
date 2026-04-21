@@ -1,5 +1,6 @@
 # Dissecting Sample Hardness: A Fine-Grained Analysis of Hardness Characterization Methods for Data-Centric AI
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 1, 8
 

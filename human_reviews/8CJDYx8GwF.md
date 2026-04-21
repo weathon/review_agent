@@ -1,5 +1,6 @@
 # Gradient Flow Provably Learns Robust Classifiers for Data from Orthonormal Clusters
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 6, 6, 5
 

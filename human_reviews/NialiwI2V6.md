@@ -1,5 +1,6 @@
 # MOTOR: A Time-to-Event Foundation Model For Structured Medical Records
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

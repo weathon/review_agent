@@ -1,5 +1,6 @@
 # On Expressive Power of Looped Transformers: Theoretical Analysis and Enhancement via Timestep Encoding
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 8, 6
 

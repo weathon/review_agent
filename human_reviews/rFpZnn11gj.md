@@ -1,5 +1,6 @@
 # PathGen-1.6M: 1.6 Million Pathology Image-text Pairs Generation through Multi-agent Collaboration
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8
 

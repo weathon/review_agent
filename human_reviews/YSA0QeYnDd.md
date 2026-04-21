@@ -1,5 +1,6 @@
 # Inference of Evolving Mental States from Irregular Action Events to Understand Human Behaviors
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Asynchronous RLHF: Faster and More Efficient Off-Policy RL for Language Models
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

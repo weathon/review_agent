@@ -1,5 +1,6 @@
 # Hyperparameter Optimization via Interacting with Probabilistic Circuits
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 3, 8
 

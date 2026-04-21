@@ -1,5 +1,6 @@
 # Enhance Multi-View Classification Through Multi-Scale Alignment and Expanded Boundary
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # On Local Equilibrium in Non-Concave Games
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 3, 8, 10, 6
 

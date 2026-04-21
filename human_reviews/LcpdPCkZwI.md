@@ -1,5 +1,6 @@
 # Federated Adapter on Foundation Models:  An Out-Of-Distribution Approach
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

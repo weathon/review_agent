@@ -1,5 +1,6 @@
 # DenseMatcher: Learning 3D Semantic Correspondence for Category-Level Manipulation from a Single Demo
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 8, 10
 

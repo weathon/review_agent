@@ -1,5 +1,6 @@
 # Language Reward Modulation for Pretraining Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Diffusion Models as Cartoonists: The Curious Case of High Density Regions
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # Object Fusion via Diffusion Time-step for Customized Image Editing with Single Example
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

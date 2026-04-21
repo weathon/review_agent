@@ -1,5 +1,6 @@
 # A Spitting Image: Superpixel Transformers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 5, 3
 

@@ -1,5 +1,6 @@
 # DTVLT: A Multi-modal Diverse Text Benchmark for Visual Language Tracking Based on LLM
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3, 5
 

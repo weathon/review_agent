@@ -1,5 +1,6 @@
 # Federated Virtual Learning on Heterogeneous Data with Local-global Distillation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5
 

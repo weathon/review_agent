@@ -1,5 +1,6 @@
 # SE(3)-Stochastic Flow Matching for Protein Backbone Generation
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

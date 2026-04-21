@@ -1,5 +1,6 @@
 # RATE: Score Reward Models with Imperfect Rewrites of Rewrites
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

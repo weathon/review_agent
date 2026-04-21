@@ -1,5 +1,6 @@
 # Contextual Molecule Representation Learning from Chemical Reaction Knowledge
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 5, 3
 

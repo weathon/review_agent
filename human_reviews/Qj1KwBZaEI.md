@@ -1,5 +1,6 @@
 # Intrinsic Dimension Correlation: uncovering nonlinear connections in multimodal representations
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5, 8
 
@@ -248,7 +249,8 @@ __Choice of Id estimator:__ Not enough reasons are given for the choice of using
 
 __Id assumptions:__ The proposed measure IdCor assumes that the intrinsic dimensionality is roughly constant throughout the data. That is unlikely to be true for most real-world data (in line with what the authors point out in lines 312--313). A simple example is one in which we have clustered data but different clusters might have different dimensionalities -- a reasonable assumption if one takes into account that a clustered representation might be clustered precisely due to the fact that different "concepts" may require different topologies. E.g., the dimensionality of the space of images of dogs is likely to much much higher than that of images of soccer balls due to the different symmetries and "directions" of variability (e.g. color) between the two objects encountered in natural scene data. Here are a couple of recent papers that directly consider this possibility and propose solutions for dealing with this dimensional heterogeneity:
 
-[1] Allegra, M., Facco, E., Denti, F., Laio, A., & Mira, A. (2020). "Data segmentation based on the local intrinsic dimension". Scientific reports, 10(1), 16449. 
+[1] Allegra, M., Facco, E., Denti, F., Laio, A., & Mira, A. (2020). "Data segmentation based on the local intrinsic dimension". Scientific reports, 10(1), 16449.
+
 
 [2] Dyballa, L., Zucker, S., (2023). “IAN: Iterated Adaptive Neighborhoods for manifold learning and dimensionality estimation”, Neural Computation, 35 (3): 453-524. 
 

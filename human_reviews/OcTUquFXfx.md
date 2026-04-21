@@ -1,5 +1,6 @@
 # Discovering Global Minima of High-Dimensional Energy Landscapes
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 1, 5
 

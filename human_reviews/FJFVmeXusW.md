@@ -1,5 +1,6 @@
 # Not All Heads Matter: A Head-Level KV Cache Compression Method with Integrated Retrieval and Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

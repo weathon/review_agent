@@ -1,5 +1,6 @@
 # Benchmarking Survival Models: Treatment Effects, Bias, and Equity
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

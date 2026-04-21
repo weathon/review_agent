@@ -1,5 +1,6 @@
 # Doubly Robust Proximal Causal Learning for Continuous Treatments
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

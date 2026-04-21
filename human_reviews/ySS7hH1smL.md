@@ -1,5 +1,6 @@
 # Sparse MoE with Language Guided Routing for Multilingual Machine Translation
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

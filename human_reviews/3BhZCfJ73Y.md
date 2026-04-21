@@ -1,5 +1,6 @@
 # Not All Prompts Are Made Equal: Prompt-based Pruning of Text-to-Image Diffusion Models
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

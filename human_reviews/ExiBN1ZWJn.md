@@ -1,5 +1,6 @@
 # Denoising Graph Dissipation Model Improves Graph Representation Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

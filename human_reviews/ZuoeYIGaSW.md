@@ -1,5 +1,6 @@
 # $\texttt{PREMIER-TACO}$ is a Few-Shot Policy Learner: Pretraining Multitask Representation via Temporal Action-Driven Contrastive Loss
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

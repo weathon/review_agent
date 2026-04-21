@@ -1,5 +1,6 @@
 # Assessing Uncertainty in Similarity Scoring: Performance & Fairness in Face Recognition
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 6, 5, 8
 

@@ -1,5 +1,6 @@
 # Which Examples to Annotate for In-Context Learning? Towards Effective and Efficient Selection
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

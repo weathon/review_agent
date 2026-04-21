@@ -1,5 +1,6 @@
 # The AdEMAMix Optimizer: Better, Faster, Older
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 10, 6
 

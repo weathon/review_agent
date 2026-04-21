@@ -1,5 +1,6 @@
 # Large Language Models are Effective Text Rankers with Pairwise Ranking Prompting
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

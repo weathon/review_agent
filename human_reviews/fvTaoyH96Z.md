@@ -1,5 +1,6 @@
 # Non-Parameterized Randomization for Environmental Generalization in Deep Reinforcement Learning
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

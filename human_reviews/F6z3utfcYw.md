@@ -1,5 +1,6 @@
 # The Crucial Role of Samplers in Online Direct Preference Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # SciPG: A New Benchmark and Approach for Layout-aware Scientific Poster Generation
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 6, 6
 

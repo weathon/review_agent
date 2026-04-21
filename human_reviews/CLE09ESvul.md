@@ -1,5 +1,6 @@
 # What should a neuron aim for? Designing local objective functions based on information theory
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # On the Relation Between Linear Diffusion and Power Iteration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

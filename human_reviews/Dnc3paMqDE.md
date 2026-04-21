@@ -1,5 +1,6 @@
 # DeepSPF: Spherical SO(3)-Equivariant Patches for Scan-to-CAD Estimation
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 5
 

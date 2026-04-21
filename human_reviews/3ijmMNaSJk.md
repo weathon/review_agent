@@ -1,5 +1,6 @@
 # Towards Understanding Masked Distillation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 3, 1, 3
 

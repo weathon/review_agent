@@ -1,5 +1,6 @@
 # Infinitely Deep Residual Networks: Unveiling Wide Neural ODEs as Gaussian Processes
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

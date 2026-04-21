@@ -1,5 +1,6 @@
 # Adaptive Second-Order Stochastic Optimization
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3, 5
 

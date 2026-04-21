@@ -1,5 +1,6 @@
 # Automatic Combination of Sample Selection Strategies for Few-Shot Learning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 6, 5, 5
 

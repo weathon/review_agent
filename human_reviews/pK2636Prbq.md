@@ -1,5 +1,6 @@
 # Preference fine-tuning for factuality in chest X-ray interpretation models without human feedback
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

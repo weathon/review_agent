@@ -1,5 +1,6 @@
 # Solving Urban Network Security Games: Learning Platform, Benchmark, and Challenge for AI Research
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 3, 6
 

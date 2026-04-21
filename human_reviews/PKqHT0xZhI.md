@@ -1,5 +1,6 @@
 # Efficient Ensembles Improve Training Data Attribution
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 3, 6, 8, 5, 5
 

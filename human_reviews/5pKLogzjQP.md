@@ -1,5 +1,6 @@
 # Purify Perturbative Availability Poisons via Rate-Constrained Variational Autoencoders
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

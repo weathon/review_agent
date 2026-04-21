@@ -1,5 +1,6 @@
 # Nash Equilibria in Reward-Potential Markov Games: Algorithms, Complexity, and Applications
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5, 5
 

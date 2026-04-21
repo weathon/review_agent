@@ -1,5 +1,6 @@
 # Knapsack Schema Linking Agent for LLM-Based Text-to-SQL Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 5, 6, 3
 

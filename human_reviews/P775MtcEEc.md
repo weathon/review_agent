@@ -1,5 +1,6 @@
 # Distributional Sobolev reinforcement learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 1, 3, 3
 

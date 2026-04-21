@@ -1,5 +1,6 @@
 # Efficient Residual Learning with Mixture-of-Experts for Universal Dexterous Grasping
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

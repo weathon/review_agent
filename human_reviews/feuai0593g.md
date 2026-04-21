@@ -1,5 +1,6 @@
 # ScoreFlow: Bridging Score and Neural ODE for Reversible Generative Modeling
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5, 1
 

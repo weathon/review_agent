@@ -1,5 +1,6 @@
 # InstructRetro: Instruction Tuning post Retrieval-Augmented Pretraining
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 6, 5
 

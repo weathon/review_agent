@@ -1,5 +1,6 @@
 # When is Task Vector Provably Effective for Model Editing? A Generalization Analysis of Nonlinear Transformers
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 8
 

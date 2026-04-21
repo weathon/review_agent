@@ -1,5 +1,6 @@
 # Search-Adaptor: Text Embedding Customization for Information Retrieval
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 5, 8
 

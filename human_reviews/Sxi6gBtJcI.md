@@ -1,5 +1,6 @@
 # R$^2$: A LLM Based Novel-to-Screenplay Generation Framework with Causal Plot Graphs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

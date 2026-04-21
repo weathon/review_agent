@@ -1,5 +1,6 @@
 # Discovery and Expansion of New Domains within Diffusion Models
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

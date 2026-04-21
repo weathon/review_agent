@@ -1,5 +1,6 @@
 # Scaling 3D Compositional Models for Robust Classification and Pose Estimation
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

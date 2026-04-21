@@ -1,5 +1,6 @@
 # Dynamic Electroencephalography Representation Learning for Improved Epileptic Seizure Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

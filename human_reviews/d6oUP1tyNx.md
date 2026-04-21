@@ -1,5 +1,6 @@
 # The KNN Score for Evaluating Probabilistic Multivariate Time Series Forecasting
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5
 

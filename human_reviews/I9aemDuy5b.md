@@ -1,5 +1,6 @@
 # Stochastic Steepest Descent with Acceleration for $\ell_p$-Smooth Non-Convex Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

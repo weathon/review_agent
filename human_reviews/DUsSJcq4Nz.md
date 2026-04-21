@@ -1,5 +1,6 @@
 # FMM-Head: Enhancing Autoencoder-based ECG anomaly detection with prior knowledge
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 1
 

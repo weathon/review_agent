@@ -1,5 +1,6 @@
 # Co-Representation Neural Hypergraph Diffusion for Edge-Dependent Node Classification
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 8, 5, 5
 

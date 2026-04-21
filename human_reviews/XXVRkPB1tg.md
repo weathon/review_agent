@@ -1,5 +1,6 @@
 # CodeBenchGen: Creating Scalable Execution-based Code Generation Benchmarks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

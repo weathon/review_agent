@@ -1,5 +1,6 @@
 # Continuously Volumetric Rendering with Neural Density-Distance Fields
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

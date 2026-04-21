@@ -1,5 +1,6 @@
 # Dynamic Inhomogeneous Quantum Resource Scheduling with Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

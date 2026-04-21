@@ -1,5 +1,6 @@
 # Biologically Plausible Brain Graph Transformer
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6
 

@@ -1,5 +1,6 @@
 # TUBench: Benchmarking Large Vision-Language Models on Trustworthiness with Unanswerable Questions
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

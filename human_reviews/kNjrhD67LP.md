@@ -1,5 +1,6 @@
 # Leveraging Unpaired Data for Vision-Language Generative Models via Cycle Consistency
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 8
 

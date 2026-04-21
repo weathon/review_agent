@@ -1,5 +1,6 @@
 # Encoding Unitig-level Assembly Graphs with Heterophilous Constraints for Metagenomic Contigs Binning
 
+- Avg Score: 4.33
 - Decision: Accept (poster)
 - Scores: 5, 3, 5
 

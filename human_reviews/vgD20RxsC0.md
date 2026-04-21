@@ -1,5 +1,6 @@
 # Time Series Prediction With  Events Disturbance Based Causal Representation Learnin
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

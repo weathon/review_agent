@@ -1,5 +1,6 @@
 # Personalized Federated Learning via Variational Massage Passing
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Compressing LLMs: The Truth is Rarely Pure and Never Simple
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 8
 

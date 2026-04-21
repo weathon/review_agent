@@ -1,5 +1,6 @@
 # ARTIST: Towards Disentangled Text Painter with Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

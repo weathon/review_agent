@@ -1,5 +1,6 @@
 # MiniFold: Simple, Fast and Accurate Protein Structure Prediction
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

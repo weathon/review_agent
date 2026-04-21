@@ -1,5 +1,6 @@
 # Local convergence of simultaneous min-max algorithms to differential equilibrium on Riemannian manifold
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 1, 6, 6, 6
 

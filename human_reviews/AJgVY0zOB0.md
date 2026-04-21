@@ -1,5 +1,6 @@
 # Weakly-supervised Camera Localization by Ground-to-satellite Image Registration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3
 

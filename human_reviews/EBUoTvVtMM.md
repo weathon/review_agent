@@ -1,5 +1,6 @@
 # User Inference Attacks on Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 6, 3
 

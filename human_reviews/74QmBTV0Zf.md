@@ -1,5 +1,6 @@
 # Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Evaluating Large Language Models' Capability to Conduct Cyberattacks On Embedded Devices
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

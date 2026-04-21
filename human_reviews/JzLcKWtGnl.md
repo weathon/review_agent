@@ -1,5 +1,6 @@
 # Spatial 3D-LLM: Progressive Spatial Awareness for Advanced 3D Vision-Language Understanding
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

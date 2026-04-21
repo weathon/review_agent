@@ -1,5 +1,6 @@
 # Elucidating the Exposure Bias in Diffusion Models
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6, 6
 

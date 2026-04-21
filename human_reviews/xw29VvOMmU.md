@@ -1,5 +1,6 @@
 # LQ-LoRA: Low-rank plus Quantized Matrix Decomposition for Efficient Language Model Finetuning
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 8
 

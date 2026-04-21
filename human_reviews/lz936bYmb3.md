@@ -1,5 +1,6 @@
 # DMQR-RAG: Diverse Multi-Query Rewriting in Retrieval-Augmented Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

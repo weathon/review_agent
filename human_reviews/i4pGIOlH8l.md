@@ -1,5 +1,6 @@
 # Benchmark Dataset for Radiology Report Generation with Instructions and Contexts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 6, 5, 3
 

@@ -1,5 +1,6 @@
 # Uncertainty and Influence aware Reward Model Refinement for Reinforcement Learning from Human Feedback
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

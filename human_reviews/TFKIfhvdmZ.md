@@ -1,5 +1,6 @@
 # Proximal Policy Gradient Arborescence for Quality Diversity Reinforcement Learning
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 8
 

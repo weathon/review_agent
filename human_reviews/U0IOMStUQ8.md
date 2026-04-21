@@ -1,5 +1,6 @@
 # Sin3DM: Learning a Diffusion Model from a Single 3D Textured Shape
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 5
 

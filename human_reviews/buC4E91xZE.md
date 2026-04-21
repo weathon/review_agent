@@ -1,5 +1,6 @@
 # AnomalyCLIP: Object-agnostic Prompt Learning for Zero-shot Anomaly Detection
 
+- Avg Score: 6.17
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 5, 8, 5
 

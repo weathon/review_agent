@@ -1,5 +1,6 @@
 # Merlin: Multi-View Representation Learning for Robust Multivariate Time Series Forecasting with Unfixed Missing Rates
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

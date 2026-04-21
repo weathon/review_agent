@@ -1,5 +1,6 @@
 # ECD: A Machine Learning Benchmark for Predicting Enhanced-Precision Electronic Charge Density in Crystalline Inorganic Materials
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6
 

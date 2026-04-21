@@ -1,5 +1,6 @@
 # ALMANACS: A Simulatability Benchmark for Language Model Explainability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

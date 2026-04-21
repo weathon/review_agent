@@ -1,5 +1,6 @@
 # Prompt Space Optimizing Few-shot Reasoning Success with Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

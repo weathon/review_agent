@@ -1,5 +1,6 @@
 # MentalArena: Self-play Training of Language Models for Diagnosis and Treatment of Mental Health Disorders
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 3, 3
 

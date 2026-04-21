@@ -1,5 +1,6 @@
 # Self-Supervised High Dynamic Range Imaging with Multi-Exposure Images in Dynamic Scenes
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

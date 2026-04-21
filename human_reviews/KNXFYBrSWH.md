@@ -1,5 +1,6 @@
 # Tackling the Generative learning trilemma through VAE and GMM-controlled latent space class expansion
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

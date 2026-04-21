@@ -1,5 +1,6 @@
 # SWAP-NAS: Sample-Wise Activation Patterns for Ultra-fast NAS
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

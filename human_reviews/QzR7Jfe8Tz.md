@@ -1,5 +1,6 @@
 # ALPBench: A Benchmark for Active Learning Pipelines on Tabular Data
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

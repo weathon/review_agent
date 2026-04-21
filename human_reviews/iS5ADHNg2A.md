@@ -1,5 +1,6 @@
 # Deceptive Fairness Attacks on Graphs via Meta Learning
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

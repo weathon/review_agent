@@ -1,5 +1,6 @@
 # Holistically Evaluating the Environmental Impact of Creating Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

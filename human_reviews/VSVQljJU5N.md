@@ -1,5 +1,6 @@
 # Diffusion Minimization and Sheaf Neural Networks for Recommender Systems
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

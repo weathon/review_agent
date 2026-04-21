@@ -1,5 +1,6 @@
 # GeoDream: Disentangling 2D and Geometric Priors for High-Fidelity and Consistent 3D Generation
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

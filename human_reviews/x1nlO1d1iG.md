@@ -1,5 +1,6 @@
 # CogMath: Evaluating LLMs' Authentic Mathematical Ability from a Cognitive Perspective
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

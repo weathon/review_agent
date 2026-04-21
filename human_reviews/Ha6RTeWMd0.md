@@ -1,5 +1,6 @@
 # SAM 2: Segment Anything in Images and Videos
 
+- Avg Score: 9.00
 - Decision: Accept (Oral)
 - Scores: 10, 8, 8, 10
 

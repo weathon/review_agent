@@ -1,5 +1,6 @@
 # HyperFace: Generating Synthetic Face Recognition Datasets by Exploring Face Embedding Hypersphere
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 5, 5, 5, 6
 

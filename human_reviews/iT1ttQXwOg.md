@@ -1,5 +1,6 @@
 # Equivariant Deep Weight Space Alignment
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Environmental Robustness in Deep Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3
 

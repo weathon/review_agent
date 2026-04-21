@@ -1,5 +1,6 @@
 # Diffusion with Synthetic Features: Feature Imputation for Graphs with Partially Observed Features
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

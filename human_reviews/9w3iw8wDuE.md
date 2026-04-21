@@ -1,5 +1,6 @@
 # Entropy is not Enough for Test-Time Adaptation: From the Perspective of Disentangled Factors
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 8
 

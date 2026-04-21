@@ -1,5 +1,6 @@
 # Rethinking Semantic Few-Shot Image Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

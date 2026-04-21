@@ -1,5 +1,6 @@
 # COOL: Efficient and Reliable Chain-Oriented Objective Logic with Neural Networks Feedback Control for Program Synthesis
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 1
 

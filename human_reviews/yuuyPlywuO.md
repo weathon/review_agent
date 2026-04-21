@@ -1,5 +1,6 @@
 # Distilling an End-to-End Voice Assistant Without Instruction Training Data
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

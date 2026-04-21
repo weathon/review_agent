@@ -1,5 +1,6 @@
 # Are Large Language Models Truly Democratizing Financial Knowledge? Identifying Knowledge Gaps
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 1, 3
 

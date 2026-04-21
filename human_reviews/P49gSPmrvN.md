@@ -1,5 +1,6 @@
 # Time-dependent Development of Scientific Discourse: A Novel Approach Using UMAP and Word Embeddings
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1
 

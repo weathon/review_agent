@@ -1,5 +1,6 @@
 # Exploring the Recall of Language Models: Case Study on Molecules
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 3, 5, 3, 5
 

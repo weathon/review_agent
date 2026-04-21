@@ -1,5 +1,6 @@
 # Probabilistic Token Alignment for Large Language Model Fusion
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 6, 8
 

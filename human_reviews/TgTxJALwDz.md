@@ -1,5 +1,6 @@
 # Language Model for Large-Text Transmission in Noisy Quantum Communications
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

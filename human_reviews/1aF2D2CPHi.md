@@ -1,5 +1,6 @@
 # Open-Vocabulary Customization from CLIP via Data-Free Knowledge Distillation
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 10, 8
 

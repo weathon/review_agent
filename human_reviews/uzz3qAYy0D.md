@@ -1,5 +1,6 @@
 # VideoShield: Regulating Diffusion-based Video Generation Models via Watermarking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 3, 6, 6
 

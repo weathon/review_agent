@@ -1,5 +1,6 @@
 # Learning Mask Invariant Mutual Information for Masked Image Modeling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

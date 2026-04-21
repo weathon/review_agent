@@ -1,5 +1,6 @@
 # MIBench: A Comprehensive Benchmark for Model Inversion Attack and Defense
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3
 

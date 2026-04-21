@@ -1,5 +1,6 @@
 # FLIP: Flow-Centric Generative Planning as General-Purpose Manipulation World Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

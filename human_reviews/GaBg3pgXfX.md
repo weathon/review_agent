@@ -1,5 +1,6 @@
 # MusicAOG: an Energy-Based Model for Learning and Sampling a Hierarchical Representation of Symbolic Music
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

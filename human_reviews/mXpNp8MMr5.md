@@ -1,5 +1,6 @@
 # On the Vulnerability of Adversarially Trained Models Against Two-faced Attacks
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

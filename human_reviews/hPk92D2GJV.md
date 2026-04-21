@@ -1,5 +1,6 @@
 # BALCONI: BALancing CONtext  and Internal Knowledge For Training Flexible LLMs
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

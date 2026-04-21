@@ -1,5 +1,6 @@
 # Beyond Size: How Gradients Shape Pruning Decisions in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

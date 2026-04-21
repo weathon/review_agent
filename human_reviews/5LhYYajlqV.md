@@ -1,5 +1,6 @@
 # In-Context Unlearning: Language Models as Few Shot Unlearners
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

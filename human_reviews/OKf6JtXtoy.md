@@ -1,5 +1,6 @@
 # MAP IT to Visualize Representations
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 3, 5, 8, 8
 

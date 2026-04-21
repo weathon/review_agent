@@ -1,5 +1,6 @@
 # How Jailbreak Defenses Work and Ensemble? A Mechanistic Investigation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

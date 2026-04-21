@@ -1,5 +1,6 @@
 # Optimizing Adaptive Attacks against Content Watermarks for Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

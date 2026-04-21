@@ -1,5 +1,6 @@
 # FedAnchor: Enhancing Federated Semi-Supervised Learning with Label Contrastive Loss
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # LaMPlace: Learning to Optimize Cross-Stage Metrics in Macro Placement
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6
 

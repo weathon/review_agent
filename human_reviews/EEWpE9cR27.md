@@ -1,5 +1,6 @@
 # Unraveling and Mitigating Safety Alignment Degradation of Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

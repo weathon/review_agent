@@ -1,5 +1,6 @@
 # Scaling Laws for Imitation Learning in Single-Agent Games
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 8, 6, 6, 8, 3
 

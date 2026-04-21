@@ -1,5 +1,6 @@
 # Combine and Conquer: A Meta-Analysis on Data Shift and Out-of-Distribution Detection
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 
@@ -70,7 +71,8 @@ The paper presents an approach to combine multiple arbitrary out-of-distribution
 
 ### Strengths
 + The idea of the paper is easy to follow. In addition, the problem is well presented, including a detailed explanation of the different types of data shifts.
- + The different single-score methods and methods combining different detection scores are evaluated in detail using different data shift scenarios.
+
++ The different single-score methods and methods combining different detection scores are evaluated in detail using different data shift scenarios.
 
 ### Weaknesses
 - (Major) Although the results of combining existing methods are interesting, the paper does not show any new idea. It therefore has limited novelty. 

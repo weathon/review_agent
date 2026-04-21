@@ -1,5 +1,6 @@
 # Decomposition Polyhedra of Piecewise Linear Functions
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 5
 

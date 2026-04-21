@@ -1,5 +1,6 @@
 # DexTrack: Towards Generalizable Neural Tracking Control for Dexterous Manipulation from Human References
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 8
 

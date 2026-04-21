@@ -1,5 +1,6 @@
 # RetroInText: A Multimodal Large Language Model Enhanced Framework for Retrosynthetic Planning via In-Context Representation Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 8
 

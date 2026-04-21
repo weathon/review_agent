@@ -1,5 +1,6 @@
 # Learning Splitting Heuristics in Divide-and-Conquer SAT Solvers with Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 6
 

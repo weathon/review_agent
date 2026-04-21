@@ -1,5 +1,6 @@
 # Breaking Physical and Linguistic Borders: Multilingual Federated Prompt Tuning for Low-Resource Languages
 
+- Avg Score: 4.25
 - Decision: Accept (poster)
 - Scores: 8, 1, 3, 5
 

@@ -1,5 +1,6 @@
 # Open-YOLO 3D: Towards Fast and Accurate Open-Vocabulary 3D Instance Segmentation
 
+- Avg Score: 7.80
 - Decision: Accept (Oral)
 - Scores: 10, 8, 8, 5, 8
 

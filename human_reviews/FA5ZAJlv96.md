@@ -1,5 +1,6 @@
 # DreamCatalyst: Fast and High-Quality 3D Editing via Controlling Editability and Identity Preservation
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6
 

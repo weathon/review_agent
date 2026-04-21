@@ -1,5 +1,6 @@
 # AstroCompress: A benchmark dataset for multi-purpose compression of astronomical data
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

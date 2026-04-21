@@ -1,5 +1,6 @@
 # Knowledge Graph Tuning: Real-time Large Language Model Personalization based on Human Feedback
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 6, 3, 1, 5, 6
 

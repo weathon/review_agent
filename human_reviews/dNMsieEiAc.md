@@ -1,5 +1,6 @@
 # Prompt2Rec : Prompt based user and item Re-characterizing method for Recommendation
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 3, 1, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # EXPLORING FEW-SHOT IMAGE GENERATION WITH MINIMIZED RISK OF OVERFITTING
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

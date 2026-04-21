@@ -1,5 +1,6 @@
 # ToVE: Efficient Vision-Language Learning via Knowledge Transfer from Vision Experts
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

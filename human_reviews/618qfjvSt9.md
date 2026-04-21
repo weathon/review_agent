@@ -1,5 +1,6 @@
 # StyleGuide: Crafting visual style prompting with negative visual query guidance
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 6, 8
 

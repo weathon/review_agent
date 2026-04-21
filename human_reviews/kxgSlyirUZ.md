@@ -1,5 +1,6 @@
 # COLLIE: Systematic Construction of Constrained Text Generation Tasks
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 10
 

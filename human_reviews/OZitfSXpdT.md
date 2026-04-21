@@ -1,5 +1,6 @@
 # Less or More From Teacher: Exploiting Trilateral Geometry For Knowledge Distillation
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 5
 

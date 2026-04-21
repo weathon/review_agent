@@ -1,5 +1,6 @@
 # TopoGaussian: Inferring Internal Topology Structures from Visual Clues
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

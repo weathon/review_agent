@@ -1,5 +1,6 @@
 # Maintaining Adversarial Robustness in  Continuous Learning
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 3, 1, 6
 

@@ -1,5 +1,6 @@
 # Latent 3D Graph Diffusion
 
+- Avg Score: 6.17
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5, 6, 8
 

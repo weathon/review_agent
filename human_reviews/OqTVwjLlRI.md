@@ -1,5 +1,6 @@
 # S2-Attention: Hardware-Aware Context Sharding Among Attention Heads
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

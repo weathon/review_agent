@@ -1,5 +1,6 @@
 # READ: Recurrent Adaptation of Large Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

@@ -1,5 +1,6 @@
 # ModernTCN: A Modern Pure Convolution Structure for General Time Series Analysis
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8
 

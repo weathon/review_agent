@@ -1,5 +1,6 @@
 # Optimizing Calibration by Gaining Aware of Prediction Correctness
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # PoTable: Programming Standardly on Table-based Reasoning Like a Human Analyst
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

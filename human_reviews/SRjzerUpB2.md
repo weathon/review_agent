@@ -1,5 +1,6 @@
 # Fat-to-Thin Policy Optimization: Offline Reinforcement Learning with Sparse Policies
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

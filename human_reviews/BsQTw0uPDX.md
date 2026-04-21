@@ -1,5 +1,6 @@
 # Hierarchical Preference Optimization: Learning to achieve goals via feasible subgoals prediction
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 8, 5
 

@@ -1,5 +1,6 @@
 # Generation and Evaluation of Synthetic Data Containing Treatments
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 3, 8, 5, 8
 

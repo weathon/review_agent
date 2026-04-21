@@ -1,5 +1,6 @@
 # TIMBA: Time series Imputation with Bi-directional Mamba Blocks and Diffusion models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

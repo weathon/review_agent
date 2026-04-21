@@ -1,5 +1,6 @@
 # Near-Optimal Policy Identification in Robust Constrained Markov Decision Processes via Epigraph Form
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 3, 6
 

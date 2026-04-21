@@ -1,5 +1,6 @@
 # Pronunciation-Lexicon Free Training for Phoneme-based Crosslingual ASR via Joint Stochastic Approximation
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 6, 5, 3
 

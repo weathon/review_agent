@@ -1,5 +1,6 @@
 # DPM: Dual Preferences-based Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 6
 

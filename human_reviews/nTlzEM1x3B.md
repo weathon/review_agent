@@ -1,5 +1,6 @@
 # Beyond Data Scarcity: A Frequency-Driven Framework for Zero-Shot Forecasting
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

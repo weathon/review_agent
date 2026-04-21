@@ -1,5 +1,6 @@
 # Convex Potential Mirror Langevin Algorithm for Efficient Sampling of Energy-Based Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 3, 8, 8
 

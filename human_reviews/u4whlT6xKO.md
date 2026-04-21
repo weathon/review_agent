@@ -1,5 +1,6 @@
 # Fine-Tuning with Divergent Chains of Thought Boosts Reasoning Through Self-Correction in Language Models
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 3
 

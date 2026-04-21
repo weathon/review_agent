@@ -1,5 +1,6 @@
 # AutoCustomization: A Unified Framework for Effortless, Selective LLM Bias and Style Finetuning
 
+- Avg Score: 2.60
 - Decision: Reject
 - Scores: 3, 1, 3, 3, 3
 

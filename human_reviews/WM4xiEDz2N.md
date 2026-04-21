@@ -1,5 +1,6 @@
 # Generalization Performance Gap Analysis between Centralized and Federated Learning: How to Bridge this Gap?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

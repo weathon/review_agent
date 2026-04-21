@@ -1,5 +1,6 @@
 # FedBug: A Bottom-Up Gradual Unfreezing Framework for Federated Learning With Client Drift
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

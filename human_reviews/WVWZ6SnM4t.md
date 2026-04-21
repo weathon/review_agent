@@ -1,5 +1,6 @@
 # RoundTable: Investigating Group Decision-Making Mechanism in Multi-Agent Collaboration
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 3, 5, 8
 

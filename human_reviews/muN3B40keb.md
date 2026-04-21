@@ -1,5 +1,6 @@
 # Common Causes for Sudden Shifts: Linking Phase Transitions in Sinusoidal Networks
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 6
 

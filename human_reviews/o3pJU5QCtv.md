@@ -1,5 +1,6 @@
 # EC-Diffuser: Multi-Object Manipulation via Entity-Centric Behavior Generation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Interpretable Vision-Language Survival Analysis with Ordinal Inductive Bias for Computational Pathology
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5
 

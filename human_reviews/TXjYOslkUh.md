@@ -1,5 +1,6 @@
 # Distribution Shift Aware Neural Feature Transformation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

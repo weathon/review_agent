@@ -1,5 +1,6 @@
 # Solving Differential Equations with Constrained Learning
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 5, 5, 8, 3
 

@@ -1,5 +1,6 @@
 # Unveiling the Secret Recipe: A Guide For Supervised Fine-Tuning Small LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

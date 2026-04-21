@@ -1,5 +1,6 @@
 # EWoK: Tackling Robust Markov Decision Processes via Estimating Worst Kernel
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 
@@ -27,7 +28,8 @@ The authors introduce a new method to learn robust policies by approximately sim
 * It is nice that we can combine the methods proposed in the paper with other (non-robust) RL algorithms.
 
 ### Weaknesses
-* “The optimal policy”, “The worst-case transition probabilities”: some there are multiple optimal policies/worst-case kernels, I think that the authors should be more careful with the phrasing. I also don’t know what it means to “train” a transition kernel (last sentence of the paragraph after Eq. (7)), and I don’t know what is a “perfect value function” (paragraph before Eq. (14)). I list other inaccurate statements below. 
+* “The optimal policy”, “The worst-case transition probabilities”: some there are multiple optimal policies/worst-case kernels, I think that the authors should be more careful with the phrasing. I also don’t know what it means to “train” a transition kernel (last sentence of the paragraph after Eq. (7)), and I don’t know what is a “perfect value function” (paragraph before Eq. (14)). I list other inaccurate statements below.
+
 
 * The Theoretical results are very weak. Nothing new in Appendix A.1 (proof of Theorem 3.2), it is already in [A].
 

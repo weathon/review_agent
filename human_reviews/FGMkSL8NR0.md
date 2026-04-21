@@ -1,5 +1,6 @@
 # SPARTUN3D: Situated Spatial Understanding of 3D World in Large Language Model
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6
 

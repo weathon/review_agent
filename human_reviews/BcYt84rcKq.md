@@ -1,5 +1,6 @@
 # Fourier Sliced-Wasserstein Embedding for Multisets and Measures
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

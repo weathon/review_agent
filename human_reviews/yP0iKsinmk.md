@@ -1,5 +1,6 @@
 # AdaFlow: Efficient Long Video Editing via Adaptive Attention Slimming And Keyframe Selection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

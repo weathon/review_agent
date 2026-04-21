@@ -1,5 +1,6 @@
 # Structural-Entropy-Based Sample Selection for Efficient and Effective Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

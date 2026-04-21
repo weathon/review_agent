@@ -1,5 +1,6 @@
 # Online Clustering with Nearly Optimal Consistency
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5
 

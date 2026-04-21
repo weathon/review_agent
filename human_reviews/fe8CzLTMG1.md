@@ -1,5 +1,6 @@
 # Can Large Language Models be Good Path Planners? A Benchmark and Investigation on Spatial-Temporal Reasoning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

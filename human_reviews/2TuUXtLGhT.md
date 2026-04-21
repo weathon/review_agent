@@ -1,5 +1,6 @@
 # Long-Context Linear System Identification
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 8, 8
 

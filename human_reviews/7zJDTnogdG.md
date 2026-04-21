@@ -1,5 +1,6 @@
 # Electrocardiogram Foundation Model Using Temporally Augmented Patient Contrastive Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 1, 6, 1, 3, 3, 6
 

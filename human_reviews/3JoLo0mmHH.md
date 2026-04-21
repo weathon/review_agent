@@ -1,5 +1,6 @@
 # Reverse the auditory processing pathway: Coarse-to-fine audio reconstruction from fMRI
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 5, 3, 5
 

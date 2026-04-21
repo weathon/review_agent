@@ -1,5 +1,6 @@
 # Pre-Training Goal-based Models for Sample-Efficient Reinforcement Learning
 
+- Avg Score: 7.33
 - Decision: Accept (oral)
 - Scores: 8, 6, 8
 

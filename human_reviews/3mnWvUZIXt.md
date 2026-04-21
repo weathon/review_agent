@@ -1,5 +1,6 @@
 # Towards Principled Representation Learning from Videos for Reinforcement Learning
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 5, 8, 8
 

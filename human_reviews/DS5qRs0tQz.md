@@ -1,5 +1,6 @@
 # Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 5
 

@@ -1,5 +1,6 @@
 # Upcycling Instruction Tuning from Dense to Mixture-of-Experts via Parameter Merging
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

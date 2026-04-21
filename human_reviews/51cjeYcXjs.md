@@ -1,5 +1,6 @@
 # Search and Retrieval in Semantic-Structural Representations of Novel Malware
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

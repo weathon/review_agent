@@ -1,5 +1,6 @@
 # Domain Prompt Matters a Lot in Multi-Source Few-Shot Domain Adaptation
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 1, 6, 3, 3
 

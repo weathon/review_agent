@@ -1,5 +1,6 @@
 # Node Duplication Improves Cold-start Link Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

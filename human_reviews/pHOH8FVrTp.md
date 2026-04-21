@@ -1,5 +1,6 @@
 # No Need to Talk: Asynchronous Mixture of Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

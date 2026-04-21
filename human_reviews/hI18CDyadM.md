@@ -1,5 +1,6 @@
 # Adaptive Window Pruning for Efficient Local Motion Deblurring
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 3
 

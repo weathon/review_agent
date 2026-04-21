@@ -1,5 +1,6 @@
 # DenoiseVAE: Learning Molecule-Adaptive Noise Distributions for Denoising-based 3D Molecular Pre-training
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

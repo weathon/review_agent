@@ -1,5 +1,6 @@
 # Iteration and Stochastic First-order Oracle Complexities of Stochastic Gradient Descent using Constant and Decaying Learning Rates
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

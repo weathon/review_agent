@@ -1,5 +1,6 @@
 # Talking Turns: Benchmarking Audio Foundation Models on Turn-Taking Dynamics
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 6, 8
 

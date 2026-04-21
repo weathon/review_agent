@@ -1,5 +1,6 @@
 # Explainable Graph Representation Learning via Graph Pattern Analysis
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

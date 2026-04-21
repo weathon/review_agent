@@ -1,5 +1,6 @@
 # On partial prototype collapse in clustering-based self-supervised learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

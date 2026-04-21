@@ -1,5 +1,6 @@
 # Narrowing Information Bottleneck Theory for Multimodal Image-Text Representations Interpretability
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 5, 5, 3, 8
 

@@ -1,5 +1,6 @@
 # Fairness Under Demographic Scarce Regime
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

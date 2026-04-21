@@ -1,5 +1,6 @@
 # LR0.FM: Low-Res Benchmark and  Improving robustness for Zero-Shot Classification in Foundation Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

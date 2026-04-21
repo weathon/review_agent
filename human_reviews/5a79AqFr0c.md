@@ -1,5 +1,6 @@
 # ControlVideo: Training-free Controllable Text-to-video Generation
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 5
 

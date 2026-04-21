@@ -1,5 +1,6 @@
 # Robust Deep Reinforcement Learning against ADVERSARIAL BEHAVIOR MANIPULATION
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

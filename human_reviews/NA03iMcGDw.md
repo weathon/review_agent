@@ -1,5 +1,6 @@
 # Oversmoothing as Loss of Sign: Towards Structural Balance in Graph Neural Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

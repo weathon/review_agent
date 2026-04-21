@@ -1,5 +1,6 @@
 # Self-supervised Monocular Depth Estimation Robust to Reflective Surface Leveraged by Triplet Mining
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

@@ -1,5 +1,6 @@
 # MST-GNN: Graph Neural Network with Multi-Granularity in Space and Time for Traffic Prediction
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

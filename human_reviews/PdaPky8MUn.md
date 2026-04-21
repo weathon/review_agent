@@ -1,5 +1,6 @@
 # Never Train from Scratch: Fair Comparison of Long-Sequence Models Requires Data-Driven Priors
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

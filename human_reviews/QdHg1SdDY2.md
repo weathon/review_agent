@@ -1,5 +1,6 @@
 # LEA: Learning Latent Embedding Alignment Model for fMRI Decoding and Encoding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

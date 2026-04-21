@@ -1,5 +1,6 @@
 # DynamicKV: Task-Aware Adaptive KV Cache Compression for Long Context LLMs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 5, 6, 3
 

@@ -1,5 +1,6 @@
 # Unlocking State-Tracking in Linear RNNs Through Negative Eigenvalues
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8
 

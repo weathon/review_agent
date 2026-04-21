@@ -1,5 +1,6 @@
 # Multi-timestep models for Model-based Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

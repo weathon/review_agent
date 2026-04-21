@@ -1,5 +1,6 @@
 # DragonDiffusion: Enabling Drag-style Manipulation on Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 6, 6, 6
 

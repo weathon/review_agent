@@ -1,5 +1,6 @@
 # Cocoon: Robust Multi-Modal Perception with Uncertainty-Aware Sensor Fusion
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

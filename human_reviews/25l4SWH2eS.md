@@ -1,5 +1,6 @@
 # IFAdapter: Instance feature control for grounded Text-to-Image Generation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

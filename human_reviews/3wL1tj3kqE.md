@@ -1,5 +1,6 @@
 # Fair Domain Generalization with Arbitrary Sensitive Attributes
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 3, 6, 1
 

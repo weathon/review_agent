@@ -1,5 +1,6 @@
 # To CoT or not to CoT? Chain-of-thought helps mainly on math and symbolic reasoning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

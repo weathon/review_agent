@@ -1,5 +1,6 @@
 # Cheating Automatic LLM Benchmarks: Null Models Achieve High Win Rates
 
+- Avg Score: 7.75
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6, 8, 10, 10, 8
 

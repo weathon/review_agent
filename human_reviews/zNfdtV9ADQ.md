@@ -1,5 +1,6 @@
 # SRPCA: Sparse Reverse of Principal Component Analysis for Fast Low-Rank Matrix Completion
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

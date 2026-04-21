@@ -1,5 +1,6 @@
 # Leveraging Knowledge Graphs to harvest a high-quality dataset for efficient CLIP model training
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

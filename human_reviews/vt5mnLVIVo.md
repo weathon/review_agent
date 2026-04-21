@@ -1,5 +1,6 @@
 # Grokking as the transition from lazy to rich training dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 3, 5
 

@@ -1,5 +1,6 @@
 # Counterfactual Image Generation for adversarially robust and interpretable Classifiers
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

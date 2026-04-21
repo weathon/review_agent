@@ -1,5 +1,6 @@
 # MoH: Multi-Head Attention as Mixture-of-Head Attention
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

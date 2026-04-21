@@ -1,5 +1,6 @@
 # Don't Take Things Out of Context: Attention Intervention for Enhancing Chain-of-Thought Reasoning in Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # How To Be A Good Teacher? Process Strong Pretrained Models For Effective Knowledge Distillation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

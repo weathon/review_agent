@@ -1,5 +1,6 @@
 # CTNet: A CNN-Transformer Hybrid Network for 6D Object Pose Estimation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

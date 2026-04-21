@@ -1,5 +1,6 @@
 # Think before you speak: Training Language Models With Pause Tokens
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 3, 3, 8
 

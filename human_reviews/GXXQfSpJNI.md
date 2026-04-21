@@ -1,5 +1,6 @@
 # Fair Image Generation from Pre-trained Models by Probabilistic Modeling
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

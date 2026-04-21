@@ -1,5 +1,6 @@
 # From Decoupling to Adaptive Transformation: a Wider Optimization Space for PTQ
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 6
 

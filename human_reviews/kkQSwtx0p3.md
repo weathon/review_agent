@@ -1,5 +1,6 @@
 # Leveraging Task Structures for Improved Identifiability in Neural Network Representations
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

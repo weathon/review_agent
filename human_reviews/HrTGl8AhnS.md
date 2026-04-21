@@ -1,5 +1,6 @@
 # PACIA: Parameter-Efficient Adapter for Few-Shot Molecular Property Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

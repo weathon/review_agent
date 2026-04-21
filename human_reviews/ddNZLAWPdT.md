@@ -1,5 +1,6 @@
 # Robust Decentralized VFL Over Dynamic Device Environment
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 3, 6
 

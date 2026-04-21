@@ -1,5 +1,6 @@
 # Score Models for Offline Goal-Conditioned Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # STBench: Assessing the Ability of Large Language Models in Spatio-Temporal Analysis
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # Convergence Towards Stable Intrinsic Self-correction of Large Language Models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 8, 3, 8, 3
 

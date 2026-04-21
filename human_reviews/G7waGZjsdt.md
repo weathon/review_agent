@@ -1,5 +1,6 @@
 # Visual Category Discovery via Linguistic Anchoring
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 8
 

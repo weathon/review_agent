@@ -1,5 +1,6 @@
 # Towards Meta-Models for Automated Interpretability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5
 

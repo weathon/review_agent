@@ -1,5 +1,6 @@
 # Learning to Compose: Improving Object Centric Learning by Injecting Compositionality
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

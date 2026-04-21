@@ -1,5 +1,6 @@
 # Extending Stability Analysis to Adaptive Optimization Algorithms Using Loss Surface Geometry
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 1, 3, 5, 5
 

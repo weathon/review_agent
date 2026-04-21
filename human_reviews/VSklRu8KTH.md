@@ -1,5 +1,6 @@
 # The logic of rational graph neural networks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

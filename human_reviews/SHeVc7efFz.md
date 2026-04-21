@@ -1,5 +1,6 @@
 # ROMEO: ROBUST METRIC VISUAL ODOMETRY
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 5, 1
 

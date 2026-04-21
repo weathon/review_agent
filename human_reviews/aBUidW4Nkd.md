@@ -1,5 +1,6 @@
 # Object-Centric Learning with Slot Mixture Module
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

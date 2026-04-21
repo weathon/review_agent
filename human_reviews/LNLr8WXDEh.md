@@ -1,5 +1,6 @@
 # What Does Stable Diffusion Know about the 3D Scene?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Structured Packing in LLM Training Improves Long Context Utilization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

@@ -1,5 +1,6 @@
 # BRIGHT: A Realistic and Challenging Benchmark for Reasoning-Intensive Retrieval
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 10, 6, 6, 8, 6
 

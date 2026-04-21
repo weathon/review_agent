@@ -1,5 +1,6 @@
 # HAICO-CN: Human-AI Collaboration By Cluster-wise Noisy-Label Augmentation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 5
 

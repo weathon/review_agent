@@ -1,5 +1,6 @@
 # VeRA: Vector-based Random Matrix Adaptation
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 8
 

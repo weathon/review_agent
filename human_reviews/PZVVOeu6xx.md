@@ -1,5 +1,6 @@
 # Predicting Network Motif Fingerprints with Graph Neural Networks
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 3, 3
 
@@ -133,7 +134,8 @@ Lines 49-52, which aim to outline the main contributions of the paper, are overl
 Line 43 states, “Additionally, our method is robust and versatile, capable of operating effectively on graphs of any size.” The term "robust" is ambiguous in this context, and since many graph neural networks (GNNs) can operate on graphs of varying sizes, this statement does not clearly highlight the uniqueness of the authors' approach.
 The sentence in line 53, “Knowing how difficult it is to obtain a high volume of real-world graph datasets that have both high quality and variety,” lacks supporting references, which undermines the claim.
 Finally, lines 62-63 are poorly constructed: “We make available a large diverse synthetic dataset in terms of graph topology and motif significance-profile generated with 23 synthetic generators.” This statement could benefit from clearer phrasing and more specificity regarding what is meant by “motif significance-profile.”
-More vague and poorly written lines: 192-193. 
+More vague and poorly written lines: 192-193.
+
 Overall, the introduction requires substantial revision for clarity, precision, and supporting evidence.
 
 

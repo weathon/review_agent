@@ -1,5 +1,6 @@
 # What's the Magic Word? A Control Theory of LLM Prompting
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 5, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Efficient Gradient-Based Algorithm for Training Deep Learning Models With Many Nonlinear Activations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

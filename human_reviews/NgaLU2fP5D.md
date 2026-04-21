@@ -1,5 +1,6 @@
 # Predictive, scalable and interpretable knowledge tracing on structured domains
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 6, 5, 8, 8
 

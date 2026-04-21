@@ -1,5 +1,6 @@
 # Variational Quantum Linear Solver enhanced Quantum Support Vector machine
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3
 

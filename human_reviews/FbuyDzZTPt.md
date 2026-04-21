@@ -1,5 +1,6 @@
 # OVOR: OnePrompt with Virtual Outlier Regularization for Rehearsal-Free Class-Incremental Learning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

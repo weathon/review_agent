@@ -1,5 +1,6 @@
 # FedLoRA: When Personalized Federated Learning Meets Low-Rank Adaptation
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 3, 8, 5, 5
 

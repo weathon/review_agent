@@ -1,5 +1,6 @@
 # Tuning Frequency Bias of State Space Models
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

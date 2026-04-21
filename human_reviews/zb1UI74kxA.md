@@ -1,5 +1,6 @@
 # How Many Van Goghs Does It Take to Van Gogh? Finding the Imitation Threshold
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

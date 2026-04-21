@@ -1,5 +1,6 @@
 # Graph Transformers Dream of Electric Flow
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

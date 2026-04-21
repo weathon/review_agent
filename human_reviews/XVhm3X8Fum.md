@@ -1,5 +1,6 @@
 # Stack Attention: Improving the Ability of Transformers to Model Hierarchical Patterns
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6
 

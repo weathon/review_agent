@@ -1,5 +1,6 @@
 # End-to-End Reinforcement Learning for Traffic Signal Control: Real-Time Video to Signal Decisions
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 3, 3
 

@@ -1,5 +1,6 @@
 # On The Representation Properties Of The Perturb-Softmax And The Perturb-Argmax Probability Distributions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 3, 5
 

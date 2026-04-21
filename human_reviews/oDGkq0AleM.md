@@ -1,5 +1,6 @@
 # Anomaly Detection with Variance Stabilized Density Estimation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3
 

@@ -1,5 +1,6 @@
 # Everything Everywhere All at Once: LLMs can In-Context Learn Multiple Tasks in Superposition
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

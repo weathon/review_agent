@@ -1,5 +1,6 @@
 # Crystalformer: Infinitely Connected Attention for Periodic Structure Encoding
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 8
 

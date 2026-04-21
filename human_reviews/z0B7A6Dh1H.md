@@ -1,5 +1,6 @@
 # High Probability Contextual Bandits for Optimal Dosage Selection
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

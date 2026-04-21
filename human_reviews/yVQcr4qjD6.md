@@ -1,5 +1,6 @@
 # Robust Function-Calling for On-Device Language Model via Function Masking
 
+- Avg Score: 6.80
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 6, 6
 

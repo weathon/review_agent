@@ -1,5 +1,6 @@
 # PlugVFL: Robust and IP-Protecting Vertical Federated Learning against Unexpected Quitting of Parties
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

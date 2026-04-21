@@ -1,5 +1,6 @@
 # A Comprehensive Deepfake Detector Assessment Platform
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 3, 3, 5, 3
 

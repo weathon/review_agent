@@ -1,5 +1,6 @@
 # Disentangling the Roles of Representation and Selection in Data Pruning (for Fine-Tuning)
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

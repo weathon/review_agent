@@ -1,5 +1,6 @@
 # Tool-Planner: Task Planning with Clusters across Multiple Tools
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 5
 

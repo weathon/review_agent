@@ -1,5 +1,6 @@
 # Robust Multi-modal Learning with Shifted Feature Reweighting Against Spurious Correlations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 3, 1
 

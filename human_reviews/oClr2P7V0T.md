@@ -1,5 +1,6 @@
 # Are Synthetic Classifiers Really as Good as Real Classifiers?
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

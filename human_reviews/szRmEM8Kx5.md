@@ -1,5 +1,6 @@
 # Effective post-training embedding compression via temperature control in contrastive training
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

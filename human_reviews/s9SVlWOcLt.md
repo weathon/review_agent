@@ -1,5 +1,6 @@
 # Proto Successor Measure: Representing the space of all possible solutions of Reinforcement Learning
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 5, 8, 6, 8
 

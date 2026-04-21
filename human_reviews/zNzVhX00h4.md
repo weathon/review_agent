@@ -1,5 +1,6 @@
 # Mildly Overparameterized ReLU Networks Have a Favorable Loss Landscape
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # On Unsupervised Prompt Learning for Classification with Black-box Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 3, 3
 

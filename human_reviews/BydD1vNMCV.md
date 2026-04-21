@@ -1,5 +1,6 @@
 # Statistical Inference for Deep Learning via Stochastic Modeling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

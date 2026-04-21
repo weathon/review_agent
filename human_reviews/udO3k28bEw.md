@@ -1,5 +1,6 @@
 # Mathematical Justification of Hard Negative Mining via Isometric Approximation Theorem
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 3, 5, 6
 

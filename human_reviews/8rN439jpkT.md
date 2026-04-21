@@ -1,5 +1,6 @@
 # Imitation Learning Using Generalized Sliced Wasserstein Distances
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5, 3
 

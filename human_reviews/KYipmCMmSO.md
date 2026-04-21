@@ -1,5 +1,6 @@
 # Characterizing the Training Dynamics of Private Fine-tuning with Langevin Diffusion
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 6, 5
 

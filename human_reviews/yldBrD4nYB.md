@@ -1,5 +1,6 @@
 # CI-VAE: a Generative Deep Learning Model for Class-Specific Data Interpolation
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 3, 1, 1
 

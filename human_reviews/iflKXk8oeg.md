@@ -1,5 +1,6 @@
 # Interchangeable Token Embeddings for Extendable Vocabulary and Alpha-Equivalence
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # Emergent Robust Communication for Multi-Round Interactions in Noisy Environments
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

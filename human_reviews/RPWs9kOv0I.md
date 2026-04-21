@@ -1,5 +1,6 @@
 # Logic-Based Adaptive Reward Shaping for Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

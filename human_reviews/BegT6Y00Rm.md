@@ -1,5 +1,6 @@
 # PREDICTING THE BEHAVIOR OF AI AGENTS USING TRANSFER OPERATORS
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 8
 

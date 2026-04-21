@@ -1,5 +1,6 @@
 # Instance Segmentation with Supervoxel Based Topological Loss Function
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

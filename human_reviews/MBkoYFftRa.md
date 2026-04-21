@@ -1,5 +1,6 @@
 # Accelerate High-Quality Diffusion Models with Inner Loop Feedback
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 1
 

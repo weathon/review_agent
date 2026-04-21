@@ -1,5 +1,6 @@
 # $EFO_{k}$-CQA: Towards Knowledge Graph Complex Query Answering beyond Set Operation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

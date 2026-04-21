@@ -1,5 +1,6 @@
 # On the generalization capacity of neural networks during generic multimodal reasoning
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 3, 8
 

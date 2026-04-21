@@ -1,5 +1,6 @@
 # S$^2$MAM: Semi-supervised Meta Additive Model for Robust Estimation and Variable Selection
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 6, 5
 

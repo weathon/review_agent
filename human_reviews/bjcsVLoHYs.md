@@ -1,5 +1,6 @@
 # CycleResearcher: Improving Automated Research via Automated Review
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # The Convergence of Second-Order Sampling Methods for Diffusion Models
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 3, 3, 6, 6
 

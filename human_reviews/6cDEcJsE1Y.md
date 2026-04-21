@@ -1,5 +1,6 @@
 # Certainty In, Certainty Out: REVQCs for Quantum Machine Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

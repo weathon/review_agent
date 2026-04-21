@@ -1,5 +1,6 @@
 # Visual Data-Type Understanding does not emerge from scaling Vision-Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8
 

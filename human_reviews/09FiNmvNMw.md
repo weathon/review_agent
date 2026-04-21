@@ -1,5 +1,6 @@
 # Divide and Translate: Compositional First-Order Logic Translation and Verification for Complex Logical Reasoning
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5
 

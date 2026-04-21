@@ -1,5 +1,6 @@
 # Min-K%++: Improved Baseline for Pre-Training Data Detection from Large Language Models
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

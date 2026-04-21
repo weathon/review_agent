@@ -1,5 +1,6 @@
 # At Which Training Stage Does Code Data Help LLMs Reasoning?
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 5
 

@@ -1,5 +1,6 @@
 # A Closer Look at Time Steps is Worthy of Triple Speed-Up for Diffusion Model Training
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

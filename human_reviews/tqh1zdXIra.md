@@ -1,5 +1,6 @@
 # Quick-Tune: Quickly Learning Which Pretrained Model to Finetune and How
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

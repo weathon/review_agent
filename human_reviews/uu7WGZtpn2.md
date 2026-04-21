@@ -1,5 +1,6 @@
 # Finite Sample Analysis for Single-Loop Single-Timescale Natural Actor-Critic Algorithm
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

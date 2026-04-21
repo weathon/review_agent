@@ -1,5 +1,6 @@
 # DAViD: Domain Adaptive Visually-Rich Document Understanding with Synthetic Insights
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

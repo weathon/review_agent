@@ -1,5 +1,6 @@
 # CADS: Unleashing the Diversity of Diffusion Models through Condition-Annealed Sampling
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8
 

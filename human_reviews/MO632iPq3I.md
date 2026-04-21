@@ -1,5 +1,6 @@
 # Differentiable Euler Characteristic Transforms for Shape Classification
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 8
 

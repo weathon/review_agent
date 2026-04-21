@@ -1,5 +1,6 @@
 # One Hundred Neural Networks and Brains Watching Videos: Lessons from Alignment
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Learning to Help in Multi-Class Settings
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # TPO: Aligning Large Language Models with Multi-branch & Multi-step Preference Trees
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8
 

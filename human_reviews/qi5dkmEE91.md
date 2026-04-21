@@ -1,5 +1,6 @@
 # Uncovering BioLOGICAL Motifs and Syntax via Sufficient and Necessary Explanations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5
 

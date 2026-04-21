@@ -1,5 +1,6 @@
 # GenomeOcean: Efficient Foundation Model for Genome Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

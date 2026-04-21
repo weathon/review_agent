@@ -1,5 +1,6 @@
 # Coarse Correspondences Boost 3D Spacetime Understanding in Multimodal Language Model
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3
 

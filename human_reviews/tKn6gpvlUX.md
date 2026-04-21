@@ -1,5 +1,6 @@
 # Efficient Fine-Tuning of Single-Cell Foundation Models Enables Zero-Shot Molecular Perturbation Prediction
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 3, 6, 8, 6
 

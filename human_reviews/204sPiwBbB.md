@@ -1,5 +1,6 @@
 # Learning from others' mistakes: Finetuning machine translation models with span-level error annotations
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 3, 5, 8
 

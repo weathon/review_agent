@@ -1,5 +1,6 @@
 # Decoding Generalization from Memorization in Deep Neural Networks
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 6, 3, 6, 3, 1
 

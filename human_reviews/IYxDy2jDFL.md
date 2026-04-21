@@ -1,5 +1,6 @@
 # Improved Active Learning via Dependent Leverage Score Sampling
 
+- Avg Score: 7.20
 - Decision: Accept (oral)
 - Scores: 8, 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Statistical Perspective of Top-K Sparse Softmax Gating Mixture of Experts
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

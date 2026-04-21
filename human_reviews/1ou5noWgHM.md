@@ -1,5 +1,6 @@
 # Source Attribution for Large Language Model-Generated Data
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 5, 6, 5
 

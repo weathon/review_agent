@@ -1,5 +1,6 @@
 # Process Supervision-Guided Policy Optimization for Code Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 3, 6, 8
 

@@ -1,5 +1,6 @@
 # SPFQ: A Stochastic Algorithm and Its Error Analysis for Neural Network Quantization
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

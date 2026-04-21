@@ -1,5 +1,6 @@
 # Supervised Band Selection with a Concrete Layer for Hyperspectral Imagery in Remote Sensing and Autonomous Driving
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

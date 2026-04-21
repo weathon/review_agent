@@ -1,5 +1,6 @@
 # XTSFormer: Cross-Temporal-Scale Transformer for Irregular Time Event Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

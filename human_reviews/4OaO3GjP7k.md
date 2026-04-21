@@ -1,5 +1,6 @@
 # Flat Reward in Policy Parameter Space Implies Robust Reinforcement Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

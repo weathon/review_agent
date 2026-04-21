@@ -1,5 +1,6 @@
 # MathCAMPS: Fine-grained Synthesis of Mathematical Problems From Human Curricula
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

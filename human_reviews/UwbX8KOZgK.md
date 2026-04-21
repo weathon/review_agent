@@ -1,5 +1,6 @@
 # From Pixels to Prose: A Large Dataset of Dense Image Captions
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3, 5
 

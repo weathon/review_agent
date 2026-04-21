@@ -1,5 +1,6 @@
 # How Out-of-Distribution important is
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

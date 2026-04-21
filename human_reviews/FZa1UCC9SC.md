@@ -1,5 +1,6 @@
 # Exact risk curves of signSGD in High-Dimensions: quantifying preconditioning and noise-compression effects
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6
 

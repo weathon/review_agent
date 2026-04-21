@@ -1,5 +1,6 @@
 # Modulate Your Spectrum in Self-Supervised Learning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

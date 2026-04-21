@@ -1,5 +1,6 @@
 # BiDST: Dynamic Sparse Training is a Bi-Level Optimization Problem
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

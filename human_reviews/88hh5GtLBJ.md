@@ -1,5 +1,6 @@
 # MetaAdapter: Leveraging Meta-Learning for Expandable Representation in Few-Shot Class Incremental Learning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 5, 6, 5, 6
 

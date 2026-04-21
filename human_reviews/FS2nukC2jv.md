@@ -1,5 +1,6 @@
 # Teaching LLMs How to Learn with Contextual Fine-Tuning
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5
 

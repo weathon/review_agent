@@ -1,5 +1,6 @@
 # MTVQA: Benchmarking Multilingual Text-Centric Visual Question Answering
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5, 6
 

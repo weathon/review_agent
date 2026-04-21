@@ -1,5 +1,6 @@
 # Demystifying CLIP Data
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 5
 

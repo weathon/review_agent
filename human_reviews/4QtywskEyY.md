@@ -1,5 +1,6 @@
 # Teaching wiser, Learning smarter: Multi-stage Decoupled Relational Knowledge Distillation with Adaptive Stage Selection
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 6, 5
 

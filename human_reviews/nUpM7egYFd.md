@@ -1,5 +1,6 @@
 # scMPT: towards applying large language models to complement single-cell foundation models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 5, 5
 

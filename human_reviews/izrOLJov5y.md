@@ -1,5 +1,6 @@
 # Spoken Question Answering and Speech Continuation Using Spectrogram-Powered LLM
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 5
 

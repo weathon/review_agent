@@ -1,5 +1,6 @@
 # Feedback Schrödinger Bridge Matching
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # SEAL-Pose: Enhancing Pose Estimation through Trainable Loss Function
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

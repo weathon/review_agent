@@ -1,5 +1,6 @@
 # Gated Attention Bins for Depth Estimation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

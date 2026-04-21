@@ -1,5 +1,6 @@
 # Streaming Video Understanding and Multi-round Interaction with Memory-enhanced Knowledge
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6, 8
 

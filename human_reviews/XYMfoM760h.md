@@ -1,5 +1,6 @@
 # Make It Count: Text-to-Image Generation with an Accurate Number of Objects
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

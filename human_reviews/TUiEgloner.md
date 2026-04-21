@@ -1,5 +1,6 @@
 # Adaptive Learning of Quantum Hamiltonians
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

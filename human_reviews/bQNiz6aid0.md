@@ -1,5 +1,6 @@
 # Quantum sequential scattering model for quantum state learning
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 1
 

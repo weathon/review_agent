@@ -1,5 +1,6 @@
 # An Information Theoretic Approach to Interaction Grounded Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 5, 6
 

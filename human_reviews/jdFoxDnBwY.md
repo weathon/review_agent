@@ -1,5 +1,6 @@
 # Part321: Recognizing 3D Object Parts from a 2D Image Using 1-Shot Annotations
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6, 5
 

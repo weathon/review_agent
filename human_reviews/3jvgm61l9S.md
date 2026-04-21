@@ -1,5 +1,6 @@
 # MathScape: Evaluating MLLMs in Multi-modal Math Scenarios through a Hierarchical Benchmark
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 3
 

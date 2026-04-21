@@ -1,5 +1,6 @@
 # Solving Homogeneous and Heterogeneous Cooperative Tasks with Greedy Sequential Execution
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

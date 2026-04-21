@@ -1,5 +1,6 @@
 # Momentum-SAM: Sharpness Aware Minimization without Computational Overhead
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

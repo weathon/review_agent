@@ -1,5 +1,6 @@
 # LDINet:  Latent Decomposition-Interpolation for Single Image Fast-moving Objects Deblatting
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5
 

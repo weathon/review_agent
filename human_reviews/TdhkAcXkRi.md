@@ -1,5 +1,6 @@
 # Momentum Benefits Non-iid Federated Learning Simply and Provably
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 5
 

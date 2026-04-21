@@ -1,5 +1,6 @@
 # ArchLock: Locking DNN Transferability at the Architecture Level with a Zero-Cost Binary Predictor
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 3, 8, 6
 

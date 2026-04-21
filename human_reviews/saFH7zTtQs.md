@@ -1,5 +1,6 @@
 # Learning Linear Dynamical Systems with Sparse System Matrices
 
+- Avg Score: 5.17
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 5, 3
 

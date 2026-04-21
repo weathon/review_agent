@@ -1,5 +1,6 @@
 # S3E: Semantic Symbolic State Estimation With Vision-Language Foundation Models
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

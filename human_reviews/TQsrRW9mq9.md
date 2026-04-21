@@ -1,5 +1,6 @@
 # DeCUR: decoupling common & unique representations for multimodal self-supervision
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 3, 5, 8
 

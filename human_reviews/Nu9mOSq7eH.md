@@ -1,5 +1,6 @@
 # InstructCV: Instruction-Tuned Text-to-Image Diffusion Models as Vision Generalists
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 3, 8, 6, 5
 

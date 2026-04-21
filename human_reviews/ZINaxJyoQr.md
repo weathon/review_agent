@@ -1,5 +1,6 @@
 # Why Barlow Twins Work: The Critical Role of Normalization and Its Link to Sample Contrastive Learning
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 3
 

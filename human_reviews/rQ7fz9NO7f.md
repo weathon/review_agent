@@ -1,5 +1,6 @@
 # Multimodal Large Language Models for Inverse Molecular Design with Retrosynthetic Planning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

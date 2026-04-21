@@ -1,5 +1,6 @@
 # Addressing Signal Delay in Deep Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Accept (spotlight)
 - Scores: 3, 6, 6, 8
 

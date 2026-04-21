@@ -1,5 +1,6 @@
 # Rapid Selection and Ordering of In-Context Demonstrations via Prompt Embedding Clustering
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

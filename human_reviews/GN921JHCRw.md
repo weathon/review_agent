@@ -1,5 +1,6 @@
 # RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

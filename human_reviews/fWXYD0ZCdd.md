@@ -1,5 +1,6 @@
 # A New Look at Low-Rank Recurrent Neural Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 
@@ -77,7 +78,8 @@ My main concern with this paper is that it presents multiple results as new, eve
 
 1. Non-linear recurrent dynamics are commonly used in the NEF
 
->  (Line 073) while the NEF has been widely explored, most studies have focused on feed forward-networks, comparatively few studies focused on non-linear recurrent dynamics
+> 
+(Line 073) while the NEF has been widely explored, most studies have focused on feed forward-networks, comparatively few studies focused on non-linear recurrent dynamics
 
 This statement seems false, the NEF is used to embed (non-linear) low-D functions in high-D networks, which can be (and are often) straightforwardly made recurrent, for instance when used for integration / memory, or pattern generation [1]. Most of the online tutorials using the python implementation of NEF (nengo) also deal with time-varying dynamical systems, e.g., non-linear oscillators or the chaotic Lorenz attractor: https://www.nengo.ai/nengo/examples.html.
 
@@ -110,7 +112,8 @@ The fact that Eq. 7 is a neural ODE with one hidden layer was explicitly pointed
 
 6. On non-linear oscillators
 
-> ( Line 274) Note that this 2D system is highly nonlinear—unlike recent work focused on oscillations in linear dynamical systems
+> (
+Line 274) Note that this 2D system is highly nonlinear—unlike recent work focused on oscillations in linear dynamical systems
 
 This statement is misleading. A quick search should give one many studies that investigated oscillations / limit cycles in non-linear RNNs (including low-rank ones!). Ref [2] also derived a limit cycle oscillator in low-rank RNNs.
 
@@ -137,7 +140,10 @@ Refs
 2. 
 > (Line 277) This target ODE is not radially odd-symmetric, so once again (although not shown here), embedding the system in a low-rank RNN fails if we do not include inputs.
 
- It is unclear to me how to reconcile the statement with ref [2], where a rank-2 RNN with $\tanh$ units (without biases) was derived such that it implements a similar limit cycle.  One answer could it be that (unlike stated in the text) the system actually is odd-symmetric?  From a quick try, converting your system to back to cartesian coordinates using $z_1 = r\cos(\theta)$, $z_2 = r\sin(\theta)$, I get: $\dot{z}_1 = az_1-z_2$, $\dot{z}_2 = az_2+z_1$, with $a=\frac{1-r^2}{r}$, which satisfies $F(-z_1,-z_2) = - F(z_1,z_2)$.
+
+It is unclear to me how to reconcile the statement with ref [2], where a rank-2 RNN with $\tanh$ units (without biases) was derived such that it implements a similar limit cycle. 
+One answer could it be that (unlike stated in the text) the system actually is odd-symmetric? 
+From a quick try, converting your system to back to cartesian coordinates using $z_1 = r\cos(\theta)$, $z_2 = r\sin(\theta)$, I get: $\dot{z}_1 = az_1-z_2$, $\dot{z}_2 = az_2+z_1$, with $a=\frac{1-r^2}{r}$, which satisfies $F(-z_1,-z_2) = - F(z_1,z_2)$.
 
 ### Soundness
 3

@@ -1,5 +1,6 @@
 # Towards Category Unification of 3D Single Object Tracking on Point Clouds
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

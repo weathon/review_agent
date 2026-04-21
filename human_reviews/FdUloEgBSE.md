@@ -1,5 +1,6 @@
 # Text-guided Diffusion Model for 3D Molecule Generation
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 1, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Flow: Modularized Agentic Workflow Automation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Lipschitz Bandits in Optimal Space
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 6
 

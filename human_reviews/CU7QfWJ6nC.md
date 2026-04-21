@@ -1,5 +1,6 @@
 # FreeTraj: Tuning-Free Trajectory Control via Noise Guided Video Diffusion
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

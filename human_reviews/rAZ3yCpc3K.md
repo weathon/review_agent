@@ -1,5 +1,6 @@
 # The Deficit of New Information in Diffusion Models: A Focus on Diverse Samples
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # FreeReg: Image-to-Point Cloud Registration Leveraging Pretrained Diffusion Models and Monocular Depth Estimators
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

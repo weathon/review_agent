@@ -1,5 +1,6 @@
 # Multi-task Learning with 3D-Aware Regularization
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

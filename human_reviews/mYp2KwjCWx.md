@@ -1,5 +1,6 @@
 # Hierarchical Empowerment: Towards Tractable Empowerment-Based Skill Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

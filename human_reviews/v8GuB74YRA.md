@@ -1,5 +1,6 @@
 # Generalizable Transferability Estimation of Foundation Vision Models via Implicit Learning
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 5, 5, 5
 

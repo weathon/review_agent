@@ -1,5 +1,6 @@
 # Variational Inference for Self-Supervised Speech Models Fine-tuning on Downstream Tasks
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 3, 6
 

@@ -1,5 +1,6 @@
 # Language Models Can Help to Learn High-Performing Cost Functions for Recourse
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 8, 5
 

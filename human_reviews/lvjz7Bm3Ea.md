@@ -1,5 +1,6 @@
 # ChronoGAM: An End-to-End One-Class Time Series Gaussian Mixture Model
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 1, 5, 3
 

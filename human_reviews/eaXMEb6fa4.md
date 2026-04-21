@@ -1,5 +1,6 @@
 # Referring Expression Matters: Multi-referring Feature Aggregation for Referring Video Object Segmentation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 3
 

@@ -1,5 +1,6 @@
 # GEAR-FEN: Generalized Feature Representation for Kinematic Human Activity Recognition
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

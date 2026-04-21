@@ -1,5 +1,6 @@
 # Querying Easily Flip-flopped Samples for Deep Active Learning
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 10
 

@@ -1,5 +1,6 @@
 # SpaFL: Communication-Efficient Federated Learning with Sparse Models and Low Computational Overhead
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

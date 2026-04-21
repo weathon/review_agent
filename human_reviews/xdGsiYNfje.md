@@ -1,5 +1,6 @@
 # LLMScan: Causal Scan for LLM Misbehavior Detection
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Turn-by-Turn Driving Navigation: Leveraging Sequence Model for Real-time Audio Instructions
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

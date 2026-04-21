@@ -1,5 +1,6 @@
 # Learning Large Skillsets in Stochastic Settings with Empowerment
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 8, 3
 

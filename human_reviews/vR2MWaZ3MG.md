@@ -1,5 +1,6 @@
 # Matchmaker: Schema Matching with self-improving compositional LLM programs
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

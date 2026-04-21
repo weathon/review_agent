@@ -1,5 +1,6 @@
 # Masked Mamba: An Efficient Self-Supervised Framework for Pathological Image Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

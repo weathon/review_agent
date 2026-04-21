@@ -1,5 +1,6 @@
 # Global Optimality of In-context Markovian Dynamics Learning
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

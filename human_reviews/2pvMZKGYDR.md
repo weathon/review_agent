@@ -1,5 +1,6 @@
 # Extend Model Merging from Fine-Tuned to Pre-Trained Large Language Models via Weight Disentanglement
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

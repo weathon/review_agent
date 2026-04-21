@@ -1,5 +1,6 @@
 # Dense Backpropagation Improves Routing for Sparsely-Gated Mixture-of-Experts
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 5, 8
 

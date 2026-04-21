@@ -1,5 +1,6 @@
 # Data Scaling Laws in Imitation Learning for Robotic Manipulation
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

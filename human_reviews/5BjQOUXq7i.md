@@ -1,5 +1,6 @@
 # RegMix: Data Mixture as Regression for Language Model Pre-training
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 6, 8, 8
 

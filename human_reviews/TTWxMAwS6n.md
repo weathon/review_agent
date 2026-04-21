@@ -1,5 +1,6 @@
 # X-PlugVid: Versatile Adaptation of Image Plugins for Controllable Video Generation
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

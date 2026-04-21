@@ -1,5 +1,6 @@
 # Self-Prompt SAM: Automatic Prompt SAM Adaptation for Medical Image Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

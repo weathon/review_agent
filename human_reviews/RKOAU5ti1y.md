@@ -1,5 +1,6 @@
 # A Distributional Approach to Uncertainty-Aware Preference Alignment Using Offline Demonstrations
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 
@@ -89,19 +90,26 @@ By employing the Conditional Value-at-Risk (CVaR) metric, UA-PbRL facilitates ri
 ### Weaknesses
 1. Notation issues
 * In Equation 9, an explanation of the distance metric is omitted, and additional question about the distance metric is detailed in Q4.
-* In line 318, isn't Zπ a random variable? This seems to be expressed as an expectation. 
+* In line 318, isn't Zπ a random variable? This seems to be expressed as an expectation.
+
 2. Experiment on LLM alignment
-* In the LLM alignment experiment, the main focus have to be results about red teaming experiment (i.e., how uncertain inputs are handled). However, there is a lack of comparative analysis on risk-averse behaivor of LLMs given harmful prompts that were not seen during the reward model training process.  
-* It would be helpful to provide information on how much the rate of evasive responses increases compared to the baseline (currently, only an example for one sample is provided in Appendix D.3). 
+* In the LLM alignment experiment, the main focus have to be results about red teaming experiment (i.e., how uncertain inputs are handled). However, there is a lack of comparative analysis on risk-averse behaivor of LLMs given harmful prompts that were not seen during the reward model training process. 
+
+* It would be helpful to provide information on how much the rate of evasive responses increases compared to the baseline (currently, only an example for one sample is provided in Appendix D.3).
+
 3. Analysis on the various preference labelling setup.
 * Over entire experiments, expected likelihood of a risky trajectory outranking a risk-averse one is set to be 0.6. 
-* At least in the gridworld experiment, I want to see how the results change with preference labelling setup other than p(τ2 >τ1 )=0.6. 
+* At least in the gridworld experiment, I want to see how the results change with preference labelling setup other than p(τ2 >τ1 )=0.6.
+
 * Specifically, it would be useful to analyze whether the uncertainty-aware reward function still estimates high variance for τ2  even when the preference for τ2  increases to around 0.7 or 0.8.
 
 ### Questions
-1. Can you provide additional explanation for Equation 2 (derivation of the prior of the reward function)? I have difficulty understanding the transition from the first term to the second term and from the third term to the fourth term (Does d indicate a derivative?). 
+1. Can you provide additional explanation for Equation 2 (derivation of the prior of the reward function)? I have difficulty understanding the transition from the first term to the second term and from the third term to the fourth term (Does d indicate a derivative?).
 
-2. Rather than training neural network for informative beta prior, isn’t it possible to simply define parameters of Beta distribution using the statistics in the data (i.e., the number of times a specific trajectory wins over another trajectory / loses within the offline preference data)?  Of course, if you aimed to obtain the distribution of ϕ(τ) for any arbitrary trajectory, then this approach might be necessary, but aren’t you using offline trajectories D to train the reward model? 
+
+2. Rather than training neural network for informative beta prior, isn’t it possible to simply define parameters of Beta distribution using the statistics in the data (i.e., the number of times a specific trajectory wins over another trajectory / loses within the offline preference data)? 
+Of course, if you aimed to obtain the distribution of ϕ(τ) for any arbitrary trajectory, then this approach might be necessary, but aren’t you using offline trajectories D to train the reward model?
+
 
 3. Regarding the proof of Theorem 4.1, Is there a guarantee that the p.d.f of the posterior distribution of r(τ) is concave? If not, how can Equation 22 ensure a “global” maximum?
 

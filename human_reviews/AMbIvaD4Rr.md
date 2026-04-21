@@ -1,5 +1,6 @@
 # SHIELD: Multi-task Multi-distribution Vehicle Routing Solver with Sparsity & Hierarchy in Efficiently Layered Decoder
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

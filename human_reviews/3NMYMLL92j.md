@@ -1,5 +1,6 @@
 # Brain encoding models based on binding multiple modalities across audio, language, and vision
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 8, 3
 

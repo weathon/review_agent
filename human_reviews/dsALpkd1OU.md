@@ -1,5 +1,6 @@
 # D2Coder: large language models based agent for coding with dynamic debugging tools
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 1
 

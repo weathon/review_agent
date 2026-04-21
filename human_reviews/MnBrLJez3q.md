@@ -1,5 +1,6 @@
 # Temperature Optimization for Bayesian Deep Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # From Sparse to Dense: Learning to Construct 3D Human Meshes from WiFi
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 5, 5, 5
 

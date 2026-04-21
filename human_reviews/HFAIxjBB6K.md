@@ -1,5 +1,6 @@
 # Improving Autoregressive Image Generation by Mitigating Gradient Bias in Softmax
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

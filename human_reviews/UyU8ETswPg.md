@@ -1,5 +1,6 @@
 # Fictitious Synthetic Data Can Improve LLM Factuality via Prerequisite Learning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

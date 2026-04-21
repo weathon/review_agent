@@ -1,5 +1,6 @@
 # DSMentor: Enhancing Data Science Agents with Curriculum Learning and Online Knowledge Accumulation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

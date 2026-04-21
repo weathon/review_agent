@@ -1,5 +1,6 @@
 # A Conceptual Framework for Analyzing Social Representation in Unstructured Data
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3, 3, 3, 5
 

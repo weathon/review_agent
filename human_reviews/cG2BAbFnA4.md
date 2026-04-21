@@ -1,5 +1,6 @@
 # Learning with Complementary Labels Revisited: A Consistent Approach via Negative-Unlabeled Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

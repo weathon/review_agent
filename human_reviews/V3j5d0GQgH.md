@@ -1,5 +1,6 @@
 # FedLoGe: Joint Local and Generic Federated Learning under Long-tailed Data
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 5
 

@@ -1,5 +1,6 @@
 # Towards Generalizable Multi-Camera 3D Object Detection via Perspective Debiasing
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 5, 8, 6, 6
 

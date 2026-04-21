@@ -1,5 +1,6 @@
 # Learning Optimal Contracts: How to Exploit Small Action Spaces
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

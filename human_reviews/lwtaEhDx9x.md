@@ -1,5 +1,6 @@
 # Elephants Never Forget: Testing Language Models for Memorization of Tabular Data
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 3, 8, 5
 

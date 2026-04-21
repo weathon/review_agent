@@ -1,5 +1,6 @@
 # Benchmarking Positional Encodings for GNNs and Graph Transformers
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 3
 

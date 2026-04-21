@@ -1,5 +1,6 @@
 # ICFI: a Feature Importance Measure For Multi-Class Classification
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

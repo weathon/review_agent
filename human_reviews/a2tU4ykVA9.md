@@ -1,5 +1,6 @@
 # OpsEval: A Comprehensive Benchmark Suite for Evaluating Large Language Models’ Capability in IT Operations Domain
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 6, 3
 

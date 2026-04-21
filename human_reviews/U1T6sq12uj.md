@@ -1,5 +1,6 @@
 # Perplexity Trap: PLM-Based Retrievers Overrate Low Perplexity Documents
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8
 

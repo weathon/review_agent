@@ -1,5 +1,6 @@
 # Improving CNN training by Riemannian optimization on the generalized Stiefel manifold combined with a gradient-based manifold search
 
+- Avg Score: 2.60
 - Decision: Reject
 - Scores: 3, 3, 3, 1, 3
 

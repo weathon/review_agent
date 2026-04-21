@@ -1,5 +1,6 @@
 # Segment as You Wish: Free-Form Language-Based Segmentation for Medical Images
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 3, 3
 

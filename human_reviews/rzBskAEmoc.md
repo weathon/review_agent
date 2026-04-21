@@ -1,5 +1,6 @@
 # CAMIL: Context-Aware Multiple Instance Learning for Cancer Detection and Subtyping in Whole Slide Images
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # DePT: Decomposed Prompt Tuning for Parameter-Efficient Fine-tuning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

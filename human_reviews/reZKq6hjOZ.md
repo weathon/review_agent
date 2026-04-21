@@ -1,5 +1,6 @@
 # Broadening Target Distributions for Accelerated Diffusion Models via a Novel Analysis Approach
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

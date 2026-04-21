@@ -1,5 +1,6 @@
 # Robust Locally Differentially Private Graph Analysis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

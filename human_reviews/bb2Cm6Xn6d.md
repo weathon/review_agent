@@ -1,5 +1,6 @@
 # Intriguing Properties of Large Language and Vision Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

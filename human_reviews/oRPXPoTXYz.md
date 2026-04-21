@@ -1,5 +1,6 @@
 # Backpropagation-Free Learning through Gradient Aligned Feedbacks
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

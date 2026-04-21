@@ -1,5 +1,6 @@
 # Toward Exploratory Inverse Constraint Inference with Generative Diffusion Verifiers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

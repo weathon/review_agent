@@ -1,5 +1,6 @@
 # Exploring the Collaborative Advantage of Low-level Information on Generalizable AI-generateted Image Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # In-Context Learning for Few-Shot Molecular Property Prediction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

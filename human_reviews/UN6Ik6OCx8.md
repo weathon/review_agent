@@ -1,5 +1,6 @@
 # Exploring the Design Space of Visual Context Representation in Video MLLMs
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

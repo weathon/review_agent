@@ -1,5 +1,6 @@
 # From Corpora to Causality: Unveiling Causal Comprehension in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5, 8, 3
 

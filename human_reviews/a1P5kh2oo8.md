@@ -1,5 +1,6 @@
 # Vinoground: Scrutinizing LMMs over Dense Temporal Reasoning with Short Videos
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Meta-Learning Strategies through Value Maximization in Neural Networks
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Fantastic Generalization Measures are Nowhere to be Found
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

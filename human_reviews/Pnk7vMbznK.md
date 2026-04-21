@@ -1,5 +1,6 @@
 # Magpie: Alignment Data Synthesis from Scratch by Prompting Aligned LLMs with Nothing
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3
 

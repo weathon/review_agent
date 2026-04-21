@@ -1,5 +1,6 @@
 # MMFNet: Multi-Scale Frequency Masking Neural Network for Multivariate Time Series Forecasting
 
+- Avg Score: 3.83
 - Decision: Reject
 - Scores: 3, 6, 5, 3, 3, 3
 

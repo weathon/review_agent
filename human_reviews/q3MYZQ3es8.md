@@ -1,5 +1,6 @@
 # tBen: Benchmarking and Testing the Rule-Based Temporal Logic Reasoning Ability of Large Language Models with DatalogMTL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

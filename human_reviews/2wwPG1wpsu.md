@@ -1,5 +1,6 @@
 # LST-Bench:A Benchmark for long sequence time-series forecasting Task
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

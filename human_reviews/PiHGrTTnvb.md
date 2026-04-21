@@ -1,5 +1,6 @@
 # CL-DiffPhyCon: Closed-loop Diffusion Control of Complex Physical Systems
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 3, 10, 8
 

@@ -1,5 +1,6 @@
 # Contextual Biasing with the Knuth-Morris-Pratt Matching Algorithm
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

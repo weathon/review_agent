@@ -1,5 +1,6 @@
 # Through the Dual-Prism: A Spectral Perspective on Graph Data Augmentation for Graph Classification
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 6, 8
 

@@ -1,5 +1,6 @@
 # Unsupervised 2D Molecule Drug-likeness Prediction based on Knowledge Distillation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

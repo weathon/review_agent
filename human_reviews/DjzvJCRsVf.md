@@ -1,5 +1,6 @@
 # CLIPSelf: Vision Transformer Distills Itself for Open-Vocabulary Dense Prediction
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 8
 

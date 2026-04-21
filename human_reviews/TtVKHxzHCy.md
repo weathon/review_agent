@@ -1,5 +1,6 @@
 # Efficient Long-range Language Modeling with Self-supervised Causal Retrieval
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

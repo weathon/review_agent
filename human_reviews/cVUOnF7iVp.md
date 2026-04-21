@@ -1,5 +1,6 @@
 # Improved Analysis of Sparse Linear Regression in Local Differential Privacy Model
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 5, 6
 

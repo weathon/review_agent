@@ -1,5 +1,6 @@
 # Prompt-Guided Dynamic Network for Image Super Resolution
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

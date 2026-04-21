@@ -1,5 +1,6 @@
 # Identity Lock: Locking API Fine-tuned LLMs With Identity-based Wake Words
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

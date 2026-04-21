@@ -1,5 +1,6 @@
 # Do I Know This Entity? Knowledge Awareness and Hallucinations in Language Models
 
+- Avg Score: 9.00
 - Decision: Accept (Oral)
 - Scores: 8, 10, 8, 10
 

@@ -1,5 +1,6 @@
 # Talking Vehicles: Cooperative Driving via Natural Language
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

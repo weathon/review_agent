@@ -1,5 +1,6 @@
 # Breaking Class Barriers: Efficient Dataset Distillation via Inter-Class Feature Compensator
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 3
 

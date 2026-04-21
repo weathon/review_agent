@@ -1,5 +1,6 @@
 # Data-Driven Uncertainty-Aware Forecasting of Sea Ice Conditions in the Gulf of Ob Based on Satellite Radar Imagery
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

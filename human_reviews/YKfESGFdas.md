@@ -1,5 +1,6 @@
 # GeONet: a neural operator for learning the Wasserstein geodesic
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Visual Grounding with attention-driven constraint balancing
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

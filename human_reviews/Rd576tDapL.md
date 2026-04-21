@@ -1,5 +1,6 @@
 # Unsupervised Event Outlier Detection in Continuous Time
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 6
 

@@ -1,5 +1,6 @@
 # Realistic Evaluation of Deep Partial-Label Learning Algorithms
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

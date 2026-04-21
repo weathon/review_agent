@@ -1,5 +1,6 @@
 # MA-RLHF: Reinforcement Learning from Human Feedback with Macro Actions
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 3, 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Kolmogorov–Arnold Graph Neural Networks
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5
 

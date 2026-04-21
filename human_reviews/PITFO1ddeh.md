@@ -1,5 +1,6 @@
 # Unlocking Efficient, Scalable, and Continual Knowledge Editing with Basis-Level Representation Fine-Tuning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 8, 3, 6
 

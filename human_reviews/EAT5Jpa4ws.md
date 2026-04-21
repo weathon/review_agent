@@ -1,5 +1,6 @@
 # SHARE: Bridging Shape and Ray Estimation for Pose-Free Generalizable Gaussian Splatting
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Analyzing the Effects of Emulating on the Reinforcement Learning Manifold
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

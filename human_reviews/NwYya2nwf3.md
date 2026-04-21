@@ -1,5 +1,6 @@
 # ExpertZIP: A Progressive Fusion Framework for Mixture-of-Experts Model Optimization through Huffman Tree Structures
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 5, 3, 6
 

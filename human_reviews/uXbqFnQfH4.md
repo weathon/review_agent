@@ -1,5 +1,6 @@
 # Multi-Objective Multi-Solution Transport
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 5, 5, 1, 8
 

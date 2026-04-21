@@ -1,5 +1,6 @@
 # Leveraging Human Revisions for Improving Text-to-Layout Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

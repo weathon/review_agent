@@ -1,5 +1,6 @@
 # It's Never Too Late: Fusing Acoustic Information into Large Language Models for Automatic Speech Recognition
 
+- Avg Score: 6.60
 - Decision: Accept (poster)
 - Scores: 10, 6, 6, 6, 5
 

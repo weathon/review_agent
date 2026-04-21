@@ -1,5 +1,6 @@
 # Use Your INSTINCT: INSTruction optimization usIng Neural bandits Coupled with Transformers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 8, 5
 

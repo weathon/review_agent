@@ -1,5 +1,6 @@
 # Language Models Need Inductive Biases to Count Inductively
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 8
 

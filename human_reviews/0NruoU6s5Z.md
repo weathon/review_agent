@@ -1,5 +1,6 @@
 # CompoDiff: Versatile Composed Image Retrieval With Latent Diffusion
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

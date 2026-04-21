@@ -1,5 +1,6 @@
 # Seg-LaneDet: 3D Lane Detection from Monocular Images with 2D Segmentation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

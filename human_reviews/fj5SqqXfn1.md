@@ -1,5 +1,6 @@
 # Avoiding Pitfalls for Privacy Accounting of Subsampled Mechanisms under Composition
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 6, 3
 

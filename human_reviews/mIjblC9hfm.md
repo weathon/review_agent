@@ -1,5 +1,6 @@
 # GOFA: A Generative One-For-All Model for Joint Graph Language Modeling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

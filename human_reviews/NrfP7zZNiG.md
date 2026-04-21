@@ -1,5 +1,6 @@
 # Buckle Up: Robustifying LLMs at Every Customization Stage via Data Curation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Task-Oriented Diffusion Inversion for High-Fidelity Text-based Editing
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3, 5
 

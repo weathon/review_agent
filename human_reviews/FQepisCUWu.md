@@ -1,5 +1,6 @@
 # ChatEval: Towards Better LLM-based Evaluators through Multi-Agent Debate
 
+- Avg Score: 5.60
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 6, 6
 

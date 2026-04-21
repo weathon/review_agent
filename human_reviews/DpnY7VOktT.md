@@ -1,5 +1,6 @@
 # Can Model Randomization Offer Robustness Against Query-Based Black-Box Attacks?
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Bootstrapping Language-Guided Navigation Learning with Self-Refining Data Flywheel
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 5
 

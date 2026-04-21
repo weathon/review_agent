@@ -1,5 +1,6 @@
 # Large Language Models to Enhance Bayesian Optimization
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 8
 

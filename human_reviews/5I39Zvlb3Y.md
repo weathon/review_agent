@@ -1,5 +1,6 @@
 # Collu-Bench: A Benchmark for Predicting LLM Hallucinations in Code
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # UnCLe: An Unlearning Framework for Continual Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

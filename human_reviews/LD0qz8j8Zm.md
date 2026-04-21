@@ -1,5 +1,6 @@
 # Evaluating topological fitness of human brain-inspired sub-circuits in Echo State Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

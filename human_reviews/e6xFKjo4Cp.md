@@ -1,5 +1,6 @@
 # Learn while Unlearn: An Iterative Unlearning Framework for Generative Language Models
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5
 

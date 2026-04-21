@@ -1,5 +1,6 @@
 # SimLabel: Consistency-Guided OOD Detection with Pretrained Vision-Language Models
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 6, 6
 

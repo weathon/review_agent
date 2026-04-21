@@ -1,5 +1,6 @@
 # Neural Manifold Regularization: Aligning 2D Latent Dynamics with Stereotyped, Natural, and Attempted Movements
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

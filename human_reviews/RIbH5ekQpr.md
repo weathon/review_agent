@@ -1,5 +1,6 @@
 # IMP: Benchmarking Image Polysemy in Vision-Language Models
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 3, 5, 8, 5, 5
 

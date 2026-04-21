@@ -1,5 +1,6 @@
 # Arctic-SnowCoder: Demystifying High-Quality Data in Code Pretraining
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

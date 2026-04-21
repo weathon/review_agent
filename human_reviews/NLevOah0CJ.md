@@ -1,5 +1,6 @@
 # Hindsight PRIORs for Reward Learning from Human Preferences
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 5, 6
 

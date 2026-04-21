@@ -1,5 +1,6 @@
 # Text-To-Energy: Accelerating Quantum Chemistry Calculations through Enhanced Text-to-Vector Encoding and Orbital-Aware Multilayer Perceptron
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1, 8
 

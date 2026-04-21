@@ -1,5 +1,6 @@
 # Spectral learning of shared dynamics between generalized-linear processes
 
+- Avg Score: 6.80
 - Decision: Reject
 - Scores: 6, 8, 8, 6, 6
 

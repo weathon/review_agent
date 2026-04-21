@@ -1,5 +1,6 @@
 # DynamicsDiffusion: Generating and Rare Event Sampling of Molecular Dynamic Trajectories Using Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 3
 

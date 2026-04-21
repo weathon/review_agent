@@ -1,5 +1,6 @@
 # MotherNet: Fast Training and Inference via Hyper-Network Transformers
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 8
 

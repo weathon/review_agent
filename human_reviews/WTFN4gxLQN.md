@@ -1,5 +1,6 @@
 # Mask and Restore: Blind Backdoor Defense at Test Time with Masked Autoencoder
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

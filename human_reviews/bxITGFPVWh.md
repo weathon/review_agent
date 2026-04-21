@@ -1,5 +1,6 @@
 # Sharpness-Aware Data Poisoning Attack
 
+- Avg Score: 5.83
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # REVO-LION: Evaluating and Refining Vision-Language Instruction Tuning Datasets
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

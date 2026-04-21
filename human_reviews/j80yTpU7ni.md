@@ -1,5 +1,6 @@
 # Connection Strength-Based Optimization for Multi-Task Learning
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 6
 

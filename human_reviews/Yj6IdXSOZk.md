@@ -1,5 +1,6 @@
 # CF-GISS: Collision-Free Generative 3D Indoor Scene Synthesis with Controllable Floor Plans and Optimized Layouts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 8, 3
 

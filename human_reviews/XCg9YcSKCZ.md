@@ -1,5 +1,6 @@
 # Weak Supervision from Vision-Language Models to Self-Improve on Downstream Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # COFlowNet: Conservative Constraints on Flows Enable High-Quality Candidate Generation
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6
 

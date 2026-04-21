@@ -1,5 +1,6 @@
 # Reweighting Local Mimina with Tilted SAM
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 8, 6, 6
 

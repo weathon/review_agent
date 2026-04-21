@@ -1,5 +1,6 @@
 # Learning Semantic Proxies from Visual Prompts for Parameter-Efficient Fine-Tuning in Deep Metric Learning
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 5
 

@@ -1,5 +1,6 @@
 # Learning Imbalanced Data with Beneficial Label Noise
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

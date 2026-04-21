@@ -1,5 +1,6 @@
 # Seeker: Enhancing Exception Handling in Code with a LLM-based Multi-Agent Approach
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1
 

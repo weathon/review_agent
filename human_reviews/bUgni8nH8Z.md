@@ -1,5 +1,6 @@
 # Neural Characteristic Activation Value Analysis for Improved ReLU Network Feature Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6
 

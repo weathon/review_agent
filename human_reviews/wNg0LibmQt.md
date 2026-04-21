@@ -1,5 +1,6 @@
 # Gradient-based Jailbreak Images for Multimodal Fusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 3, 3, 8, 8
 

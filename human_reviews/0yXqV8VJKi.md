@@ -1,5 +1,6 @@
 # Understanding Complexity in VideoQA via Visual Program Generation
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

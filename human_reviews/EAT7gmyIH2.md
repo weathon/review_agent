@@ -1,5 +1,6 @@
 # DAME: A Distillation Based Approach For Model-agnostic Local Explainability
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # MVDream: Multi-view Diffusion for 3D Generation
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

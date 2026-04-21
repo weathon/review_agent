@@ -1,5 +1,6 @@
 # PETRA: Parallel End-to-end Training with Reversible Architectures
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

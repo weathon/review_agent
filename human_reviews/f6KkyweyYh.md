@@ -1,5 +1,6 @@
 # Biological Sequence Analysis Using B ́ezier Curve
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

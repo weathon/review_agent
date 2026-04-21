@@ -1,5 +1,6 @@
 # Learning Hierarchical Polynomials of Multiple Nonlinear Features
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # A Simple Romance Between Multi-Exit Vision Transformer and Token Reduction
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

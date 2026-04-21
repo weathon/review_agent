@@ -1,5 +1,6 @@
 # Unifying over-smoothing and over-squashing in graph neural networks: A physics informed approach and beyond
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

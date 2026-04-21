@@ -1,5 +1,6 @@
 # ClimODE: Climate and Weather Forecasting with Physics-informed Neural ODEs
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # SmartPlay : A Benchmark for LLMs as Intelligent Agents
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 8
 

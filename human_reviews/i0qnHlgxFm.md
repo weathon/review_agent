@@ -1,5 +1,6 @@
 # Periodical Moving Average Accelerates Gradient Accumulation for Post-Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

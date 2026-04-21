@@ -1,5 +1,6 @@
 # Llamas (mostly) think in English: On Causal Interventions in the Latent Language of Transformers
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5
 

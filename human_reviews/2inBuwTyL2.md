@@ -1,5 +1,6 @@
 # Deep SE(3)-Equivariant Geometric Reasoning for Precise Placement Tasks
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

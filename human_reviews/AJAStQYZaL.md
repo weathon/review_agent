@@ -1,5 +1,6 @@
 # DiverseAgentEntropy: Quantifying Black-Box LLM Uncertainty through Diverse Perspectives and Multi-Agent Interaction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

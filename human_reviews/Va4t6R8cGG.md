@@ -1,5 +1,6 @@
 # End-to-End Spatio-Temporal Action Localisation with Video Transformers
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 6
 

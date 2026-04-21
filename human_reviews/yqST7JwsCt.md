@@ -1,5 +1,6 @@
 # Entropy-Based Aggregation for Fair and Effective Federated Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 5, 6, 5
 

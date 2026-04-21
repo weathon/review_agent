@@ -1,5 +1,6 @@
 # Complexity of Injectivity and Verification of ReLU Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

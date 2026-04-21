@@ -1,5 +1,6 @@
 # Identification of Intermittent Temporal Latent Process
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6, 8
 

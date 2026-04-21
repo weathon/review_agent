@@ -1,5 +1,6 @@
 # Q-Adapt: Adapting LMM for  Visual Quality Perceiver with Progressive Instruction Tuning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

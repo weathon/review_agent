@@ -1,5 +1,6 @@
 # Latent Point Collapse Induces an Information Bottleneck in Deep Neural Network Classifiers
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # Self-supervised Pocket Pretraining via Protein Fragment-Surroundings Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

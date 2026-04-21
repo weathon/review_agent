@@ -1,5 +1,6 @@
 # High Fidelity Text-Guided Music Editing via Single-Stage Flow Matching
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 3, 3
 

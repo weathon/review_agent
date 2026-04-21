@@ -1,5 +1,6 @@
 # Safety Representations for Safer Policy Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

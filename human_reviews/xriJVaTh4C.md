@@ -1,5 +1,6 @@
 # Gaussian Loss Smoothing Enables Certified Training with Tight Convex Relaxations
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 3, 1, 6
 

@@ -1,5 +1,6 @@
 # A Study of Bayesian Neural Network Surrogates for Bayesian Optimization
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

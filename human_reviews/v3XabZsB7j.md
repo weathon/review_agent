@@ -1,5 +1,6 @@
 # CNN Variational autoencoders' reconstruction ability of long ECG signals
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 

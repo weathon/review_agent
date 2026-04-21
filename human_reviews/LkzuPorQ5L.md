@@ -1,5 +1,6 @@
 # Cut the Crap: An Economical Communication Pipeline for LLM-based Multi-Agent Systems
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 3, 8, 5, 8
 

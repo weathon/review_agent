@@ -1,5 +1,6 @@
 # Calibration Bottleneck: What Makes Neural Networks less Calibratable?
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

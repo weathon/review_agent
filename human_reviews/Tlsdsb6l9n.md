@@ -1,5 +1,6 @@
 # Mol-Instructions: A Large-Scale Biomolecular Instruction Dataset for Large Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

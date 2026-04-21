@@ -1,5 +1,6 @@
 # SegGen: Supercharging Segmentation Models with Text2Mask and Mask2Img Synthesis
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5
 

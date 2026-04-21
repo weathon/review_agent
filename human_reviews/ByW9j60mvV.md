@@ -1,5 +1,6 @@
 # RL Algorithms are Information-State Policies in the Bayes-Adaptive MDP
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 3, 8
 

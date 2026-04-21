@@ -1,5 +1,6 @@
 # Approaching Deep Learning through the Spectral Dynamics of Weights
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 6, 6, 5
 

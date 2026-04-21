@@ -1,5 +1,6 @@
 # Data-Driven Lipschitz Continuity: A Cost-Effective Approach to Improve Adversarial Robustness
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 5, 6, 5, 5
 

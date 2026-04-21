@@ -1,5 +1,6 @@
 # Mamba-HMIL: Hierarchical Multiple Instance Learning via State Space Model for Whole Slide Image Diagnosis
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 6
 

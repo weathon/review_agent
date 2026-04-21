@@ -1,5 +1,6 @@
 # Approaching Rate-Distortion Limits in Neural Compression with Lattice Transform Coding
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 6, 8, 8
 

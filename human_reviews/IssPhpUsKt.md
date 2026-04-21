@@ -1,5 +1,6 @@
 # Improving Reasoning Performance in Large Language Models via Representation Engineering
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6, 6
 

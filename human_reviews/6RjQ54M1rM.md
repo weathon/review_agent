@@ -1,5 +1,6 @@
 # FedLWS: Federated Learning with Adaptive Layer-wise Weight Shrinking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Distributed In-Context Learning under Non-IID Among Clients
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

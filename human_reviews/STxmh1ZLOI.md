@@ -1,5 +1,6 @@
 # RTMPose: Real-Time Models for Multi-Person Pose Estimation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 5, 3
 

@@ -1,5 +1,6 @@
 # Quantifying Emergence in Neural Networks: Insights from Pruning and Training Dynamics
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

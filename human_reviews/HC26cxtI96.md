@@ -1,5 +1,6 @@
 # The Fine-Grained Chip Placement with Hybrid Action Spaces and Feature Fusion
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1, 1
 

@@ -1,5 +1,6 @@
 # From Patches to Graphs: Towards Image Diffusion Models with GNNs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Regularized KL-Divergence for well-defined function space variational inference in BNNs
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Adapters for Altering LLM Vocabularies: What Languages Benefit the Most?
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

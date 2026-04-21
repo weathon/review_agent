@@ -1,5 +1,6 @@
 # SliM-LLM: Salience-Driven Mixed-Precision Quantization for Large Language Models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 5, 5, 6, 6
 

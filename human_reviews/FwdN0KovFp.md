@@ -1,5 +1,6 @@
 # Towards Stable Learning in Predictive Coding Networks
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 5, 6, 1
 
@@ -30,31 +31,45 @@ This work tackles an important problem in the literature of computational neuros
 - Skip connections are an interesting idea to address the issue (and lower the required number of iterations T needed to perform the inference phase).
 
 ### Weaknesses
-1) The solution proposed, as well as the experimental evaluations, need improvement and argumentations:   The nice property of predictive coding, is the parallelisation of all of its operations, and the lack of external control that triggers them. As specified in [4]:   “Minimal external control. The neurons perform the computation autonomously with as little external control routing information in different ways at different times as possible.”
+1) The solution proposed, as well as the experimental evaluations, need improvement and argumentations: 
 
-Is this requirement satisfied in your proposed solution? I suspect not, based on the description   “In the initial training stage, the latent states z2 and zL−1 closest to the data pair are inferred. The parameters associated with these states are learned in the subsequent learning phase. At this stage, the latent states from z3 to zL−2 do not participate in inference”  If not, I would suggest to adapt the proposed algorithm to perform all of the neuronal computations with no external control that specifies when specific layers have to be updated. Otherwise, if we could control when specific layers can be updated, we can turn PC into BP, and solve the stability problems [1,2]. To not mention that this is not only not acceptable from a biological plausibility perspective, but it also makes the model much harder to be implemented on neuromrphic chips. 
+The nice property of predictive coding, is the parallelisation of all of its operations, and the lack of external control that triggers them. As specified in [4]: 
+
+“Minimal external control. The neurons perform the computation autonomously with as little external control routing information in different ways at different times as possible.”
+
+Is this requirement satisfied in your proposed solution? I suspect not, based on the description 
+
+“In the initial training stage, the latent states z2 and zL−1 closest to the data pair are inferred. The parameters associated with these states are learned in the subsequent learning phase. At this stage, the latent states from z3 to zL−2 do not participate in inference”
+
+If not, I would suggest to adapt the proposed algorithm to perform all of the neuronal computations with no external control that specifies when specific layers have to be updated. Otherwise, if we could control when specific layers can be updated, we can turn PC into BP, and solve the stability problems [1,2]. To not mention that this is not only not acceptable from a biological plausibility perspective, but it also makes the model much harder to be implemented on neuromrphic chips. 
 
 2) Here is my biggest concern: the experimental evaluation for the image classification experiments. Why are the accuracies so low? On such small scale tasks, PCNs have been shown to be as good as backprop models: you can get >98% on MNIST using feedforward models, and >85% on CIFAR10 using convolutional ones (for the state of the art on the field, we refer to [5]). Is there an explanation on why they are so low? 
 
 3) Presentation could be improved: Add a pseudocode for the proposed algorithm, make the experimental sections clearer.
 
 ### Questions
-The authors briefly mention similarities and differences between the weight update of PCNs and backprop. There are cases in which, by breaking the parallelism of the operations, and adding some external control that triggers the parameter updates at specific time steps, the updates of PC and BP are equivalent [1,2]. A discussion on this, and the other works you cite is [3].  
+The authors briefly mention similarities and differences between the weight update of PCNs and backprop. There are cases in which, by breaking the parallelism of the operations, and adding some external control that triggers the parameter updates at specific time steps, the updates of PC and BP are equivalent [1,2]. A discussion on this, and the other works you cite is [3].
+
+
 
 Can the authors elaborate on the proposed SPCNs needing external control: what would be the advantage of such algorithm in practice? 
 
 Can the authors comment on the test accuracies obtained (for MNIST they are comparable with linear regression)?
 
-The theoretical results are interesting, and so is the idea of addressing the problems of PCNs using the author’s findings. However, they could be used differently to improve the performance of deep PCNs. FOr example, I would focus on the skip connection idea (I believe there is value in it), and in the regularisation techniques proposed (how do they work if you apply them in isolation? This would be an interesting ablation study to add), without touching the autonomous updates. Furthermore, as the authors developed connections between the variance of the weights and the propagation of the error, how can PCNs be improved by changing the initialisation of the weights of intermediate layers?  The results seem to suggest that using initializations defined and optimized for BP is not the best way?
+The theoretical results are interesting, and so is the idea of addressing the problems of PCNs using the author’s findings. However, they could be used differently to improve the performance of deep PCNs. FOr example, I would focus on the skip connection idea (I believe there is value in it), and in the regularisation techniques proposed (how do they work if you apply them in isolation? This would be an interesting ablation study to add), without touching the autonomous updates. Furthermore, as the authors developed connections between the variance of the weights and the propagation of the error, how can PCNs be improved by changing the initialisation of the weights of intermediate layers? 
+The results seem to suggest that using initializations defined and optimized for BP is not the best way?
 
 
 [1] Salvatori, Tommaso, et al. "Reverse differentiation via predictive coding." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 36. No. 7. 2022.
 
 [2] Song, Yuhang, et al. "Can the brain do backpropagation?---exact implementation of backpropagation in predictive coding networks." Advances in neural information processing systems 33 (2020): 22566-22579.
 
-[3] Rosenbaum, Robert. "On the relationship between predictive coding and backpropagation." Plos one 17.3 (2022): e0266102.  
+[3] Rosenbaum, Robert. "On the relationship between predictive coding and backpropagation." Plos one 17.3 (2022): e0266102.
 
-[4] Whittington, James CR, and Rafal Bogacz. "An approximation of the error backpropagation algorithm in a predictive coding network with local hebbian synaptic plasticity." Neural computation 29.5 (2017): 1229-1262. 
+
+
+[4] Whittington, James CR, and Rafal Bogacz. "An approximation of the error backpropagation algorithm in a predictive coding network with local hebbian synaptic plasticity." Neural computation 29.5 (2017): 1229-1262.
+
 
 [5] Pinchetti, Luca, et al. "Benchmarking Predictive Coding Networks--Made Simple." arXiv preprint arXiv:2407.01163 (2024).
 

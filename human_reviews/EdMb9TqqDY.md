@@ -1,5 +1,6 @@
 # Long-horizon Visual Instruction Generation with Logic and Attribute Self-reflection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

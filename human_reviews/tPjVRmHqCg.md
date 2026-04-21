@@ -1,5 +1,6 @@
 # Curiosity Driven Protein Sequence Generation via Reinforcement Learning
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

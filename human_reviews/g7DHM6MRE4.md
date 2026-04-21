@@ -1,5 +1,6 @@
 # Building Luganda Machine Translation models for the   Medical Domain
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

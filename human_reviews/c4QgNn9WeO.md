@@ -1,5 +1,6 @@
 # LMEye: An Interactive Perception Network for Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 3, 6
 

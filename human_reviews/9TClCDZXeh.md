@@ -1,5 +1,6 @@
 # Differentiable and Learnable Wireless Simulation with Geometric Transformers
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

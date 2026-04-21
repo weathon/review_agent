@@ -1,5 +1,6 @@
 # Causal Bayesian Optimization with Unknown Causal Graphs
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 10, 3, 8, 5
 

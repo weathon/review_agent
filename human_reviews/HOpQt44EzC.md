@@ -1,5 +1,6 @@
 # Differentially Private Vision-Language Foundation Models via Image Captioning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 

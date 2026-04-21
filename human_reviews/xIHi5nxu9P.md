@@ -1,5 +1,6 @@
 # Subtractive Mixture Models via Squaring: Representation and Learning
 
+- Avg Score: 7.20
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8, 6
 

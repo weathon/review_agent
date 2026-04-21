@@ -1,5 +1,6 @@
 # WizardCoder: Empowering Code Large Language Models with Evol-Instruct
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Learning to Jointly Understand Visual and Tactile Signals
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

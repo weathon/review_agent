@@ -1,5 +1,6 @@
 # Probabilistic Learning to Defer: Handling Missing Expert Annotations and Controlling Workload Distribution
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

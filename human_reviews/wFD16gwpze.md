@@ -1,5 +1,6 @@
 # Analyzing Neural Scaling Laws in Two-Layer Networks with Power-Law Data Spectra
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

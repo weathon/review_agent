@@ -1,5 +1,6 @@
 # Diffusion Models for Tabular Data Imputation and Synthetic Data Generation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

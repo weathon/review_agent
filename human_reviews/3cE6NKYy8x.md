@@ -1,5 +1,6 @@
 # Towards Fair Graph Anomaly Detection: Problem, New Datasets, and Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 5, 3
 

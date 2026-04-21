@@ -1,5 +1,6 @@
 # Neuro-Symbolic Rule Lists
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

@@ -1,5 +1,6 @@
 # Task Planning for Visual Room Rearrangement under Partial Observability
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

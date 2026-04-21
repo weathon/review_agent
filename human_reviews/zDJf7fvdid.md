@@ -1,5 +1,6 @@
 # NVS-Solver: Video Diffusion Model as Zero-Shot Novel View Synthesizer
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

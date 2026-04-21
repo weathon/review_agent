@@ -1,5 +1,6 @@
 # GenBot: Generative Simulation Empowers Automated Robotic Skill Learning at Scale
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 6, 5
 

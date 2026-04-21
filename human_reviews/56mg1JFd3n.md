@@ -1,5 +1,6 @@
 # Writing in the Margins: Better Inference Patterns for Long-Context Retrieval
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 3, 10
 

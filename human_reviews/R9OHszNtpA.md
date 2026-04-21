@@ -1,5 +1,6 @@
 # Generative Modeling of Individual Behavior at Scale
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 10, 5, 5
 

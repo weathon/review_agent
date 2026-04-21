@@ -1,5 +1,6 @@
 # Federated Coordination: Private and Distributed Strategy Alignment
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 6, 5, 6, 5
 

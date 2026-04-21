@@ -1,5 +1,6 @@
 # Implicit degree bias in the link prediction task
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5, 6, 6
 

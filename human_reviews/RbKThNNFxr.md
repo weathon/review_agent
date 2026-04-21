@@ -1,5 +1,6 @@
 # LoRA-FA: Memory-efficient Low-rank Adaptation for Large Language Models Fine-tuning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

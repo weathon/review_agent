@@ -1,5 +1,6 @@
 # WavTokenizer: an Efficient Acoustic Discrete Codec Tokenizer for Audio Language Modeling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 5, 8, 3, 10
 

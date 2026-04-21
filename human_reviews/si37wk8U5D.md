@@ -1,5 +1,6 @@
 # Semantix: An Energy-guided Sampler for Semantic Style Transfer
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 6
 

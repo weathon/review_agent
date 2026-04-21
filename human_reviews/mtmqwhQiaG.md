@@ -1,5 +1,6 @@
 # Canonic Signed Spike Coding for Efficient Spiking Neural Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

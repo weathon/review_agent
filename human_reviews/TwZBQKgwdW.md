@@ -1,5 +1,6 @@
 # NTK-DFL: Enhancing Decentralized Federated Learning in Heterogeneous Settings via Neural Tangent Kernel
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

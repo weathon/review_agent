@@ -1,5 +1,6 @@
 # DS-Prover: A Dynamic Sampling Based Approach for Neural Theorem Proving
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

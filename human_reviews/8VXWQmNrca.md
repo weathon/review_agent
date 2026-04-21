@@ -1,5 +1,6 @@
 # Conformal Bounds on Full-Reference Image Quality for Imaging Inverse Problems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

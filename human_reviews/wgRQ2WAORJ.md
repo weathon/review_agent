@@ -1,5 +1,6 @@
 # Aligning Visual Contrastive learning models via Preference Optimization
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 8, 8
 

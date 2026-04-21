@@ -1,5 +1,6 @@
 # Inference-Friendly Models With MixAttention
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 3, 1
 

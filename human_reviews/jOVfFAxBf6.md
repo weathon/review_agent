@@ -1,5 +1,6 @@
 # Bi-continuous and complete SE(2)-invariants parametrize all clouds of unordered points
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 6, 6, 8
 

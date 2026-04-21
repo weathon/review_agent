@@ -1,5 +1,6 @@
 # A Large Deviation Theory Analysis on the Implicit Bias of SGD
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

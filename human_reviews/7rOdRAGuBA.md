@@ -1,5 +1,6 @@
 # Spatiotemporal Backward Inconsistency Learning Gives STGNNs Icing on the Cake
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

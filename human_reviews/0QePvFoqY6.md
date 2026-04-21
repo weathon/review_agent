@@ -1,5 +1,6 @@
 # IncEventGS: Pose-Free Gaussian Splatting from a Single Event Camera
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

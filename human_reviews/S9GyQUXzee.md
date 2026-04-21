@@ -1,5 +1,6 @@
 # GROOT-2: Weakly Supervised Multimodal Instruction Following Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 5
 

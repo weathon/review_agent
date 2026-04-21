@@ -1,5 +1,6 @@
 # Century: A Framework and Dataset for Evaluating Historical Contextualisation of Sensitive Images
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

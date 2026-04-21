@@ -1,5 +1,6 @@
 # Reasoning on Graphs: Faithful and Interpretable Large Language Model Reasoning
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

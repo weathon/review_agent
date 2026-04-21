@@ -1,5 +1,6 @@
 # Sampling from Energy-based Policies using Diffusion
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

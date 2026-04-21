@@ -1,5 +1,6 @@
 # Trust or Escalate: LLM Judges with Provable Guarantees for Human Agreement
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 10
 

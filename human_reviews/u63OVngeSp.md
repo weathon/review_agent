@@ -1,5 +1,6 @@
 # Deriving Causal Order from Single-Variable Interventions: Guarantees & Algorithm
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 8, 5
 

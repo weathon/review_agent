@@ -1,5 +1,6 @@
 # Class-wise Autoencoders Measure Classification Difficulty And Detect Label Mistakes
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 3, 6, 3, 8
 

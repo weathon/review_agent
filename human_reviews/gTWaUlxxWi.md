@@ -1,5 +1,6 @@
 # On the Effectiveness of One-Shot Federated Ensembles in Heterogeneous Cross-Silo Settings
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

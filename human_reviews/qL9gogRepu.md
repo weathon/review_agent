@@ -1,5 +1,6 @@
 # Zero and Few-shot Semantic Parsing with Ambiguous Inputs
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

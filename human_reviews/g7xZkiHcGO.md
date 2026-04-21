@@ -1,5 +1,6 @@
 # Investigating Domain Gaps for Indoor 3D Object Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3, 5
 

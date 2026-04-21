@@ -1,5 +1,6 @@
 # Learning Embodied Vision-Language Programming From Instruction, Exploration, and Environmental Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # When Attention Sink Emerges in Language Models: An Empirical View
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

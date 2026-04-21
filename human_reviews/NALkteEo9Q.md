@@ -1,5 +1,6 @@
 # Adversarial Inception for Bounded Backdoor Poisoning in Deep Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Learning to Plan and Generate Text with Citations
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 3, 8, 6
 

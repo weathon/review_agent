@@ -1,5 +1,6 @@
 # Beyond correlation: The impact of human uncertainty in measuring the effectiveness of automatic evaluation and LLM-as-a-judge
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 8
 

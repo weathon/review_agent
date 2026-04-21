@@ -1,5 +1,6 @@
 # ZeroI2V: Zero-Cost Adaptation of Pre-Trained Transformers from Image to Video
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 6, 8
 

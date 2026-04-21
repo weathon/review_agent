@@ -1,5 +1,6 @@
 # NEMESIS \\  Jailbreaking LLMs with Chain of Thoughts Approach
 
+- Avg Score: 1.40
 - Decision: Reject
 - Scores: 1, 1, 1, 3, 1
 

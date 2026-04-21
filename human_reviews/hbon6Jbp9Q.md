@@ -1,5 +1,6 @@
 # Learning and Interpreting Multiple Representations of Semantics in a Neurobiological System
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

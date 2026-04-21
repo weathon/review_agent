@@ -1,5 +1,6 @@
 # GUI-World: A Video Benchmark and Dataset for Multimodal GUI-oriented Understanding
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5
 

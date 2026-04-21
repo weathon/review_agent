@@ -1,5 +1,6 @@
 # PowerNet: Truncated Matrix Power Series as Quasi-Equivariant Layers
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 1
 

@@ -1,5 +1,6 @@
 # Many-Objective Multi-Solution Transport
 
+- Avg Score: 6.17
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6, 8, 6
 

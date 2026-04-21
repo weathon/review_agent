@@ -1,5 +1,6 @@
 # SimO Loss: Anchor-Free Contrastive Loss for Fine-Grained Supervised Contrastive Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1, 3, 3, 3
 

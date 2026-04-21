@@ -1,5 +1,6 @@
 # Playing For You: Text Prompt-guided Joint Audio-visual Generation for Narrating Faces using Multi-entangled Latent Space
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 5, 6
 

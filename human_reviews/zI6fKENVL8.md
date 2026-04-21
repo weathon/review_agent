@@ -1,5 +1,6 @@
 # Federated Learning with Differential Privacy for End-to-End Speech Recognition
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

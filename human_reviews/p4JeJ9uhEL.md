@@ -1,5 +1,6 @@
 # CamoVid60K: A Large-Scale Video Dataset for Moving Camouflaged Animals Understanding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

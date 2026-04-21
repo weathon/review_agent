@@ -1,5 +1,6 @@
 # How do Language Models Bind Entities in Context?
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 6
 

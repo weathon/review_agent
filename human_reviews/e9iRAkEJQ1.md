@@ -1,5 +1,6 @@
 # Rate of Approximation by Flows: A Case Study on the Eikonal Equation
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

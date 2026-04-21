@@ -1,5 +1,6 @@
 # DeepSeek-Prover-V1.5: Harnessing Proof Assistant Feedback for Reinforcement Learning and Monte-Carlo Tree Search
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5
 

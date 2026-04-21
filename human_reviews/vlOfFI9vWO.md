@@ -1,5 +1,6 @@
 # Multi-Agent Reinforcement Learning for Efficient Vision Transformer with Dynamic Token Selection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 1
 

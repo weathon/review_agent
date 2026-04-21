@@ -1,5 +1,6 @@
 # Learning Latent Causal Semantics from Text: An Empirical Study of Next-Token Predictors Trained on Programs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

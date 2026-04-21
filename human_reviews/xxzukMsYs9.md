@@ -1,5 +1,6 @@
 # 3D Object Manipulation in a Single Image Using Generative Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 8, 3
 

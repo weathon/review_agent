@@ -1,5 +1,6 @@
 # A Semi-smooth, Self-shifting, and Singular Newton Method for Sparse Optimal Transport
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 3, 6, 6, 3
 

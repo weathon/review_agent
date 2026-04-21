@@ -1,5 +1,6 @@
 # Scalable and Effective Implicit Graph Neural Networks on Large Graphs
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 8, 3, 6, 6
 

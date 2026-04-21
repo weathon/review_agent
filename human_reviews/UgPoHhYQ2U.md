@@ -1,5 +1,6 @@
 # Uncertainty Herding: One Active Learning Method for All Label Budgets
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 6
 

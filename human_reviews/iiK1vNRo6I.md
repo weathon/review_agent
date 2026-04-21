@@ -1,5 +1,6 @@
 # Semi-Supervised Neural Network Model For Quadratic Multiparametric Programming
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

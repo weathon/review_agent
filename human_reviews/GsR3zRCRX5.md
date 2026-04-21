@@ -1,5 +1,6 @@
 # Robust Simulation-Based Inference under Missing Data via Neural Processes
 
+- Avg Score: 6.17
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6, 8, 8
 

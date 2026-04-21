@@ -1,5 +1,6 @@
 # Tabular Deep-SMOTE: A supervised autoencoder-based minority-oversampling technique for class-imbalanced tabular classification
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

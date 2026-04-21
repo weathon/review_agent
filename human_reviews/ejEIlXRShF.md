@@ -1,5 +1,6 @@
 # Unveiling Molecular Secrets: An LLM-Augmented Linear Model for Explainable and Calibratable Molecular Property Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 3, 6, 8
 

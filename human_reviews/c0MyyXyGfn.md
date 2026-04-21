@@ -1,5 +1,6 @@
 # Prioritized Soft Q-Decomposition for Lexicographic Reinforcement Learning
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Right on Time: Revising Time Series Models by Constraining their Explanations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

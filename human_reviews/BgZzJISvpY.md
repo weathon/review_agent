@@ -1,5 +1,6 @@
 # Reinforcement Learning with Extreme Minimum Distribution
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

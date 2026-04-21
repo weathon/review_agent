@@ -1,5 +1,6 @@
 # CTV-FAS: Compensate Texts with Visuals for Generalizable Face Anti-spoofing
 
+- Avg Score: 4.71
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6, 5, 5, 6
 

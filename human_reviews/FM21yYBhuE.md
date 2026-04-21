@@ -1,5 +1,6 @@
 # Equally Critical: Samples, Targets, and Their Mappings in Datasets
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

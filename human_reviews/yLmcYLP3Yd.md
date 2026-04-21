@@ -1,5 +1,6 @@
 # Discrete Neural Algorithmic Reasoning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 3, 5, 8
 

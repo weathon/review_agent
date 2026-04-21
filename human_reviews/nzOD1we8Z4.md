@@ -1,5 +1,6 @@
 # ContextGNN: Beyond Two-Tower Recommendation Systems
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 5, 5, 5, 8
 

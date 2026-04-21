@@ -1,5 +1,6 @@
 # Open-CK: A Large Multi-Physics Fields Coupling benchmarks in Combustion Kinetics
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5
 

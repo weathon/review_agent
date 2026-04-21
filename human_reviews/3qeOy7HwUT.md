@@ -1,5 +1,6 @@
 # Input Space Mode Connectivity in Deep Neural Networks
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6
 

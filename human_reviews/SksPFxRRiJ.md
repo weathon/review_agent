@@ -1,5 +1,6 @@
 # Removing Spurious Concepts from Neural Network Representations via Joint Subspace Estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

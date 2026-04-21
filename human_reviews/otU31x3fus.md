@@ -1,5 +1,6 @@
 # Advancing the Lower Bounds: an Accelerated, Stochastic, Second-order Method with Optimal Adaptation to Inexactness
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 1, 8
 

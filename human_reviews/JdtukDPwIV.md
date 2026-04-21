@@ -1,5 +1,6 @@
 # Frequency-Decoupled Cross-Modal Knowledge Distillation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

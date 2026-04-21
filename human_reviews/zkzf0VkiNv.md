@@ -1,5 +1,6 @@
 # Certified Robustness on Visual Graph Matching via Searching Optimal Smoothing Range
 
+- Avg Score: 5.86
 - Decision: Reject
 - Scores: 8, 6, 6, 5, 5, 6, 5
 

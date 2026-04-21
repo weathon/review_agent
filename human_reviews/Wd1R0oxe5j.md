@@ -1,5 +1,6 @@
 # Large Language Models for Explainability in Machine Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 5, 3, 1
 

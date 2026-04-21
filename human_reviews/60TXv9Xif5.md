@@ -1,5 +1,6 @@
 # Metamizer: A Versatile Neural Optimizer for Fast and Accurate Physics Simulations
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 3, 5
 

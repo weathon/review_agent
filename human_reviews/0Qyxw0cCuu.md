@@ -1,5 +1,6 @@
 # CONTROL: A Contrastive Learning Framework for Open World Semi-Supervised Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

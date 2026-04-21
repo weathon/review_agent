@@ -1,5 +1,6 @@
 # SemPLeS: Semantic Prompt Learning for Weakly-Supervised Semantic Segmentation
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # World-Model based Hierarchical Planning with Semantic Communications for Autonomous Driving
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

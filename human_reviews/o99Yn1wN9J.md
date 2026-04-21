@@ -1,5 +1,6 @@
 # Looking into User’s Long-term Interests through the Lens of Conservative Evidential Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 8
 

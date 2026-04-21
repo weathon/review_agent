@@ -1,5 +1,6 @@
 # Guiding VLM Agents with Process Rewards at Inference Time for GUI Navigation
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

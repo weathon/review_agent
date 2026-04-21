@@ -1,5 +1,6 @@
 # On-Device Collaborative Language Modeling via a Mixture of Generalists and Specialists
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

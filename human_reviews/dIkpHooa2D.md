@@ -1,5 +1,6 @@
 # MixMax: Distributional Robustness in Function Space via Optimal Data Mixtures
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

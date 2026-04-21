@@ -1,5 +1,6 @@
 # Sufficient and Necessary Explanations (and What Lies in Between)
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Best-of-Both-Worlds Policy Optimization for CMDPs with Bandit Feedback
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 3, 3, 3, 6, 3
 

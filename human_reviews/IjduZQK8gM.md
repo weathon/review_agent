@@ -1,5 +1,6 @@
 # From Attention to Activation: Unraveling the Enigmas of Large Language Models
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5
 

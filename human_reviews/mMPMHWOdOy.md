@@ -1,5 +1,6 @@
 # WizardMath: Empowering Mathematical Reasoning for Large Language Models via Reinforced Evol-Instruct
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

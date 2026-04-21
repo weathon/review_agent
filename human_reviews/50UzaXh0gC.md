@@ -1,5 +1,6 @@
 # One Wave to Explain Them All: A Unifying Perspective on Post-hoc Explainability
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Imitation Learning from Observation with Automatic Discount Scheduling
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 5
 

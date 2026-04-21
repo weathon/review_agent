@@ -1,5 +1,6 @@
 # Federated Orthogonal Training: Mitigating Global Catastrophic Forgetting in Continual Federated Learning
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 8, 6
 

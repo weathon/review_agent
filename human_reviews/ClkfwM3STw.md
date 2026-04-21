@@ -1,5 +1,6 @@
 # Evaluating the Generalization Ability of Quantized LLMs: Benchmark, Analysis, and Toolbox
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

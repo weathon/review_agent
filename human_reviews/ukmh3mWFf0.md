@@ -1,5 +1,6 @@
 # Attributed Graph Clustering via Coarsening with Modularity
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 5, 3
 

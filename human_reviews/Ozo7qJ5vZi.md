@@ -1,5 +1,6 @@
 # KAN: Kolmogorov–Arnold Networks
 
+- Avg Score: 7.20
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 8, 8
 

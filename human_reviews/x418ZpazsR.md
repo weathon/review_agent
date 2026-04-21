@@ -1,5 +1,6 @@
 # Are Language Model Logits Calibrated?
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

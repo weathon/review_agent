@@ -1,5 +1,6 @@
 # Understanding Unfairness via Training Concept Influence
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

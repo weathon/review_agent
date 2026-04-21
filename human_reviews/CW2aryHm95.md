@@ -1,5 +1,6 @@
 # Policy Learning For Video Streaming
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # Uni$^2$Det: Unified and Universal Framework for Prompt-Guided Multi-dataset 3D Detection
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

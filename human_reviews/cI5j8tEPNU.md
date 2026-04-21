@@ -1,5 +1,6 @@
 # PAIR Diffusion: A Comprehensive Multimodal Object-Level Image Editor
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 6, 3, 3
 

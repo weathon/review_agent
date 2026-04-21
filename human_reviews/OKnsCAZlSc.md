@@ -1,5 +1,6 @@
 # A robust federated learning client selection with combinatorial data class representations and data augmentation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Tensor-Train Point Cloud Compression and Efficient Approximate Nearest Neighbor Search
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

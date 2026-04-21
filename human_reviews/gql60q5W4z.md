@@ -1,5 +1,6 @@
 # Reinforcement Learning with Fine-grained Reward for Controllable Text Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

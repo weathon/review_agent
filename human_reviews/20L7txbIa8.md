@@ -1,5 +1,6 @@
 # UniPredict: Large Language Models are Universal Tabular Predictors
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 8, 5, 3, 5
 

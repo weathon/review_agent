@@ -1,5 +1,6 @@
 # RECOMP: Improving Retrieval-Augmented LMs with Context Compression and Selective Augmentation
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

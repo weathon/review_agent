@@ -1,5 +1,6 @@
 # Beyond Predefined Depots: A Dual-Mode Generative DRL Framework for Proactive Depot Generation in Location-Routing Problem
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 8, 1
 

@@ -1,5 +1,6 @@
 # #InsTag: Instruction Tagging for Analyzing Supervised Fine-tuning of Large Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 6
 

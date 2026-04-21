@@ -1,5 +1,6 @@
 # Injecting Learnable Table Features into LLMs
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 5, 8
 

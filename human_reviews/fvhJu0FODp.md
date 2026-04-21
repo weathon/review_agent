@@ -1,5 +1,6 @@
 # Avalon's Game of Thoughts: Battle Against Deception through Recursive Contemplation
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 3
 

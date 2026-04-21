@@ -1,5 +1,6 @@
 # Detecting Out-of-Context Misinformation via Multi-Agent and Multi-Grained Retrieval
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Protein Captioning: Bridging the Gap between Protein Sequences and Natural Languages
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 6
 

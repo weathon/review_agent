@@ -1,5 +1,6 @@
 # OSM+: Cloud-native Open Street Map Data System for City-wide Experiments
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

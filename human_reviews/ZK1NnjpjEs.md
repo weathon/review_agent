@@ -1,5 +1,6 @@
 # Improving the Language Understanding Capabilities of Large Language Models Using Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

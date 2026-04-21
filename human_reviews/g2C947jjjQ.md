@@ -1,5 +1,6 @@
 # Agent-G: An Agentic Framework for Graph Retrieval Augmented Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

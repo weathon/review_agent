@@ -1,5 +1,6 @@
 # Group Preference Optimization: Few-Shot Alignment of Large Language Models
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 5, 6
 

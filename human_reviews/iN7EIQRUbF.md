@@ -1,5 +1,6 @@
 # Advancing Few-shot Continual Learning via Selective Knowledge Transfer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

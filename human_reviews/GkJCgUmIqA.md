@@ -1,5 +1,6 @@
 # Physics-Informed Neural Networks with Trust-Region Sequential Quadratic Programming
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

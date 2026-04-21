@@ -1,5 +1,6 @@
 # Dual-target Point Cloud Registration Using Representative Overlapping Points
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

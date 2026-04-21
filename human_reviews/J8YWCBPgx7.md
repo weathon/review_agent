@@ -1,5 +1,6 @@
 # PostEdit: Posterior Sampling for Efficient Zero-Shot Image Editing
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

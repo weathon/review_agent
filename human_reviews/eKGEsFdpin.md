@@ -1,5 +1,6 @@
 # I Know You Did Not Write That! A Sampling Based Watermarking Method for Identifying Machine Generated Text
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

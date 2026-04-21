@@ -1,5 +1,6 @@
 # Rethinking the Stability-Plasticity Trade-off in Continual Learning from an Architectural Perspective
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 3, 6, 5, 6
 

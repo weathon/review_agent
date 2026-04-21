@@ -1,5 +1,6 @@
 # Understanding In-Context Learning in Transformers and LLMs by Learning to Learn Discrete Functions
 
+- Avg Score: 7.00
 - Decision: Accept (oral)
 - Scores: 8, 6, 6, 8
 

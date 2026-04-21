@@ -1,5 +1,6 @@
 # Benchmarking Ethics in Text-to-Image Models: A Holistic Dataset and Evaluator for Fairness, Toxicity, and Privacy
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 3, 5
 

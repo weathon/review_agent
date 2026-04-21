@@ -1,5 +1,6 @@
 # Do We Really Need Parameter-Isolation to Protect Task Knowledge?
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

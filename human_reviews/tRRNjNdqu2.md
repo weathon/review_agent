@@ -1,5 +1,6 @@
 # Self, Semi and Fully Supervised Training for Autoencoders using Ternary Classification
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

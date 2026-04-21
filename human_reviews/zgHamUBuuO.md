@@ -1,5 +1,6 @@
 # Sparling: Learning Latent Representations With Extremely Sparse Activations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5, 3
 

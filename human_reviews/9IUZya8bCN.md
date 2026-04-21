@@ -1,5 +1,6 @@
 # PoisoningGuard: Provable Defense against Data Poisoning Attacks to Multi-label Classification
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

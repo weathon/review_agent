@@ -1,5 +1,6 @@
 # Rethinking CNN’s Generalization to Backdoor Attack from Frequency Domain
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

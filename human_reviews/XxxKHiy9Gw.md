@@ -1,5 +1,6 @@
 # Conformal mapping Coordinates Physics-Informed Neural Networks (CoCo-PINNs): learning neural networks for designing neutral inclusions
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

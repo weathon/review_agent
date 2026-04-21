@@ -1,5 +1,6 @@
 # Model Growth Schedule learning via Optimal Path (SLOP) for Efficient LLM Pre-Training
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 8
 

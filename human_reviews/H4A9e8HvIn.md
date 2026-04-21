@@ -1,5 +1,6 @@
 # Unified Projection-Free Algorithms for Adversarial DR-Submodular Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 10
 

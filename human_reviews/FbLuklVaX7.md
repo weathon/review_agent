@@ -1,5 +1,6 @@
 # Node Classification in the Heterophilic Regime via Diffusion-Jump GNNs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 1, 8
 

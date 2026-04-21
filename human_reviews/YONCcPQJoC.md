@@ -1,5 +1,6 @@
 # Integrating Planning into Single-Turn Long-Form Text Generation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 8, 3
 

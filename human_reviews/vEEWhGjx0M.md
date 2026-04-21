@@ -1,5 +1,6 @@
 # Adversarial Attacks on Combinatorial Multi-Armed Bandits
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

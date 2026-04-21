@@ -1,5 +1,6 @@
 # Regularized Maximum Mean Discrepancy for Variable Selection
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 3, 5
 

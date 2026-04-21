@@ -1,5 +1,6 @@
 # Weaker MVI Condition: Extragradient Methods with Multi-Step Exploration
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 5
 

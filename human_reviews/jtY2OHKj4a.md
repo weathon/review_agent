@@ -1,5 +1,6 @@
 # Tool Calling: Enhancing Medication Consultation via Retrieval-Augmented Large Language Models
 
+- Avg Score: 5.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6
 

@@ -1,5 +1,6 @@
 # ViDROP: Video Dense Representation through Spatio-Temporal Sparsity
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3, 6
 
@@ -241,7 +242,8 @@ The paper proposed to use token dropping and mask strategy for video self-superv
     - to compare VideoMAE(1600ep) with VideoMAE(800ep) + ViDROP(800ep).
     - or training VideoMAE(1600ep) for the additional number of epochs that the paper uses to train ViDROP
 - The authors listed a strategy to scale model size from scratch in lines 305-309, and provide results for ViT-Huge variant in Table 6. Do the authors have the results for ViT-Large trained from scratch?
- 
+
+
 ### Is linear probing the best way to evaluate VideoMAE features?
 - The authors consistently use linear probing to draw comparisons with VideoMAE, but only fine-tuning is used in their paper [1]. Did the authors try fine-tuning?
 
@@ -250,13 +252,16 @@ The paper proposed to use token dropping and mask strategy for video self-superv
 - In Figure 4, the authors made a comparison with a variant of the model with no token dropping, which is close to DINOv2 approach (Fig 2c), and shows that it converges slower
 - On the other hand, the approach also address the limitation of VideoMAE-style encoder-decoder approach (Fig 2a). One baseline that could be included is to use the same drop+mask strategy but reconstruct mask tokens using a decoder. This would help draw direct comparisons with VideoMAE architecture and give readers some insights.
 - Moreover this would highlight whether the improvement is brought by the use of additional losses or model architecture 
- 
+
+
 ### Lack of notations and uniform use of terminology
 - Table 1 caption (line 272) specifies a “masking ratio is 85%” but lines 319-320 mentions “mask uniformly between 10% to 40% of the tokens”. This creates a confusion between mask and drop tokens, and readers are left to parse the details.
-    - Notations for drop and mask ratios could be introduced in the text to as done in previous works such as VideoMAEv2 [1] ($\rho$)  
+    - Notations for drop and mask ratios could be introduced in the text to as done in previous works such as VideoMAEv2 [1] ($\rho$) 
+
 - Further, tokens that are masked are denoted as “MSK” in Figure 2 and lines 203-204, but later denoted as “MASK” in Table 1 and line 323
 
-- In Table 1, although 85% is desirable w.r.t. accuracy and time trade-off, the accuracy in bold should be the first row (for 80%) 
+- In Table 1, although 85% is desirable w.r.t. accuracy and time trade-off, the accuracy in bold should be the first row (for 80%)
+
 
 ### Additional details (such as supplementary material) would have been useful
 - A model card containing complete hyperparameter setting for the experiments and details on model architecture. For example, VideoMAEv2 [1] shared details of model architecture along with pre-training, post pre-training, and fine-tuning settings

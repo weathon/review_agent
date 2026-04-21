@@ -1,5 +1,6 @@
 # OctoPack: Instruction Tuning Code Large Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

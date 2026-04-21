@@ -1,5 +1,6 @@
 # L3Ms — Lagrange Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 6
 

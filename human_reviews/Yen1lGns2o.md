@@ -1,5 +1,6 @@
 # Is ImageNet worth 1 video? Learning strong image encoders from 1 long unlabelled video
 
+- Avg Score: 7.60
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 6, 8
 

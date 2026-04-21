@@ -1,5 +1,6 @@
 # From Eww to Woo: Detection of Mental Health Disturbing Images in Social Media
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

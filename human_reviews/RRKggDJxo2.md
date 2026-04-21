@@ -1,5 +1,6 @@
 # Real-time learning of decay trajectory of Higgs boson using reservoir-in-reservoir architecture
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 1, 5, 5, 6
 

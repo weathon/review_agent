@@ -1,5 +1,6 @@
 # Understanding the Initial Condensation of Convolutional Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

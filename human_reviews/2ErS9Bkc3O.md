@@ -1,5 +1,6 @@
 # Towards unlocking the mystery of adversarial fragility of neural networks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # ImplicitSLIM and How it Improves Embedding-based Collaborative Filtering
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 3
 

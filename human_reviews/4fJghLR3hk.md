@@ -1,5 +1,6 @@
 # Addressing Extrapolation Error in Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 3
 

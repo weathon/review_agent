@@ -1,5 +1,6 @@
 # Probabilistic Adaptation of Black-Box Text-to-Video Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 3
 

@@ -1,5 +1,6 @@
 # The importance of feature preprocessing for differentially private linear optimization
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

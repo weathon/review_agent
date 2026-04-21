@@ -1,5 +1,6 @@
 # Re-evaluating Open-ended Evaluation of Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

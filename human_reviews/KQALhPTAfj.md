@@ -1,5 +1,6 @@
 # Navigating Scaling Laws: Accelerating Vision Transformer's Training via Adaptive Strategies
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

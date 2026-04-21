@@ -1,5 +1,6 @@
 # Fairness without Sensitive attributes via Noise and Uncertain Predictions
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

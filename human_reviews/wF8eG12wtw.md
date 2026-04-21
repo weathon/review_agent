@@ -1,5 +1,6 @@
 # Understanding Benefit of Personalization: Beyond Classification
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 1
 

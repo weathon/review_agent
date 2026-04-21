@@ -1,5 +1,6 @@
 # On inherent limitations of GPT/LLM \\ Architecture
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 1, 3, 3
 

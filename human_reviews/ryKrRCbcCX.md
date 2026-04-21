@@ -1,5 +1,6 @@
 # Rethinking the Uncertainty: A Critical Review and Analysis in the Era of Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

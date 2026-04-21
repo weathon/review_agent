@@ -1,5 +1,6 @@
 # Concept Alignment as a Prerequisite for Value Alignment
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 3, 6
 

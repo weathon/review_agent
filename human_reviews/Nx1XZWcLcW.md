@@ -1,5 +1,6 @@
 # MoMa: Efficient Early-Fusion Pre-training with Mixture of Modality-Aware Experts
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5, 5
 

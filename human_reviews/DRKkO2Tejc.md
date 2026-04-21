@@ -1,5 +1,6 @@
 # Label Privacy in Split Learning for Large Models with Parameter-Efficient Training
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

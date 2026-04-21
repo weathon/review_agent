@@ -1,5 +1,6 @@
 # Low-Cost High-Power Membership Inference by Boosting Relativity
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 8, 5
 

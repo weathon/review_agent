@@ -1,5 +1,6 @@
 # HART: Efficient Visual Generation with Hybrid Autoregressive Transformer
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6, 8
 

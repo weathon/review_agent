@@ -1,5 +1,6 @@
 # Selective Unlearning via Representation Erasure Using Domain Adversarial Training
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Neural Language of Thought Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

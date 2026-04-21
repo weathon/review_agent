@@ -1,5 +1,6 @@
 # Towards Characterizing Domain Counterfactuals for Invertible Latent Causal Models
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

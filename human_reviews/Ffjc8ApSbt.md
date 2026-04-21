@@ -1,5 +1,6 @@
 # Debiased Collaborative Filtering with Kernel-Based Causal Balancing
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6
 

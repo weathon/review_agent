@@ -1,5 +1,6 @@
 # ColCLIP: Enhancing Fine-Grained Image Retrieval with Pre-trained Embeddings
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

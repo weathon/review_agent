@@ -1,5 +1,6 @@
 # A Plug-In Curriculum Scheduler for Improved Deformable Medical Image Registration
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Unleashing the power of Neural Collapse for Transferability Estimation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 5, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Sparse MeZO: Less Parameters for Better Performance in Zeroth-Order LLM Fine-Tuning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

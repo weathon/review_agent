@@ -1,5 +1,6 @@
 # Sounding the Alarm: Backdooring Acoustic Foundation Models for Physically Realizable Triggers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

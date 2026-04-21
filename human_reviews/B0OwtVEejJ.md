@@ -1,5 +1,6 @@
 # Weight-Entanglement Meets Gradient-Based Neural Architecture Search
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

@@ -1,5 +1,6 @@
 # Diff-Privacy: Diffusion-based Face Privacy Protection
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 6, 8, 5
 

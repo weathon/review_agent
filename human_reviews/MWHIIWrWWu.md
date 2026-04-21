@@ -1,5 +1,6 @@
 # Motion Control of High-Dimensional Musculoskeletal Systems with Hierarchical Model-Based Planning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

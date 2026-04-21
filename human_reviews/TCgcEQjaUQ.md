@@ -1,5 +1,6 @@
 # Scalable Message Passing Neural Networks: No Need for Attention in Large Graph Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

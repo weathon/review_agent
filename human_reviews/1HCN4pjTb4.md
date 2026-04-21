@@ -1,5 +1,6 @@
 # Wide Neural Networks Trained with Weight Decay Provably Exhibit Neural Collapse
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8, 6
 

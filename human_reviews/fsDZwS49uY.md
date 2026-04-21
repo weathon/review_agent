@@ -1,5 +1,6 @@
 # OptiBench Meets ReSocratic: Measure and Improve LLMs for Optimization Modeling
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

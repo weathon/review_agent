@@ -1,5 +1,6 @@
 # Your Mixture-of-Experts LLM Is Secretly an Embedding Model for Free
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6
 

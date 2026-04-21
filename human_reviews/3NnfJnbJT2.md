@@ -1,5 +1,6 @@
 # GIO: Gradient Information Optimization for Training Dataset Selection
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 6
 

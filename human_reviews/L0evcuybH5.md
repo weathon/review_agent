@@ -1,5 +1,6 @@
 # Projection Head is Secretly an Information Bottleneck
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

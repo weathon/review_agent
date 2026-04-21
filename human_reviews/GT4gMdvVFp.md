@@ -1,5 +1,6 @@
 # PuzzlePlex: A Benchmark to Evaluate the Reasoning and Planning of Large Language Models on Puzzles
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

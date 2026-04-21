@@ -1,5 +1,6 @@
 # Thought-Retriever: Don’t Just Retrieve Raw Data, Retrieve Thoughts
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

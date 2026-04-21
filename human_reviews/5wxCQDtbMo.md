@@ -1,5 +1,6 @@
 # GotenNet: Rethinking Efficient 3D Equivariant Graph Neural Networks
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 10, 6, 3, 8
 

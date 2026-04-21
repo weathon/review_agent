@@ -1,5 +1,6 @@
 # MuseCoco: Generating Symbolic Music from Text
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # XAL: EXplainable Active Learning Makes Classifiers Better Low-resource Learners
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

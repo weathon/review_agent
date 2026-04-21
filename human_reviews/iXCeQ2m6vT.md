@@ -1,5 +1,6 @@
 # Mind the GAP: Glimpse-based Active Perception improves generalization and sample efficiency of visual reasoning
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 8
 

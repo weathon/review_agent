@@ -1,5 +1,6 @@
 # On the Joint Interaction of Models, Data, and Features
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 6, 8, 8
 

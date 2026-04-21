@@ -1,5 +1,6 @@
 # Improving Convergence and Generalization Using Parameter Symmetries
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 6, 8, 8, 8
 

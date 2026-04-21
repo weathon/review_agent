@@ -1,5 +1,6 @@
 # Improved Stochastic Controlled Averaging for Distributed and Federated Learning
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 5, 3, 3, 3
 

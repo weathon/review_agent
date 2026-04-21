@@ -1,5 +1,6 @@
 # Enhancing Language Model Agents using Diversity of Thoughts
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 5
 

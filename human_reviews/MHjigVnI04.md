@@ -1,5 +1,6 @@
 # High-dimensional SGD aligns with emerging outlier eigenspaces
 
+- Avg Score: 7.67
 - Decision: Accept (spotlight)
 - Scores: 10, 8, 8, 6, 8, 6
 

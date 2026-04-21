@@ -1,5 +1,6 @@
 # ResidualViT for Efficient Zero-Shot Natural Language Temporal Video Grounding
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 8, 3
 

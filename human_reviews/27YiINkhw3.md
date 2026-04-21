@@ -1,5 +1,6 @@
 # ToolDec: Syntax Error-Free and Generalizable Tool Use for LLMs via Finite-State Decoding
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 6, 8
 

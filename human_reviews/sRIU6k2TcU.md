@@ -1,5 +1,6 @@
 # Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 6
 

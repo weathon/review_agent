@@ -1,5 +1,6 @@
 # Language Reconstruction with Brain Predictive Coding from fMRI Data
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

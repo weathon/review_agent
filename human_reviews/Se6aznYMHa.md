@@ -1,5 +1,6 @@
 # Explaining Contrastive Models using Exemplars: Explanation, Confidence, and Knowledge Limits
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

@@ -1,5 +1,6 @@
 # PIORF: Physics-Informed Ollivier-Ricci Flow for Long–Range Interactions in Mesh Graph Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 5
 

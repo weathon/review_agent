@@ -1,5 +1,6 @@
 # Feasible Algorithmic Recourse Without Explicit Structure Prior
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 5, 3, 3, 6
 

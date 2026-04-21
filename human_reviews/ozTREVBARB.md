@@ -1,5 +1,6 @@
 # SIKeD: Self-guided Iterative Knowledge Distillation for Mathematical Reasoning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 3, 6, 6, 6
 

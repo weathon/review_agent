@@ -1,5 +1,6 @@
 # Do LLMs have Consistent Values?
 
+- Avg Score: 4.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 3, 5
 

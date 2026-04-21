@@ -1,5 +1,6 @@
 # Failures to Find Transferable Image Jailbreaks Between Vision-Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 8
 

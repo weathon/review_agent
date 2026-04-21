@@ -1,5 +1,6 @@
 # Interpretability Illusions in the Generalization of Simplified Models
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 3, 6, 6, 8, 5
 

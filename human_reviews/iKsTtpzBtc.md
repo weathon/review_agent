@@ -1,5 +1,6 @@
 # Large Language Models Are Natural Video Popularity Predictors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

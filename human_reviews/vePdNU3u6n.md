@@ -1,5 +1,6 @@
 # Towards Robust and Efficient Cloud-Edge Elastic Model Adaptation via Selective Entropy Distillation
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

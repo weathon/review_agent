@@ -1,5 +1,6 @@
 # FreeLM: Fine-Tuning-Free Language Model
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 

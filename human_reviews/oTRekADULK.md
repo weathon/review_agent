@@ -1,5 +1,6 @@
 # Sparse Training of Discrete Diffusion Models for Graph Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

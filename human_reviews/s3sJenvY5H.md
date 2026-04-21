@@ -1,5 +1,6 @@
 # On Evaluation of Generative Robotic Simulations
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 8, 3
 

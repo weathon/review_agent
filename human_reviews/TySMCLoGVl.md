@@ -1,5 +1,6 @@
 # Efficiently Scanning and Resampling Spatio-Temporal Tasks with Irregular Observations
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

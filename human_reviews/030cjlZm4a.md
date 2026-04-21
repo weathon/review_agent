@@ -1,5 +1,6 @@
 # Learning Predictive Checklists with Probabilistic Logic Programming
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 8, 3, 6
 

@@ -1,5 +1,6 @@
 # SF(DA)$^2$: Source-free Domain Adaptation Through the Lens of Data Augmentation
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 6
 

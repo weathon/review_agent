@@ -1,5 +1,6 @@
 # Lyra: Orchestrating Dual Correction in Automated Theorem Proving
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

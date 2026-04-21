@@ -1,5 +1,6 @@
 # EXAGREE: Towards Explanation Agreement in Explainable Machine Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 1, 3
 

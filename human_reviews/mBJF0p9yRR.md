@@ -1,5 +1,6 @@
 # Almost Sure Convergence of Average Reward Temporal Difference Learning
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 6, 3
 

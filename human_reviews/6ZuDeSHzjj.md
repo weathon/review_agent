@@ -1,5 +1,6 @@
 # Outliers Memorized Last: Trends in Memorization of Diffusion Models Based on Training Distribution and Epoch
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 3, 1, 1
 

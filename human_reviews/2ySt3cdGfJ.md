@@ -1,5 +1,6 @@
 # Distribution Backtracking Builds A Faster Convergence Trajectory for Diffusion Distillation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 3, 6, 8
 

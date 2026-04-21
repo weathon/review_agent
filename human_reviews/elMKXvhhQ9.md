@@ -1,5 +1,6 @@
 # Consistency Training with Learnable Data Augmentation for Graph Anomaly Detection with Limited Supervision
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8
 

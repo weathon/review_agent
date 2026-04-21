@@ -1,5 +1,6 @@
 # Keep Your Friends Close, and Your Enemies Farther: Distance-aware Voxel-wise Contrastive Learning for Semi-supervised Multi-organ Segmentation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

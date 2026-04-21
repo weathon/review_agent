@@ -1,5 +1,6 @@
 # 🤔Emoji2Idiom: Benchmarking Cryptic Symbol Understanding of Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 6
 

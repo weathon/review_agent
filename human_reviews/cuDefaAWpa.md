@@ -1,5 +1,6 @@
 # Modeling non-uniform uncertainty in Reaction Prediction via Boosting and Dropout
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

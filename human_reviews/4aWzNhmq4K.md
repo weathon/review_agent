@@ -1,5 +1,6 @@
 # Choose Your Anchor Wisely: Effective Unlearning Diffusion Models via Concept Reconditioning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

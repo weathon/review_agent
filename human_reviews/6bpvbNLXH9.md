@@ -1,5 +1,6 @@
 # Deep Clustering with Uniform Quasi-low-rank Hypersphere Embedding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # $\mathcal{X}^2$-DFD: A framework for e$\mathcal{X}$plainable and e$\mathcal{X}$tendable Deepfake Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 6, 5
 

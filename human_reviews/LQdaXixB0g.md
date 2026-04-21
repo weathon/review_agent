@@ -1,5 +1,6 @@
 # pSAE-chiatry: Utilizing Sparse Autoencoders to Uncover Mental-Health-Related Features in Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 5, 1, 1, 3
 

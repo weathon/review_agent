@@ -1,5 +1,6 @@
 # Rethinking the Benefits of Steerable Features in 3D Equivariant Graph Neural Networks
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

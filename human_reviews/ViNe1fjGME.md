@@ -1,5 +1,6 @@
 # Deep Temporal Graph Clustering
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 8
 

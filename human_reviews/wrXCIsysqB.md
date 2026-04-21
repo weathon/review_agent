@@ -1,5 +1,6 @@
 # GaussianBlock: Building Part-Aware Compositional and Editable 3D Scene by Primitives and Gaussians
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6, 6
 

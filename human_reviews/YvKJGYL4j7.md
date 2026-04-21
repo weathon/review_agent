@@ -1,5 +1,6 @@
 # Toward Efficient Multi-Agent Exploration With Trajectory Entropy Maximization
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 8, 8
 

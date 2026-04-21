@@ -1,5 +1,6 @@
 # Implicit Neural Surface Deformation with Explicit Velocity Fields
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

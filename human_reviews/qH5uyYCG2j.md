@@ -1,5 +1,6 @@
 # Controllable Text-to-Speech Synthesis with Masked-Autoencoded Style Representation
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1, 6, 6
 

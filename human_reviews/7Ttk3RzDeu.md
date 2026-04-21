@@ -1,5 +1,6 @@
 # BooookScore: A systematic exploration of book-length summarization in the era of LLMs
 
+- Avg Score: 8.50
 - Decision: Accept (oral)
 - Scores: 8, 10, 8, 8
 

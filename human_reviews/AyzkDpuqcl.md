@@ -1,5 +1,6 @@
 # Learning Energy-Based Models by Cooperative Diffusion Recovery Likelihood
 
+- Avg Score: 6.80
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 6, 8
 

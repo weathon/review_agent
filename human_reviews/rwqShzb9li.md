@@ -1,5 +1,6 @@
 # Linear Representations of Political Perspective Emerge in Large Language Models
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 10, 6
 

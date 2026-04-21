@@ -1,5 +1,6 @@
 # Towards flexible perception with visual memory
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 3, 6, 8
 

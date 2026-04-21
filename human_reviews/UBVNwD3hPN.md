@@ -1,5 +1,6 @@
 # CivRealm: A Learning and Reasoning Odyssey in Civilization for Decision-Making Agents
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8
 

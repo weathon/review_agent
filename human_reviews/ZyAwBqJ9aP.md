@@ -1,5 +1,6 @@
 # CypST: Improving Cytochrome P450 Substrates Prediction with Fine-Tuned Protein Language Model and Graph Attention Network
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 1
 

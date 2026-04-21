@@ -1,5 +1,6 @@
 # Verbalized Graph Representation Learning: A Fully Interpretable Graph Model Based on Large Language Models Throughout the Entire Process
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 1
 

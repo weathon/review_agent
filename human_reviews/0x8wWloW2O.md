@@ -1,5 +1,6 @@
 # OracleMamba: A Dynamic Market-Guided and Time State Selection Framework for Robust Stock Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 5, 5, 5
 

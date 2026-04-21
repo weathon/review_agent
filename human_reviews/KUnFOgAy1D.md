@@ -1,5 +1,6 @@
 # Efficient Differentiable Approximation of the Generalized Low-rank Regularization
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 5, 8, 3, 5
 

@@ -1,5 +1,6 @@
 # Towards Unifying Interpretability and Control: Evaluation via Intervention
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

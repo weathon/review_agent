@@ -1,5 +1,6 @@
 # FSW-GNN: A Bi-Lipschitz WL-Equivalent Graph Neural Network
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

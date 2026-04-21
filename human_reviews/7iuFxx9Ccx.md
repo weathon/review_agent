@@ -1,5 +1,6 @@
 # Resource Efficient Test-Time Training with Slimmable Network
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Connecting NTK and NNGP: A Unified Theoretical Framework for Neural Network Learning Dynamics in the Kernel Regime
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 3, 8, 5
 

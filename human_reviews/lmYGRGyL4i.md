@@ -1,5 +1,6 @@
 # Uncovering the Spectrum of Graph Generative Models: From One-Shot to Sequential
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 5, 6, 3, 5
 

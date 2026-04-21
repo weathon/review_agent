@@ -1,5 +1,6 @@
 # ReLU Strikes Back: Exploiting Activation Sparsity in Large Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (oral)
 - Scores: 6, 8, 8
 

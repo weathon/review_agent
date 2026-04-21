@@ -1,5 +1,6 @@
 # MATLABER: Material-Aware Text-to-3D via LAtent BRDF auto-EncodeR
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 5, 3
 

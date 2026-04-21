@@ -1,5 +1,6 @@
 # In defense of parameter sharing for model-compression
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 3, 5, 8, 6
 

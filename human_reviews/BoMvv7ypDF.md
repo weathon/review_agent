@@ -1,5 +1,6 @@
 # Recursive Score Estimation Accelerates Diffusion-Based Monte Carlo
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 8, 5, 8, 5, 3
 

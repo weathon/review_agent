@@ -1,5 +1,6 @@
 # Communication-Efficient Gradient Descent-Accent Methods for Distributed Variational Inequalities: Unified Analysis and Local Updates
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 8
 

@@ -1,5 +1,6 @@
 # I-Con: A Unifying Framework for Representation Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

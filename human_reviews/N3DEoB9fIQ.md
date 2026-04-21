@@ -1,5 +1,6 @@
 # Debiased Machine Learning and Network Cohesion for Doubly-Robust Differential Reward Models in Contextual Bandits
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

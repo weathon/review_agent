@@ -1,5 +1,6 @@
 # CONFIDE: CONtextual FInite DifferencE modelling of PDEs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

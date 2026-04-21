@@ -1,5 +1,6 @@
 # Adapt-$\infty$: Scalable Continual Multimodal Instruction Tuning via Dynamic Data Selection
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

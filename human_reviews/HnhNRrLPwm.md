@@ -1,5 +1,6 @@
 # MMIE: Massive Multimodal Interleaved Comprehension Benchmark for Large Vision-Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8
 

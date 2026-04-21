@@ -1,5 +1,6 @@
 # Duoduo CLIP: Efficient 3D Understanding with Multi-View Images
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

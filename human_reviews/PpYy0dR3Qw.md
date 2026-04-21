@@ -1,5 +1,6 @@
 # LoCoDL: Communication-Efficient Distributed Learning with Local Training and Compression
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

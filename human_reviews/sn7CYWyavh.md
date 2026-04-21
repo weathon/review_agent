@@ -1,5 +1,6 @@
 # Whole-Song Hierarchical Generation of Symbolic Music Using Cascaded Diffusion Models
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 5, 8
 

@@ -1,5 +1,6 @@
 # $\textbf{CoCoGesture}$: Towards Coherent Co-speech 3D Gesture Generation in the Wild
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

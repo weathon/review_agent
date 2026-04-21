@@ -1,5 +1,6 @@
 # Highly Efficient Self-Adaptive Reward Shaping for Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

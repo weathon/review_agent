@@ -1,5 +1,6 @@
 # MMed-RAG: Versatile Multimodal RAG System for Medical Vision Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

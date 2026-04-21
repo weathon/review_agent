@@ -1,5 +1,6 @@
 # Estimating Shape Distances on Neural Representations with Limited Samples
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 10, 6, 6
 

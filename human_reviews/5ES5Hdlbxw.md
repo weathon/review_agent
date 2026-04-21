@@ -1,5 +1,6 @@
 # The Effective Horizon Explains Deep RL Performance in Stochastic Environments
 
+- Avg Score: 5.75
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 6, 5
 

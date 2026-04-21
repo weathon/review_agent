@@ -1,5 +1,6 @@
 # Spatio-Temporal Approximation: A Training-Free SNN Conversion for Transformers
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

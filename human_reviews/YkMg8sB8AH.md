@@ -1,5 +1,6 @@
 # On Explaining Equivariant Graph Networks via Improved Relevance Propagation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

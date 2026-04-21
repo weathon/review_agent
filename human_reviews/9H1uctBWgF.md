@@ -1,5 +1,6 @@
 # Ferret: Federated Full-Parameter Tuning at Scale for Large Language Models
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3
 

@@ -1,5 +1,6 @@
 # Automated Filtering of Human Feedback Data for Aligning Text-to-Image Diffusion Models
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

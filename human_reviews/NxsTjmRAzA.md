@@ -1,5 +1,6 @@
 # Test Time Augmentations are Worth One Million Images for Out-of-Distribution Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

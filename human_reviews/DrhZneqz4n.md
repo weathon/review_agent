@@ -1,5 +1,6 @@
 # Single Motion Diffusion
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

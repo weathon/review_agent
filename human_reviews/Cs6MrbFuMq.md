@@ -1,5 +1,6 @@
 # HexGen-2: Disaggregated Generative Inference of LLMs in Heterogeneous Environment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 5, 8, 6
 

@@ -1,5 +1,6 @@
 # GAFormer: Enhancing Timeseries Transformers Through Group-Aware Embeddings
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6, 6
 

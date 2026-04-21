@@ -1,5 +1,6 @@
 # The Implicit Bias of Structured State Space Models Can Be Poisoned With Clean Labels
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 6, 6, 8
 

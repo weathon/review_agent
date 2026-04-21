@@ -1,5 +1,6 @@
 # BiCert: A Blinear Mixed Integer Programming Formulation for Precise Certified Bounds Against Data Poisoning Attacks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

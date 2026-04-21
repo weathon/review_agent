@@ -1,5 +1,6 @@
 # A Systematic Comparison of Syllogistic Reasoning in Humans and Language Models
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

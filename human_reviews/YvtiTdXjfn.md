@@ -1,5 +1,6 @@
 # Scalable Ensemble Diversification for OOD Generalization and Detection
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

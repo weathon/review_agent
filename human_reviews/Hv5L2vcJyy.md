@@ -1,5 +1,6 @@
 # Elementary: Pattern-aware Evidence Discovery with Large Language Models
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 

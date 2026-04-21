@@ -1,5 +1,6 @@
 # MAS: Multi-view Ancestral Sampling for 3D motion generation using 2D diffusion
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

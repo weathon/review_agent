@@ -1,5 +1,6 @@
 # Estimating the Probabilities of Rare Outputs in Language Models
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 5, 6, 10
 

@@ -1,5 +1,6 @@
 # Which Experiences Are Influential for RL Agents? Efficiently Estimating The Influence of Experiences
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

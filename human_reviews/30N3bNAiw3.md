@@ -1,5 +1,6 @@
 # Separating common from salient patterns with Contrastive Representation Learning
 
+- Avg Score: 7.40
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 8, 8
 

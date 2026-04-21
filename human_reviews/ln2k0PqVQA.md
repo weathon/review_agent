@@ -1,5 +1,6 @@
 # Online Intrinsic Rewards for Decision Making Agents from Large Language Model Feedback
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 5, 6
 

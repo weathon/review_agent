@@ -1,5 +1,6 @@
 # Molecular Active Learning: How can LLMs Help?
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6, 5
 

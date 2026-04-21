@@ -1,5 +1,6 @@
 # Bridging Visual Communication and Data Exploration through Pose-Driven Query Synthesis
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1
 

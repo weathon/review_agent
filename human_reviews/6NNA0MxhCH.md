@@ -1,5 +1,6 @@
 # Answer, Assemble, Ace: Understanding How LMs Answer Multiple Choice Questions
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

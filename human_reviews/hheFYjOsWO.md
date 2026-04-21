@@ -1,5 +1,6 @@
 # Mixture Compressor for Mixture-of-Experts LLMs Gains More
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

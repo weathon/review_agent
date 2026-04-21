@@ -1,5 +1,6 @@
 # Data Prediction Denoising Models: The Pupil Outdoes the Master
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

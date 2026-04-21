@@ -1,5 +1,6 @@
 # Gradients protection in federated learning for Biometric authentication
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 5, 3
 

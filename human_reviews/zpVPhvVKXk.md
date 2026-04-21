@@ -1,5 +1,6 @@
 # Get What You Want, Not What You Don't: Image Content Suppression for Text-to-Image Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

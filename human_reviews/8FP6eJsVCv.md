@@ -1,5 +1,6 @@
 # Explanation Shift: How Did the Distribution Shift Impact the Model?
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

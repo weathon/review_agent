@@ -1,5 +1,6 @@
 # Efficient Multi Subject Visual Reconstruction from fMRI Using Aligned Representations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

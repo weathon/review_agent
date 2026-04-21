@@ -1,5 +1,6 @@
 # Dropout-Based Rashomon Set Exploration for Efficient Predictive Multiplicity Estimation
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

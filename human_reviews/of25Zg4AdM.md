@@ -1,5 +1,6 @@
 # Online Decision Deferral under Budget Constraints
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

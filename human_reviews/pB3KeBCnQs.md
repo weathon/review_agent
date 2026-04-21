@@ -1,5 +1,6 @@
 # FairLoRA: Unpacking Bias Mitigation in Vision Models with Fairness-Regularized Low-Rank Adaptation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 5, 3
 

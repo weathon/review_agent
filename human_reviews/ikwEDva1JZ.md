@@ -1,5 +1,6 @@
 # How Do Transformers Learn In-Context Beyond Simple Functions? A Case Study on Learning with Representations
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

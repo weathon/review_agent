@@ -1,5 +1,6 @@
 # Deep Learning for Protein-Ligand Docking: Are We There Yet?
 
+- Avg Score: 4.38
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5, 3, 5, 5, 6
 

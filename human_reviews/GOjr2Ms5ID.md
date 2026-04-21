@@ -1,5 +1,6 @@
 # Cascaded Learned Bloom filter for Optimal Model-Filter Size Balance and Fast Rejection
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 1, 3, 6, 3
 

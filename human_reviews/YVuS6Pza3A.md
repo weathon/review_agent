@@ -1,5 +1,6 @@
 # Operator Learning Meets Numerical Analysis: Improving Neural Networks through Iterative Methods
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 1
 

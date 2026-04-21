@@ -1,5 +1,6 @@
 # When Graph Neural Networks Meet Dynamic Mode Decomposition
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6, 5
 

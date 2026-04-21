@@ -1,5 +1,6 @@
 # Human-inspired Episodic Memory for Infinite Context LLMs
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 5, 8, 5
 

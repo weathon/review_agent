@@ -1,5 +1,6 @@
 # Towards Cheaper Inference in Deep Networks with Lower Bit-Width Accumulators
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6
 

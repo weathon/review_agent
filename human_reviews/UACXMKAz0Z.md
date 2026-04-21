@@ -1,5 +1,6 @@
 # DualFast: Dual-Speedup Framework for Fast Sampling of Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 3, 6
 

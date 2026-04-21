@@ -1,5 +1,6 @@
 # Enhancing Dataset Distillation with Concurrent Learning: Addressing Negative Correlations and Catastrophic Forgetting in Trajectory Matching
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

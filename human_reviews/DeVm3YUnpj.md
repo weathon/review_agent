@@ -1,5 +1,6 @@
 # Agent-as-a-Judge: Evaluating Agents with Agents
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

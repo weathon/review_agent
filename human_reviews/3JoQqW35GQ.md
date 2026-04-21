@@ -1,5 +1,6 @@
 # Training-free Linear Image Inversion via Flows
 
+- Avg Score: 7.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Interpretable and Adaptive Graph Contrastive Learning with Information Sharing for Biomedical Link Prediction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

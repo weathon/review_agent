@@ -1,5 +1,6 @@
 # Bayesian Learning of Adaptive Koopman Operator with Application to Robust Motion Planning for Autonomous Trucks
 
+- Avg Score: 5.83
 - Decision: Reject
 - Scores: 5, 6, 8, 3, 5, 8
 

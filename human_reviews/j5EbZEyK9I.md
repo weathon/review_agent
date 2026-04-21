@@ -1,5 +1,6 @@
 # Mo' Data Mo' Problems: How Data Composition Compromises Scaling Properties
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 3, 6, 6
 

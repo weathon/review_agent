@@ -1,5 +1,6 @@
 # A Study of Necessity & Sufficiency of Linear Transformations in the Attention Mechanism
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

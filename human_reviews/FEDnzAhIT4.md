@@ -1,5 +1,6 @@
 # Test-Time Fairness and Robustness in Large Language Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

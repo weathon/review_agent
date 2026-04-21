@@ -1,5 +1,6 @@
 # DMV3D: Denoising Multi-view Diffusion Using 3D Large Reconstruction Model
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 10, 8, 6, 8
 

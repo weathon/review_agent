@@ -1,5 +1,6 @@
 # SalUn: Empowering Machine Unlearning via Gradient-based Weight Saliency in Both Image Classification and Generation
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

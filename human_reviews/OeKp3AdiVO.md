@@ -1,5 +1,6 @@
 # Rethinking Classifier Re-Training in Long-Tailed Recognition: Label Over-Smooth Can Balance
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

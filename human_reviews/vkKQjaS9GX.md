@@ -1,5 +1,6 @@
 # SDM-RL: Steady-State Divergence Maximization for Robust Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

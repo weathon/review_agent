@@ -1,5 +1,6 @@
 # NetInfoF Framework: Measuring and Exploiting Network Usable Information
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8
 

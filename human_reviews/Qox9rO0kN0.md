@@ -1,5 +1,6 @@
 # Learning Multi-Agent Communication from Graph Modeling Perspective
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

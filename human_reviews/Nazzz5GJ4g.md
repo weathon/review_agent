@@ -1,5 +1,6 @@
 # Weak-to-Strong Jailbreaking on Large Language Models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 6, 6, 3, 6
 

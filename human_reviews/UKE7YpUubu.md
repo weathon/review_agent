@@ -1,5 +1,6 @@
 # RACH-Space: Reconstructing Adaptive Convex Hull Space with applications in weak supervision
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 3
 

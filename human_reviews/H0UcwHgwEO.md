@@ -1,5 +1,6 @@
 # LLF-Bench: A Benchmark for Interactive Learning from Language Feedback
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

@@ -1,5 +1,6 @@
 # Quantile-Free Regression: A Flexible Alternative to Quantile Regression
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 3, 3, 5, 5
 

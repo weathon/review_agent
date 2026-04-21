@@ -1,5 +1,6 @@
 # OMNI: Open-endedness via Models of human Notions of Interestingness
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 3
 

@@ -1,5 +1,6 @@
 # LancBiO: Dynamic Lanczos-aided Bilevel Optimization via Krylov Subspace
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Dual Caption Preference Optimization for Diffusion Models
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5
 

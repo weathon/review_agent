@@ -1,5 +1,6 @@
 # Certified Defense on the Fairness of Graph Neural Networks
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 5, 6, 8
 

@@ -1,5 +1,6 @@
 # LongLoRA: Efficient Fine-tuning of Long-Context Large Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (oral)
 - Scores: 6, 8, 8, 6
 

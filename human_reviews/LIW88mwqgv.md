@@ -1,5 +1,6 @@
 # Enhancing Chain-of-Thoughts Prompting with Iterative Bootstrapping in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

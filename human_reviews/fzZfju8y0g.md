@@ -1,5 +1,6 @@
 # In-Context Neural PDE: Learning to Adapt a Neural Solver to Different Physics
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Learn from Known Unknowns: A Unified Empirical Bayesian Framework for Improving Group Robustness
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

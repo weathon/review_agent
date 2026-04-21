@@ -1,5 +1,6 @@
 # Revisiting a Design Choice in Gradient Temporal Difference Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Impact of Computation in Integral Reinforcement Learning for Continuous-Time Control
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # ConceptFlow: Unified Framework for Personalized Image Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

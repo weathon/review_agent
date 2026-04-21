@@ -1,5 +1,6 @@
 # UGradSL: Machine Unlearning Using Gradient-based Smoothed Label
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

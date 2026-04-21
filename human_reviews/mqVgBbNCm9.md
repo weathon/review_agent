@@ -1,5 +1,6 @@
 # Skeleton-of-Thought: Prompting LLMs for Efficient Parallel Generation
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8, 5, 3
 

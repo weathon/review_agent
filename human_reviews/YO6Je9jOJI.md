@@ -1,5 +1,6 @@
 # LLM-Guided Self-Supervised Tabular Learning With Task-Specific Pre-text Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

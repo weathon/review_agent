@@ -1,5 +1,6 @@
 # Don't trust your eyes: on the (un)reliability of feature visualizations
 
+- Avg Score: 7.00
 - Decision: Reject
 - Scores: 8, 6, 6, 8
 

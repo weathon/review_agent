@@ -1,5 +1,6 @@
 # Visuo-emotional perception and Human Cognition to engineer content-generation using Generative AI
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

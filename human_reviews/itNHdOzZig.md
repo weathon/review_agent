@@ -1,5 +1,6 @@
 # Encodings for Prediction-based Neural Architecture Search
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 6, 8
 

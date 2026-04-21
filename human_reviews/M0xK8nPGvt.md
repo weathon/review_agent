@@ -1,5 +1,6 @@
 # Exploiting Causal Graph Priors with Posterior Sampling for Reinforcement Learning
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

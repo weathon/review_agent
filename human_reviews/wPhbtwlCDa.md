@@ -1,5 +1,6 @@
 # STARC: A General Framework For Quantifying Differences Between Reward Functions
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # ALIA: An LLM for Industrial Assets using Synthetic Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Improving Uncertainty Quantification in Large Language Models via Semantic Embeddings
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

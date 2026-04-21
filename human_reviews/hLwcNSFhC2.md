@@ -1,5 +1,6 @@
 # SAGEPhos: Sage Bio-Coupled and Augmented Fusion for Phosphorylation Site Detection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

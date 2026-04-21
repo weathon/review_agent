@@ -1,5 +1,6 @@
 # Partially Observed Trajectory Inference using Optimal Transport and a Dynamics Prior
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3
 

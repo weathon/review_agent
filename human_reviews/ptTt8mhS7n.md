@@ -1,5 +1,6 @@
 # In-Context Transfer Learning: Demonstration Synthesis by Transferring Similar Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

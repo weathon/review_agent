@@ -1,5 +1,6 @@
 # Bayesian Image Regression with Soft-thresholded Conditional Autoregressive Prior
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 3
 

@@ -1,5 +1,6 @@
 # Balancing Differential Discriminative Knowledge For Clothing-Irrelevant Lifelong Person Re-identification
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 1
 

@@ -1,5 +1,6 @@
 # Replacing Implicit Regression with Classification in Policy Gradient Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 6, 3
 

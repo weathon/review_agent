@@ -1,5 +1,6 @@
 # MaskCLR: Multi-Level Contrastive Learning for Robust Skeletal Action Recognition
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3, 6
 

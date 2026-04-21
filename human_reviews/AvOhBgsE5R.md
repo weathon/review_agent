@@ -1,5 +1,6 @@
 # Motion-Agent: A Conversational Framework for Human Motion Generation with LLMs
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8, 6
 

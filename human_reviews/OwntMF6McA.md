@@ -1,5 +1,6 @@
 # Weak-to-Strong Trustworthiness: Eliciting Trustworthiness with Weak Supervision
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

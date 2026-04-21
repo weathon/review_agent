@@ -1,5 +1,6 @@
 # Finite-Time Analysis of On-Policy Heterogeneous Federated Reinforcement Learning
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 6
 

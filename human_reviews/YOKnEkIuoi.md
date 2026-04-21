@@ -1,5 +1,6 @@
 # Conditional Variational Diffusion Models
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 5, 3
 

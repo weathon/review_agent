@@ -1,5 +1,6 @@
 # Rethinking the Smoothness of Node Features Learned by Graph Convolutional Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

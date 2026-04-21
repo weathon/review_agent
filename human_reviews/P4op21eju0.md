@@ -1,5 +1,6 @@
 # Informing Reinforcement Learning Agents by Grounding Natural Language to Markov Decision Processes
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

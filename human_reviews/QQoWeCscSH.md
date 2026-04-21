@@ -1,5 +1,6 @@
 # Unlocking Speech Instruction Data Potential with Query Rewriting
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

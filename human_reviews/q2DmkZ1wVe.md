@@ -1,5 +1,6 @@
 # CofCA: A STEP-WISE Counterfactual Multi-hop QA benchmark
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 6
 

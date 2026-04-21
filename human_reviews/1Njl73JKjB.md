@@ -1,5 +1,6 @@
 # Towards Principled Evaluations of Sparse Autoencoders for Interpretability and Control
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Exploring View Sampling Strategy in Novel View Synthesis from Causal Perspectives
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

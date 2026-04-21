@@ -1,5 +1,6 @@
 # FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # BiDRN: Binarized 3D Whole-body Human Mesh Recovery
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

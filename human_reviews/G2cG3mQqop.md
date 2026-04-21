@@ -1,5 +1,6 @@
 # Image Clustering Conditioned on Text Criteria
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

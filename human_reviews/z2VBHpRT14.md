@@ -1,5 +1,6 @@
 # SpaceSet: A Large-scale Realistic Space-based Image Dataset for Space Situational Awareness
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 10, 5, 5, 6
 

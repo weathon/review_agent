@@ -1,5 +1,6 @@
 # DNA-GPT: Divergent N-Gram Analysis for Training-Free Detection of GPT-Generated Text
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

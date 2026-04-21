@@ -1,5 +1,6 @@
 # Learning Hierarchical Image Segmentation For Recognition and By Recognition
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 10, 8
 

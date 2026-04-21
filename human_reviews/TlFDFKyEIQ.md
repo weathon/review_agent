@@ -1,5 +1,6 @@
 # Oldie but Goodie: Re-illuminating Label Propagation on Graphs with Partially Observed Features
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

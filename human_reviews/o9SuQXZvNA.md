@@ -1,5 +1,6 @@
 # ClinicalBench: Can LLMs Beat Traditional ML Models in Clinical Prediction?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 8, 3, 3
 

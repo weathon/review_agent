@@ -1,5 +1,6 @@
 # On the efficacy of group-wise clipping in differentially private optimization
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

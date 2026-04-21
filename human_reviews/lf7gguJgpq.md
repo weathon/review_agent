@@ -1,5 +1,6 @@
 # UniINR: Unifying Spatial-Temporal INR for RS Video Correction, Deblur, and Interpolation with an Event Camera
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

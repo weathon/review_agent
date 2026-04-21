@@ -1,5 +1,6 @@
 # LongGenBench: Benchmarking Long-Form Generation in Long Context LLMs
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 3, 5, 8, 8
 

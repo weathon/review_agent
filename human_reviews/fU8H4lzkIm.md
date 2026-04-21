@@ -1,5 +1,6 @@
 # PhyMPGN: Physics-encoded Message Passing Graph Network for spatiotemporal PDE systems
 
+- Avg Score: 8.00
 - Decision: Accept (Spotlight)
 - Scores: 8, 10, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # MMMT-IF: A Challenging Multimodal Multi-Turn Instruction Following Benchmark
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

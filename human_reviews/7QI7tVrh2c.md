@@ -1,5 +1,6 @@
 # Adversarial Adaptive Sampling: Unify PINN and Optimal Transport for the Approximation of PDEs
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 10, 6, 5
 

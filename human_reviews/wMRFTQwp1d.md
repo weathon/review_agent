@@ -1,5 +1,6 @@
 # VideoEval: Comprehensive Benchmark Suite for Low-Cost Evaluation of Video Foundation Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

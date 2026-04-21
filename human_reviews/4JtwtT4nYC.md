@@ -1,5 +1,6 @@
 # Multi-Task Reinforcement Learning with Shared-Unique Features and Task-Aware Prioritized Experience Replay
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

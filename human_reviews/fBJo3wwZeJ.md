@@ -1,5 +1,6 @@
 # MetaGFN: Exploring Distant Modes with Adapted Metadynamics for Continuous GFlowNets
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 6, 3, 5, 6
 

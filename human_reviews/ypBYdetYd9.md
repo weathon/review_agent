@@ -1,5 +1,6 @@
 # Measuring and Controlling Solution Degeneracy across Task-Trained Recurrent Neural Networks
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 3, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # ECG Instruction Tuning on Multimodal LLMs for Report Generation: Benchmark and Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 5, 3, 5, 6
 

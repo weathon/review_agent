@@ -1,5 +1,6 @@
 # Out-of-Distribution Detection & Applications With Ablated Learned Temperature Energy
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

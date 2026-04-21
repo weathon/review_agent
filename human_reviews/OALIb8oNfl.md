@@ -1,5 +1,6 @@
 # Maintaining Structural Integrity in Parameter Spaces for Parameter Efficient Fine-tuning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

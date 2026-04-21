@@ -1,5 +1,6 @@
 # Generalization of Scaled Deep ResNets in the Mean-Field Regime
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8
 

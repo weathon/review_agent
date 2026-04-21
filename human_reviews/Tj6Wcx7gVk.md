@@ -1,5 +1,6 @@
 # Probabilistically Rewired Message-Passing Neural Networks
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

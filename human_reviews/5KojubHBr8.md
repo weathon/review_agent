@@ -1,5 +1,6 @@
 # MMICL: Empowering Vision-language Model with Multi-Modal In-Context Learning
 
+- Avg Score: 5.60
 - Decision: Accept (poster)
 - Scores: 3, 8, 6, 6, 5
 
@@ -34,7 +35,8 @@ First, I find it **extremely hard to follow the methodology** in this paper. For
 
 The authors should also provide more visual examples from each dataset and more detailed description on how you convert them into instruction-following formats. For example, the current Section 2.3 is very hard to understand. It says *“Next, we employ ChatGPT to rewrite the instructions to describe the key characteristics of each task accurately”* — what does it mean by *“key characteristics of each task”* and how did ChatGPT come up with them?
 
-There are **lots of missing details** regarding model evaluation.  
+There are **lots of missing details** regarding model evaluation. 
+
 
 - For one example, in Table 4, how did the authors select the few-shot samples? Will different few-shot samples affect the performance? No variance/std is provided in Table4.
 

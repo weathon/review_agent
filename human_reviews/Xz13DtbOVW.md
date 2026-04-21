@@ -1,5 +1,6 @@
 # Balancing Act: Constraining Disparate Impact in Sparse Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 5
 

@@ -1,5 +1,6 @@
 # What are the Essential Factors in Crafting Effective Long Context Multi-Hop Instruction Datasets? Insights and Best Practices
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

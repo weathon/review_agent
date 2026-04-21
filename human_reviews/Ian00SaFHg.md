@@ -1,5 +1,6 @@
 # Efficient Model-Based Reinforcement Learning Through Optimistic Thompson Sampling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 3, 8
 

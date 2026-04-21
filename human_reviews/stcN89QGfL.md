@@ -1,5 +1,6 @@
 # PDE-constrained Learning with Multi-time-stepping for Accelerated Fluid Simulation
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 8, 3, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Fine-Tuning Is All You Need to Mitigate Backdoor Attacks
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 6, 5, 5, 3
 

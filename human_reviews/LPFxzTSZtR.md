@@ -1,5 +1,6 @@
 # Personalization Mitigates the Perils of Local SGD for Heterogeneous Distributed Learning
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 1
 
@@ -43,7 +44,9 @@ The key message that over-parameterization is helpful to convergence for persona
 
 3. The author claimed that such an ``over-parameterization’’ is beneficial in enlarging the solution regime. However, I’m not convinced that the additional $w$ is beneficial. The paper considers a convex optimization problem, so the optimal loss value is unique (the optimal solution might not). Also, keep in mind that the paper still wants to find all local minimizers rather than a global minimizer. So I believe the pure local training is the optimal algorithm. Note that in Theorem 1, the author identified the regimes where the proposed algorithm outperforms pure local training. The main advance is that the noise terms are scaled by the number of devices for the proposed method (from Table 1). To guarantee this advantage, a restriction on the local update $K$ is posed. For me, it is more like a mathematical trick rather than an algorithmic advantage.  Furthermore, no experiments/simulation results are provided, it is harder for me to believe the introduction of $w$ to the original problem (1) and the proposed method is indeed better than pure local training and this outperformance is due to algorithmic development rather than mathematical tricks. 
 
-4. Given that (5) is equal to (1), some comparisons in the paper are actually not very fair.  For example, at the first point of contributions (on Page 3), the author said ``We make no data heterogeneity assumptions in our analysis, which is a significant improvement over every known vanilla local SGD analysis.’’. The comparison is unfair, because most local methods try to find a consensus model, while here in this paper, the goal is to find personalized models. Hence, to make each personalized model converge, you of course do not need any heterogeneity assumptions.
+4. Given that (5) is equal to (1), some comparisons in the paper are actually not very fair.
+
+For example, at the first point of contributions (on Page 3), the author said ``We make no data heterogeneity assumptions in our analysis, which is a significant improvement over every known vanilla local SGD analysis.’’. The comparison is unfair, because most local methods try to find a consensus model, while here in this paper, the goal is to find personalized models. Hence, to make each personalized model converge, you of course do not need any heterogeneity assumptions.
 
 ### Soundness
 2 fair

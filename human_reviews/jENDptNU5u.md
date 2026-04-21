@@ -1,5 +1,6 @@
 # EditHOI: A framework for HOI image editing with self-generated skeleton guidance
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 6, 5, 3
 

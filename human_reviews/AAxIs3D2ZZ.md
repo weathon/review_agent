@@ -1,5 +1,6 @@
 # RLAIF: Scaling Reinforcement Learning from Human Feedback with AI Feedback
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 3, 6, 6
 

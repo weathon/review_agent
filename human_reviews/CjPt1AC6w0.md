@@ -1,5 +1,6 @@
 # IS SYNTHETIC DATA USEFUL FOR TRANSFER LEARNING? AN INVESTIGATION INTO DATA GENERATION, VOLUME, AND UTILIZATION
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 8, 6
 
@@ -180,7 +181,9 @@ The paper explores a transfer learning framework that augments the target datase
 ### Weaknesses
 It would be helpful for the reader to get a better understanding of the following:
 
-1. It would interesting to have the approach proposed in paper “IS SYNTHETIC DATA FROM GENERATIVE MODELS READY FOR IMAGE RECOGNITION?” as a baseline (let’s say this baseline as Transfer1). Specifically, it would be interesting to see the following: 
+1. It would interesting to have the approach proposed in paper “IS SYNTHETIC DATA FROM GENERATIVE MODELS READY FOR IMAGE RECOGNITION?” as a baseline (let’s say this baseline as Transfer1).
+Specifically, it would be interesting to see the following:
+
     1. Performance of Transfer1 on the same setting (i.e. having same generative text2image model, same evaluation datasets and using the proposed approaches of dataset filtering RF, RG to close the domain gap) 
     2. Performance of Bridged transfer on pre-trained CLIP models and then comparison with Transfer1 on the same proposed evaluation setting introduced by Transfer1.
     3. The idea of the above 2 suggestions is to glean out what additional information we can learn on top of the findings discovered by Transfer1 approach.

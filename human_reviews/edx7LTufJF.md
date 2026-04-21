@@ -1,5 +1,6 @@
 # Efficient Low-Rank Diffusion Model Training for Text-to-Image Generation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

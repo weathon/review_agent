@@ -1,5 +1,6 @@
 # Demystifying the Myths and Legends of Nonconvex Convergence of SGD
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 1
 

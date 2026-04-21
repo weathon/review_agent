@@ -1,5 +1,6 @@
 # Test-Time Graph Rebirth: Serving GNN Generalization Under Distribution Shifts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

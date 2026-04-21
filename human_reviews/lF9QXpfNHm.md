@@ -1,5 +1,6 @@
 # Efficient Open-world Test Time Adaptation of Vision Language Models
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 

@@ -1,5 +1,6 @@
 # Rethinking One-vs-the-Rest Loss for Instance-dependent Complementary Label Learning
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

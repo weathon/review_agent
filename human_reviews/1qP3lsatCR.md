@@ -1,5 +1,6 @@
 # NetMoE: Accelerating MoE Training through Dynamic Sample Placement
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 6, 8, 8
 

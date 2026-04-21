@@ -1,5 +1,6 @@
 # Learning with User-Level Local Differential Privacy
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

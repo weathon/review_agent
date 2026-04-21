@@ -1,5 +1,6 @@
 # PRM:  Photometric Stereo based Large Reconstruction Model
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 8, 6
 

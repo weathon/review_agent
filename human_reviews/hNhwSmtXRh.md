@@ -1,5 +1,6 @@
 # Lemur: Harmonizing Natural Language and Code for Language Agents
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 8
 

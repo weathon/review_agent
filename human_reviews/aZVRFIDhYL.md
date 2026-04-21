@@ -1,5 +1,6 @@
 # Efficient Diffusion Posterior Sampling for Dose Reduced CT Reconstruction
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

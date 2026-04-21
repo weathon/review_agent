@@ -1,5 +1,6 @@
 # Time Series Representation Models for Multivariate Time Series Forecasting and Imputation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

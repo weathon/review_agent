@@ -1,5 +1,6 @@
 # MapEval: A Map-Based Evaluation of Geo-Spatial Reasoning in Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

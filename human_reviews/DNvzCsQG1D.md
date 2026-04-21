@@ -1,5 +1,6 @@
 # InstructionGPT-4: A 200-Instruction Paradigm for Fine-Tuning MiniGPT-4
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 5, 3, 6, 1
 

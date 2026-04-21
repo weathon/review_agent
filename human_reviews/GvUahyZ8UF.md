@@ -1,5 +1,6 @@
 # Improved Off-policy Reinforcement Learning in Biological Sequence Design
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 6, 8
 

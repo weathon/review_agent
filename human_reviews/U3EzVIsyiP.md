@@ -1,5 +1,6 @@
 # Dog-IQA: Standard-guided Zero-shot MLLM for Mix-grained Image Quality Assessment
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 5
 

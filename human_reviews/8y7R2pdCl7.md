@@ -1,5 +1,6 @@
 # Text as parameter: interactive prompt optimisation for large language models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3, 3
 

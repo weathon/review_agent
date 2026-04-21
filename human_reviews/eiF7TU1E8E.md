@@ -1,5 +1,6 @@
 # SAN: Inducing Metrizability of GAN with Discriminative Normalized Linear Layer
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6
 

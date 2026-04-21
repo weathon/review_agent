@@ -1,5 +1,6 @@
 # LFPS: Learned Farthest Point Sampling
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 5, 3
 

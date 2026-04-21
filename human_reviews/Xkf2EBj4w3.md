@@ -1,5 +1,6 @@
 # Stabilizing Contrastive RL: Techniques for Robotic Goal Reaching from Offline Data
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8, 8
 

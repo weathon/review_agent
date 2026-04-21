@@ -1,5 +1,6 @@
 # DP-SGD Without Clipping: The Lipschitz Neural Network Way
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 8, 6
 

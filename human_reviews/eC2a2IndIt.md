@@ -1,5 +1,6 @@
 # BadJudge: Backdoor Vulnerabilities of LLM-As-A-Judge
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 8
 

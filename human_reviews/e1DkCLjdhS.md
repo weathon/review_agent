@@ -1,5 +1,6 @@
 # A Brain-Inspired Machine Learning Paradigm for Nature-Powered Equation Solving
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 6, 6
 

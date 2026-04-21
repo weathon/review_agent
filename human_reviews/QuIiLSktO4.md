@@ -1,5 +1,6 @@
 # Algorithms for Caching and MTS with reduced number of predictions
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # V2M: Visual 2-Dimensional Mamba for Image Representation Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 8, 6
 

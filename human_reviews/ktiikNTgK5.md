@@ -1,5 +1,6 @@
 # Compresso: Structured Pruning with Collaborative Prompting Learns Compact Large Language Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

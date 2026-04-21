@@ -1,5 +1,6 @@
 # RaCNN: Region-aware Convolutional Neural Network with Global Receptive Field
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 5, 3, 5, 5
 

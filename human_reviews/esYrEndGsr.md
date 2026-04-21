@@ -1,5 +1,6 @@
 # Influence Functions for Scalable Data Attribution in Diffusion Models
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 10, 8, 6
 

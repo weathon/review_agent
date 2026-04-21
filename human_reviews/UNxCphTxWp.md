@@ -1,5 +1,6 @@
 # Programming Every Example: Lifting Pre-training Data Quality like Experts at Scale
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 8, 5
 

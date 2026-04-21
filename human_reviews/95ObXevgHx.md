@@ -1,5 +1,6 @@
 # The Temporal Structure of Language Processing in the Human Brain Corresponds to The Layered Hierarchy of Deep Language Models
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 3, 8, 6, 8
 

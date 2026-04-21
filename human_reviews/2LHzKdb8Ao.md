@@ -1,5 +1,6 @@
 # Reducing Symmetry Mismatch Caused by Freely Placed Cameras in Robotic Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

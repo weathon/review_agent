@@ -1,5 +1,6 @@
 # PingPong: A Benchmark for Role-Playing Language Models with User Emulation and Multi-Model Evaluation
 
+- Avg Score: 3.83
 - Decision: Reject
 - Scores: 6, 3, 3, 3, 5, 3
 

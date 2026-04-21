@@ -1,5 +1,6 @@
 # Cognitive Modeling for Human-Robot Value Soft Alignment
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5
 

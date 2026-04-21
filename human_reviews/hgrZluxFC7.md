@@ -1,5 +1,6 @@
 # Adversarial Machine Learning in Latent Representations of Neural Networks
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 3, 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Joint Reward and Policy Learning with Demonstrations and Human Feedback Improves Alignment
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 10, 6, 8, 5
 

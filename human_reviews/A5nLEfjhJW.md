@@ -1,5 +1,6 @@
 # SHARCS: SHARed Concept Space for\\Explainable Multimodal Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

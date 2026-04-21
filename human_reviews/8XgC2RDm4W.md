@@ -1,5 +1,6 @@
 # Graphon Neural Differential Equations and Transferabilty of Graph Neural Differential Equations
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

@@ -1,5 +1,6 @@
 # DebUnc: Improving Large Language Model Agent Communication Via Uncertainty Metrics
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

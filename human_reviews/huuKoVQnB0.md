@@ -1,5 +1,6 @@
 # Improving Pretraining Data Using Perplexity Correlations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 5, 6
 

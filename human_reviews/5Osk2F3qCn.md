@@ -1,5 +1,6 @@
 # TADIS: Steering Models for Deep-Thinking about Demonstration Examples
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

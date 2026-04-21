@@ -1,5 +1,6 @@
 # Hot PATE: Private Aggregation of Distributions for Diverse Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

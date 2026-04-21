@@ -1,5 +1,6 @@
 # FlashFFTConv: Efficient Convolutions for Long Sequences with Tensor Cores
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

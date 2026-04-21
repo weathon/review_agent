@@ -1,5 +1,6 @@
 # TCL-VS: Temporal Contrastive Learning for Self-Supervised Video Summarization
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

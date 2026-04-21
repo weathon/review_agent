@@ -1,5 +1,6 @@
 # How Abilities in Large Language Models are Affected by Supervised Fine-tuning Data Composition
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3
 

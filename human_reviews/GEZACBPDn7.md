@@ -1,5 +1,6 @@
 # KDGCN: A Kernel-based Double-level Graph Convolution Network for Semi-supervised Graph Classification with Scarce Labels
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # AudioMorphix: Training-free audio editing with diffusion probabilistic models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 3
 

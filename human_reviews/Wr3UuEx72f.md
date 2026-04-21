@@ -1,5 +1,6 @@
 # LARP: Tokenizing Videos with a Learned Autoregressive Generative Prior
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

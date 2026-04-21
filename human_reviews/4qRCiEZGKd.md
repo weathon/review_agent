@@ -1,5 +1,6 @@
 # Neural Description Logic Reasoning over Incomplete Knowledge Bases
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 5, 3, 3
 

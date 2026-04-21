@@ -1,5 +1,6 @@
 # The Cyclical Chaos And Its Equilibrium
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 3
 

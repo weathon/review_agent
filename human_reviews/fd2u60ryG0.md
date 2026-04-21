@@ -1,5 +1,6 @@
 # Enhancing End-to-End Autonomous Driving with Latent World Model
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

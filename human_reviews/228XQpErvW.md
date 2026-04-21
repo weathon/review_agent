@@ -1,5 +1,6 @@
 # Automatic Fine-Tuned Offline-to-Online Reinforcement Learning via Increased Simple Moving Average Q-value
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

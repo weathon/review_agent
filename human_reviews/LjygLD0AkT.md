@@ -1,5 +1,6 @@
 # Rethinking Test-time Likelihood: The Likelihood Path Principle and Its Application to OOD Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

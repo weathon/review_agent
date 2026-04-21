@@ -1,5 +1,6 @@
 # ElastoGen: 4D Generaetive Elastodynamics
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

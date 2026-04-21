@@ -1,5 +1,6 @@
 # Identifying Latent State Transition Processes for Individualized Reinforcement Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 5, 3, 6, 6
 

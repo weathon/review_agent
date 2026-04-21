@@ -1,5 +1,6 @@
 # GTMGC: Using Graph Transformer to Predict Molecule’s Ground-State Conformation
 
+- Avg Score: 6.33
 - Decision: Accept (spotlight)
 - Scores: 3, 8, 8
 

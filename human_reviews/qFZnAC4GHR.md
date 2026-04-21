@@ -1,5 +1,6 @@
 # A new framework for evaluating model out-of-distribution generalisation for the biochemical domain
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

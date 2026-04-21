@@ -1,5 +1,6 @@
 # Extending Power of Nature from Binary to Real-Valued Graph Learning in Real World
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 5
 

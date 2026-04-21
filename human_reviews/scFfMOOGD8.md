@@ -1,5 +1,6 @@
 # Learnable Invisible Backdoor for Diffusion Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 8, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # CoSDA: Continual Source-Free Domain Adaptation
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3, 5, 3, 3
 

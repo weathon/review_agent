@@ -1,5 +1,6 @@
 # Forward $\chi^2$ Divergence Based Variational Importance Sampling
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 5
 

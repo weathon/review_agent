@@ -1,5 +1,6 @@
 # BioBridge: Bridging Biomedical Foundation Models via Knowledge Graphs
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

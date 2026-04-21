@@ -1,5 +1,6 @@
 # Standardizing the Measurement of Text Diversity: A Tool and Comparative Analysis
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3, 3
 

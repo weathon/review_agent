@@ -1,5 +1,6 @@
 # Calibrated Decision-Making through Large Language Model-Assisted Retrieval
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

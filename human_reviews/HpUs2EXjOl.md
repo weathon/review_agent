@@ -1,5 +1,6 @@
 # Rethinking Evaluation of Sparse Autoencoders through the Representation of Polysemous Words
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # 3DTrajMaster: Mastering 3D Trajectory for Multi-Entity Motion in Video Generation
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6
 

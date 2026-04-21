@@ -1,5 +1,6 @@
 # LLaMA-Adapter: Efficient Fine-tuning of Large Language Models with Zero-initialized Attention
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 8, 6
 

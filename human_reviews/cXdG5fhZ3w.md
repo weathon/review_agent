@@ -1,5 +1,6 @@
 # Enhancing Group Fairness in Federated Learning through Personalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # L-PINN: A Langevin Dynamics Approach with Balanced Sampling to Improve Learning Stability in Physics-Informed Neural Networks
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 8, 5
 

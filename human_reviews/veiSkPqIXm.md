@@ -1,5 +1,6 @@
 # OpenPL: Realistic Evaluation of Prompt Learning for VLM in Open Environments
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

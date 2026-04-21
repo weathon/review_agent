@@ -1,5 +1,6 @@
 # Learning Temporal Causal Representation under Non-Invertible Generation Process
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 5, 6
 

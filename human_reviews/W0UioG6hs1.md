@@ -1,5 +1,6 @@
 # Revisiting Vector-Quantization for Blind Image Restoration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 3, 3
 

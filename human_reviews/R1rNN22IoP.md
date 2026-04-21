@@ -1,5 +1,6 @@
 # MeshLRM: Large Reconstruction Model for High-Quality Meshes
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 6, 8
 

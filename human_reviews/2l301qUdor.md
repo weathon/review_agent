@@ -1,5 +1,6 @@
 # BOSE-NAS: Differentiable Neural Architecture Search with Bi-Level Optimization Stable Equilibrium
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Neural Electrostatics: A 3D Physics-Informed Boundary Element Poisson Equation Solver
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

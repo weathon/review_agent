@@ -1,5 +1,6 @@
 # Dataset Ownership Verification in Contrastive Pre-trained Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 8, 8
 

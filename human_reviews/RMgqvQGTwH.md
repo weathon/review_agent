@@ -1,5 +1,6 @@
 # Offline Data Enhanced On-Policy Policy Gradient with Provable Guarantees
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # HiLoRA: High-frequency-augmented Low-Rank Adaptation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

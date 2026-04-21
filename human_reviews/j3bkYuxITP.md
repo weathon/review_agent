@@ -1,5 +1,6 @@
 # Refined Partitioning Boosts MGDA: Introducing RP-MGDA for Multi-Objective Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

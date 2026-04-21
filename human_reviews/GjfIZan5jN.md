@@ -1,5 +1,6 @@
 # Enhancing Pre-trained Representation Classifiability can Boost its Interpretability
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 6, 8, 8, 8
 

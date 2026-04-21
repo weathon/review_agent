@@ -1,5 +1,6 @@
 # Graph Neural Networks Are More Than Filters: Revisiting and Benchmarking from A Spectral Perspective
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 6
 

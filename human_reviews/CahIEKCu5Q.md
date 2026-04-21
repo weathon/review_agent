@@ -1,5 +1,6 @@
 # CodeMMLU: A Multi-Task Benchmark for Assessing Code Understanding & Reasoning Capabilities of CodeLLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 3
 

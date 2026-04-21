@@ -1,5 +1,6 @@
 # Privacy-Preserving Logistic Regression Training with A Faster Gradient Variant
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3, 3
 

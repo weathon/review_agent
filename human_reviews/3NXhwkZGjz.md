@@ -1,5 +1,6 @@
 # Source-Free Unsupervised Domain Adaptation with Hypothesis Consolidation of Prediction Rationale
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 6
 

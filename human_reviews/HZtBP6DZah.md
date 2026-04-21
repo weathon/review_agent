@@ -1,5 +1,6 @@
 # Contrastive Grouping-based Invariant Learning for Generalizable Graph Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 5, 1
 

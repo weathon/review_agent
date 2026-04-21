@@ -1,5 +1,6 @@
 # MSfusion: Enabling Collaborative Training of Large Models over Resource-Constraint Participants
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 3, 5
 

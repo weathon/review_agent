@@ -1,5 +1,6 @@
 # Characteristic Function-Based Regularization for Probability Function Informed Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5, 3
 

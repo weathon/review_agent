@@ -1,5 +1,6 @@
 # Applying language models to algebraic topology: generating simplicial cycles using multi-labeling in Wu's formula
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

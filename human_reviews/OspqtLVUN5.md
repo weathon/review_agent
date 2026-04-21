@@ -1,5 +1,6 @@
 # Earlier Tokens Contribute More: Learning Direct Preference Optimization From Temporal Decay Perspective
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

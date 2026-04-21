@@ -1,5 +1,6 @@
 # Improved Sampling Of Diffusion Models In Fluid Dynamics With Tweedie's Formula
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 8, 6
 

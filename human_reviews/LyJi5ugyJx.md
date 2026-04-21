@@ -1,5 +1,6 @@
 # Simplifying, Stabilizing and Scaling Continuous-time Consistency Models
 
+- Avg Score: 9.20
 - Decision: Accept (Oral)
 - Scores: 8, 10, 8, 10, 10
 

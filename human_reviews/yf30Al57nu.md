@@ -1,5 +1,6 @@
 # CodeLutra: Boosting LLM Code Generation via Preference-Guided Refinement
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5, 8
 

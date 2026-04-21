@@ -1,5 +1,6 @@
 # Investigating Self-Attention: Its Impact on Sample Efficiency in Deep Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1
 

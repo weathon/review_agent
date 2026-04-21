@@ -1,5 +1,6 @@
 # PoseCheck: Generative Models for 3D Structure-based Drug Design Produce Unrealistic Poses
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Training on more Reachable Tasks for Generalisation in Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

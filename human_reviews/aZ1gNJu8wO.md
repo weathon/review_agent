@@ -1,5 +1,6 @@
 # A Geometric Framework for Understanding Memorization in Generative Models
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

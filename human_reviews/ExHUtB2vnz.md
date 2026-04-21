@@ -1,5 +1,6 @@
 # INFER: A Neural-symbolic Model For Extrapolation Reasoning on Temporal Knowledge Graph
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6
 

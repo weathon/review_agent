@@ -1,5 +1,6 @@
 # Revisiting the Design Choices in Max-Return Sequence Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

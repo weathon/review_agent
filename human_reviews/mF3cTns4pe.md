@@ -1,5 +1,6 @@
 # Sum-Product-Set Networks: Deep Tractable Models for Tree-Structured Graphs
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

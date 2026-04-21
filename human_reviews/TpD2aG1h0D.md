@@ -1,5 +1,6 @@
 # Meta Continual Learning Revisited: Implicitly Enhancing Online Hessian Approximation via Variance Reduction
 
+- Avg Score: 8.67
 - Decision: Accept (oral)
 - Scores: 10, 8, 8
 

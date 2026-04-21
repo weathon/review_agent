@@ -1,5 +1,6 @@
 # Multimodal Variational Disentangled  Knowledge Alignment for Cross-domain Recommendation
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

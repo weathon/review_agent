@@ -1,5 +1,6 @@
 # Rethinking Self-Distillation: Label Averaging and Enhanced Soft Label Refinement with Partial Labels
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

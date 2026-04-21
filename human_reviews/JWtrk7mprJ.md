@@ -1,5 +1,6 @@
 # Residual Deep Gaussian Processes on Manifolds
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 8, 8
 

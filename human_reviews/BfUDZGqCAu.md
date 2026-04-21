@@ -1,5 +1,6 @@
 # On the Linear Speedup of Personalized Federated Reinforcement Learning with Shared Representations
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

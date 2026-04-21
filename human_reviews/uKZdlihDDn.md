@@ -1,5 +1,6 @@
 # Learning Distributions of Complex Fluid Simulations with Diffusion Graph Networks
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8, 8
 

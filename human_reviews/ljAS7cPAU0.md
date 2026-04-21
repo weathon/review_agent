@@ -1,5 +1,6 @@
 # Symbolic regression via MDLformer-guided search: from minimizing prediction error to minimizing description length
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3
 

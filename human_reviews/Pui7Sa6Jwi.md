@@ -1,5 +1,6 @@
 # CLEAR: An Information-Theoretic  Framework for Distraction-Free Representation Learning in Visual Offline RL
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

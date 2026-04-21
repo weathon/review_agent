@@ -1,5 +1,6 @@
 # Sporadicity in Decentralized Federated Learning: Theory and Algorithm
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

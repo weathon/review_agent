@@ -1,5 +1,6 @@
 # OvercookedV2: Rethinking Overcooked for Zero-Shot Coordination
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 5
 

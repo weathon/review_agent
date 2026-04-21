@@ -1,5 +1,6 @@
 # IBCL: Zero-shot Model Generation for Task Trade-offs in Continual Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 6, 3
 

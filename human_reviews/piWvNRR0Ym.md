@@ -1,5 +1,6 @@
 # Towards Minimal Targeted Updates of Language Models with Targeted Negative Training
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

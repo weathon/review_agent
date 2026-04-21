@@ -1,5 +1,6 @@
 # Social Reward: Evaluating and Enhancing Generative AI through Million-User Feedback from an Online Creative Community
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8, 6
 

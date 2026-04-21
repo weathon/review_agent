@@ -1,5 +1,6 @@
 # RNAinformer: Generative RNA Design with Tertiary Interactions
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 5
 

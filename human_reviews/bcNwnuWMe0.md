@@ -1,5 +1,6 @@
 # Exploiting River Network Topology for Flood Forecasting with Graph Neural Networks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

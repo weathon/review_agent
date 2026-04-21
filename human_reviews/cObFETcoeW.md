@@ -1,5 +1,6 @@
 # Towards Faithful XAI Evaluation via Generalization-Limited Backdoor Watermark
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 5
 
@@ -150,7 +151,8 @@ This paper proposed a generalization-limited backdoor watermark (GLBW), an evalu
 - Limitation of IoU based evaluation methods
   - Since the saliency map is not a segmentation, comparing the ground truth segmentation label with the saliency map could not be the best evaluation method. The classifier would not uniformly refer to the ground truth area.
 - Week explanation for the intention of BWTP/GLBW
-  - Many of the details of BWTP and GLBW are in the appendix, which makes it hard to understand them at first sight.  
+  - Many of the details of BWTP and GLBW are in the appendix, which makes it hard to understand them at first sight. 
+
 
 - Minor corrections
   - In Eq (1), $\mathcal{L}$ receives $y\in${$0,...,K-1$} for benign and backdoor loss, but $\mathbf{y}\in\mathbb{R}^K$ for penalty loss. 

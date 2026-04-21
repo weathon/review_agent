@@ -1,5 +1,6 @@
 # LoTa-Bench: Benchmarking Language-oriented Task Planners for Embodied Agents
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

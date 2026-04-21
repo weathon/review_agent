@@ -1,5 +1,6 @@
 # On the Stochasticity in Graph Neural Networks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 5, 6
 

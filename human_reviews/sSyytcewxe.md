@@ -1,5 +1,6 @@
 # Divide and not forget: Ensemble of  selectively trained experts  in Continual Learning
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

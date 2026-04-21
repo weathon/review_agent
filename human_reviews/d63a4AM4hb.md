@@ -1,5 +1,6 @@
 # Not All Language Model Features Are One-Dimensionally Linear
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Text-Augmented Multimodal LLMs for Chemical Reaction Condition Recommendation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

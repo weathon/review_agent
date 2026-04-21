@@ -1,5 +1,6 @@
 # RotRNN: Modelling Long Sequences with Rotations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # MEMO: Memory-Guided and Emotion-Aware Talking Video Generation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3
 

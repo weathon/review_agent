@@ -1,5 +1,6 @@
 # FMP-AE: A HYBRID APPROACH TO TIME SERIES ANOMALY DETECTION
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 3, 3, 3, 5
 

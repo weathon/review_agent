@@ -1,5 +1,6 @@
 # Cluster-Segregate-Perturb (CSP): A Model-agnostic Explainability Pipeline for Spatiotemporal Land Surface Forecasting Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

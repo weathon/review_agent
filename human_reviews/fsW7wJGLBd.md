@@ -1,5 +1,6 @@
 # Tensor Trust: Interpretable Prompt Injection Attacks from an Online Game
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 5, 8
 

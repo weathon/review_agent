@@ -1,5 +1,6 @@
 # The Closeness of In-Context Learning and Weight Shifting for Softmax Regression
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

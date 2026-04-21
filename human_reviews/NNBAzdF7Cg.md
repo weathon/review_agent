@@ -1,5 +1,6 @@
 # Binary Spiking Neural Networks as causal models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

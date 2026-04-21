@@ -1,5 +1,6 @@
 # Achieving Exact Federated Unlearning with Improved Post-Unlearning Performance
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

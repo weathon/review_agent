@@ -1,5 +1,6 @@
 # Towards Codec-LM Co-design for Neural Codec Language Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6, 3
 

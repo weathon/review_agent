@@ -1,5 +1,6 @@
 # A New, Physics-Based Continuous-Time Reinforcement Learning Algorithm with Performance Guarantees
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

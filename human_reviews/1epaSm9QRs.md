@@ -1,5 +1,6 @@
 # Complex Numerical Computation  with Numerical Semantic Pre-training Framework
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 3, 8
 

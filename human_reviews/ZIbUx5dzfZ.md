@@ -1,5 +1,6 @@
 # ORBIS: Open Dataset Can Rescue You From Dataset Bias
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

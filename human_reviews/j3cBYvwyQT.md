@@ -1,5 +1,6 @@
 # TapWeight: Reweighting Pretraining Objectives for Task-Adaptive Pretraining
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

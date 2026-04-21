@@ -1,5 +1,6 @@
 # Leveraging Semantic and Positional Uncertainty for Trajectory Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Rate/Distortion Constrained Model Quantization for Efficient Storage and Inference
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

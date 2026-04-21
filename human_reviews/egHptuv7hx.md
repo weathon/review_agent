@@ -1,5 +1,6 @@
 # How does controllability emerge in language models during pretraining?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

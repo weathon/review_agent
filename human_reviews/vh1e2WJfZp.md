@@ -1,5 +1,6 @@
 # High-Precision Dichotomous Image Segmentation via Probing Diffusion Capacity
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

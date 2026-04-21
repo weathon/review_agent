@@ -1,5 +1,6 @@
 # AVCAPS: AN AUDIO-VISUAL DATASET WITH MODALITY-SPECIFIC CAPTIONS
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

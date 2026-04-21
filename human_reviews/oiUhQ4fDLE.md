@@ -1,5 +1,6 @@
 # Mixup Your Own Pairs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 6, 8, 5
 

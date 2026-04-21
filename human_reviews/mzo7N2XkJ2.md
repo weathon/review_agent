@@ -1,5 +1,6 @@
 # Corrupting Unbounded Unlearnable Datasets with Pixel-based Image Transformations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

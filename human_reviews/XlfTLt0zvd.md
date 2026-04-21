@@ -1,5 +1,6 @@
 # An Efficient Multi-Task Transformer for 3D Face Alignment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

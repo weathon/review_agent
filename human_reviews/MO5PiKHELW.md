@@ -1,5 +1,6 @@
 # Sudden Drops in the Loss: Syntax Acquisition, Phase Transitions, and Simplicity Bias in MLMs
 
+- Avg Score: 7.75
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 8, 10
 

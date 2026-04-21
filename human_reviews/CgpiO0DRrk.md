@@ -1,5 +1,6 @@
 # Video Caching at Data-drifting Network Edge: A KD-based Cross-domain Collaborative Solution
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

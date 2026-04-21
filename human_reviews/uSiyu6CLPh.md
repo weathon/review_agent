@@ -1,5 +1,6 @@
 # AdCorDA: Classifier Refinement via Adversarial Correction and Domain Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

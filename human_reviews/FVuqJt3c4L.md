@@ -1,5 +1,6 @@
 # Population Transformer: Learning Population-level Representations of Neural Activity
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 5, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Meta-Learning with Personalized Learning Rates for Rapid Task Mastery
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Diffeomorphic Mesh Deformation via Efficient Optimal Transport for Cortical Surface Reconstruction
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

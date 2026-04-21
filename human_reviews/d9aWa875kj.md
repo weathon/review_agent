@@ -1,5 +1,6 @@
 # Exact Certification of (Graph) Neural Networks Against Label Poisoning
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

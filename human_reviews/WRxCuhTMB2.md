@@ -1,5 +1,6 @@
 # Experimental methodology to evaluate the effectiveness of uncertainty disentanglement on regression models
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 1, 1, 3
 

@@ -1,5 +1,6 @@
 # Annealed Implicit Q-learning in Online Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

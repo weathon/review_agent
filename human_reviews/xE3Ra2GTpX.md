@@ -1,5 +1,6 @@
 # Multi-Grained Knowledge for Retrieval-Augmented Question Answering on Hyper-long Contexts
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

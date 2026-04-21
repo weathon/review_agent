@@ -1,5 +1,6 @@
 # How Many Pretraining Tasks Are Needed for In-Context Learning of Linear Regression?
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 5
 

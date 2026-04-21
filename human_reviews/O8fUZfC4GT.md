@@ -1,5 +1,6 @@
 # GENERALIZATION, ROBUSTNESS AND ADAPTABILITY OF PROGRESSIVE NEURAL COLLAPSE
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

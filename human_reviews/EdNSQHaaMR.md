@@ -1,5 +1,6 @@
 # Selective Task Group Updates for Multi-Task Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

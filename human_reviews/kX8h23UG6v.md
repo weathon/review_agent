@@ -1,5 +1,6 @@
 # Standard Gaussian Process is All You Need for High-Dimensional Bayesian Optimization
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 8, 8
 

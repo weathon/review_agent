@@ -1,5 +1,6 @@
 # Long-Sequence Recommendation Models Need Decoupled Embeddings
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 5
 

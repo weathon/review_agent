@@ -1,5 +1,6 @@
 # GLIMO: Grounding Large Language Models With Imperfect World Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 3
 

@@ -1,5 +1,6 @@
 # HUB: Enhancing Learned Optimizers via Hybrid Update-based Strategy
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

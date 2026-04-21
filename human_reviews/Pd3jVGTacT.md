@@ -1,5 +1,6 @@
 # Simplicity Prevails: Rethinking Negative Preference Optimization for LLM Unlearning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # 1-Bit FQT: Pushing the Limit of Fully Quantized Training to 1-bit
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 8, 3
 

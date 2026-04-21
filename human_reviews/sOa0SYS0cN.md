@@ -1,5 +1,6 @@
 # Controllable Data Generation with Hierarchical Neural Representations
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 6, 6, 5, 5
 

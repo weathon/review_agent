@@ -1,5 +1,6 @@
 # Enhancing Clinical Note Summarization: Iterative Reflexions with Small-model Supervision and Error2Correct Demonstrations
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 8, 3, 3
 

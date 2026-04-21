@@ -1,5 +1,6 @@
 # Tighter Privacy Auditing of DP-SGD in the Hidden State Threat Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # LoRA-X: Bridging Foundation Models with Training-Free Cross-Model Adaptation
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 8
 

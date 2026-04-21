@@ -1,5 +1,6 @@
 # Foveated Dynamic Transformer: Robust and Efficient Perception Inspired by the Human Visual System
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

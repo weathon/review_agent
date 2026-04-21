@@ -1,5 +1,6 @@
 # GNN-RAG: Graph Neural Retrieval for Large Language Model Reasoning
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 6, 8, 3, 5
 

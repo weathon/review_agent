@@ -1,5 +1,6 @@
 # Don't Miss the Forest for the Trees: Attentional Vision Calibration for Large Vision Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

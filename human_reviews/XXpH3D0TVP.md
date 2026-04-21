@@ -1,5 +1,6 @@
 # The Journey, Not the Destination: How Data Guides Diffusion Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

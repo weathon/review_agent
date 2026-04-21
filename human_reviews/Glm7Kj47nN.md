@@ -1,5 +1,6 @@
 # Geometry Image Diffusion: Fast and Data-Efficient Text-to-3D with Image-Based Surface Representation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

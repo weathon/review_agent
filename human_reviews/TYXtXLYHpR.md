@@ -1,5 +1,6 @@
 # Towards Transparent Time Series Forecasting
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 3
 

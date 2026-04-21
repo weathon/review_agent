@@ -1,5 +1,6 @@
 # Q* Agent: Optimizing Language Agents with Q-Guided Exploration
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

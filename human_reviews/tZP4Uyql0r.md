@@ -1,5 +1,6 @@
 # FedDFQ : Personalized Federated Learning Based On Data Feature Quantification
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

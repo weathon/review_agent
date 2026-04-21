@@ -1,5 +1,6 @@
 # Large Language Models Often Say One Thing and Do Another
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 8, 8
 

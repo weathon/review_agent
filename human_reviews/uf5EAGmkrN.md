@@ -1,5 +1,6 @@
 # Dynamical versus Bayesian Phase Transitions in a Toy Model of Superposition
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 5, 6, 8
 

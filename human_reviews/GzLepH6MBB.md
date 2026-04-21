@@ -1,5 +1,6 @@
 # MMTryon: Multi-Modal Multi-Reference Control for High-Quality Fashion Generation
 
+- Avg Score: 7.00
 - Decision: Reject
 - Scores: 3, 10, 8
 

@@ -1,5 +1,6 @@
 # Attribute-Enhanced Similarity Ranking for Sparse Link Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Can Copyright be Reduced to Privacy?
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

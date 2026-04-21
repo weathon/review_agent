@@ -1,5 +1,6 @@
 # A Unified Riemannian-Geometric Framework for SARS-CoV-2 Detection from CT Scans
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 3, 1, 6
 

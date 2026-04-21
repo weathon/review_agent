@@ -1,5 +1,6 @@
 # Towards Foundation Models for Knowledge Graph Reasoning
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 8
 

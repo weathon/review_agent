@@ -1,5 +1,6 @@
 # Provable Robustness of (Graph) Neural Networks Against Data Poisoning and Backdoors
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 8, 6, 6
 

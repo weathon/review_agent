@@ -1,5 +1,6 @@
 # Amortized Bayesian Inference with Hybrid Expert-in-the-Loop and Learnable Summary Statistics
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5, 6
 

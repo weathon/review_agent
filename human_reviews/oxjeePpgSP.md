@@ -1,5 +1,6 @@
 # Backdoor Contrastive Learning via Bi-level Trigger Optimization
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6
 

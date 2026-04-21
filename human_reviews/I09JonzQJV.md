@@ -1,5 +1,6 @@
 # Counterfactual Fairness With the Human in the Loop
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

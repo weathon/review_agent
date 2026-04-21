@@ -1,5 +1,6 @@
 # Bisimulation Metric for Model Predictive Control
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 6
 

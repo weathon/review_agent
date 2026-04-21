@@ -1,5 +1,6 @@
 # NovoBench-100K: A large-scale protein dataset for in silico evolution of de novo TadA
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 3, 6, 6, 3
 

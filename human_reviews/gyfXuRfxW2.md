@@ -1,5 +1,6 @@
 # Learning Polynomial Problems with $SL(2, \mathbb{R})$-Equivariance
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 5
 

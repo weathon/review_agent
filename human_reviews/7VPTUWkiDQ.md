@@ -1,5 +1,6 @@
 # Provable Compositional Generalization for Object-Centric Learning
 
+- Avg Score: 7.33
 - Decision: Accept (oral)
 - Scores: 8, 8, 6
 

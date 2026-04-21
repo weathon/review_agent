@@ -1,5 +1,6 @@
 # Beyond Shortest-Paths: A Benchmark for Reinforcement Learning on Traffic Engineering
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 3, 3, 6, 3, 3
 

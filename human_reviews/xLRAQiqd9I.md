@@ -1,5 +1,6 @@
 # GeoMFormer: A General Architecture for Geometric Molecular Representation Learning
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 6, 5
 

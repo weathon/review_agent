@@ -1,5 +1,6 @@
 # X-VILA: Cross-Modality Alignment for Large Language Models
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 8, 3, 3
 

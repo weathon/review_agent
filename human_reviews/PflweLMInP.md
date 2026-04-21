@@ -1,5 +1,6 @@
 # Complete multi-modal metric learning for multi-modal sarcasm detection
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 10, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Robust Heterogeneous Graph Neural Network Explainer with Graph Information Bottleneck
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

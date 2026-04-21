@@ -1,5 +1,6 @@
 # Boosting Adversarial Robustness with CLAT: Criticality Leveraged Adversarial Training
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 5, 6, 3, 6
 

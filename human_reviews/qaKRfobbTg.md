@@ -1,5 +1,6 @@
 # Learning Thresholds with Latent Values and Censored Feedback
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 5, 8
 

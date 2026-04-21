@@ -1,5 +1,6 @@
 # LoRA-Ensemble: Efficient Uncertainty Modelling for Self-attention Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

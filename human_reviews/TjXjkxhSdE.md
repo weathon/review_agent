@@ -1,5 +1,6 @@
 # Enhancing One-Shot Pruned Generative Pre-training Language Models through Sparse-Dense-Sparse Mechanism
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

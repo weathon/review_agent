@@ -1,5 +1,6 @@
 # Rethinking the OoD Generalization for Deep Neural Network: A Frequency Domain Perspective
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

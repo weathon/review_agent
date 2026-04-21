@@ -1,5 +1,6 @@
 # InsightMapper: A closer look at inner-instance information for vectorized High-Definition Mapping
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

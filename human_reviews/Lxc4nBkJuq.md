@@ -1,5 +1,6 @@
 # Dissecting Gradient Masking and Denoising in Diffusion Models for Adversarial Purification
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

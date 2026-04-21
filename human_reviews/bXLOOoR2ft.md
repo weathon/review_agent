@@ -1,5 +1,6 @@
 # DoraemonGPT: Toward Solving Real-world Tasks with Large Language Models
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 6, 5, 8, 8
 

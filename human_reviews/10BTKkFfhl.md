@@ -1,5 +1,6 @@
 # Efficient Backdoor Mitigation in Federated Learning with Contrastive Loss
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

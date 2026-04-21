@@ -1,5 +1,6 @@
 # OOD-Chameleon: Is Algorithm Selection for OOD Generalization Learnable?
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

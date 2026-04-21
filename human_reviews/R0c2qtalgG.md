@@ -1,5 +1,6 @@
 # MetaTool Benchmark for Large Language Models: Deciding Whether to Use Tools and Which to Use
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 5
 

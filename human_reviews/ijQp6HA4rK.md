@@ -1,5 +1,6 @@
 # MotionCLR: Motion Generation and Training-free Editing via Understanding Attention Mechanisms
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 3, 6, 3
 

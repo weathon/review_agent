@@ -1,5 +1,6 @@
 # DITTO: Offline Imitation Learning with World Models
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 3, 5, 5, 3
 

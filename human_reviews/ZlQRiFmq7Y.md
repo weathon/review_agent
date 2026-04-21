@@ -1,5 +1,6 @@
 # Retrieval-based Disentangled Representation Learning with Natural Language Supervision
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8
 

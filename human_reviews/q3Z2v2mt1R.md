@@ -1,5 +1,6 @@
 # Post-Hoc Robustness Enhancement in Graph Neural Networks with Conditional Random Fields
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

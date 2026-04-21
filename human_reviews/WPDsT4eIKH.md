@@ -1,5 +1,6 @@
 # Angle Graph Transformer: Capturing Higher-Order Structures for Accurate Molecular Geometry Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Zebra: In-Context and Generative Pretraining for Solving Parametric PDEs
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 6, 3, 6, 8
 

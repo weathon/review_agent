@@ -1,5 +1,6 @@
 # HashOrder: Accelerating Graph Processing Through Hashing-based Reordering
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 5, 6, 5, 6
 

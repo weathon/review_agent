@@ -1,5 +1,6 @@
 # A Little Help Goes a Long Way: Efficient LLM Training by Leveraging Small LMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 6, 3
 

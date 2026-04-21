@@ -1,5 +1,6 @@
 # FedConv: Enhancing Convolutional Neural Networks for Handling Data Heterogeneity in Federated Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 6
 

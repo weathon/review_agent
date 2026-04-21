@@ -1,5 +1,6 @@
 # PolySketchFormer: Fast Transformers via Sketches for Polynomial Kernels
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 5, 6, 3, 3
 

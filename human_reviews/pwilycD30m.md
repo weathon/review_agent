@@ -1,5 +1,6 @@
 # Dynamic Cross-Layer Prefix Alignment for Resolving Label Preference Discrepancies in LLMs Fine-Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

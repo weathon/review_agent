@@ -1,5 +1,6 @@
 # Channel-aware Contrastive Conditional Diffusion for Multivariate Probabilistic Time Series Forecasting
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 8, 3
 

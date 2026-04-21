@@ -1,5 +1,6 @@
 # Latent Noise Segmentation: How Neural Noise Leads to the Emergence of Segmentation and Grouping
 
+- Avg Score: 6.60
 - Decision: Reject
 - Scores: 6, 8, 3, 8, 8
 

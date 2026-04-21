@@ -1,5 +1,6 @@
 # Discretized Quadratic Integrate-and-Fire Neuron Model for Direct Training of Spiking Neural Networks
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3, 5, 3
 

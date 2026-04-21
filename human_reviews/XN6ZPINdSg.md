@@ -1,5 +1,6 @@
 # COLEP: Certifiably Robust Learning-Reasoning Conformal Prediction via Probabilistic Circuits
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6, 6
 

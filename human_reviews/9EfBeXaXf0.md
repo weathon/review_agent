@@ -1,5 +1,6 @@
 # Optimization by Parallel Quasi-Quantum Annealing with Gradient-Based Sampling
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

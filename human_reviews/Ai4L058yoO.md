@@ -1,5 +1,6 @@
 # Is Feature Extraction the most informative dimensionality reduction technique? Revisiting Unsupervised Feature Selection from a Dynamic Approach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

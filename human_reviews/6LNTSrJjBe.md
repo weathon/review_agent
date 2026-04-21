@@ -1,5 +1,6 @@
 # Language Agent Tree Search Unifies Reasoning Acting and Planning in Language Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

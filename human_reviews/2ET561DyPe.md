@@ -1,5 +1,6 @@
 # Few-Class Arena: A Benchmark for Efficient Selection of Vision Models and Dataset Difficulty Measurement
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # MLPs for NLP: Towards Discovering Inductive Bias From Scratch
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

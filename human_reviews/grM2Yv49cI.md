@@ -1,5 +1,6 @@
 # Minimal Variance Model Aggregation: A principled, non-intrusive, and versatile integration of black box models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Privately Aligning Language Models with Reinforcement Learning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

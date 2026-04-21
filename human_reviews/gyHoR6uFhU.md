@@ -1,5 +1,6 @@
 # PortLLM: Personalizing Evolving Large Language Models with Training-Free and Portable Model Patches
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

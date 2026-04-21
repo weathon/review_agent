@@ -1,5 +1,6 @@
 # Progressive Pseudo Bag Augmentation with Instance Importance Estimation for Whole Slide Image Classification
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8
 

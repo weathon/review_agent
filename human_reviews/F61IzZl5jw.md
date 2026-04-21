@@ -1,5 +1,6 @@
 # SolidMark: Evaluating Image Memorization in Generative Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 5, 5
 

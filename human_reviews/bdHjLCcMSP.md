@@ -1,5 +1,6 @@
 # NGTTA: Non-parametric Geometry-driven Test Time Adaption for 3D Point Cloud Segmentation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

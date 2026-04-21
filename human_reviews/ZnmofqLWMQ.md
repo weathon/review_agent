@@ -1,5 +1,6 @@
 # Zero-shot Image Restoration via Diffusion Inversion
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

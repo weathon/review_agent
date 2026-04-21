@@ -1,5 +1,6 @@
 # Fixed-Budget Differentially Private Best Arm Identification
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 6, 8
 

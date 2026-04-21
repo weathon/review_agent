@@ -1,5 +1,6 @@
 # A Characterization Theorem for Equivariant Networks with Point-wise Activations
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

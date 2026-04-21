@@ -1,5 +1,6 @@
 # Red Teaming Game: A Game-Theoretic Framework for Red Teaming Language Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 1
 

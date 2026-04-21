@@ -1,5 +1,6 @@
 # Amphibian: A Meta-Learner for Rehearsal-Free Fast Online Continual Learning
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

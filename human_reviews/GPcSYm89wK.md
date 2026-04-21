@@ -1,5 +1,6 @@
 # Practical Kernel Learning for Kernel-based Conditional Independent Test
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

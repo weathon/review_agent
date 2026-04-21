@@ -1,5 +1,6 @@
 # DiffusionGuard: A Robust Defense Against Malicious Diffusion-based Image Editing
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

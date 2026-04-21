@@ -1,5 +1,6 @@
 # What Does It Mean to Be a Transformer? Insights from a Theoretical Hessian Analysis
 
+- Avg Score: 7.00
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 5, 8, 6
 

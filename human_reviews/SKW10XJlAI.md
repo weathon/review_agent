@@ -1,5 +1,6 @@
 # Towards Understanding Text Hallucination of Diffusion Models via Local Generation Bias
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

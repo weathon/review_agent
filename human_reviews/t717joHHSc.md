@@ -1,5 +1,6 @@
 # Mitigate Position Bias in Large Language Models via Scaling a Single Dimension
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

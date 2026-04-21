@@ -1,5 +1,6 @@
 # A Discrete Actor and Critic for Reinforcement Learning on Continuous Tasks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

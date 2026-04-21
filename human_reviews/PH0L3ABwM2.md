@@ -1,5 +1,6 @@
 # SEER: Towards Efficient Preference-based Reinforcement Learning via Aligned Experience Estimation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

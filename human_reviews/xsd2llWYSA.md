@@ -1,5 +1,6 @@
 # FLD: Fourier Latent Dynamics for Structured Motion Representation and Learning
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8
 

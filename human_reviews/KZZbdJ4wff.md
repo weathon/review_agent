@@ -1,5 +1,6 @@
 # PRO: Pseudo-label Regularized Optimization on Unlabeled Test Data
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

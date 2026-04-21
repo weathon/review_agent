@@ -1,5 +1,6 @@
 # Graph Neural Tangent Kernel and Graph Neural Network Gaussian Processes for Node Classification/ Regression
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

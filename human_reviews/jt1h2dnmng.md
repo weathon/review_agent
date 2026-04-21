@@ -1,5 +1,6 @@
 # CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6
 

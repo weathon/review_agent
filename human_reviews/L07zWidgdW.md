@@ -1,5 +1,6 @@
 # Finding Shared Decodable Concepts and their Negations in the Brain
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5
 

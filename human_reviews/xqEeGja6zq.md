@@ -1,5 +1,6 @@
 # Components Beat Patches: Eigenvector Removal for Robust Masked Image Modelling
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 3, 8
 

@@ -1,5 +1,6 @@
 # Cross-Cultural Recipe Transformation via Neural Network and Encoder-Based Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

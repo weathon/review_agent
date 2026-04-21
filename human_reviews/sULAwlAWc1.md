@@ -1,5 +1,6 @@
 # One Model Transfer to All: On Robust Jailbreak Prompts Generation against LLMs
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8
 

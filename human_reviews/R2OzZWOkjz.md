@@ -1,5 +1,6 @@
 # Retrieval-Augmented Editing Generation: Impact of Knowledge Editing and Fine-Tuning on RAG
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 5
 

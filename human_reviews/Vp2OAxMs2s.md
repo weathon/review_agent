@@ -1,5 +1,6 @@
 # Learning Interpretable Hierarchical Dynamical Systems Models from Time Series Data
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 1, 8, 6
 

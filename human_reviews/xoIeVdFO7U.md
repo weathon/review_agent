@@ -1,5 +1,6 @@
 # Can a MISL Fly? Analysis and Ingredients for Mutual Information Skill Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # PAGAR: Taming Reward Misalignment in Inverse Reinforcement Learning-Based Imitation Learning with Protagonist Antagonist Guided Adversarial Reward
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 5, 3
 

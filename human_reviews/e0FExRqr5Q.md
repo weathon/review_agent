@@ -1,5 +1,6 @@
 # Discouraging Posterior Collapse in Hierarchical Variational Autoencoders Using Context
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

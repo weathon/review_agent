@@ -1,5 +1,6 @@
 # Generative Adversarial Equilibrium Solvers
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 10
 

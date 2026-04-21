@@ -1,5 +1,6 @@
 # MorphOcc: An Implicit Generative Model of Neuronal Morphologies
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 3
 

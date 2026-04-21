@@ -1,5 +1,6 @@
 # Alice in Wonderland: Simple Tasks Reveal Severe Generalization and Basic Reasoning Deficits in State-Of-the-Art Large Language Models
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 3, 5, 6
 

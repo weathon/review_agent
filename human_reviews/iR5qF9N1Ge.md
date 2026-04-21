@@ -1,5 +1,6 @@
 # MAA: Meticulous Adversarial Attack against Vision-Language Pre-trained Models
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 5, 5, 8, 6, 5
 

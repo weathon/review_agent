@@ -1,5 +1,6 @@
 # Pretraining Decision Transformers with Reward Prediction for In-Context Structured Bandit Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

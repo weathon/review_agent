@@ -1,5 +1,6 @@
 # Adversarial Robustness of Count-Min Sketch
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 8, 3
 

@@ -1,5 +1,6 @@
 # Collaboration! Towards Robust Neural Methods for Vehicle Routing Problems
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

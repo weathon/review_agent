@@ -1,5 +1,6 @@
 # Space Group Constrained Crystal Generation
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

@@ -1,5 +1,6 @@
 # A Theory of Unimodal Bias in Multimodal Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 5, 8
 

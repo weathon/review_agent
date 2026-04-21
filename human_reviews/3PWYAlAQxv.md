@@ -1,5 +1,6 @@
 # Neural Networks Trained by Weight Permutation are Universal Approximators
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 5, 8
 

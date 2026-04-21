@@ -1,5 +1,6 @@
 # ReNovo: Retrieval-Based \emph{De Novo} Mass Spectrometry Peptide Sequencing
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

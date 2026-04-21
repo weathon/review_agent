@@ -1,5 +1,6 @@
 # Enhancing Machine Learning System Reliability in Healthcare through Uncertainty Estimation and Multi-Modal Learning
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 3, 1, 1
 

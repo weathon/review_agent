@@ -1,5 +1,6 @@
 # Transformers Provably Solve Parity Efficiently with Chain of Thought
 
+- Avg Score: 8.67
 - Decision: Accept (Oral)
 - Scores: 8, 8, 10
 

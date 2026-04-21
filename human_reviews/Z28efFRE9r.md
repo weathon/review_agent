@@ -1,5 +1,6 @@
 # AuthFace: Towards Authentic Blind Face Restoration with Face-oriented Generative Diffusion Prior
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

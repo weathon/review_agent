@@ -1,5 +1,6 @@
 # DOMAIN-GROUNDING OF NEURAL NETWORKS FOR SPATIOTEMPORAL REASONING
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

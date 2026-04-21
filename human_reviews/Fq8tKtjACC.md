@@ -1,5 +1,6 @@
 # Textbooks Are All You Need
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 5, 8, 5
 

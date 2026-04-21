@@ -1,5 +1,6 @@
 # Long-distance Targeted Poisoning Attacks on Graph Neural Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

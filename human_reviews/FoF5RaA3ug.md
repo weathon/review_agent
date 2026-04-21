@@ -1,5 +1,6 @@
 # GIFT: Unlocking Full Potential of Labels in Distilled Dataset at Near-zero Cost
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Noise Robust Graph Learning under Feature-Dependent Graph-Noise
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 3, 5
 

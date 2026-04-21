@@ -1,5 +1,6 @@
 # Weighted Multi-Prompt Learning with Description-free Large Language Model Distillation
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 6
 

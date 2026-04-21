@@ -1,5 +1,6 @@
 # UniMatch: Universal Matching from Atom to Task for Few-Shot Drug Discovery
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

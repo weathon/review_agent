@@ -1,5 +1,6 @@
 # Visual Chain of Thought: Bridging Logical Gaps with Multimodal Infillings
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

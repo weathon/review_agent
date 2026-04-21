@@ -1,5 +1,6 @@
 # NSM4D: Neural Scene Model Based Online 4D Point Cloud Sequence Understanding
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 3
 

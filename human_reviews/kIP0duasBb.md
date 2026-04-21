@@ -1,5 +1,6 @@
 # Test-Time Adaptation with CLIP Reward for Zero-Shot Generalization in Vision-Language Models
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

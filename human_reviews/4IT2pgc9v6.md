@@ -1,5 +1,6 @@
 # One For All: Towards Training One Graph Model For All Classification Tasks
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 10, 6, 6, 6
 

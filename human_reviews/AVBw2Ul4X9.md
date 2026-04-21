@@ -1,5 +1,6 @@
 # Towards Precise Prediction Uncertainty in GNNs: Refining GNNs with Topology-grouping Strategy
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

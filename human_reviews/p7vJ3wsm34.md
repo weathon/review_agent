@@ -1,5 +1,6 @@
 # KV-Distill: Nearly Lossless Context Compression for Transformers
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3
 

@@ -1,5 +1,6 @@
 # KVSharer: Efficient Inference via Layer-Wise Dissimilar KV Cache Sharing
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3, 3
 

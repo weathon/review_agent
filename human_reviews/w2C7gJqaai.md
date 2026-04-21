@@ -1,5 +1,6 @@
 # Integrated Multi-system Prediction via Equilibrium State Evaluation
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 5, 1
 

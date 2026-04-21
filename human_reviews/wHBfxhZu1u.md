@@ -1,5 +1,6 @@
 # YaRN: Efficient Context Window Extension of Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

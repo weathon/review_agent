@@ -1,5 +1,6 @@
 # Ladder: Language Driven Slice Discovery and Error Rectification
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

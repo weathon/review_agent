@@ -1,5 +1,6 @@
 # CORN: Contact-based Object Representation for Nonprehensile Manipulation of General Unseen Objects
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 5, 10
 

@@ -1,5 +1,6 @@
 # Graph-Guided Scene Reconstruction from Images with 3D Gaussian Splatting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

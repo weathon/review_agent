@@ -1,5 +1,6 @@
 # Beyond Isolated Words: Diffusion Brush for Handwritten Text-Line Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 3, 3, 8
 

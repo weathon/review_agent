@@ -1,5 +1,6 @@
 # Sparse Model Soups: A Recipe for Improved Pruning via Model Averaging
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Constructing Sparse Neural Architecture with Deterministic Ramanujan Graphs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

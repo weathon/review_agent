@@ -1,5 +1,6 @@
 # Logically Consistent Language Models via Neuro-Symbolic Integration
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 6
 

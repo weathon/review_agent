@@ -1,5 +1,6 @@
 # $Staple$: Towards Reliable Problem Solving with Large Language Models via Plan Optimization and Tree Search
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

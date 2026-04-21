@@ -1,5 +1,6 @@
 # An X-Ray Is Worth 15 Features: Sparse Autoencoders for Interpretable Radiology Report Generation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 5, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # OLGA: One-cLass Graph Autoencoder
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

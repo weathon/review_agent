@@ -1,5 +1,6 @@
 # Accurate Differential Operators for Neural Fields
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 6, 3
 

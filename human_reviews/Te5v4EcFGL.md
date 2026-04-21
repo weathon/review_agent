@@ -1,5 +1,6 @@
 # PatchMixer: A Patch-Mixing Architecture for Long-Term Time Series Forecasting
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 8, 5
 

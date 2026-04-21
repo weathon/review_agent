@@ -1,5 +1,6 @@
 # Interaction Makes Better Segmentation: An Interaction-based Framework for Temporal Action Segmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

@@ -1,5 +1,6 @@
 # ColPali: Efficient Document Retrieval with Vision Language Models
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 5, 8, 5
 

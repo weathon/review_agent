@@ -1,5 +1,6 @@
 # Shedding Light on Time Series Classification using Interpretability Gated Networks
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5, 6
 

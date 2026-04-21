@@ -1,5 +1,6 @@
 # Incrementally Adapting Generative Vision-Language Models with Task Codebook
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

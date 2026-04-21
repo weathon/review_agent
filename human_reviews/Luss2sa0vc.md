@@ -1,5 +1,6 @@
 # AdaManip: Adaptive Articulated Object Manipulation Environments and Policy Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 8, 1, 6, 5, 8
 

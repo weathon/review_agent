@@ -1,5 +1,6 @@
 # Group Ligands Docking to Protein Pockets
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 8
 

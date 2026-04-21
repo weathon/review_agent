@@ -1,5 +1,6 @@
 # Long-Tailed 3D Detection via 2D Late Fusion
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

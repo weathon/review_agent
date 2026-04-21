@@ -1,5 +1,6 @@
 # MCCE: Missingness-aware Causal Concept Explainer
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

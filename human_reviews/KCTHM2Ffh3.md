@@ -1,5 +1,6 @@
 # Runtime Learning Machine
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 5, 6
 
@@ -76,7 +77,8 @@ Though the results look impressive, I found some parts of the paper needs furthe
 1. The paper lacks details on the verifiability of the PhyRL structure, especially regarding how the teacher's safety is guaranteed in unknown environments. In Equation 2, the system safety is only related to its state. Does this mean that this paper assumes such simple constraint and not consider how the environment change impacts on the states?
 2. The paper should discuss whether switching back to the teacher affects operational performance, as such switches may potentially degrade it. Additionally, the evaluation would benefit from presenting metrics on how frequently the teacher’s guidance is triggered.
 3. The work currently assumes a single-step safety model, where each action ensures safety only for the immediate next state. However, a broader perspective on end-to-end safety—considering the effects over several steps or even entire trajectories—is the cases that usually happen in reality.
-4. There are lots of verified learning works that are not cited/discussed by this paper.  For example, Neurosymbolic reinforcement learning with formally verified exploration. Neurips 2020.
+4. There are lots of verified learning works that are not cited/discussed by this paper.
+ For example, Neurosymbolic reinforcement learning with formally verified exploration. Neurips 2020.
 5. There are only two benchmarks presented. Though one of them is the real robot, it would be necessary to evaluate on a more diverse set of benchmarks.
 
 ### Questions

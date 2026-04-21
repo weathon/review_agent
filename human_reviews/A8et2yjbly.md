@@ -1,5 +1,6 @@
 # Cross-Modality Masked Pre-training for Visible-Infrared Person Re-identification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3
 

@@ -1,5 +1,6 @@
 # CAB-KGC: Context-Aware BERT for Knowledge Graph Completion
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3, 3
 

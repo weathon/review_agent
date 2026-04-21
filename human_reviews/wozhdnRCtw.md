@@ -1,5 +1,6 @@
 # Improving Instruction-Following in Language Models through Activation Steering
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

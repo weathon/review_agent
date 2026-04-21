@@ -1,5 +1,6 @@
 # Antibody DomainBed: Out-of-Distribution Generalization in Therapeutic Protein Design
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

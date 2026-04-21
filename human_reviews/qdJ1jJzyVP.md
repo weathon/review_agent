@@ -1,5 +1,6 @@
 # Joint Training Does Not Transfer Information between EEG and Image Classifiers
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 5, 5
 

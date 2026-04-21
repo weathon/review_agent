@@ -1,5 +1,6 @@
 # JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

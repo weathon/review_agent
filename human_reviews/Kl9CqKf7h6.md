@@ -1,5 +1,6 @@
 # FedHyper: A Universal and Robust Learning Rate Scheduler for Federated Learning with Hypergradient Descent
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 8
 

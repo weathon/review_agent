@@ -1,5 +1,6 @@
 # Unitention: Attend a sample to the dataset
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # CTP: A Causal Interpretable Model for Non-Communicable Disease Progression Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

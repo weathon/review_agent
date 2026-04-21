@@ -1,5 +1,6 @@
 # HESSO: Towards Automatic Efficient and User Friendly Any Neural Network Training and Pruning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 6
 

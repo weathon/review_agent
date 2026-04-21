@@ -1,5 +1,6 @@
 # BlueSuffix: Reinforced Blue Teaming for Vision-Language Models Against Jailbreak Attacks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 5
 

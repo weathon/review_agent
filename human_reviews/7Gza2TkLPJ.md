@@ -1,5 +1,6 @@
 # BiTGNN: prediction of drug-target interactions based on bidirectional transformer and graph neural network on heterogeneous graph
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 3
 

@@ -1,5 +1,6 @@
 # Rethinking Label Smoothing as a Tool for Embedding Perturbation Uncertainty
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

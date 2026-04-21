@@ -1,5 +1,6 @@
 # Unlocking Anticipatory Text Generation: A Constrained Approach for Faithful Decoding with Large Language Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 3, 6
 

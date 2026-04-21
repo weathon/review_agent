@@ -1,5 +1,6 @@
 # GPT Can Solve Mathematical Problems Without a Calculator
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 3, 8, 5
 

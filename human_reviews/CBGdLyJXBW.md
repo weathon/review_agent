@@ -1,5 +1,6 @@
 # Connected Hidden Neurons (CHNNet): An Artificial Neural Network for Rapid Convergence
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

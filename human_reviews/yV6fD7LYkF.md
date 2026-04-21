@@ -1,5 +1,6 @@
 # ValUES: A Framework for Systematic Validation of Uncertainty Estimation in Semantic Segmentation
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 6, 8
 

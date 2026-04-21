@@ -1,5 +1,6 @@
 # Refined Generalization Analysis of the Deep Ritz Method and Physics-Informed Neural Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

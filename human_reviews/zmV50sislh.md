@@ -1,5 +1,6 @@
 # A Symmetry-Aware Learning Approach for Solving Mixed-Integer Linear Programs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Explaining Modern Gated-Linear RNNs via a Unified Implicit Attention Formulation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

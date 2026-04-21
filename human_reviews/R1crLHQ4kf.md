@@ -1,5 +1,6 @@
 # Leveraging characteristics of the output distribution for identifying adversarial audio examples
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

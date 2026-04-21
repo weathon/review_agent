@@ -1,5 +1,6 @@
 # Attention with Markov: A Curious Case of Single-layer Transformers
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 6, 5, 10, 8
 

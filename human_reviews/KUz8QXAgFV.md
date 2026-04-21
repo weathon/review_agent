@@ -1,5 +1,6 @@
 # Bridging Autoregressive and Masked Modeling for Enhanced Visual Representation Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

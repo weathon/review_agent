@@ -1,5 +1,6 @@
 # Long Horizon Episodic Decision Making for Cognitively Inspired Robots
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 3, 1, 1, 1
 

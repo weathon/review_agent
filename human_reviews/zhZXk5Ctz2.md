@@ -1,5 +1,6 @@
 # Rethinking RGB Color Representation for Image Restoration Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 8, 6
 

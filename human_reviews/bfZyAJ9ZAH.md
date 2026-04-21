@@ -1,5 +1,6 @@
 # MSM: Multi-Scale Mamba in Multi-Task Dense Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

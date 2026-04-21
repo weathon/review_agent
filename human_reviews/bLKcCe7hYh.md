@@ -1,5 +1,6 @@
 # UC-NERF: Neural Radiance Field for Under-Calibrated Multi-View Cameras in Autonomous Driving
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6, 6
 

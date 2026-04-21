@@ -1,5 +1,6 @@
 # PRUC & Play: Probabilistic Residual User Clustering for Recommender Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

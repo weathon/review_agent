@@ -1,5 +1,6 @@
 # ReFusion: Improving Natural Language Understanding with Computation-Efficient Retrieval Representation Fusion
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 6, 3, 8
 

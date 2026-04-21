@@ -1,5 +1,6 @@
 # I-LLM: Efficient Integer-Only Inference for Fully-Quantized Low-Bit Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5, 5
 

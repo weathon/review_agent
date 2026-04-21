@@ -1,5 +1,6 @@
 # Unintentional Unalignment: Likelihood Displacement in Direct Preference Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

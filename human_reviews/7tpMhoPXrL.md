@@ -1,5 +1,6 @@
 # Forget Vectors at Play: Universal Input Perturbations Driving Machine Unlearning in Image Classification
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3, 6
 

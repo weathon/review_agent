@@ -1,5 +1,6 @@
 # Vision State Space Duality for Medical Image Segmentation: Enhancing Precision through Non-Causal Modeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

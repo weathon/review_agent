@@ -1,5 +1,6 @@
 # SynCamMaster: Synchronizing Multi-Camera Video Generation from Diverse Viewpoints
 
+- Avg Score: 5.86
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 8, 6, 6, 6
 

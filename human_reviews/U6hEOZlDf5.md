@@ -1,5 +1,6 @@
 # 3D-Aware Hypothesis & Verification for Generalizable Relative Object Pose Estimation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

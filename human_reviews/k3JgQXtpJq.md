@@ -1,5 +1,6 @@
 # Physics3D: Learning Physical Properties of 3D Gaussians via Video Diffusion
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 5, 1
 

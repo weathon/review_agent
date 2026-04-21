@@ -1,5 +1,6 @@
 # Generalizability of Neural Networks Minimizing Empirical Risk Based on Expressive Power
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8, 6
 

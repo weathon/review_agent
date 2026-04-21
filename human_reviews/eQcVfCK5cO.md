@@ -1,5 +1,6 @@
 # Where is the Invisible: Spatial-Temporal Reasoning with Object Permanence
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

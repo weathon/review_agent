@@ -1,5 +1,6 @@
 # Subject-specific Deep Neural Networks for Count Data with High-cardinality Categorical Features
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6
 

@@ -1,5 +1,6 @@
 # Why Clean Generalization and Robust Overfitting Both Happen in Adversarial Training
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 6, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Overcoming Lower-Level Constraints in Bilevel Optimization: A Novel Approach with Regularized Gap Functions
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

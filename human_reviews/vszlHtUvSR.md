@@ -1,5 +1,6 @@
 # RDHNet: Addressing Rotational and Permutational Symmetries in Continuous Multi-Agent Systems
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1
 

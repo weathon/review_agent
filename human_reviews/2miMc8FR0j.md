@@ -1,5 +1,6 @@
 # SCALE: Augmenting Content Analysis via LLM Agents and AI-Human Collaboration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

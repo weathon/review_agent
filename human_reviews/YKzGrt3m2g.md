@@ -1,5 +1,6 @@
 # Transformers Learn Higher-Order Optimization Methods for In-Context Learning: A Study with Linear Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

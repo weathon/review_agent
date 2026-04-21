@@ -1,5 +1,6 @@
 # Towards Foundation Models for Learning on Tabular Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

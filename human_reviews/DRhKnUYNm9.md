@@ -1,5 +1,6 @@
 # A Decoupled Learning Framework for Neural Marked Temporal Point Process
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 3, 6
 

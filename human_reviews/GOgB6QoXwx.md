@@ -1,5 +1,6 @@
 # LDMol: Text-to-Molecule Diffusion Model with Structurally Informative Latent Space
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

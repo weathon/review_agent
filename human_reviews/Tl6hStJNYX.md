@@ -1,5 +1,6 @@
 # Fisher Contrastive Learning: A Robust Solution to the Feature Suppression Effect
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3
 

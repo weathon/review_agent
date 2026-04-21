@@ -1,5 +1,6 @@
 # Accelerating semidefinite programming beyond limit: ADMM with tune-free operator stepsize
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 3
 

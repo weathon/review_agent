@@ -1,5 +1,6 @@
 # Uncovering Causal Variables in Transformers Using Circuit Probing
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 1, 5
 

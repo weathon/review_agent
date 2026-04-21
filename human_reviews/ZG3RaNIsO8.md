@@ -1,5 +1,6 @@
 # Connecting Large Language Models with Evolutionary Algorithms Yields Powerful Prompt Optimizers
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

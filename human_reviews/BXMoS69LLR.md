@@ -1,5 +1,6 @@
 # Blind Baselines Beat Membership Inference Attacks for Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

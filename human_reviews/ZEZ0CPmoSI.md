@@ -1,5 +1,6 @@
 # Det-CGD: Compressed Gradient Descent with Matrix Stepsizes for Non-Convex Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 3, 6, 6
 

@@ -1,5 +1,6 @@
 # EfficientDM: Efficient Quantization-Aware Fine-Tuning of Low-Bit Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 6
 

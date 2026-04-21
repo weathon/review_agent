@@ -1,5 +1,6 @@
 # Quantization Enhanced Cross-modal Alignment for Gene Expression Prediction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 3, 1, 3
 

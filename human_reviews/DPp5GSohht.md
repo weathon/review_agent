@@ -1,5 +1,6 @@
 # Unclipping CLIP's Wings: Avoiding Robustness Pitfalls in Multimodal Image Classification
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 8, 3, 3, 3
 

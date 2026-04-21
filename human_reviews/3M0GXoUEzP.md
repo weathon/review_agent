@@ -1,5 +1,6 @@
 # CrIBo: Self-Supervised Learning via Cross-Image Object-Level Bootstrapping
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 10
 

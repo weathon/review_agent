@@ -1,5 +1,6 @@
 # Sketching for Convex and Nonconvex Regularized Least Squares with Sharp Guarantees
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

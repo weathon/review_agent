@@ -1,5 +1,6 @@
 # Corex: Pushing the Boundaries of Complex Reasoning through Multi-Model Collaboration
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 8
 

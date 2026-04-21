@@ -1,5 +1,6 @@
 # Normalizing Flow Based Evaluation Metrics for Image Generation
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 1, 5, 3, 6
 

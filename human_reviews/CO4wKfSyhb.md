@@ -1,5 +1,6 @@
 # Worldwide Federated Training of Language Models
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # UniEEG: Advancing Universal EEG Representation with Electrode-Wise Time-Frequency Pretraining
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 1
 

@@ -1,5 +1,6 @@
 # Understanding Augmentation-based Self-Supervised Representation Learning via RKHS Approximation and Regression
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 8, 5, 6, 8
 

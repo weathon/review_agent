@@ -1,5 +1,6 @@
 # Improving Gradient-guided Nested Sampling for Posterior Inference
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 6, 8, 6, 5, 5, 8
 

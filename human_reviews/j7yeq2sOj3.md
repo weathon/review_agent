@@ -1,5 +1,6 @@
 # A simple connection from loss flatness to compressed representations in neural networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 5, 3
 
@@ -97,7 +98,8 @@ This paper explores the connection between sharpness in the loss landscape of ne
 3. Presentation of Results: Certain results, particularly those related to local dimensionality (Figure 1 and 2), suggest that local dimensionality increases during training, which appears to contradict the central claim of compression. This inconsistency could be addressed by clarifying the behavior of local dimensionality in the final stages of training.
 
 ### Questions
-1. Definition of C_f^{\lim}:Could you clarify the definition of C_f^{\lim} (line 204)? It would be helpful to refer to the appendix and add some intuition in the main text.
+1. Definition of C_f^{\lim}:Could you clarify the definition of C_f^{\lim}
+(line 204)? It would be helpful to refer to the appendix and add some intuition in the main text.
 2. Relation to Neural Tangent Kernel (NTK): Have you considered potential connections between your sharpness metric (Eq. 3, line 130) and the Neural Tangent Kernel? This would be particularly interesting for understanding if flat solutions introduce certain inductive biases through gradient flow.
 3. Generalization Motivation: The introduction appears to frame the paper around generalization, yet the theoretical focus is on sharpness and compression. Could you clarify whether the link to generalization is correlational or whether there are theoretical underpinnings that relate compression directly to generalization?
 

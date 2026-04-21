@@ -1,5 +1,6 @@
 # G-TIGRE: A new generative framework for Multivariate Time Series Imputation By Graph Neural Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Benchmarking a well-calibrated measure of weight similarity of deep neural network models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Quantifying the Sensitivity of Inverse Reinforcement Learning to Misspecification
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

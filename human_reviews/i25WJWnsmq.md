@@ -1,5 +1,6 @@
 # Optimizing Dynamic Treatment Strategies with Reinforcement Learning and Dual-Hawkes Process in Clinical Environments
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Improving Non-Transferable Representation Learning by Harnessing Content and Style
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6
 

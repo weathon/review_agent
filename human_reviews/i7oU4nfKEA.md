@@ -1,5 +1,6 @@
 # When Is Multilinguality a Curse? Language Modeling for 252 High- and Low-Resource Languages
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 6, 5, 8
 

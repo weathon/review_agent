@@ -1,5 +1,6 @@
 # TimeMixer: Decomposable Multiscale Mixing for Time Series Forecasting
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 3, 8, 6
 

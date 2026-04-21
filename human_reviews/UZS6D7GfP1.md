@@ -1,5 +1,6 @@
 # Human-in-the-loop Detection of AI-generated Text via Grammatical Patterns
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

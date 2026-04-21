@@ -1,5 +1,6 @@
 # The Foundations of Tokenization: Statistical and Computational Concerns
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 8, 8
 

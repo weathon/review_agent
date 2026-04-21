@@ -1,5 +1,6 @@
 # Benchmarking Multimodal Retrieval Augmented Generation with Dynamic VQA Dataset and Self-adaptive Planning Agent
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

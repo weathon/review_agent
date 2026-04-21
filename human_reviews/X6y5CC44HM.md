@@ -1,5 +1,6 @@
 # MANTRA: The Manifold Triangulations Assemblage
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 6
 

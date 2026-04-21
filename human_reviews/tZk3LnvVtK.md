@@ -1,5 +1,6 @@
 # Measuring Language Model Uncertainty With Internal Concepts
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 5, 6, 6, 6
 

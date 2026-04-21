@@ -1,5 +1,6 @@
 # Beyond Disentanglement: On the Orthogonality of Learned Representations
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # ME-LORA: MEMORY-EFFICIENT BAYESIAN LOW- RANK ADAPTATION FOR LARGE LANGUAGE MODELS
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # Multi-Concept T2I-Zero: Tweaking Only The Text Embeddings And Nothing Else
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

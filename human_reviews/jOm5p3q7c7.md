@@ -1,5 +1,6 @@
 # Optimal Sample Complexity for Average Reward Markov Decision Processes
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

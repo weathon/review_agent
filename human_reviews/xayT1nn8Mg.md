@@ -1,5 +1,6 @@
 # Deep Signature: Characterization of Large-Scale Molecular Dynamics
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

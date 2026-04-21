@@ -1,5 +1,6 @@
 # Efficient Subgraph Rule Induction via Tree Folding in Differentiable Logic Programming
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

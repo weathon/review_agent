@@ -1,5 +1,6 @@
 # AdvPaint: Protecting Images from Inpainting Manipulation via Adversarial Attention Disruption
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

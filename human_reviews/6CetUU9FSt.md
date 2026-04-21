@@ -1,5 +1,6 @@
 # Visual Encoders for Data-Efficient Imitation Learning in Modern Video Games
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

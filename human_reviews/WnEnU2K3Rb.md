@@ -1,5 +1,6 @@
 # Beyond the Benchmark: Detecting Diverse Anomalies in Videos
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

@@ -1,5 +1,6 @@
 # TAO-Amodal: A Benchmark for Tracking Any Object Amodally
 
+- Avg Score: 6.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 6, 5
 

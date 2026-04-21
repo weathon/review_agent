@@ -1,5 +1,6 @@
 # Learning Delays in Spiking Neural Networks using Dilated Convolutions with Learnable Spacings
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # How Hard is Trojan Detection in DNNs? Fooling Detectors With Evasive Trojans
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # ALP: Action-Aware Embodied Learning for Perception
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

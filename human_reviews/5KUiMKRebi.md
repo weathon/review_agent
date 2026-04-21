@@ -1,5 +1,6 @@
 # Implicit Neural Representation Inference for Low-Dimensional Bayesian Deep Learning
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 5, 5
 

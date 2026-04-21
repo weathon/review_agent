@@ -1,5 +1,6 @@
 # Progressive distillation induces an implicit curriculum
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6, 8
 

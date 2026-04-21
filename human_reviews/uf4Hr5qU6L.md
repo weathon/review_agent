@@ -1,5 +1,6 @@
 # PreCoT: Problem Representation Enhances Reasoning in Large Language Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 8, 5, 3, 3
 

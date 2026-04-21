@@ -1,5 +1,6 @@
 # Dynamic Model Editing to Rectify Unreliable Behavior in Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

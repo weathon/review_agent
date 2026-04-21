@@ -1,5 +1,6 @@
 # PQ-VAE: Learning Hierarchical Discrete Representations with Progressive Quantization
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3
 

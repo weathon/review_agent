@@ -1,5 +1,6 @@
 # Improving Generalization of Alignment with Human Preferences through Group Invariant Learning
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 10, 6, 6
 

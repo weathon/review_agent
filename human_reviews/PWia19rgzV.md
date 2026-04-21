@@ -1,5 +1,6 @@
 # Your Actions Talk: DUET - A Multimodal Dataset for Contextualizable Dyadic Activities
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

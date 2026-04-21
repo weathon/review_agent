@@ -1,5 +1,6 @@
 # Co-Learning Empirical Games & World Models
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 5, 8, 6, 3
 

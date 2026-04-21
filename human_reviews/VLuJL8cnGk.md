@@ -1,5 +1,6 @@
 # 3D-free meets 3D priors: Novel View Synthesis from a Single Image with Pretrained Diffusion Guidance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 3, 8, 5
 

@@ -1,5 +1,6 @@
 # MatExpert: Decomposing Materials Discovery By Mimicking Human Experts
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

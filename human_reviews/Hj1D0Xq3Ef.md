@@ -1,5 +1,6 @@
 # Underestimated Privacy Risks for Minority Populations in Large Language Model Unlearning
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 
@@ -79,7 +80,8 @@ Minors:
 2. Why minority data should be defined based on personally identifiable information? How generalisable the results/findings are when using alternative minority definitions? 
 3. Why is the suggested way of creating canaries relevant?
 4. Why do the chosen minorities suffer from at least 20% more privacy leakage in studied cases? Is it due to being least frequent or their context/semantics?
-5. How are these results compared to those works analyzing disparate vulnerability against MIAs such as Kulynych et. al., Disparate Vulnerability to Membership Inference Aacks (https://arxiv.org/pdf/1906.00389).
+5. How are these results compared to those works analyzing disparate vulnerability against MIAs such as Kulynych et. al., Disparate Vulnerability to Membership Inference A
+acks (https://arxiv.org/pdf/1906.00389).
 
 ### Soundness
 3

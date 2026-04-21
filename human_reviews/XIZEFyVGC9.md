@@ -1,5 +1,6 @@
 # Debiasing Algorithm through Model Adaptation
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 3, 6, 8
 

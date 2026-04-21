@@ -1,5 +1,6 @@
 # SASSL: Enhancing Self-Supervised Learning via Neural Style Transfer
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 

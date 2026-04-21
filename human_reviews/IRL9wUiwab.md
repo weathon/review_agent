@@ -1,5 +1,6 @@
 # Exploring Representations and Interventions in Time Series Foundation Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

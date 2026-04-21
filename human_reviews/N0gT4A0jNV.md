@@ -1,5 +1,6 @@
 # Low Rank Matrix Completion via Robust Alternating Minimization in Nearly Linear Time
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

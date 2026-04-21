@@ -1,5 +1,6 @@
 # Distribution-Aware Diffusion Model Quantization via Distortion Minimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 3, 6
 

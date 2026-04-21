@@ -1,5 +1,6 @@
 # Visual Analysis of the Bumpiness and Ruggedness of Residual Neural Network Landscapes
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

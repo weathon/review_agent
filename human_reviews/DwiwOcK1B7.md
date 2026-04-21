@@ -1,5 +1,6 @@
 # Two Sparse Matrices are Better than One: Sparsifying Neural Networks with Double Sparse Factorization
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6
 

@@ -1,5 +1,6 @@
 # Designing Skill-Compatible AI: Methodologies and Frameworks in Chess
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 6
 

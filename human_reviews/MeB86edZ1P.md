@@ -1,5 +1,6 @@
 # Hebbian Learning based Orthogonal Projection for Continual Learning of Spiking Neural Networks
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

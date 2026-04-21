@@ -1,5 +1,6 @@
 # Self-predictive Mamba: Improving Multi-agent Reinforcement Learning with Self-predictive Encoding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Finite-State Autoregressive Entropy Coding for Efficient Learned Lossless Compression
 
+- Avg Score: 6.00
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 6, 6
 

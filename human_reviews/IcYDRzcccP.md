@@ -1,5 +1,6 @@
 # Optimizing 4D Gaussians for Dynamic Scene Video from Single Landscape Images
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 3
 

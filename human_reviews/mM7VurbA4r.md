@@ -1,5 +1,6 @@
 # SOTOPIA: Interactive Evaluation for Social Intelligence in Language Agents
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6
 

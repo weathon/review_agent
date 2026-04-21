@@ -1,5 +1,6 @@
 # GraphSTAGE: Channel-Preserving Graph Neural Networks for Time Series Forecasting
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

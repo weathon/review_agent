@@ -1,5 +1,6 @@
 # Joint Modeling of Spatial and Temporal Multiscales in Molecular Dynamics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

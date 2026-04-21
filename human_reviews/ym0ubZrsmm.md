@@ -1,5 +1,6 @@
 # Image Background Serves as Good Proxy for Out-of-distribution Data
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 3, 3, 6, 6, 6, 8
 

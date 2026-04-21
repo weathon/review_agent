@@ -1,5 +1,6 @@
 # Exploring Data Distillation for efficient generation of Tabular Data
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 3, 3
 

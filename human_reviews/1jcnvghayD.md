@@ -1,5 +1,6 @@
 # Bayesian Optimization via Continual Variational Last Layer Training
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 5
 

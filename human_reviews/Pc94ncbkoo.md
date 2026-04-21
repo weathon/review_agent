@@ -1,5 +1,6 @@
 # $A^2$-DP: Annotation-aware Data Pruning for Object Detection
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

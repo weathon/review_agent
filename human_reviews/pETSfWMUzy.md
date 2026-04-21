@@ -1,5 +1,6 @@
 # RAIN: Your Language Models Can Align Themselves without Finetuning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 8, 5
 

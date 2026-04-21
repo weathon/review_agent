@@ -1,5 +1,6 @@
 # Measuring, Evaluating and Improving Logical Consistency in Large Language Models
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 3, 6, 6, 5, 8
 

@@ -1,5 +1,6 @@
 # HOI-Diff: Text-Driven Synthesis of 3D Human-Object Interactions using Diffusion Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

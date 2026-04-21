@@ -1,5 +1,6 @@
 # The Power of Linear Combinations: Learning with Random Convolutions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 3, 6
 

@@ -1,5 +1,6 @@
 # World-simulation as pre-training for scalable perception
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

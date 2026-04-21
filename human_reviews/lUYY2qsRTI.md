@@ -1,5 +1,6 @@
 # Delphic Offline Reinforcement Learning under Nonidentifiable Hidden Confounding
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

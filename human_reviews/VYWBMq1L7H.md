@@ -1,5 +1,6 @@
 # MrT5: Dynamic Token Merging for Efficient Byte-level Language Models
 
+- Avg Score: 4.25
 - Decision: Accept (Poster)
 - Scores: 3, 3, 5, 6
 

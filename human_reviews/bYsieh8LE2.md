@@ -1,5 +1,6 @@
 # ULoRA: Universal Low-Rank Adaptation of Diverse Deep Learning Architectures
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

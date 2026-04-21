@@ -1,5 +1,6 @@
 # Out of Sight: A Framework for Egocentric Active Speaker Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 3, 6, 6
 

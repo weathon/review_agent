@@ -1,5 +1,6 @@
 # Action Sequence Planner: An Alternative For Offline Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 3
 

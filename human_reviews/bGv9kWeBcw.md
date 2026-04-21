@@ -1,5 +1,6 @@
 # FStega: Fourier Neural Operators for printer-proof steganography
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 6, 3, 1
 

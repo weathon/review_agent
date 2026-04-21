@@ -1,5 +1,6 @@
 # Interactive Semantic Map Representation for Skill-based Visual Object Navigation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 1, 3
 

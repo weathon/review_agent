@@ -1,5 +1,6 @@
 # Inductive Transformers: How Large Language Models Form Concepts, And How to Make Them Even Better At It
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 5
 

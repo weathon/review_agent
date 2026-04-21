@@ -1,5 +1,6 @@
 # LOB-Bench: Benchmarking Generative AI for Finance - with an Application to Limit Order Book Markets
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 3, 1, 6
 

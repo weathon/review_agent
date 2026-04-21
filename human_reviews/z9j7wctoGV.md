@@ -1,5 +1,6 @@
 # Deep Kernel Relative Test for Machine-generated Text Detection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

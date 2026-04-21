@@ -1,5 +1,6 @@
 # Simplicity Bias and Optimization Threshold in Two-Layer Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Invariant Spatiotemporal Representation Learning for Cross-patient Seizure Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 5
 

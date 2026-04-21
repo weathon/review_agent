@@ -1,5 +1,6 @@
 # DynVideo-E: Harnessing Dynamic NeRF for Large-Scale Motion- and View-Change Human-Centric Video Editing
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5
 

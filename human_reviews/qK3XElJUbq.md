@@ -1,5 +1,6 @@
 # You Only Scan Once: Efficient Multi-dimension Sequential Modeling with LightNet
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 8, 3, 3, 5
 

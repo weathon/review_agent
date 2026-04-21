@@ -1,5 +1,6 @@
 # OpenPatch: a 3D patchwork for Out-Of-Distribution detection
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

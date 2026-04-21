@@ -1,5 +1,6 @@
 # AntifakePrompt: Prompt-Tuned Vision-Language Models are Fake Image Detectors
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

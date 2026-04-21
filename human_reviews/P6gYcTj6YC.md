@@ -1,5 +1,6 @@
 # Incorporating Domain Knowledge in VAE Learning via Exponential Dissimilarity-Dispersion Family
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 5, 5, 6, 5
 

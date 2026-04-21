@@ -1,5 +1,6 @@
 # Free Hunch: Denoiser Covariance Estimation for Diffusion Models Without Extra Costs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

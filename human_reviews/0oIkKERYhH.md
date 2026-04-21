@@ -1,5 +1,6 @@
 # DOG: Discriminator-only Generation Beats GANs on Graphs
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

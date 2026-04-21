@@ -1,5 +1,6 @@
 # TimeBridge: Non-Stationarity Matters for Long-term Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 3, 8
 

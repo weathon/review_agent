@@ -1,5 +1,6 @@
 # Neural Wave Equation for Irregularly Sampled Sequence Data
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

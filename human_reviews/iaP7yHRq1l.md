@@ -1,5 +1,6 @@
 # THE ROBUSTNESS OF DIFFERENTIABLE CAUSAL DISCOVERY IN MISSPECIFIED SCENARIOS
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 3, 8, 6, 5
 

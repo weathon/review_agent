@@ -1,5 +1,6 @@
 # Global Convergence in Neural ODEs: Impact of Activation Functions
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

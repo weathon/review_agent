@@ -1,5 +1,6 @@
 # Soft Convex Quantization: Revisiting Vector Quantization with Convex Optimization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # A Statistical Analysis of Wasserstein Autoencoders for Intrinsically Low-dimensional Data
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

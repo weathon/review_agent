@@ -1,5 +1,6 @@
 # Breaking Free from MMI: A New Frontier in Rationalization by Probing Input Utilization
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

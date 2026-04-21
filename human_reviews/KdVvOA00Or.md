@@ -1,5 +1,6 @@
 # ReTaSA: A Nonparametric Functional Estimation Approach for Addressing Continuous Target Shift
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

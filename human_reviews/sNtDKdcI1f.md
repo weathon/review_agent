@@ -1,5 +1,6 @@
 # A Long Way To Go: Investigating Length Correlations in RLHF
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

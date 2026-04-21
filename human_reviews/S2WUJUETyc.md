@@ -1,5 +1,6 @@
 # Integrating Distributed Acoustic Sensing and PINN Frameworks for Enhanced Indoor Sound Source Localization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

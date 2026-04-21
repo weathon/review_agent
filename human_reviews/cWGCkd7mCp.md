@@ -1,5 +1,6 @@
 # Efficient Learning with Sine-Activated Low-Rank Matrices
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 
@@ -77,7 +78,8 @@ Technical Soundness:
 The theoretical analysis highlights how controlling the frequency coefficient "w" in the sine function affects the linear independence of the original matrix "W". Figure 2 illustrates this effect, showing that the sine-activated low-rank decomposition facilitates efficient training without increasing the number of model parameters.
 
 ### Weaknesses
-Lack of Rationale Behind the Sine Function's Effectiveness: While the theoretical and experimental validations in Sections 3.2 and 4 establish the efficacy of the sine activation, the paper doesn't delve into why the sine function specifically enhances parameter-efficient training. I'm left wondering what inherent properties of the sine function drive these results. A clearer explanation of how the sine function contributes to increasing matrix rank or improving performance without adding parameters would significantly strengthen the argument.
+Lack of Rationale Behind the Sine Function's Effectiveness:
+While the theoretical and experimental validations in Sections 3.2 and 4 establish the efficacy of the sine activation, the paper doesn't delve into why the sine function specifically enhances parameter-efficient training. I'm left wondering what inherent properties of the sine function drive these results. A clearer explanation of how the sine function contributes to increasing matrix rank or improving performance without adding parameters would significantly strengthen the argument.
 
 Hyperparameter "w" Tuning:
 The role of the frequency hyperparameter "w" isn't thoroughly addressed. Is there a need to fine-tune "w" for each task, or does it generally benefit from being larger? More importantly, how do we determine the optimal "w"? A systematic exploration or guidelines for selecting "w" across different tasks would be helpful, as the current approach seems to leave this critical aspect underexplored.

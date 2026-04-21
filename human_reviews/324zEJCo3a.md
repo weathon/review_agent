@@ -1,5 +1,6 @@
 # Local Vs. Global Interpretability: A Computational Perspective
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

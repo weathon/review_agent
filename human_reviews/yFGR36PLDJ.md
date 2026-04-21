@@ -1,5 +1,6 @@
 # Simple, Good, Fast: Self-Supervised World Models Free of Baggage
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 3
 

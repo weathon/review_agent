@@ -1,5 +1,6 @@
 # DCT-CryptoNets: Scaling Private Inference in the Frequency Domain
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5
 

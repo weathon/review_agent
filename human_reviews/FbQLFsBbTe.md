@@ -1,5 +1,6 @@
 # FastCLIP: A Suite of Optimization Techniques to Accelerate CLIP Training with Limited Resources
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

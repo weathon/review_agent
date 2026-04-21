@@ -1,5 +1,6 @@
 # Towards Adaptive Time Series Foundation Models Against Distribution Shift
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

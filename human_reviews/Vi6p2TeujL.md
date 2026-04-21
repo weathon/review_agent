@@ -1,5 +1,6 @@
 # PTAD: Prototype-Oriented Tabular Anomaly Detection via Mask Modeling
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

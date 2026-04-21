@@ -1,5 +1,6 @@
 # Learning Dynamical Systems with Helmholtz-Hodge Decomposition and Gaussian Processes
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 8, 6, 6, 3, 6
 

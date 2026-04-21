@@ -1,5 +1,6 @@
 # OmniParser for Pure Vision Based GUI Agent
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

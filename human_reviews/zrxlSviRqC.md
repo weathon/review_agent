@@ -1,5 +1,6 @@
 # Learning energy-based models by self-normalising the likelihood
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

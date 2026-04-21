@@ -1,5 +1,6 @@
 # A differentiable brain simulator bridging brain simulation and brain-inspired computing
 
+- Avg Score: 7.20
 - Decision: Accept (poster)
 - Scores: 6, 10, 8, 6, 6
 

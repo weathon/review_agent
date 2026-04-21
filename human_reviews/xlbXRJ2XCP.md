@@ -1,5 +1,6 @@
 # MaxCutPool: differentiable feature-aware Maxcut for pooling in graph neural networks
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

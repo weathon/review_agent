@@ -1,5 +1,6 @@
 # Neural Neighborhood Search for Multi-agent Path Finding
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 3, 6, 6
 

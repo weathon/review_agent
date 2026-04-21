@@ -1,5 +1,6 @@
 # Do as We Do, Not as You Think: the Conformity of Large Language Models
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8
 

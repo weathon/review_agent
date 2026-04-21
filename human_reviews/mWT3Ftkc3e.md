@@ -1,5 +1,6 @@
 # Sampling is as easy as keeping the consistency: convergence guarantee for Consistency Models
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 6, 6, 8
 

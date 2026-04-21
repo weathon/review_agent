@@ -1,5 +1,6 @@
 # Error Broadcast and Decorrelation as a Potential Artificial and Natural Learning Mechanism
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # Graph ODE with Factorized Prototypes for Modeling Complicated Interacting Dynamics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

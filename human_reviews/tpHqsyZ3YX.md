@@ -1,5 +1,6 @@
 # ProAdvPrompter: A Two-Stage Journey to Effective Adversarial Prompting for LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 5
 

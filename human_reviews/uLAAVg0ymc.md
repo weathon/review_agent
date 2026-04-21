@@ -1,5 +1,6 @@
 # Do we need rebalancing strategies? A theoretical and empirical study around SMOTE and its variants
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 5, 5, 3
 

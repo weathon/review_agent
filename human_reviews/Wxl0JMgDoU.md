@@ -1,5 +1,6 @@
 # Understanding Skill Adaptation in Transformers Using Sparse Autoencoders: Chess as a Model System
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

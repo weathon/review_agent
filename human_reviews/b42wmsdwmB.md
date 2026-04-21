@@ -1,5 +1,6 @@
 # X-Fi: A Modality-Invariant Foundation Model for Multimodal Human Sensing
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 6
 

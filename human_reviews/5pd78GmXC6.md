@@ -1,5 +1,6 @@
 # Charting the Design Space of Neural Graph Representations for Subgraph Matching
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8
 

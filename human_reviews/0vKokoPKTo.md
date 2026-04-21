@@ -1,5 +1,6 @@
 # Towards Geometry Problems Solving Employing GPT-4 Vision with Few-Shot Prompting: An Empirical Study of What Matters
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

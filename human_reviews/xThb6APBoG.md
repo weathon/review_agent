@@ -1,5 +1,6 @@
 # Adapting Retrieval Models to Task-Specific Goals using Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

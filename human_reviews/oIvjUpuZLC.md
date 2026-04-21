@@ -1,5 +1,6 @@
 # Invariant Convolutional Layers for Time Series
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

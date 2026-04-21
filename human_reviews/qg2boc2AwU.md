@@ -1,5 +1,6 @@
 # EBMDock: Neural Probabilistic Protein-Protein Docking via a Differentiable Energy Model
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Anchored Alignment for Self-Explanations Enhancement
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 6, 5
 

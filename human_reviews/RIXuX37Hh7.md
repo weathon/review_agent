@@ -1,5 +1,6 @@
 # ALR$^2$: A Retrieve-then-Reason Framework for Long-context Question Answering
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

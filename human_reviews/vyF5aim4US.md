@@ -1,5 +1,6 @@
 # QFree-Det: Query-Free Detector with Transformer and Sequential Matching
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

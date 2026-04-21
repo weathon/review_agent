@@ -1,5 +1,6 @@
 # Understanding Continuous-depth Networks through the Lens of Homogeneous Ricci Flows
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 3, 1
 

@@ -1,5 +1,6 @@
 # Project MPG: towards a generalized performance quotient for LLM intelligence
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 1, 1, 3
 

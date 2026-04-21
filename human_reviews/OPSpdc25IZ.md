@@ -1,5 +1,6 @@
 # DS-LLM: Leveraging Dynamical Systems to Enhance Both Training and Inference of Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

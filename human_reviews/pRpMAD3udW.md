@@ -1,5 +1,6 @@
 # Mastering Robot Manipulation with Multimodal Prompts through Pretraining and Multi-task Fine-tuning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

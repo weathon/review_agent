@@ -1,5 +1,6 @@
 # A Dual-branch Multi-Band Neural Vocoder with Harmonic Discriminator for High-Fidelity Speech Synthesis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

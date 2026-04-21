@@ -1,5 +1,6 @@
 # OpenVid-1M: A Large-Scale High-Quality Dataset for Text-to-video Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # On the Convergence of Symbolic Pattern Forests and Silhouette Coefficients for Robust Time Series Clustering
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

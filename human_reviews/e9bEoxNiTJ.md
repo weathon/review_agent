@@ -1,5 +1,6 @@
 # TransCues: Boundary and Reflection-empowered Pyramid Vision Transformer for Semantic Transparent Object Segmentation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

@@ -1,5 +1,6 @@
 # A Pattern Language for Machine Learning Tasks
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # KrwEmd: Revising the Imperfect Recall Abstraction from Forgetting Everything
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

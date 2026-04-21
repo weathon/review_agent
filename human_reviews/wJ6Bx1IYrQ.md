@@ -1,5 +1,6 @@
 # EEGPT: Unleashing the Potential of EEG Generalist Foundation Model by Autoregressive Pre-training
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

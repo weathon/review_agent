@@ -1,5 +1,6 @@
 # Equivariant Graph Neural Operator for Modeling 3D Dynamics
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 5, 8
 

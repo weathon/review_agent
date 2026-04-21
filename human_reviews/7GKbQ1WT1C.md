@@ -1,5 +1,6 @@
 # Prompting Fairness: Integrating Causality to Debias Large Language Models
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 6
 

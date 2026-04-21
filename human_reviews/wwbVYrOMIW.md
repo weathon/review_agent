@@ -1,5 +1,6 @@
 # POC: Preventing the Over-Collapse of Classes for Class-Incremental Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

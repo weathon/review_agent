@@ -1,5 +1,6 @@
 # Effective Offline Environment Reconstruction when the Dataset is Collected from Diversified Behavior Policies
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

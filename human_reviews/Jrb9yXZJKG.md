@@ -1,5 +1,6 @@
 # CAD-Editor: Text-based CAD Editing through Adapting Large Language Models with Synthetic Data
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

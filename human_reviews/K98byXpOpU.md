@@ -1,5 +1,6 @@
 # Double Momentum Method for Lower-Level Constrained Bilevel Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

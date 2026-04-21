@@ -1,5 +1,6 @@
 # Understanding Contrastive Learning through Variational Analysis and Neural Network Optimization Perspectives
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 3, 6
 

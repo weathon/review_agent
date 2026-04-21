@@ -1,5 +1,6 @@
 # ARGS: Alignment as Reward-Guided Search
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

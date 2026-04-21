@@ -1,5 +1,6 @@
 # Vision-Language Models Meet Meteorology: Developing Models for Anomalies Analysis with Heatmaps
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5, 8
 

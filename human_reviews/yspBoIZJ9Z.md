@@ -1,5 +1,6 @@
 # Enhancing Video Understanding with Vision and Language Collaboration
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

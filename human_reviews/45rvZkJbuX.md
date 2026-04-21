@@ -1,5 +1,6 @@
 # Cross-Modal Safety Mechanism Transfer in Large Vision-Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

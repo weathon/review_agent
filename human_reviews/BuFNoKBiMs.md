@@ -1,5 +1,6 @@
 # Decoupled Marked Temporal Point Process using Neural Ordinary Differential Equations
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 5, 6
 

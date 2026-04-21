@@ -1,5 +1,6 @@
 # What should an AI assessor optimise for?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

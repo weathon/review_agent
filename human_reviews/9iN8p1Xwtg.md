@@ -1,5 +1,6 @@
 # Discovering the Gems in Early Layers: Accelerating Long-Context LLMs with 1000x Input Token Reduction
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

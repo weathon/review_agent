@@ -1,5 +1,6 @@
 # The Mutual Information Matrix in Hyperbolic Embedding and a Generalization Error Bound
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

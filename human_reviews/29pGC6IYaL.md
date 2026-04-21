@@ -1,5 +1,6 @@
 # Maximizing LLMs Potential: Enhancing Mongolian Chinese Machine Translation with RL Agents and Adversarial Multi Knowledge Distillation
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 1, 5, 5
 

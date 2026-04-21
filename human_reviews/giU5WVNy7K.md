@@ -1,5 +1,6 @@
 # From General to Expert: Custom Pruning LLMs Across Language, Domain, and Task
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

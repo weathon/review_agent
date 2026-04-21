@@ -1,5 +1,6 @@
 # ivrit.ai: A Comprehensive Dataset of Hebrew Speech for AI Research and Development
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

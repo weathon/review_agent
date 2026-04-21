@@ -1,5 +1,6 @@
 # ANOVA-NODE: An identifiable neural network for the functional ANOVA model for better interpretability
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

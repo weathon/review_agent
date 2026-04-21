@@ -1,5 +1,6 @@
 # QA-Calibration of Language Model Confidence Scores
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 8
 

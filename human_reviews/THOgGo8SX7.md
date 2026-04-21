@@ -1,5 +1,6 @@
 # Efficient Reinforcement Learning for Global Decision Making in the Presence of Local Agents at Scale
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

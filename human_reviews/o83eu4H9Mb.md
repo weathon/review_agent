@@ -1,5 +1,6 @@
 # Information Retention via Learning Supplemental Features
 
+- Avg Score: 7.20
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 6, 8
 

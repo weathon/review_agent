@@ -1,5 +1,6 @@
 # LIME: LESS IS MORE FOR MLLM EVALUATION
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5
 

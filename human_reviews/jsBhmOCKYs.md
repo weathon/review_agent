@@ -1,5 +1,6 @@
 # Denoising as Adaptation: Noise-Space Domain Adaptation for Image Restoration
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6, 6
 

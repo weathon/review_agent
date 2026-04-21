@@ -1,5 +1,6 @@
 # TLCM: Training- efficient Latent Consistency Model for Image Generation with 2-8 Steps
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5, 3
 

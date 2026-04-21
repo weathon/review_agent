@@ -1,5 +1,6 @@
 # Q-resafe: Assessing Safety Risks and Quantization-aware Safety Patching for Quantized Large Language Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

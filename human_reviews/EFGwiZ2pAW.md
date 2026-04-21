@@ -1,5 +1,6 @@
 # SimTeG: A Frustratingly Simple Approach Improves Textual Graph Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

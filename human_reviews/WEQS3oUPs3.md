@@ -1,5 +1,6 @@
 # Zero-Shot Goal-Directed Dialogue via RL on Imagined Conversations
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

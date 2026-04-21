@@ -1,5 +1,6 @@
 # Interpreting Adversarial Attacks and Defenses using Architectures with Enhanced Interpretability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

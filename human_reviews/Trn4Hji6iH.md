@@ -1,5 +1,6 @@
 # AccCtr: Accelerating Training-Free  Control For Text-to-Image Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 1
 

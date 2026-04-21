@@ -1,5 +1,6 @@
 # Everyone Counts: Fair and Accurate Heterogeneous Federated Learning with Resource-Adaptive Model Modulation
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

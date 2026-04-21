@@ -1,5 +1,6 @@
 # PhyloGFN: Phylogenetic inference with generative flow networks
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 5
 

@@ -1,5 +1,6 @@
 # Random Graph Asymptotics for Treatment Effect Estimation in Two-Sided Markets
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # TOMATO: Assessing Visual Temporal Reasoning Capabilities in Multimodal Foundation Models
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 5
 

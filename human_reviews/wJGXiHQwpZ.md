@@ -1,5 +1,6 @@
 # MaskTwins: Dual-form Complementary Masking for Domain-Adaptive Image Segmentation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 3, 8
 

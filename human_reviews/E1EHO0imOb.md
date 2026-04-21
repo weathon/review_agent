@@ -1,5 +1,6 @@
 # Scaling FP8 training to trillion-token LLMs
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # PaPaGei: Open Foundation Models for Optical Physiological Signals
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 8, 1, 8
 

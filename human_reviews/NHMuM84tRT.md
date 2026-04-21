@@ -1,5 +1,6 @@
 # Long-Short Decision Transformer: Bridging Global and Local Dependencies for Generalized Decision-Making
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

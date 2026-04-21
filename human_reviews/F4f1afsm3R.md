@@ -1,5 +1,6 @@
 # Interpretable Contrastive Monte Carlo Tree Search Reasoning
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 3, 6, 3
 

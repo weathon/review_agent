@@ -1,5 +1,6 @@
 # A Structured Pruning Algorithm for Model-based Deep Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

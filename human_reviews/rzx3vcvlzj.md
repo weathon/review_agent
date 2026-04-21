@@ -1,5 +1,6 @@
 # TIGER: Time-frequency Interleaved Gain Extraction and Reconstruction for Efficient Speech Separation
 
+- Avg Score: 5.83
 - Decision: Accept (Poster)
 - Scores: 1, 6, 8, 6, 8, 6
 

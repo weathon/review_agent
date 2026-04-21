@@ -1,5 +1,6 @@
 # Adapt On-the-Go: Behavior Modulation for Single-Life Robot Deployment
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 6, 8
 

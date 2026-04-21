@@ -1,5 +1,6 @@
 # FruitBin: A tunable large-scale dataset for advancing 6D Pose estimation in fruit bin picking automation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 8, 3, 3
 

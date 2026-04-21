@@ -1,5 +1,6 @@
 # The Uncanny Valley: Exploring Adversarial Robustness from a Flatness Perspective
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 3
 

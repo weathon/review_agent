@@ -1,5 +1,6 @@
 # MOFDiff: Coarse-grained Diffusion for Metal-Organic Framework Design
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 8
 

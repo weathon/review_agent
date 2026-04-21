@@ -1,5 +1,6 @@
 # Würstchen: An Efficient Architecture for Large-Scale Text-to-Image Diffusion Models
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

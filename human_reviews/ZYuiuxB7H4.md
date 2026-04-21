@@ -1,5 +1,6 @@
 # Certified  $\ell_2$ Attribution Robustness via Uniformly Smoothed Attributions
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 1, 3
 

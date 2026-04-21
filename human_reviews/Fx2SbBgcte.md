@@ -1,5 +1,6 @@
 # AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

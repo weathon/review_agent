@@ -1,5 +1,6 @@
 # Hierarchical Demonstration Order Optimization for Many-shot In-Context Learning
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 1, 3
 

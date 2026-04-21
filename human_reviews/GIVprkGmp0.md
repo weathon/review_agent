@@ -1,5 +1,6 @@
 # Enhancing Deep Graph Neural Networks via Improving Signal Propagation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

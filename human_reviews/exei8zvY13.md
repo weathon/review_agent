@@ -1,5 +1,6 @@
 # Improving High-Frequency Details in Cerebellum for Brain MRI Super-Resolution
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 1, 3
 

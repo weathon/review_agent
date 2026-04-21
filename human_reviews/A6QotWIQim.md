@@ -1,5 +1,6 @@
 # Advancing Energy Efficiency in On-Device Streaming Speech Recognition
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6
 

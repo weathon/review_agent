@@ -1,5 +1,6 @@
 # Build Roadmap for Automated Feature Transformation: A Graph-based Reinforcement Learning Approach
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

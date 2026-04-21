@@ -1,5 +1,6 @@
 # An operator preconditioning perspective on training in physics-informed machine learning
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 6, 8, 8
 

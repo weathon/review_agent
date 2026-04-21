@@ -1,5 +1,6 @@
 # Conceptualize Any Network: A Concept Extraction Framework for Holistic Interpretability of Image Classifiers
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 5
 

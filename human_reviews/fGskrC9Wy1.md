@@ -1,5 +1,6 @@
 # Boosted Long Short-Term Memory with Additional Inner Layers
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

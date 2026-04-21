@@ -1,5 +1,6 @@
 # Q-Bench-Video: Benchmarking the Video Quality Understanding of LMMs
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5, 5
 

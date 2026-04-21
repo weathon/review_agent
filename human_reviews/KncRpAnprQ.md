@@ -1,5 +1,6 @@
 # A Novel Approach For Adversarial Robustness
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 
@@ -129,11 +130,14 @@ This paper proposes a input preprocessing method for defending against adversari
 This paper proposes a preprocessor that obtains very strong performance on adversarial examples while not training on adversarial examples at all. This is a very surprising result if it is able to withstand thorough empirical evaluation.
 
 ### Weaknesses
-1.	Gradient Masking and Suppression: The paper has many well-known signs of gradient masking, which is a phenomenon where estimating gradients of a classifier might be error-prone. In this paper, there are two components that might be causing this: (1) the random shift and scaling, (2) sigmoid squeezing. Further, Table 1 shows that the performance of the proposed method barely decreases under the strong auto attack ($\ell_infty, \ell_1$) as well as square attacks. This typically indicates some issues with the underlying evaluation [1]. 
+1.	Gradient Masking and Suppression: The paper has many well-known signs of gradient masking, which is a phenomenon where estimating gradients of a classifier might be error-prone. In this paper, there are two components that might be causing this: (1) the random shift and scaling, (2) sigmoid squeezing. Further, Table 1 shows that the performance of the proposed method barely decreases under the strong auto attack ($\ell_infty, \ell_1$) as well as square attacks. This typically indicates some issues with the underlying evaluation [1].
 
-2.	Evaluation on Black Box Attacks: Interestingly, the paper does provide an evaluation on the black box Square attack, which is considered to be a strong black box attack. However, the evaluation is subject to concern, as the performance barely dips below the benign performance after attack. A simple test to check any problems with the evaluation would be to intentionally inject adversarial examples and check if the performance is still retained [2]. 
 
-3.	Code for the method and evaluations: Since the authors report stunning performance increases, in light of the above concerns, it would be easier to believe the claims if well documented code would be provided for each of the evaluations. 
+2.	Evaluation on Black Box Attacks: Interestingly, the paper does provide an evaluation on the black box Square attack, which is considered to be a strong black box attack. However, the evaluation is subject to concern, as the performance barely dips below the benign performance after attack. A simple test to check any problems with the evaluation would be to intentionally inject adversarial examples and check if the performance is still retained [2].
+
+
+3.	Code for the method and evaluations: Since the authors report stunning performance increases, in light of the above concerns, it would be easier to believe the claims if well documented code would be provided for each of the evaluations.
+
 
 4.	Writing: The writing is loose and informal in some parts of the paper.
 	1.	P3: Step 1: What is mean, std?
@@ -149,7 +153,8 @@ This paper proposes a preprocessor that obtains very strong performance on adver
 ### Questions
 In addition to the concerns raised above, 
 
-1.	What is the robustness vs accuracy curve? When does it dip below the benign performance, for each of the attacks tested? At what perturbation does it go to zero? At this perturbation, how does a human perform? 
+1.	What is the robustness vs accuracy curve? When does it dip below the benign performance, for each of the attacks tested? At what perturbation does it go to zero? At this perturbation, how does a human perform?
+
 
 2.	What is the role of each of the components of the preprocessor towards the final robustness, in that what happens when each of them are replaced by an identity transformation? (1) Sigmoid, (2) Random scaling, (3) Random Shift
 

@@ -1,5 +1,6 @@
 # ELBOing Stein: Variational Bayes with Stein Mixture Inference
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # More Experts Than Galaxies: Conditionally-Overlapping Experts with Biologically-Inspired Fixed Routing
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 3, 8, 6
 

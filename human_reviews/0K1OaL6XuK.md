@@ -1,5 +1,6 @@
 # Planning Anything with Rigor: General-Purpose Zero-Shot Planning with LLM-based Formalized Programming
 
+- Avg Score: 4.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 1, 6
 

@@ -1,5 +1,6 @@
 # Unpaired Panoramic Image-to-Image Translation Leveraging Pinhole Images
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

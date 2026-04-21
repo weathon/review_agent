@@ -1,5 +1,6 @@
 # UD-Mamba: A pixel-level uncertainty-driven mamba model for medical image segmentation
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

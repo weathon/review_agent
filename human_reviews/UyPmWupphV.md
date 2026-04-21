@@ -1,5 +1,6 @@
 # Hyperion: Fused Multi-Trial and Gradient Descent for Joint Hyperparameter and Neural Architecture Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3
 

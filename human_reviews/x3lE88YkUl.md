@@ -1,5 +1,6 @@
 # Improving Resistance to Noisy Label Fitting by Reweighting Gradient in SAM
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 5, 5, 5, 5
 

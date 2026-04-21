@@ -1,5 +1,6 @@
 # Exact linear-rate gradient descent: optimal adaptive stepsize theory and practical use
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 5, 1, 3
 

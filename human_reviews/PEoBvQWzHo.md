@@ -1,5 +1,6 @@
 # Dirichlet-based Uncertainty Quantification for Personalized Federated Learning with Improved Posterior Networks
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Right Time to Learn: Promoting Generalization via Bio-inspired Spacing Effect in Knowledge Distillation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 5, 5
 

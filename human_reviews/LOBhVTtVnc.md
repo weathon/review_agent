@@ -1,5 +1,6 @@
 # Geometric Spatiotemporal Transformer to Simulate Long-Term Physical Dynamics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

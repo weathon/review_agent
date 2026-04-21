@@ -1,5 +1,6 @@
 # MPFBench: A Large Scale Dataset for SciML of Multi-Phase-Flows: Droplet and Bubble Dynamics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 3, 6
 

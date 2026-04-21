@@ -1,5 +1,6 @@
 # FTP: A Fine-grained Token-wise Pruner for Large Language Models via Token Routing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # HiddenKey: Parameter-Efficient FineTuning Meets Dropout under a Unified Framework
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

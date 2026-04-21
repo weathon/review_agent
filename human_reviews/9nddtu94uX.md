@@ -1,5 +1,6 @@
 # PlatoLM: Teaching LLMs  via a Socratic  Questioning User Simulator
 
+- Avg Score: 6.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 6, 8
 

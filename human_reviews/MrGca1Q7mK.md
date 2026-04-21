@@ -1,5 +1,6 @@
 # Location, Location, Location: Design Bias with Kernel Transformation
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 3
 

@@ -1,5 +1,6 @@
 # A$^2$-Flow: Alignment-Aware Pre-training for Speech Synthesis with Flow Matching
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 5, 6
 

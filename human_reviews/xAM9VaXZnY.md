@@ -1,5 +1,6 @@
 # What Can We Learn from State Space Models for Machine Learning on Graphs?
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 
@@ -30,7 +31,13 @@ This paper proposes Graph State Space Convolution (GSSC), an extension of state-
 
 ### Weaknesses
 My main concerns relate to the complexity claims, specifically:
-1. **Layer Complexity vs Expressivity:** The paper states that the complexity of a GSSC layer is “… $O(nmd)$    where $n$ is the number of nodes and $m$, $d$ are hidden and positional encoding dimension.” (239-240) This means that a GSSC layer has $O(|V|)$ complexity   . Consequently, GSSC is in general *incapable of examining every edge in the graph*, unlike MPNNs with $O(|V|+|E|)$ complexity, such as GINE [1]. Although the authors prove that GSSC is “more powerful than MPNNs” *in terms of the WL hierarchy*, the expressivity implications of not being able to examine every edge seems to be overlooked. Even preprocessing the graph to incorporate edge features into nodes, which itself requires $O(|E|)$ time, would still necessitate $m\in O(\frac{|E|}{|V|})$ to store these features without information loss, thus exceeding $O(|V|)$ complexity overall.
+1. **Layer Complexity vs Expressivity:** The paper states that the complexity of a GSSC layer is “… $O(nmd)$
+
+
+ where $n$ is the number of nodes and $m$, $d$ are hidden and positional encoding dimension.” (239-240) This means that a GSSC layer has $O(|V|)$ complexity
+
+
+. Consequently, GSSC is in general *incapable of examining every edge in the graph*, unlike MPNNs with $O(|V|+|E|)$ complexity, such as GINE [1]. Although the authors prove that GSSC is “more powerful than MPNNs” *in terms of the WL hierarchy*, the expressivity implications of not being able to examine every edge seems to be overlooked. Even preprocessing the graph to incorporate edge features into nodes, which itself requires $O(|E|)$ time, would still necessitate $m\in O(\frac{|E|}{|V|})$ to store these features without information loss, thus exceeding $O(|V|)$ complexity overall.
 2. **Preprocessing Complexity:** The paper claims that finding the top $d$ eigenpairs with Lanczos methods has $O(nd^2)$ complexity (286-287). However, since sparse matrix-vector multiplication with the Laplacian matrix is necessary for Lanczos methods, the complexity per iteration would be at least $O(|E|)$, resulting in an overall complexity of at least $O(d|E|)$ to find $d$ eigenpairs. This exceeds the paper’s claim of $O(nd^2)$ preprocessing, and thus requires clarification.
 
 Despite these concerns, the paper’s main contributions remain valid. I would appreciate if the authors could clarify these points during the rebuttal phase.

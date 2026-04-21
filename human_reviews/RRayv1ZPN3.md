@@ -1,5 +1,6 @@
 # TAIL: Task-specific Adapters for Imitation Learning with Large Pretrained Models
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 6, 6
 

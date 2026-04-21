@@ -1,5 +1,6 @@
 # Continuous Exposure Learning for Low-light Image Enhancement using Neural ODEs
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

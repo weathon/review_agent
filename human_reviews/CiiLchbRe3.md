@@ -1,5 +1,6 @@
 # Understanding the Training and Generalization of Pretrained Transformer for Sequential Decision Making
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

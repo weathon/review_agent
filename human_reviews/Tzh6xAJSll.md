@@ -1,5 +1,6 @@
 # Scaling Laws for Associative Memories
 
+- Avg Score: 7.60
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8, 8
 

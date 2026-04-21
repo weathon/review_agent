@@ -1,5 +1,6 @@
 # The Brain's Bitter Lesson: Scaling Speech Decoding With Self-Supervised Learning
 
+- Avg Score: 5.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6
 

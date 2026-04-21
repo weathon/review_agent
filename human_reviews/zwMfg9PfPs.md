@@ -1,5 +1,6 @@
 # Out-of-Variable Generalisation for Discriminative Models
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 8
 

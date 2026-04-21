@@ -1,5 +1,6 @@
 # M2Edit: Locate and Edit Multi-Granularity Knowledge in Multimodal Large Language Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

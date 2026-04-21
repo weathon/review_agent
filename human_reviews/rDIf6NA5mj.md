@@ -1,5 +1,6 @@
 # Exposure Bracketing Is All You Need For A High-Quality Image
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # SciSafeEval: A Comprehensive Benchmark for Safety Alignment of Large Language Models in Scientific Tasks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 6
 

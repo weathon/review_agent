@@ -1,5 +1,6 @@
 # PersonalVideo: High ID-Fidelity Video Customization With Static Images
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

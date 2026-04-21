@@ -1,5 +1,6 @@
 # AI Sandbagging: Language Models can Strategically Underperform on Evaluations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6
 

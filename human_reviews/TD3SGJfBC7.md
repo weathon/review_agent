@@ -1,5 +1,6 @@
 # Learning to Adapt Frozen CLIP for Few-Shot Test-Time Domain Adaptation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

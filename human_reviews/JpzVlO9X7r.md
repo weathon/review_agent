@@ -1,5 +1,6 @@
 # Does GPT-4 have good intuition about functions?
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

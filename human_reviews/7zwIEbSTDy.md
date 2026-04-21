@@ -1,5 +1,6 @@
 # PPT: Patch Order Do Matters In Time Series Pretext Task
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 3, 8, 6, 6
 

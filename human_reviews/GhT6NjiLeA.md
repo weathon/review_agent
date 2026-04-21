@@ -1,5 +1,6 @@
 # Exact Shapley Value for Local and Global Explanation of Additive Gaussian Processes
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 1, 3, 3
 

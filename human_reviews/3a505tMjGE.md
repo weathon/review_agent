@@ -1,5 +1,6 @@
 # AVOID: Alleviating VAE's Overestimation in Unsupervised OOD Detection
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

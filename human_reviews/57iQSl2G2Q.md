@@ -1,5 +1,6 @@
 # Safe Bayesian Optimization for Complex Control Systems via Additive Gaussian Processes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 10, 1, 3, 6
 

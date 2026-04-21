@@ -1,5 +1,6 @@
 # A General Formulation of Independent Policy Optimization in Fully Decentralized MARL
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 6
 

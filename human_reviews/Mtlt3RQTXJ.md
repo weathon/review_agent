@@ -1,5 +1,6 @@
 # Bi-level Contrastive Learning for Knowledge Enhanced Molecule Representations
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 3, 8
 

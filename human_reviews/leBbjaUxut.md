@@ -1,5 +1,6 @@
 # Multi-Scale Image Diffusion Transformers: Explainability Leads to Faster Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

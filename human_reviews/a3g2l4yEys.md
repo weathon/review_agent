@@ -1,5 +1,6 @@
 # Pangea: A Fully Open Multilingual Multimodal LLM for 39 Languages
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 

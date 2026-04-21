@@ -1,5 +1,6 @@
 # ActiView: Evaluating Active Perception Ability for Multimodal Large Language Models
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

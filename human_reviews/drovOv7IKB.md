@@ -1,5 +1,6 @@
 # Divide-and-Conquer Time Series Forecasting with Auto-Frequency-Correlation via Cross-Channel Attention
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

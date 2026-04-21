@@ -1,5 +1,6 @@
 # Simplified Mamba with Disentangled Dependency Encoding for Long-Term Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

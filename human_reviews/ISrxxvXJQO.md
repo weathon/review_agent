@@ -1,5 +1,6 @@
 # On the Hidden Waves of Image
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 6, 8
 

@@ -1,5 +1,6 @@
 # Dynamic Influence Tracker: Estimating Sample Influence in SGD-Trained Models across Arbitrary Time Windows
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 3, 6, 5
 

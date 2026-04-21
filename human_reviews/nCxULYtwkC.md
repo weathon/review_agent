@@ -1,5 +1,6 @@
 # Stylize and Align: Unlabeled-Image Stylized Continuous Consistency Regularization for Hand Pose Estimation in the Wild
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

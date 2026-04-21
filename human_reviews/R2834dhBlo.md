@@ -1,5 +1,6 @@
 # Neural Interactive Proofs
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 5, 10, 5
 

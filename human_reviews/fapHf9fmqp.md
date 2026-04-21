@@ -1,5 +1,6 @@
 # Unnormalized Density Estimation with Root Sobolev Norm Regularization
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

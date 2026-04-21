@@ -1,5 +1,6 @@
 # Physics-informed neural networks with unknown measurement noise
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3
 

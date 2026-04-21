@@ -1,5 +1,6 @@
 # RouteFinder: Towards Foundation Models for Vehicle Routing Problems
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

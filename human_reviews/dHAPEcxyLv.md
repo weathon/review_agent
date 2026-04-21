@@ -1,5 +1,6 @@
 # READ-SQL: Reasoning Path Decomposer for Text-to-SQL
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 3, 5, 6, 5
 

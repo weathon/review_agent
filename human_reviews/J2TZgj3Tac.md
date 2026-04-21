@@ -1,5 +1,6 @@
 # Toward Optimal Policy Population Growth in Two-Player Zero-Sum Games
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

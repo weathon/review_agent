@@ -1,5 +1,6 @@
 # CodeChain: An Open, Million-scale Dataset for Code Language Models at the Repository Level
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 6, 5
 

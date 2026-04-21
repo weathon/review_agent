@@ -1,5 +1,6 @@
 # Automating High-Quality Concept Banks: Leveraging LLMs and Multimodal Evaluation Metrics
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5
 

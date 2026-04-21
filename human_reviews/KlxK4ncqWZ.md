@@ -1,5 +1,6 @@
 # Shallow diffusion networks provably learn hidden low-dimensional structure
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

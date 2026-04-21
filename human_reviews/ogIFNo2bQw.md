@@ -1,5 +1,6 @@
 # BiCompFL: Stochastic Federated Learning with Bi-Directional Compression
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 6, 3, 5, 5
 

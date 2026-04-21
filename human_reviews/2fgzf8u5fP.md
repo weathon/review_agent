@@ -1,5 +1,6 @@
 # Derivative-Free Guidance in Continuous and Discrete Diffusion Models with Soft Value-Based Decoding
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 3, 5, 3, 5
 

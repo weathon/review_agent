@@ -1,5 +1,6 @@
 # NeuralPlane: Structured 3D Reconstruction in Planar Primitives with Neural Fields
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 10, 6, 8
 

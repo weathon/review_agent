@@ -1,5 +1,6 @@
 # Prediction Error-based Classification for Class-Incremental Learning
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 8
 

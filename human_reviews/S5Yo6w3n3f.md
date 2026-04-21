@@ -1,5 +1,6 @@
 # ODE-based Smoothing Neural Network for Reinforcement Learning Tasks
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 5, 8, 8
 

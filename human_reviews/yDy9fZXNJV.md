@@ -1,5 +1,6 @@
 # The Graph's Apprentice: Teaching an LLM Low-Level Knowledge for Circuit Quality Estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

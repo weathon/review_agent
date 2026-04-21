@@ -1,5 +1,6 @@
 # ICA model estimation using an optimized version of genetic algorithms
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 3, 1
 

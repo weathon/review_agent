@@ -1,5 +1,6 @@
 # From generalization analysis to optimization designs for state space models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

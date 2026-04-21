@@ -1,5 +1,6 @@
 # CIM: Constrained Intrinsic Motivation for Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 8, 3, 6
 

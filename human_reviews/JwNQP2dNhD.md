@@ -1,5 +1,6 @@
 # Searching Strengthens Large Language Models in Finding Bugs of Deep Learning Libraries
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

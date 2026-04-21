@@ -1,5 +1,6 @@
 # T-Measure: A Measure for Model Transferabilty
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

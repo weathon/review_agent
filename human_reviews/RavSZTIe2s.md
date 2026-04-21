@@ -1,5 +1,6 @@
 # Shape as Line Segments: Accurate and Flexible Implicit Surface Representation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

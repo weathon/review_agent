@@ -1,5 +1,6 @@
 # Generative Learning for Solving Non-Convex Problem with Multi-Valued Input-Solution Mapping
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 6
 

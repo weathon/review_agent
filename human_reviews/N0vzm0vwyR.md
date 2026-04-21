@@ -1,5 +1,6 @@
 # Pruning Deep Convolutional Neural Network Using Conditional Mutual Information
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 1
 

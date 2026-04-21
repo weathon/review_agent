@@ -1,5 +1,6 @@
 # Aux-NAS: Exploiting Auxiliary Labels with Negligibly Extra Inference Cost
 
+- Avg Score: 7.20
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8, 6
 

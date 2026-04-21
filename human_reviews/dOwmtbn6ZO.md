@@ -1,5 +1,6 @@
 # Adaptive Video Understanding Agent:  Enhancing Efficiency with Dynamic Frame Sampling and Feedback-driven Reasoning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 8
 

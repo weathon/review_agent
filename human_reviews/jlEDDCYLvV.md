@@ -1,5 +1,6 @@
 # Haland: Human-AI Coordination via Policy Generation from Language-guided Diffusion
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 5, 5, 3, 6
 
@@ -91,7 +92,8 @@ The approach of using diffusion models to generate network parameters is not ver
 ### Questions
 1. **Comparison with BERT-Augmented MLP**: I recommend that the authors consider a baseline that concatenates BERT representations with the MLP inputs, either as a new baseline or as part of an ablation study.
 
- *Reason of this question*: Since this study uses natural language as task instructions, it is essential to evaluate policies that integrate language models like BERT directly into the MLP policy, as simple MLP models cannot interpret language instructions without these representations. Ablation studies indicate that the method collapses without the translator (BERT+VAE), suggesting that language instructions play a crucial role. Including BERT in the baselines would help demonstrate the effectiveness of HALAND’s generative model for policy parameter estimation over direct conditioning on NL inputs.
+
+*Reason of this question*: Since this study uses natural language as task instructions, it is essential to evaluate policies that integrate language models like BERT directly into the MLP policy, as simple MLP models cannot interpret language instructions without these representations. Ablation studies indicate that the method collapses without the translator (BERT+VAE), suggesting that language instructions play a crucial role. Including BERT in the baselines would help demonstrate the effectiveness of HALAND’s generative model for policy parameter estimation over direct conditioning on NL inputs.
 
 2. **Diffusion Policy for Action Generation**: This paper uses diffusion models to generate policy network parameters, which could be viewed as simulating MLP optimization. However, prior research [1] has applied diffusion models to generate action distributions, directly aligning with diffusion models’ denoising functions. The authors should discuss this line of work and clarify why diffusion models are used here to generate policy parameters instead of actions.
 

@@ -1,5 +1,6 @@
 # FOSP: Fine-tuning Offline Safe Policy through World Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

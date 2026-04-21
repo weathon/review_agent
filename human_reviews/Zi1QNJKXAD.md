@@ -1,5 +1,6 @@
 # Solving robust MDPs as a sequence of static RL problems
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 3, 3, 1, 3
 

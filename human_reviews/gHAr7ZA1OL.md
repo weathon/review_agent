@@ -1,5 +1,6 @@
 # Modulated Phase Diffusor: Content-Oriented Feature Synthesis for Detecting Unknown Objects
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 3, 6
 

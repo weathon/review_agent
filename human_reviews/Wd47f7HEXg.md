@@ -1,5 +1,6 @@
 # Quasi-Monte Carlo for 3D Sliced Wasserstein
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

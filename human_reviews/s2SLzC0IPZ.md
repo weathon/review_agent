@@ -1,5 +1,6 @@
 # A Fast Federated Method for Minimax Problems with Sequential Convergence Guarantees
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5, 3
 

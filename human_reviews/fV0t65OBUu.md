@@ -1,5 +1,6 @@
 # Improving Probabilistic Diffusion Models With Optimal Diagonal Covariance Matching
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Addressing domain shift with diffusion-based adaptation for real image dehazing
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 6, 6, 5, 6
 

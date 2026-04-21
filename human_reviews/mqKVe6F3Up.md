@@ -1,5 +1,6 @@
 # Subtask-Aware Visual Reward Learning from Segmented Demonstrations
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5, 6
 

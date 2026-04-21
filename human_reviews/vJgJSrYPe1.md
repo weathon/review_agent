@@ -1,5 +1,6 @@
 # Logic-Logit: A Logic-Based Approach to Choice Modeling
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6
 

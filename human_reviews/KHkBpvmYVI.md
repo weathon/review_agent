@@ -1,5 +1,6 @@
 # EVA: Geometric Inverse Design for Fast Protein Motif-Scaffolding with Coupled Flow
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6, 6
 

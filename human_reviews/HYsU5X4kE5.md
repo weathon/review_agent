@@ -1,5 +1,6 @@
 # GCNFT: Graph Convolutional Networks Aware Generative Feature Transformation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

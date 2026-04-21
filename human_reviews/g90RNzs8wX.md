@@ -1,5 +1,6 @@
 # Unifying Unsupervised Graph-Level Anomaly Detection and Out-of-Distribution Detection: A Benchmark
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

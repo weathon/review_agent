@@ -1,5 +1,6 @@
 # Low-cost Enhancer for Text Attributed Graph Learning via Graph Alignment
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 5
 

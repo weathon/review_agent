@@ -1,5 +1,6 @@
 # Analyzing and Mitigating Object Hallucination in Large Vision-Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 5
 

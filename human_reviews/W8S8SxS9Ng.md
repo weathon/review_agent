@@ -1,5 +1,6 @@
 # Neuroformer: Multimodal and Multitask Generative Pretraining for Brain Data
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 5
 

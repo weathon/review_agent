@@ -1,5 +1,6 @@
 # A Novel Soft Alignment Approach for Language Models with Explicit Listwise Rewards
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

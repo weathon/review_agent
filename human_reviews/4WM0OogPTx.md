@@ -1,5 +1,6 @@
 # Learning from Sparse Offline Datasets via Conservative Density Estimation
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 8
 

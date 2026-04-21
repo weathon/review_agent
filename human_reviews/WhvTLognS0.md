@@ -1,5 +1,6 @@
 # Learning Task Relations for Test-Time Training
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 6, 5
 

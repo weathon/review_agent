@@ -1,5 +1,6 @@
 # BoneMet: An Open Large-Scale Multi-Modal Murine Dataset for Breast Cancer Bone Metastasis Diagnosis and Prognosis
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 8
 

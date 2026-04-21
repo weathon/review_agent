@@ -1,5 +1,6 @@
 # Resolution Attack: Exploiting Image Compression to Deceive Deep Neural Networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

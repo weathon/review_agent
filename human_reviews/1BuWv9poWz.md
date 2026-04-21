@@ -1,5 +1,6 @@
 # Enhancing Transferable Adversarial Attacks on Vision Transformers through Gradient Normalization Scaling and High-Frequency Adaptation
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 6, 5, 5
 

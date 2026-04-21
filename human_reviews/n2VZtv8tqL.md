@@ -1,5 +1,6 @@
 # Discovering Long-Term Effects on Parameter Efficient Fine-tuning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 8, 3
 

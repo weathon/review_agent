@@ -1,5 +1,6 @@
 # ReMasker: Imputing Tabular Data with Masked Autoencoding
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 8
 

@@ -1,5 +1,6 @@
 # Conditional Diffusion with Ordinal Regression: Longitudinal Data Generation for Neurodegenerative Disease Studies
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8
 

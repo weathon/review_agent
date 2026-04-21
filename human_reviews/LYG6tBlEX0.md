@@ -1,5 +1,6 @@
 # H-GAP: Humanoid Control with a Generalist Planner
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

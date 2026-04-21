@@ -1,5 +1,6 @@
 # Generalist Equivariant Transformer Towards 3D Molecular Interaction Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 8, 5
 

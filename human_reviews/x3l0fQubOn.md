@@ -1,5 +1,6 @@
 # Structural Quantile Normalization: a general, differentiable feature scaling technique balancing gaussian approximation and structural preservation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 3
 

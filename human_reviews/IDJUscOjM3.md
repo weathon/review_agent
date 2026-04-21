@@ -1,5 +1,6 @@
 # Self-MoE: Towards Compositional Large Language Models with Self-Specialized Experts
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

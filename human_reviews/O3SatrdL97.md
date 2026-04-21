@@ -1,5 +1,6 @@
 # Dynamic Gradient Alignment for Online Data Mixing
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 5
 

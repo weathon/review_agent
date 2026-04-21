@@ -1,5 +1,6 @@
 # Hessian-Free Natural Gradient Descent for Physics Informed Machine Learning
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3, 8
 

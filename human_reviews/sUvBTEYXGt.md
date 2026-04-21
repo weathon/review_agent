@@ -1,5 +1,6 @@
 # 6DGS: Enhanced Direction-Aware Gaussian Splatting for Volumetric Rendering
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

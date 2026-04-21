@@ -1,5 +1,6 @@
 # Autoregressive Video Generation without Vector Quantization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

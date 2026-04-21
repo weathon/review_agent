@@ -1,5 +1,6 @@
 # Sample-Efficient Multi-Agent RL: An Optimization Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6, 6
 

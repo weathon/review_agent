@@ -1,5 +1,6 @@
 # Grid Cell-Inspired Fragmentation and Recall for Efficient Map Building
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

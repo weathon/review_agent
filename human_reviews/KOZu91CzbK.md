@@ -1,5 +1,6 @@
 # Retroformer: Retrospective Large Language Agents with Policy Gradient Optimization
 
+- Avg Score: 5.67
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 3
 

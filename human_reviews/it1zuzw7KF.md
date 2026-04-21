@@ -1,5 +1,6 @@
 # In-N-Out: Robustness to In-Domain Noise and Out-of-Domain Generalization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 5, 5, 5
 

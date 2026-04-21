@@ -1,5 +1,6 @@
 # TP-Eval: Tap Multimodal LLMs' Potential in Evaluation by Customizing Prompts
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

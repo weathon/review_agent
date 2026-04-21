@@ -1,5 +1,6 @@
 # Few-Shot Detection of Machine-Generated Text using Style Representations
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 3, 6
 

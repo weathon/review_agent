@@ -1,5 +1,6 @@
 # A Restoration Network as an Implicit Prior
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 6
 

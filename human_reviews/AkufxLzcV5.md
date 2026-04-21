@@ -1,5 +1,6 @@
 # LayeredGS: Efficient Dynamic Scene Rendering and Point Tracking with Multi-Layer Deformable Gaussian Splatting
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 5
 

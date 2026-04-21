@@ -1,5 +1,6 @@
 # Improving Sample Efficiency of Model-Free Algorithms for Zero-Sum Markov Games
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

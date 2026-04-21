@@ -1,5 +1,6 @@
 # ShuffleNorm: A Better Normalization for Semi-supervised Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 6
 

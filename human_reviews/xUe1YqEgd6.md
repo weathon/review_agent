@@ -1,5 +1,6 @@
 # Unsupervised motion segmentation in one go: Smooth long-term model over a video
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

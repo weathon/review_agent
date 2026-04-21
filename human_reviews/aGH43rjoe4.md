@@ -1,5 +1,6 @@
 # Multi-modal Gaussian Process Variational Autoencoders for Neural and Behavioral Data
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 8, 3, 8, 5, 5
 

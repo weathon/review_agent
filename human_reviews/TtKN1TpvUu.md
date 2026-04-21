@@ -1,5 +1,6 @@
 # T2V2: A Unified Non-Autoregressive Model for Speech Recognition and Synthesis via Multitask Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

@@ -1,5 +1,6 @@
 # Metanetwork: A novel approach to interpreting ANNs
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

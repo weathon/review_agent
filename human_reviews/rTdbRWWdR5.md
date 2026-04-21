@@ -1,5 +1,6 @@
 # M-IDAS: MULTI-MODAL INTRUSION DETECTION AND ANALYTIC SYSTEM
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

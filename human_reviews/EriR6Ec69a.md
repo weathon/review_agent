@@ -1,5 +1,6 @@
 # Leveraging Low-Rank and Sparse Recurrent Connectivity for Robust Closed-Loop Control
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 6
 

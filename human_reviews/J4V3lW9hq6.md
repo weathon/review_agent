@@ -1,5 +1,6 @@
 # A Multi-Grained Group Symmetric Framework for Learning Protein-Ligand Binding Dynamics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

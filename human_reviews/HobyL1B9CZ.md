@@ -1,5 +1,6 @@
 # Chain-of-Experts: When LLMs Meet Complex Operations Research Problems
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

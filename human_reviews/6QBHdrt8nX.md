@@ -1,5 +1,6 @@
 # SafetyAnalyst: Interpretable, transparent, and steerable LLM safety moderation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 1, 3, 6
 

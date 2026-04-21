@@ -1,5 +1,6 @@
 # LAMP: Large Model Pruning with Inter-Block Error Compensation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 1
 

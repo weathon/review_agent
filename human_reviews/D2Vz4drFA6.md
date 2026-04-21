@@ -1,5 +1,6 @@
 # HyperChr: Quantization of Heterogeneously Distributed Matrices through Distribution-Aware Subspace Partitioning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Assessing the Interpretability of Programmatic Policies using Large Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 6, 3, 5, 3
 

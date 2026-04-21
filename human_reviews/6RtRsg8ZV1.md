@@ -1,5 +1,6 @@
 # MAD-TD: Model-Augmented Data stabilizes High Update Ratio RL
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

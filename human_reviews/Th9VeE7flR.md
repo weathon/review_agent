@@ -1,5 +1,6 @@
 # Enhanced Label Propagation through Affinity Matrix Fusion for Source-Free Domain Adaptation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

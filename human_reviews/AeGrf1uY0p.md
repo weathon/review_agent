@@ -1,5 +1,6 @@
 # FinBench: Benchmarking LLMs in Complex Financial Problem Solving and Reasoning
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 8, 3
 

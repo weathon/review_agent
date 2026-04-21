@@ -1,5 +1,6 @@
 # Problem-dependent Quantum Circuit Design Based on Entropy Matching
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 3
 

@@ -1,5 +1,6 @@
 # Flood and Echo: Algorithmic Alignment of GNNs with Distributed Computing
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 3, 8
 

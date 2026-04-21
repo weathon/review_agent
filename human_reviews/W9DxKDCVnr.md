@@ -1,5 +1,6 @@
 # BeGin: Extensive Benchmark Scenarios and An Easy-to-use Framework for Graph Continual Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3
 

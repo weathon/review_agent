@@ -1,5 +1,6 @@
 # PSHead: 3D Head Reconstruction from a Single Image with Diffusion Prior and Self-Enhancement
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

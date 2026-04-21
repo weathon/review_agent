@@ -1,5 +1,6 @@
 # TMGBench: A Systematic Game Benchmark for Evaluating Strategic Reasoning Abilities of LLMs
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

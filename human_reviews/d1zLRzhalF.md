@@ -1,5 +1,6 @@
 # Knowledge Graph Reasoning with Reinforcement Learning Agent guided by Multi-relational Graph Neural Networks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

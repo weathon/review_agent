@@ -1,5 +1,6 @@
 # 360-InpaintR: Reference-Guided 3D Inpainting for Unbounded Scenes
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 6
 

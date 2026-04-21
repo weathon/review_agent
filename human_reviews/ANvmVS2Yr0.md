@@ -1,5 +1,6 @@
 # Generalization in diffusion models arises from geometry-adaptive harmonic representations
 
+- Avg Score: 8.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 10, 8
 

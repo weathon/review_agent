@@ -1,5 +1,6 @@
 # AIMing for Explainability in GNNs
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Proper Backward Connection Placement Boosts Spiking Neural Networks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

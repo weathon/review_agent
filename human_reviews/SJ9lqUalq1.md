@@ -1,5 +1,6 @@
 # $\gamma$-Orthogonalized Tensor Deflation: Towards Robust \& Interpretable Tensor Decomposition in the Presence of Correlated Components
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

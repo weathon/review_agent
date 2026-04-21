@@ -1,5 +1,6 @@
 # Efficient Heterogeneous Meta-Learning via Channel Shuffling Modulation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

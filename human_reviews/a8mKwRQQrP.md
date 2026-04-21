@@ -1,5 +1,6 @@
 # Online Policy Selection for Inventory Problems
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

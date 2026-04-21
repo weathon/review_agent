@@ -1,5 +1,6 @@
 # On the expressiveness and spectral bias of KANs
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5
 

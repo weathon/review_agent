@@ -1,5 +1,6 @@
 # KidSat: satellite imagery to map childhood poverty
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 1, 3
 

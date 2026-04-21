@@ -1,5 +1,6 @@
 # Structured Diffusion Models with Mixture of Gaussians as Prior Distribution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

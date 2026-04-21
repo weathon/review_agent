@@ -1,5 +1,6 @@
 # Guided Evolution with Binary Discriminators for ML Program Search
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 3, 5
 

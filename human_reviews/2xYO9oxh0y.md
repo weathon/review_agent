@@ -1,5 +1,6 @@
 # DiffSDS: A geometric sequence diffusion model for protein backbone inpainting
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

@@ -1,5 +1,6 @@
 # Performing Interpretability Analysis in Federated Learning Context
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 5
 
@@ -35,7 +36,8 @@ UCI Heart Disease, OpenML Wine, and Iris datasets, demonstrated that FedNAMs ach
 
 * Insufficient novelty: The authors have applied the paradigm of FedAvg to NAMs. This is very straight-forward to do, and required no sophistication; instead of averaging one model, K models (where K is the number of features) have been averaged. I do not see why this necessitates a paper. The authors should re-evaluate the motivation for this study. 
 
-The issue of novelty aside, the following points are written treating this as an application study: 
+The issue of novelty aside, the following points are written treating this as an application study:
+
 
 * Insufficient experimentation: The authors use three toy datasets, two of which they simplify further by binarizing. They also arbitrarily split them into 3 clients. I would have expected a much more extensive test-bed, where FedNAM would perform comparably to some baselines while being more interpretable.
 * Insufficient descriptions about the experimental set-up: It would be impossible to replicate the authors’ work based on the description in the intro of section 6, as it is vague: for example, what was the exact structure of the network used for each feature?

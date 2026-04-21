@@ -1,5 +1,6 @@
 # DeepDRK: Deep Dependency Regularized Knockoff for Feature Selection
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 6, 6, 6
 

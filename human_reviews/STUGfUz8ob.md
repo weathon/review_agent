@@ -1,5 +1,6 @@
 # When can transformers reason with abstract symbols?
 
+- Avg Score: 7.60
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8, 8
 

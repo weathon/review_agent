@@ -1,5 +1,6 @@
 # Representing part-whole hierarchy with coordinated synchrony in neural networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

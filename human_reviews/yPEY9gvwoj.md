@@ -1,5 +1,6 @@
 # Amicable Perturbations
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 3, 5, 5, 8
 

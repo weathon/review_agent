@@ -1,5 +1,6 @@
 # Measuring Free-Form Decision-Making Inconsistency of Language Models in Military Crisis Simulations
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Constrained Graph Clustering with Signed Laplacians
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

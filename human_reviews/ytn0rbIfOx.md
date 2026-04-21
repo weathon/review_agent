@@ -1,5 +1,6 @@
 # Formulating AutoML as a Variable-Length Optimization Problem: A Tree of Thought Approach with LLM-Driven Code Generation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8
 

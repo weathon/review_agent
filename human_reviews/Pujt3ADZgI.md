@@ -1,5 +1,6 @@
 # Iterative Nash Policy Optimization: Aligning LLMs with General Preferences via No-Regret Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 6
 

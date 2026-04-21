@@ -1,5 +1,6 @@
 # Systematic Outliers in Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 3, 8, 8
 

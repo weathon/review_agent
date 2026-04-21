@@ -1,5 +1,6 @@
 # Uni-IR: Ambiguity-Reduced Inverse Rendering through a Unified Framework for Glossy Objects
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 6
 

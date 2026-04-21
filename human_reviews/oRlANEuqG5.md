@@ -1,5 +1,6 @@
 # Track-On: Transformer-based Online Point Tracking with Memory
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 5
 

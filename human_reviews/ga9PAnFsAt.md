@@ -1,5 +1,6 @@
 # Embedding-Converter: A Unified Framework for Cross-Model Embedding Transformation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 6
 

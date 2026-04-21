@@ -1,5 +1,6 @@
 # Part-based bird classifiers with an explainable, editable language bottleneck
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 3
 

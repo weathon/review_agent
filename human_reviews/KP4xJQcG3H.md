@@ -1,5 +1,6 @@
 # Lagrangian Proximal Gradient Descent for Learning Convex Optimization Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 5, 3
 

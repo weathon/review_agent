@@ -1,5 +1,6 @@
 # Towards Understanding Domain Adapted Sentence Embeddings for Document Retrieval
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 3, 8
 

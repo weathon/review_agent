@@ -1,5 +1,6 @@
 # Is Large-scale Pretraining the Secret to Good Domain Generalization?
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

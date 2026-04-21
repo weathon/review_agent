@@ -1,5 +1,6 @@
 # Improving Sample Efficiency in Off-policy RL with Low-dimensional Policy Representation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

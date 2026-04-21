@@ -1,5 +1,6 @@
 # Beyond Weisfeiler-Lehman: A Quantitative Framework for GNN Expressiveness
 
+- Avg Score: 8.50
 - Decision: Accept (oral)
 - Scores: 8, 10, 8, 8
 

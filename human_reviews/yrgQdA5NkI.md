@@ -1,5 +1,6 @@
 # Equivariant Matrix Function Neural Networks
 
+- Avg Score: 6.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 5
 

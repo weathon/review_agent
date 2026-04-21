@@ -1,5 +1,6 @@
 # Finding Second-order Stationary Points for Generalized-Smooth Nonconvex Minimax Optimization via Gradient-based Algorithm
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3
 

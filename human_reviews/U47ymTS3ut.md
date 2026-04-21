@@ -1,5 +1,6 @@
 # Mask in the Mirror: Implicit Sparsification
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

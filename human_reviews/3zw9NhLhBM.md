@@ -1,5 +1,6 @@
 # Towards better generalization: Weight Decay induces low-rank bias for neural networks
 
+- Avg Score: 2.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1, 3, 3
 

@@ -1,5 +1,6 @@
 # POMDIFFUSER: LONG-MEMORY MEETS LONG- PLANNING FOR POMDPS
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 6, 3
 

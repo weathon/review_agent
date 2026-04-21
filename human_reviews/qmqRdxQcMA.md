@@ -1,5 +1,6 @@
 # Enhancing Cost Efficiency in Active Learning with Candidate Set Query
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

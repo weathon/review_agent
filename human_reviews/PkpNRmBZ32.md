@@ -1,5 +1,6 @@
 # Let SSMs be ConvNets: State-space Modeling with Optimal Tensor Contractions
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 
@@ -103,7 +104,8 @@ The authors present an approach to augment the number of features in the inputs,
 The authors introduce a weighting for basis kernels which can be adapted to a recurrent system. Convolutions, in this way, are shown as sums of various real and complex combinations of Fourier modes. The authors use this idea to present Centaurus, a configuration of tensor networks that allows retains SSM blocks but projects internal state to different sizes, making it possible to mimic various CNN abstractions such as depthwise, grouped, and bottleneck convolutions.
 
 The authors construct each of these layers and present implementation details, i.e. a tradeoff between optimization of einsum expressions (for which we have few compiler tools at the moment) versus GPU kernel customization.
- The authors present experiments on three tasks within sequence modeling/speech: keyword spotting, raw speech denoising, and speech transcription, showing strong results in each area with small models with good computational scaling properties.
+
+The authors present experiments on three tasks within sequence modeling/speech: keyword spotting, raw speech denoising, and speech transcription, showing strong results in each area with small models with good computational scaling properties.
 
 ### Strengths
 - The presentation of methodology is convincing and strongly tied to first principle sin SSMs.

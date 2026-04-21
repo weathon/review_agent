@@ -1,5 +1,6 @@
 # The Need for Speed: Pruning Transformers with One Recipe
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

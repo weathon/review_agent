@@ -1,5 +1,6 @@
 # Flow Matching with Gaussian Process Priors for Probabilistic Time Series Forecasting
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

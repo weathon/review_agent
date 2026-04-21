@@ -1,5 +1,6 @@
 # ExeDec: Execution Decomposition for Compositional Generalization in Neural Program Synthesis
 
+- Avg Score: 7.00
 - Decision: Accept (oral)
 - Scores: 6, 8, 8, 6
 

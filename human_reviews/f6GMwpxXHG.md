@@ -1,5 +1,6 @@
 # ZEPHYR GAN: REDEFINING GAN WITH FLEXIBLE GRADIENT CONTROL
 
+- Avg Score: 2.20
 - Decision: Reject
 - Scores: 1, 3, 3, 3, 1
 

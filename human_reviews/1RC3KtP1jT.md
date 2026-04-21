@@ -1,5 +1,6 @@
 # Archilles' Heel in Semi-open LLMs: Hiding Bottom against Recovery Attacks
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 3, 5
 

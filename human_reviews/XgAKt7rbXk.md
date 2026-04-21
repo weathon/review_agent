@@ -1,5 +1,6 @@
 # Leveraging Low Rank Structure in The Lazy Regime
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

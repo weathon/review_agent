@@ -1,5 +1,6 @@
 # Towards Continuous Reuse of Graph Models via Holistic Memory Diversification
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Towards Eliminating Hard Label Constraints in Gradient Inversion Attacks
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

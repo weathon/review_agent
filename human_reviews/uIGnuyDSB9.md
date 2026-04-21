@@ -1,5 +1,6 @@
 # SeRA: Self-Reviewing and Alignment of LLMs using Implicit Reward Margins
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

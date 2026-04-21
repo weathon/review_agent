@@ -1,5 +1,6 @@
 # Size Generalization of Graph Neural Networks on Biological Data: Insights and Practices from the Spectral Perspective
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

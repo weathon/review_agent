@@ -1,5 +1,6 @@
 # Cross-Modal Self-Supervised Learning with Effective Contrastive Units for Point Clouds
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

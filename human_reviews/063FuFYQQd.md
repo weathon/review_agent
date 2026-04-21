@@ -1,5 +1,6 @@
 # LLaVA-Surg: Towards Multimodal Surgical Assistant via Structured Lecture Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 3, 5, 5, 5
 

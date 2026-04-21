@@ -1,5 +1,6 @@
 # Adversarially Robust Deep Learning with Optimal-Transport-Regularized Divergences
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Differentially Private Principal Component Analysis for Vertically Partitioned Data
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 1, 6, 6
 

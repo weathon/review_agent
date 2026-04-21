@@ -1,5 +1,6 @@
 # Inverse Rendering using Multi-Bounce Path Tracing and Reservoir Sampling
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3, 8
 

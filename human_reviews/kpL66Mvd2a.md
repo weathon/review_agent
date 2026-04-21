@@ -1,5 +1,6 @@
 # Tree Search for Language Model Agents
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 8, 5
 
@@ -152,7 +153,8 @@ The results show that this is a meaningful route to improved performance and see
 
 Value function approach seems smart: Multi-modal, Last d screenshots. Scores in 0, 0.5, 1 and averaging over multiple reasoning. This could be a source of a lot of noise but this seems to be a way of reducing that. The trade-off is more compute so the further balance is by only evaluating states when expanded, not when generated. 
 
-“we generate 20 outputs from the model by prompting it with CoT reasoning (Wei et al., 2022), and aggregate the count of the action candidates. We use the top-b actions with the highest counts for branching.”  - This is a good way to generate distinct action candidates
+“we generate 20 outputs from the model by prompting it with CoT reasoning (Wei et al., 2022), and aggregate the count of the action candidates. We use the top-b actions with the highest counts for branching.” 
+- This is a good way to generate distinct action candidates
 
 ### Weaknesses
 WebArena results do not look strong relative to other modern works. However, some of those works seem to be a bit over-optimized for the benchmark, whereas this work is more general. 

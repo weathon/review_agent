@@ -1,5 +1,6 @@
 # Rethinking The Dependence Between Gradients and The Initial Point in Deep Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Multi-Objective Alignment of LLMs with ORPO using Self-Judgement
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 5, 3
 

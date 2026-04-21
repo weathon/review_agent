@@ -1,5 +1,6 @@
 # On the Provable Advantage of Unsupervised Pretraining
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

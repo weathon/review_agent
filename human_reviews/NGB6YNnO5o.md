@@ -1,5 +1,6 @@
 # Generalization in VAE and Diffusion Models: A Unified Information-Theoretic Analysis
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5
 

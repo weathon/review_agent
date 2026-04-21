@@ -1,5 +1,6 @@
 # Spurious Privacy Leakage in Neural Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

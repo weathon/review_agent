@@ -1,5 +1,6 @@
 # Improving Offline RL by Blending Heuristics
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 5
 

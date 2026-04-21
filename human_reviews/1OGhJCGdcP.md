@@ -1,5 +1,6 @@
 # Learning subgoal representations from state graphs in goal-conditioned hierarchical reinforcement learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

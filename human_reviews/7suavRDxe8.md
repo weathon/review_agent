@@ -1,5 +1,6 @@
 # Plausibly Deniable Encryption with Large Language Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 5, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # OneFit: Unified Neural Garment Simulation using Function-based Representation and Learning
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 3, 1
 

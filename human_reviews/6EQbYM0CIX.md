@@ -1,5 +1,6 @@
 # Conditional Generative Modeling for High-dimensional Marked Temporal Point Processes
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

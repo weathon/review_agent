@@ -1,5 +1,6 @@
 # Logical Consistency of Large Language Models in Fact-Checking
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 5
 

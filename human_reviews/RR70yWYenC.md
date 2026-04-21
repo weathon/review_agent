@@ -1,5 +1,6 @@
 # Efficient Continual Finite-Sum Minimization
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 5
 

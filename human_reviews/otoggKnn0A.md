@@ -1,5 +1,6 @@
 # FHA-Kitchens: A Novel Dataset for Fine-Grained Hand Action Recognition in Kitchen Scenes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

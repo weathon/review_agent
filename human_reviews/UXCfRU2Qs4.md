@@ -1,5 +1,6 @@
 # Large language models as windows on the mental structure of psychopathology
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 5, 6, 1
 

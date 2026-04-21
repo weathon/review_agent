@@ -1,5 +1,6 @@
 # To FP8 and Back Again: Quantifying Reduced Precision Effects on LLM Training Stability
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Everything, Everywhere, All at Once: Is Mechanistic Interpretability Identifiable?
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

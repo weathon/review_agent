@@ -1,5 +1,6 @@
 # De novo Protein Design Using Geometric Vector Field Networks
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8
 

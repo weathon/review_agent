@@ -1,5 +1,6 @@
 # Optimal Sketching for Residual Error Estimation for Matrix and Vector Norms
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 6
 

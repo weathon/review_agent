@@ -1,5 +1,6 @@
 # Generalization or Specificity? Spectral Meta Estimation and Ensemble (SMEE) with Domain-specific Experts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 1, 5, 6
 

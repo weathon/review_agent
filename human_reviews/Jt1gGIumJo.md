@@ -1,5 +1,6 @@
 # Highlight Diffusion: Training-Free Attention Guided Acceleration for Text-to-Image Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

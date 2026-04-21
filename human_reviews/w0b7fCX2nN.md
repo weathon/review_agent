@@ -1,5 +1,6 @@
 # Leveraging the Context through Multi-Round Interactions for Jailbreaking Attacks
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

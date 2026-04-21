@@ -1,5 +1,6 @@
 # Efficient Gradient Estimation via Adaptive and Importance Sampling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

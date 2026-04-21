@@ -1,5 +1,6 @@
 # OCAtari: Object-Centric Atari 2600 Reinforcement Learning Environments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

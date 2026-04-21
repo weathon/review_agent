@@ -1,5 +1,6 @@
 # Compressed Context Memory for Online Language Model Interaction
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

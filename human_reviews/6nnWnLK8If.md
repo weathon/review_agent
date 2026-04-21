@@ -1,5 +1,6 @@
 # Dataset for Image-based Analysis of Mineral Fertilizer Granules
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # EA2N: Evidence-based AMR Attention Network for Fake News Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

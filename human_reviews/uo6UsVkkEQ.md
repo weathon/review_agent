@@ -1,5 +1,6 @@
 # MolReFlect: Towards Fine-grained In-Context Alignment between Molecules and Texts
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 6
 

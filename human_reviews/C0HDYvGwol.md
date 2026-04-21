@@ -1,5 +1,6 @@
 # 3D-Adapter: Geometry-Consistent Multi-View Diffusion for High-Quality 3D Generation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 6, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Delta-AI: Local objectives for amortized inference in sparse graphical models
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

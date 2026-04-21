@@ -1,5 +1,6 @@
 # Edge-Sampler: Efficient Importance Sampling for Neural Implicit Surfaces Reconstruction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 1, 5
 

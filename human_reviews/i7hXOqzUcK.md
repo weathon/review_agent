@@ -1,5 +1,6 @@
 # 3D-GRAND: A Million-Scale Dataset for 3D-LLMs with Better Grounding and Less Hallucination
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6
 

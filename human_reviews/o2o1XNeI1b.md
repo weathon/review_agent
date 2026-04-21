@@ -1,5 +1,6 @@
 # FARM: Functional Group-Aware Representations for Small Molecules
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

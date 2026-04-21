@@ -1,5 +1,6 @@
 # Small-to-Large Generalization: Training Data Influences Models Consistently Across Scale
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

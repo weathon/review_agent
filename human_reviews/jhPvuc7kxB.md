@@ -1,5 +1,6 @@
 # Look, Remember and Reason: Grounded Reasoning in Videos with Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

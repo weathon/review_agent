@@ -1,5 +1,6 @@
 # Enabling Weak LLMs to Judge Response Reliability via Meta Ranking
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

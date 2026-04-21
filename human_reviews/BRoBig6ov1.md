@@ -1,5 +1,6 @@
 # High-Order Tensor Recovery with A Tensor $U_1$ Norm
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

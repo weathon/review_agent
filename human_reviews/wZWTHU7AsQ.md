@@ -1,5 +1,6 @@
 # Game-Theoretic Robust Reinforcement Learning Handles Temporally-Coupled Perturbations
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 5
 

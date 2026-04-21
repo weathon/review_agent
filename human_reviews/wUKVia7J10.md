@@ -1,5 +1,6 @@
 # GIFF: Generalized Inference Friendly Forward-Forward Algorithm
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 1, 5
 

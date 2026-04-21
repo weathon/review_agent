@@ -1,5 +1,6 @@
 # Delving into Weakly Supervised Learning with Pre-Trained Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

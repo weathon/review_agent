@@ -1,5 +1,6 @@
 # GeoILP: A Synthetic Dataset to Guide Large-Scale Rule Induction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 3, 8, 5, 8
 

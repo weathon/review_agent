@@ -1,5 +1,6 @@
 # Approximating Nash Equilibria in Normal-Form Games via Stochastic Optimization
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8
 

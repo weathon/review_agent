@@ -1,5 +1,6 @@
 # Sampling-guided Heterogeneous Graph Neural Network with Temporal Smoothing for Scalable Longitudinal Data Imputation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # HelmSim: Learning Helmholtz Dynamics for Interpretable Fluid Simulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

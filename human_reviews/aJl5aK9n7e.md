@@ -1,5 +1,6 @@
 # What Improves the Generalization of Graph Transformer? A Theoretical Dive into Self-attention and Positional Encoding
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 6, 6, 1
 

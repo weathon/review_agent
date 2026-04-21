@@ -1,5 +1,6 @@
 # Intransigent Teachers Guide Better Test-Time Adaptation Students
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 3, 8, 5
 

@@ -1,5 +1,6 @@
 # InstructPix2NeRF: Instructed 3D Portrait Editing from a Single Image
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 5
 

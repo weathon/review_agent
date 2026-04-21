@@ -1,5 +1,6 @@
 # GROOT: Graph Edge Re-growth and Partitioning for the Verification of Large Designs in Logic Synthesis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

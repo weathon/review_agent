@@ -1,5 +1,6 @@
 # Reconciling Model Multiplicity for Downstream Decision Making
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

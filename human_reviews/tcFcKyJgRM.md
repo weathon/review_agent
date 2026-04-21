@@ -1,5 +1,6 @@
 # HeaP: Hierarchical Policies for Web Actions using LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 3, 8
 

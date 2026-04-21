@@ -1,5 +1,6 @@
 # Learning Dynamics of LLM Finetuning
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 10
 

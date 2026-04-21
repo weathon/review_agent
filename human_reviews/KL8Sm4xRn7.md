@@ -1,5 +1,6 @@
 # Improving Semantic Understanding in Speech Language Models via Brain-tuning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

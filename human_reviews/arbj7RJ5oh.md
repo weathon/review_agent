@@ -1,5 +1,6 @@
 # Neural Slot Interpreters: Grounding Object Semantics in Emergent Slot Representations
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 8, 3, 3, 6
 

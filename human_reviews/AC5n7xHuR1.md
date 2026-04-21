@@ -1,5 +1,6 @@
 # AgentHarm: A Benchmark for Measuring Harmfulness of LLM Agents
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 8
 

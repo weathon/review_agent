@@ -1,5 +1,6 @@
 # ZeroDiff: Solidified Visual-semantic Correlation in Zero-Shot Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

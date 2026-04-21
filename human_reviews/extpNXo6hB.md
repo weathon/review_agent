@@ -1,5 +1,6 @@
 # SweetDreamer: Aligning Geometric Priors in 2D diffusion for Consistent Text-to-3D
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 5, 6, 8
 

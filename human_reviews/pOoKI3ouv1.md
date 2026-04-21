@@ -1,5 +1,6 @@
 # Robust agents learn causal world models
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 6, 10, 8
 

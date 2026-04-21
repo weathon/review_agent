@@ -1,5 +1,6 @@
 # Learn from Interactions: General-Sum Interactive Inverse Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

@@ -1,5 +1,6 @@
 # COMBO: Compositional World Models for Embodied Multi-Agent Cooperation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

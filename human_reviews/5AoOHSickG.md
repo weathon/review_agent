@@ -1,5 +1,6 @@
 # FoundationForensics: Traceback Backdoor Attacks for Vision Foundation Models
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 5
 

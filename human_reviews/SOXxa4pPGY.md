@@ -1,5 +1,6 @@
 # YOLO-MARL: You Only LLM Once for Multi-agent Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

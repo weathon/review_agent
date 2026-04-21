@@ -1,5 +1,6 @@
 # MTEEG: A Multi-Task Learning Framework for Enhanced Electroencephalography Analysis Using Low-Rank Adaptation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

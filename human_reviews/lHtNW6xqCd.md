@@ -1,5 +1,6 @@
 # Incorporating Implicit Regularization to Enhance the Transition Matrix Method for Effective Handling of Diverse Label Noise
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

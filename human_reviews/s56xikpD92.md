@@ -1,5 +1,6 @@
 # BaDExpert: Extracting Backdoor Functionality for Accurate Backdoor Input Detection
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 6
 

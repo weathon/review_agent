@@ -1,5 +1,6 @@
 # Sample-Efficient Learning of POMDPs with Multiple Observations In Hindsight
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

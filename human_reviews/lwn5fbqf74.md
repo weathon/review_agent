@@ -1,5 +1,6 @@
 # Training-free Detection of AI-generated Images via High-frequency Influence
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 6, 5
 

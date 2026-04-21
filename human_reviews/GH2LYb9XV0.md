@@ -1,5 +1,6 @@
 # Grokking in Linear Estimators -- A Solvable Model that Groks without Understanding
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 3, 8, 5, 6
 

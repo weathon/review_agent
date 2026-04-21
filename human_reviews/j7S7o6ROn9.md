@@ -1,5 +1,6 @@
 # Distributional Structured Pruning by Lower bounding the Total Variation Distance using Witness functions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3
 

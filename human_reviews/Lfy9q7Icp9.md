@@ -1,5 +1,6 @@
 # DiSK: Differentially Private Optimizer with Simplified Kalman Filter for Noise Reduction
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

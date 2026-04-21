@@ -1,5 +1,6 @@
 # Disentangling the Link Between Image Statistics and Human Perception
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

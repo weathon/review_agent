@@ -1,5 +1,6 @@
 # Neural Network Expressive Power Analysis Via Manifold Topology
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 8, 3
 

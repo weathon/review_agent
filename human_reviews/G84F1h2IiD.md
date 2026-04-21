@@ -1,5 +1,6 @@
 # Spike No More: Stabilizing the Pre-training of Large Language Models
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Towards Faster Decentralized Stochastic Optimization with Communication Compression
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 5
 

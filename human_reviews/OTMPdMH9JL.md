@@ -1,5 +1,6 @@
 # Neural Eigenfunctions Are Structured Representation Learners
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 6, 8, 6
 

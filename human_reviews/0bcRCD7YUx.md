@@ -1,5 +1,6 @@
 # VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot Text to Speech Synthesizers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 3, 3
 

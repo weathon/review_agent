@@ -1,5 +1,6 @@
 # Deep Reinforcement Learning for Efficient and Fair Allocation of Health Care Resources
 
+- Avg Score: 6.67
 - Decision: Reject
 - Scores: 5, 10, 5
 

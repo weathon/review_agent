@@ -1,5 +1,6 @@
 # HQGS: High-Quality Novel View Synthesis with Gaussian Splatting in Degraded Scenes
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Deep Learning-based Discrimination of Pause Episodes in Insertable Cardiac Monitors
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1
 

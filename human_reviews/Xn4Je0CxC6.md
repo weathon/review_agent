@@ -1,5 +1,6 @@
 # Dynamic Learning Rate for Deep Reinforcement Learning: A Bandit Approach
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

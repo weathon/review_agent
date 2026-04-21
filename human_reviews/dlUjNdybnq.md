@@ -1,5 +1,6 @@
 # Mitigating the Influence of Distractor Tasks in LMs with Prior-Aware Decoding
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

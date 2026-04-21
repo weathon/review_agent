@@ -1,5 +1,6 @@
 # What's in a Prior? Learned Proximal Networks for Inverse Problems
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 5
 

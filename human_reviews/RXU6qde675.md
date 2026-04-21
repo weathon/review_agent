@@ -1,5 +1,6 @@
 # Adversarial enhanced representation for link prediction in multi-layer networks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

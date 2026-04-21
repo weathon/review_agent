@@ -1,5 +1,6 @@
 # The Role of Counterfactual Explanations in Model Extraction Attacks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

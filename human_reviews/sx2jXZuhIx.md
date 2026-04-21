@@ -1,5 +1,6 @@
 # SVG: 3D Stereoscopic Video Generation via Denoising Frame Matrix
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Offline Reward Inference on Graph: A New Thinking
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

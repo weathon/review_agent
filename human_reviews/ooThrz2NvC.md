@@ -1,5 +1,6 @@
 # CICD-Coder: Chinese EMRs Based ICD Coding With Multi-axial  Supported Clinical Evidence
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 5, 1
 

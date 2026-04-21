@@ -1,5 +1,6 @@
 # The crossover strategy based on the cellular automata for genetic Algorithms with binary chromosomes population
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1
 

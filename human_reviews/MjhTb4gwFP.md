@@ -1,5 +1,6 @@
 # PerLDiff: Controllable Street View Synthesis Using Perspective-Layout Diffusion Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

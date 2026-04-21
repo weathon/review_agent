@@ -1,5 +1,6 @@
 # A Poincaré Inequality and Consistency Results for Signal Sampling on Large Graphs
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

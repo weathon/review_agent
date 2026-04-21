@@ -1,5 +1,6 @@
 # The Geometry of Attention: Ricci Curvature and Transformers Training and  Robustness
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 5, 5
 

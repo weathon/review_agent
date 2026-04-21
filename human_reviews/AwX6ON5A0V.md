@@ -1,5 +1,6 @@
 # On Gaussian Mixture Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3, 3, 5
 

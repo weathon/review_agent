@@ -1,5 +1,6 @@
 # Tailor3D: Customized 3D Assets Editing and Generation with Dual-Side Images
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

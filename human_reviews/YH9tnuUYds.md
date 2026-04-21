@@ -1,5 +1,6 @@
 # Model-based Reinforcement Learning for Parameterized Action Spaces
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 5, 5, 5, 10, 6
 

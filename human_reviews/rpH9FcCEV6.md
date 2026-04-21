@@ -1,5 +1,6 @@
 # An Efficient Membership Inference Attack for the Diffusion Model by Proximal Initialization
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

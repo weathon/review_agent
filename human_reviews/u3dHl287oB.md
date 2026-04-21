@@ -1,5 +1,6 @@
 # The Joint Effect of Task Similarity and Overparameterization on Catastrophic Forgetting — An Analytical Model
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 3, 8, 8, 6, 3, 6
 

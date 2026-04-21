@@ -1,5 +1,6 @@
 # Differentially Private Synthetic Data via Foundation Model APIs 1: Images
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 6
 

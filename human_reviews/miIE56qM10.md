@@ -1,5 +1,6 @@
 # Lookers-On See Most of the Game: An External Insight-Guided Method for Enhancing Uncertainty Estimation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

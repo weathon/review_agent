@@ -1,5 +1,6 @@
 # Subject Information Extraction for Novelty Detection with Domain Shifts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

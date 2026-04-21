@@ -1,5 +1,6 @@
 # Enhancing Robustness of Vision-Language Models through Orthogonality Learning and Self-Regularization
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3, 5
 

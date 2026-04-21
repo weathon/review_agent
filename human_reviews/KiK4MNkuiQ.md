@@ -1,5 +1,6 @@
 # Clustering with Geometric Modularity
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

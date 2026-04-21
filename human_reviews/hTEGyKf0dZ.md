@@ -1,5 +1,6 @@
 # Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!
 
+- Avg Score: 7.00
 - Decision: Accept (oral)
 - Scores: 6, 6, 10, 6
 

@@ -1,5 +1,6 @@
 # E3D: Enhancing Sparsely-Supervised 3D Object Detector with Large Multimodal Models
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 5, 6, 5
 

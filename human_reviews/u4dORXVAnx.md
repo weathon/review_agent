@@ -1,5 +1,6 @@
 # Numerical Pitfalls in Policy Gradient Updates
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 5, 6, 5, 6
 

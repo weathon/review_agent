@@ -1,5 +1,6 @@
 # HAZARD Challenge: Embodied Decision Making in Dynamically Changing Environments
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 5
 

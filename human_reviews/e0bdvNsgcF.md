@@ -1,5 +1,6 @@
 # A-Loc: Efficient Alternating Iterative Methods for Locating the $k$ Largest/Smallest Elements in a Factorized Tensor
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 5, 1, 3
 

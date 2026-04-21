@@ -1,5 +1,6 @@
 # PaRa: Personalizing Text-to-Image Diffusion via Parameter Rank Reduction
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

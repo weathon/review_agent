@@ -1,5 +1,6 @@
 # FourierMamba: Fourier Learning Integration with State Space Models for Image Deraining
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5
 

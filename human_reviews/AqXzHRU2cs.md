@@ -1,5 +1,6 @@
 # Generative Pretrained Embedding and Hierarchical Representation to Unlock Human Rhythm in Activities of Daily Living
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 5
 

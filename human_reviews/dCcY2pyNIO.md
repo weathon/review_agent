@@ -1,5 +1,6 @@
 # In-context Time Series Predictor
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 3
 

@@ -1,5 +1,6 @@
 # An Intuitive Multi-Frequency Feature Representation for SO(3)-Equivariant Networks
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6, 5
 

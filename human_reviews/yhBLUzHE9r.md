@@ -1,5 +1,6 @@
 # Silencer: Pruning-aware Backdoor Defense for Decentralized Federated Learning
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # EVINCE: Optimizing Adversarial LLM Dialogues via Conditional Statistics and Information Theory
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 6, 3, 3, 3
 

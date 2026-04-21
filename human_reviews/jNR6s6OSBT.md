@@ -1,5 +1,6 @@
 # ASID: Active Exploration for System Identification in Robotic Manipulation
 
+- Avg Score: 6.75
 - Decision: Accept (oral)
 - Scores: 6, 8, 5, 8
 
@@ -31,7 +32,8 @@ This paper proposes a framework for model-based RL aimed at learning model param
 - Presentation/clarity can be improved: specifically, the abstract and introduction mostly describe the field of active exploration for system identification and adaptive control, as opposed to the specific method proposed, which appears to overstate the paper’s novelty. Furthermore, the approach warrants a better intuitive explanation. As I understand it, the Fisher Information objective attempts to quantify the sensitivity of model parameters to trajectories expected given some policy. Therefore, maximizing this objective yields a policy that, when executed, yields the maximum additional information about the model parameters.
 - Lack of baselining/adequate discussion of other methods that use the Fisher information objective. The statement “As compared to these works, a primary novelty of our approach is the use of a simulator to learn effective exploration policies” seems too strong and overstated given that there are entire fields dedicated to this, and “the application of our method to modern, real-world robotics tasks” is an inadequate claim to novelty.
 - Literature review can be improved with a discussion of the following:
-    - Bayesian RL/Bayes-adaptive MDPs: 	M. Duff. Optimal Learning: Computational Procedure for Bayes-Adaptive Markov Decision Processes.  PhD thesis, University of Massachusetts, Amherst, USA, 2002. 
+    - Bayesian RL/Bayes-adaptive MDPs: 	M. Duff. Optimal Learning: Computational Procedure for Bayes-Adaptive Markov Decision Processes. 
+PhD thesis, University of Massachusetts, Amherst, USA, 2002. 
     - PILCO:
         - Deisenroth, Marc, and Carl E. Rasmussen. "PILCO: A model-based and data-efficient approach to policy search." Proceedings of the 28th International Conference on Machine Learning (ICML-11). 2011.
     - Adaptive MPC:

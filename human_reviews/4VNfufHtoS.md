@@ -1,5 +1,6 @@
 # Test-time Correction with Human Feedback: An Online 3D Detection System via Visual Prompting
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 6, 3, 6
 

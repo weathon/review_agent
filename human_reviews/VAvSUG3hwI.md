@@ -1,5 +1,6 @@
 # One by One, Continual Coordinating with Humans via Hyper-Teammate Identification
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

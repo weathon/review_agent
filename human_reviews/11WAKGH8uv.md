@@ -1,5 +1,6 @@
 # FedAIoT: A Federated Learning Benchmark for Artificial Intelligence of Things
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

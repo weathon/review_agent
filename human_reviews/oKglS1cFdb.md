@@ -1,5 +1,6 @@
 # Feature Accompaniment: Is It Feasible to Learn Out-of-Distribution Generalizable Representations with In-Distribution Data?
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

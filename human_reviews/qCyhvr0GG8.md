@@ -1,5 +1,6 @@
 # VONet: Unsupervised Video Object Learning With Parallel U-Net Attention and Object-wise Sequential VAE
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 5
 

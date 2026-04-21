@@ -1,5 +1,6 @@
 # Animate-X: Universal Character Image Animation with Enhanced Motion Representation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

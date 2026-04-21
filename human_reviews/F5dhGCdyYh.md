@@ -1,5 +1,6 @@
 # Illusory Attacks: Information-theoretic detectability matters in adversarial attacks
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8
 

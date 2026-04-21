@@ -1,5 +1,6 @@
 # Surface-based Peptide Design with Multi-modal Flow Matching
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 5, 5, 3, 5
 

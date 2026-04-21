@@ -1,5 +1,6 @@
 # Model Zoos for Benchmarking Phase Transitions in Neural Networks
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 5, 6
 

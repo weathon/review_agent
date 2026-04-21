@@ -1,5 +1,6 @@
 # WASUP: Interpretable Classification with Weight-Input Alignment and Class-Discriminative SUPports Vectors
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # A multi-region brain model to elucidate the role of hippocampus in spatially embedded decision tasks
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 5, 8, 3, 3
 

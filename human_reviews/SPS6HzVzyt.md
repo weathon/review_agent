@@ -1,5 +1,6 @@
 # Context-Parametric Inversion: Why Instruction Finetuning May Not Actually Improve Context Reliance
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

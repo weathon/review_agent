@@ -1,5 +1,6 @@
 # PaLI-3 Vision Language Models: Smaller, Faster, Stronger
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 8, 3, 6
 

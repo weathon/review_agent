@@ -1,5 +1,6 @@
 # Differentially Private Bias-Term Fine-tuning of Foundation Models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 6, 5, 3, 8
 

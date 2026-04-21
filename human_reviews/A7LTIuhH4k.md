@@ -1,5 +1,6 @@
 # Approximating Multiple Robust Optimization Solutions in One Pass via Proximal Point Methods
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Discretization of continuous input spaces in the hippocampal autoencoder
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

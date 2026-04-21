@@ -1,5 +1,6 @@
 # Controlled Denoising For Diffusion Models
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5, 5
 

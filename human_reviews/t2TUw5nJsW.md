@@ -1,5 +1,6 @@
 # On the Benefits of Attribute-Driven Graph Domain Adaptation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

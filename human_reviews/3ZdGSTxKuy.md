@@ -1,5 +1,6 @@
 # What can we learn from Harry Potter? An Exploratory Study of Visual Representation Learning from Atypical Videos
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 3
 

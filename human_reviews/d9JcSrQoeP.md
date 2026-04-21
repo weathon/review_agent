@@ -1,5 +1,6 @@
 # Flexible Fairness-Aware Learning via Inverse Conditional Permutation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

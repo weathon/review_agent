@@ -1,5 +1,6 @@
 # Inner Information Analysis Algorithm for Deep Neural Network based on Community
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

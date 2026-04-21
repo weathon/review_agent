@@ -1,5 +1,6 @@
 # Robust Gymnasium: A Unified Modular Benchmark for Robust Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 8
 

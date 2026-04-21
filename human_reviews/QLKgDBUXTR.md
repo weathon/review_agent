@@ -1,5 +1,6 @@
 # How many views does your deep neural network use for prediction?
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # GeoCon: Compositional Generalization Through Geometric Constraints on Representation Structure
 
+- Avg Score: 6.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 6
 

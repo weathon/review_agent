@@ -1,5 +1,6 @@
 # Diffusion SigFormer for Interference Time-series Signal Recognition
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 1, 3, 3
 

@@ -1,5 +1,6 @@
 # Selective State-Space Modeling of Correlation Maps for Semantic Correspondence
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # CORE: Common Random Reconstruction for Distributed Optimization with Provable Low Communication Complexity
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

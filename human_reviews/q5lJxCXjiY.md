@@ -1,5 +1,6 @@
 # GEOMETRIC SIGNATURES OF COMPOSITIONALITY ACROSS A LANGUAGE MODEL’S LIFETIME
 
+- Avg Score: 5.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3, 8
 

@@ -1,5 +1,6 @@
 # LaDEEP: A Deep Learning-based Surrogate Model for Large Deformations of Elastic-Plastic Solids
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 3
 

@@ -1,5 +1,6 @@
 # AutoHijacker: Automatic Indirect Prompt Injection Against Black-box LLM Agents
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

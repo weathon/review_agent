@@ -1,5 +1,6 @@
 # Evaluating the Zero-shot Robustness of Instruction-tuned Language Models
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

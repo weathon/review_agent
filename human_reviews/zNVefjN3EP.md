@@ -1,5 +1,6 @@
 # OpenCarbonEval: How much $CO_2$  will your large model exhale in training process?
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

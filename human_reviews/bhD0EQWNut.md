@@ -1,5 +1,6 @@
 # Naturality-Guided Hyperedge Disentanglement for Message Passing Hypergraph Neural Network
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 3, 8
 

@@ -1,5 +1,6 @@
 # Large Language Model Cascades with Mixture of Thought Representations for Cost-Efficient Reasoning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

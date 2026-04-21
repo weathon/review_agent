@@ -1,5 +1,6 @@
 # ACE: Attack Combo Enhancement Against Machine Learning Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 6
 

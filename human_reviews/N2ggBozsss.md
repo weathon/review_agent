@@ -1,5 +1,6 @@
 # Centroid-Based Learning for Malware Detection and Novel Family Identification
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

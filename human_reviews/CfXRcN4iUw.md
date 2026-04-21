@@ -1,5 +1,6 @@
 # IGNN-Solver: A Graph Neural Solver for Implicit Graph Neural Networks
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3, 6
 

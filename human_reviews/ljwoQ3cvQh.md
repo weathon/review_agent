@@ -1,5 +1,6 @@
 # Deep Neural Networks Tend To Extrapolate Predictably
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

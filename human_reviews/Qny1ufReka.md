@@ -1,5 +1,6 @@
 # Refusal Tokens: A Simple Way to Calibrate Refusals in Large Language Models
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 6, 3, 3, 6
 

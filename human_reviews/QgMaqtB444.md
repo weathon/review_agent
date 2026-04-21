@@ -1,5 +1,6 @@
 # Omnipotent Adversarial Training in the Wild
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

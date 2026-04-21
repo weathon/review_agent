@@ -1,5 +1,6 @@
 # Collaborating Heterogeneous Natural Language Processing Tasks via Federated Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 5, 5
 
@@ -143,7 +144,8 @@ The paper describes a novel framework with heterogeneous/private learning object
 
 ### Strengths
 + Framework is relevant to the ICLR community: it achieves improvements on all the participants compared to ISOLATED (overall 3.66% improvement).
-+ The experiments are well planned - randomization, splitting, sufficient datasets, different local task
++ The experiments are well planned
+- randomization, splitting, sufficient datasets, different local task
 + Comparison to baselines including vanilla FL SOTA algorithms (FedAvg, FedAvg-ST, FedProx) and personalized FL (DITTO, FedBN, PerlCFL, SPFL), and isolated local training
 + Reproducibly is enabled with the implementation descriptions and details + code availability willingness
 + Overall noticeable margins of improvement on heterogeneous clients to participate and benefit from an FL course.

@@ -1,5 +1,6 @@
 # Online Information Acquisition: Hiring Multiple Agents
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 8
 

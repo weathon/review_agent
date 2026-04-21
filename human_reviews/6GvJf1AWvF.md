@@ -1,5 +1,6 @@
 # Unveiling Context-Aware Criteria in Self-Assessing LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

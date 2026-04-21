@@ -1,5 +1,6 @@
 # HyperDisGAN: A Controllable Variety Generative Model Via Hyperplane Distances for Downstream Classifications
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1
 

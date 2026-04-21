@@ -1,5 +1,6 @@
 # SmoothLLM: Defending Large Language Models Against Jailbreaking Attacks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # FABRIC: Personalizing Diffusion Models with Iterative Feedback
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

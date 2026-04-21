@@ -1,5 +1,6 @@
 # TEOChat: A Large Vision-Language Assistant for Temporal Earth Observation Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 1
 

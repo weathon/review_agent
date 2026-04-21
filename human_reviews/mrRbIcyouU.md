@@ -1,5 +1,6 @@
 # Revisiting Class-Incremental Learning with Pre-Trained Models: Generalizability and Adaptivity are All You Need
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 5
 

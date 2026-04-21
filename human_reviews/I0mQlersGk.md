@@ -1,5 +1,6 @@
 # SGHormerVQ: Bridging Graph Transformers and Spiking Neural Networks via Spiking Vector Quantization
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

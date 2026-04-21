@@ -1,5 +1,6 @@
 # Unlocking the Potential of Knowledge Distillation: The Role of Teacher Calibration
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

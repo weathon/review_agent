@@ -1,5 +1,6 @@
 # Small Variance, Big Fairness: A Path to Harmless Fairness without Demographics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

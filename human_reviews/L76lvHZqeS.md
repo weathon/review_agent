@@ -1,5 +1,6 @@
 # A Unified Framework of Theoretically Robust Contrastive Loss against Label Noise
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 5, 5, 3, 3
 

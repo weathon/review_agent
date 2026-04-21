@@ -1,5 +1,6 @@
 # Filtered not Mixed: Filtering-Based Online Gating for Mixture of Large Language Models
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 3, 8, 6
 

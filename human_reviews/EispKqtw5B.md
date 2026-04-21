@@ -1,5 +1,6 @@
 # Stochastic Layer-Wise Shuffle: A Good Practice to Improve Vision Mamba Training
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 5
 

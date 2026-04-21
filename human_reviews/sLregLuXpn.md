@@ -1,5 +1,6 @@
 # On the Analysis of GAN-based Image-to-Image Translation with Gaussian Noise Injection
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 3
 

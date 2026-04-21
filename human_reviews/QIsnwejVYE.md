@@ -1,5 +1,6 @@
 # Robust Latent Neural Operators for a Family of Systems with Sparse Observations
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

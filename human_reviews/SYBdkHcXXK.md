@@ -1,5 +1,6 @@
 # When Semantic Segmentation Meets Frequency Aliasing
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 5, 8
 

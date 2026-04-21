@@ -1,5 +1,6 @@
 # Towards Optimal Adapter Placement for Efficient Transfer Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6
 

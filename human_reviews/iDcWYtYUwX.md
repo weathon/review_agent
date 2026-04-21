@@ -1,5 +1,6 @@
 # EcoFace: Audio-Visual Emotional Co-Disentanglement Speech-Driven 3D Talking Face Generation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

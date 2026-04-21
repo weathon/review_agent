@@ -1,5 +1,6 @@
 # Prompt-Independent Safe Decoding to Restrain Unsafe Image Generation for Text-to-Image Models against White-Box Adversary
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

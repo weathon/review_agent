@@ -1,5 +1,6 @@
 # Rethinking and Extending the Probabilistic Inference Capacity of GNNs
 
+- Avg Score: 6.60
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 6, 8
 

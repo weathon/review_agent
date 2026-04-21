@@ -1,5 +1,6 @@
 # Efficient Policy Evaluation with Safety Constraint for Reinforcement Learning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

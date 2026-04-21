@@ -1,5 +1,6 @@
 # $\texttt{NAISR}$: A 3D Neural Additive Model for Interpretable Shape Representation
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Critical Learning Periods Emerge Even in Deep Linear Networks
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 10, 5
 

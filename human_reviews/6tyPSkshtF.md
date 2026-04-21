@@ -1,5 +1,6 @@
 # Gap-Dependent Bounds for Q-Learning using Reference-Advantage Decomposition
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

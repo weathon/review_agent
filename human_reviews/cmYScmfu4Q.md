@@ -1,5 +1,6 @@
 # Zeroth-Order Policy Gradient for Reinforcement Learning from Human Feedback without Reward Inference
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 3, 8
 
@@ -55,7 +56,8 @@ This paper introduces two new algorithms for RLHF that do not require learning a
 * l. 977, typo (parenthesis)
 * l. 1014, is it the same $L$ as in Assm 3?
 * the end of proof of Thm 1 is pretty unclear (line 1104 to the end of the proof), which is a pitty, as it is the clever part of the proof discussed l.455-465. Why do we have Eq 1106, and why does it lead (and how) to the equation line 1110? It is claimed to be for the case of large gradient, but line 1119 it is again for the case of large gradient. How is the Eq line 1122 obtained, and how does it relates to the one in line 1107? Do these both equations covers all possible gradient cases, and why? L. 1134, how are combined the bounds (max of them, summing them, something else)? Overall, could you reexplain this overall important part?
-* l. 1214, there is a missing term (or the line should be removed) * l. 1230-1241, why the 3 factor? (not wrong, but why)
+* l. 1214, there is a missing term (or the line should be removed)
+* l. 1230-1241, why the 3 factor? (not wrong, but why)
 
 ### Soundness
 3

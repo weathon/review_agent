@@ -1,5 +1,6 @@
 # KBLaM: Knowledge Base augmented Language Model
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 3, 8, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # Towards Lightweight Deep Watermarking Framework
 
+- Avg Score: 7.60
 - Decision: Reject
 - Scores: 6, 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Understanding Warmup-Stable-Decay Learning Rates: A River Valley Loss Landscape View
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 3, 10, 6, 6
 

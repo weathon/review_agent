@@ -1,5 +1,6 @@
 # CryoFormer: Continuous Heterogeneous Cryo-EM Reconstruction using Transformer-based Neural Representations
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

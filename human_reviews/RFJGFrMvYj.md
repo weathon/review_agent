@@ -1,5 +1,6 @@
 # TCIG: Two-Stage Controlled Image Generation with Quality Enhancement through Diffusion
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 3, 1, 1
 

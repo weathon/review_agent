@@ -1,5 +1,6 @@
 # Hierarchical Gaussian Mixture Normalizing Flows Modeling for Multi-Class Anomaly Detection
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

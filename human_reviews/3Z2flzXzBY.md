@@ -1,5 +1,6 @@
 # Selective Label Enhancement Learning for Test-Time Adaptation
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 6
 

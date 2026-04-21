@@ -1,5 +1,6 @@
 # ComLoRA: A Competitive Learning Approach for Enhancing LoRA
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 5
 

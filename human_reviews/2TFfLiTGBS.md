@@ -1,5 +1,6 @@
 # DART: A Principled Approach to Adversarially Robust Unsupervised Domain Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

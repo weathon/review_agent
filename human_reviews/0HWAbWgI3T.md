@@ -1,5 +1,6 @@
 # A Geometric Approach to Personalized Recommendation with Set-Theoretic Constraints Using Box Embeddings
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

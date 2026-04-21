@@ -1,5 +1,6 @@
 # Few Heads are Enough
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

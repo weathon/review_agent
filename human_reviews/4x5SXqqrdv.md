@@ -1,5 +1,6 @@
 # Improving Private Training via In-distribution Public Data Synthesis and Generalization
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 5
 

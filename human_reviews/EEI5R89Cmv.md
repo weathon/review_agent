@@ -1,5 +1,6 @@
 # Neural Exploratory Landscape Analysis for Meta-Black-Box-Optimization
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

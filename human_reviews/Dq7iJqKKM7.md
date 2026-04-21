@@ -1,5 +1,6 @@
 # Rethinking Independent Cross-Entropy Loss For Graph-Structured Data
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

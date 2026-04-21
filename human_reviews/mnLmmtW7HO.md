@@ -1,5 +1,6 @@
 # Active Learning for Continual Learning: Keeping the Past Alive in the Present
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3, 8, 8
 

@@ -1,5 +1,6 @@
 # Enforcing 3D Topological Constraints in Composite Objects via Implicit Functions
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Connect Later: Improving Fine-Tuning for Robustness with Targeted Augmentations
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

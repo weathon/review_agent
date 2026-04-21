@@ -1,5 +1,6 @@
 # Travelling Salesman Problem Goes Sparse With Graph Neural Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 
@@ -45,7 +46,8 @@ This paper proposes to adopt graph sparsification techniques in the data preproc
 
 [1] A SURVEY ON OVERSMOOTHING IN GRAPH NEURAL NETWORKS. https://arxiv.org/pdf/2303.10993.pdf
 
- Based upon the above points, I believe that the work is still somehow preliminary and the paper does not meet the bar of iclr.
+
+Based upon the above points, I believe that the work is still somehow preliminary and the paper does not meet the bar of iclr.
 
 ### Questions
 - The size of instances is not given. 

@@ -1,5 +1,6 @@
 # Discovering Data Structures: Nearest Neighbor Search and Beyond
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 3, 5
 

@@ -1,5 +1,6 @@
 # FV-NeRV: Neural Compression for Free Viewpoint Videos
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 1, 3, 3
 

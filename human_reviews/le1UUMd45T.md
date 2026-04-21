@@ -1,5 +1,6 @@
 # Solving Multiobjective Combinatorial Optimization via Learn to Improve Method
 
+- Avg Score: 7.50
 - Decision: Reject
 - Scores: 6, 8, 8, 8
 

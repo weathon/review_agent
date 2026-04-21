@@ -1,5 +1,6 @@
 # Variational Mirror Descent for Robust Learning in Schrödinger Bridge
 
+- Avg Score: 6.80
 - Decision: Reject
 - Scores: 5, 8, 5, 8, 8
 

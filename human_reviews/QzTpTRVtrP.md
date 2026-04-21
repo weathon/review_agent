@@ -1,5 +1,6 @@
 # Large Brain Model for Learning Generic Representations with Tremendous EEG Data in BCI
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

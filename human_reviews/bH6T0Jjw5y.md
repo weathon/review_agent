@@ -1,5 +1,6 @@
 # Latent Representation and Simulation of Markov Processes via Time-Lagged Information Bottleneck
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8
 

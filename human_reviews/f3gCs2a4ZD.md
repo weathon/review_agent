@@ -1,5 +1,6 @@
 # DyGMamba: Efficiently Modeling Long-Term Temporal Dependency on Continuous-Time Dynamic Graphs with State Space Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 8, 3, 3
 

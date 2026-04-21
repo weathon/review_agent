@@ -1,5 +1,6 @@
 # AttackQA: Development and Adoption of a Dataset for Assisting Cybersecurity Operations using Fine-tuned and Open-Source LLMs
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

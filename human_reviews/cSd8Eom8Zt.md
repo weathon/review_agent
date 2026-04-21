@@ -1,5 +1,6 @@
 # Reshaping Model Output Space Via Deep Kernel Density Estimation Networks
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3
 

@@ -1,5 +1,6 @@
 # Unlocking the Power of Function Vectors for Characterizing and Mitigating Catastrophic Forgetting in Continual Instruction Tuning
 
+- Avg Score: 9.00
 - Decision: Accept (Oral)
 - Scores: 10, 10, 8, 8
 

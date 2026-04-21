@@ -1,5 +1,6 @@
 # Gaitor: Learning a Unified Representation for Continuous Gait Transition and Terrain Traversal for Quadruped Robots
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

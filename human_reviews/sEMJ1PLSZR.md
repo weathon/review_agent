@@ -1,5 +1,6 @@
 # Adaptive Energy Alignment for Accelerating Test-Time Adaptation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 3
 

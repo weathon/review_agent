@@ -1,5 +1,6 @@
 # Industrial Benchmarking of LLMs: Assessing Hallucination in Traffic Incident Scenarios with a Novel Spatio-Temporal Dataset
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

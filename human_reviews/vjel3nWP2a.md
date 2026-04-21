@@ -1,5 +1,6 @@
 # Scalable Extraction of Training Data from Aligned, Production Language Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 8, 6
 

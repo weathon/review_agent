@@ -1,5 +1,6 @@
 # TestGenEval: A Real World Unit Test Generation and Test Completion Benchmark
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

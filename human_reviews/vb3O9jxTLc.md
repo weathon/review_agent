@@ -1,5 +1,6 @@
 # Lost in Translation: Conceptual Blind Spots in Text-to-Image Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

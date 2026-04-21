@@ -1,5 +1,6 @@
 # Flexible Active Learning of PDE Trajectories
 
+- Avg Score: 6.80
 - Decision: Reject
 - Scores: 5, 8, 8, 5, 8
 

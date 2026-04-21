@@ -1,5 +1,6 @@
 # Towards efficient deep spiking neural networks construction with spiking activity based pruning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

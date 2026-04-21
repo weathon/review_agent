@@ -1,5 +1,6 @@
 # Pose-guided Motion Diffusion Model for Text-to-motion Generation
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Sophia: A Scalable Stochastic Second-order Optimizer for Language Model Pre-training
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

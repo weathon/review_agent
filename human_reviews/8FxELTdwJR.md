@@ -1,5 +1,6 @@
 # Hyperparameters in Continual Learning: A Reality Check
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 

@@ -1,5 +1,6 @@
 # On the Generalization of Gradient-based Neural Network Interpretations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 3
 

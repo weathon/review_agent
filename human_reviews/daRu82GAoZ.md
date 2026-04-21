@@ -1,5 +1,6 @@
 # Generalizable Origin Identification for Text-Guided Image-to-Image Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

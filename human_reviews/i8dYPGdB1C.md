@@ -1,5 +1,6 @@
 # Near-Optimal Online Learning for Multi-Agent Submodular Coordination: Tight Approximation and Communication Efficiency
 
+- Avg Score: 6.80
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 8, 8, 6
 

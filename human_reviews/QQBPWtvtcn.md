@@ -1,5 +1,6 @@
 # LVSM: A Large View Synthesis Model with Minimal 3D Inductive Bias
 
+- Avg Score: 7.67
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6, 8, 8
 

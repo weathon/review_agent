@@ -1,5 +1,6 @@
 # Small-scale proxies for large-scale Transformer training instabilities
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

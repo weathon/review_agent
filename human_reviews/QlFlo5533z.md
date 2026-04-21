@@ -1,5 +1,6 @@
 # Auto DP-SGD: Dual Improvements of Privacy and Accuracy via Automatic Clipping Threshold and Noise Multiplier Estimation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 5
 

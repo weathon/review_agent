@@ -1,5 +1,6 @@
 # Multi-domain Distribution Learning for De Novo Drug Design
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

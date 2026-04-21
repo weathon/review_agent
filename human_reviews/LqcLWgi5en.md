@@ -1,5 +1,6 @@
 # From PDEs to Wingbeats: A Novel Convolutional Fourier Layer-based ResNet Model
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

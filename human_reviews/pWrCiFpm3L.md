@@ -1,5 +1,6 @@
 # VeriFlow: Modeling Distributions for Neural Network Verification
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 5, 8
 

@@ -1,5 +1,6 @@
 # ADAM Optimization with Adaptive Batch Selection
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

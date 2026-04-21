@@ -1,5 +1,6 @@
 # LieRE: Generalizing Rotary Position Encodings to Higher Dimensional Inputs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 10, 3
 

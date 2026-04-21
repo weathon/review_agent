@@ -1,5 +1,6 @@
 # LLaRA: Supercharging Robot Learning Data for Vision-Language Policy
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # MagicDrive3D: Controllable 3D Generation for Any-View Rendering in Street Scenes
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 6
 

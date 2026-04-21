@@ -1,5 +1,6 @@
 # Scaling Sparse Feature Circuits For Studying In-Context Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

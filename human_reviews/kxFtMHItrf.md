@@ -1,5 +1,6 @@
 # Reti-Diff: Illumination Degradation Image Restoration with Retinex-based Latent Diffusion Model
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # REValueD: Regularised Ensemble Value-Decomposition for Factorisable Markov Decision Processes
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 5
 

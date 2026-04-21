@@ -1,5 +1,6 @@
 # Proposer-Agent-Evaluator (PAE): Autonomous Skill Discovery For Foundation Model Internet Agents
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 8, 3, 8, 5, 5
 

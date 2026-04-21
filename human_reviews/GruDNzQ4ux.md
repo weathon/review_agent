@@ -1,5 +1,6 @@
 # DreamSmooth: Improving Model-based Reinforcement Learning via Reward Smoothing
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6
 

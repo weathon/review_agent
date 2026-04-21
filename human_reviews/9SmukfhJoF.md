@@ -1,5 +1,6 @@
 # 3DGS-Det: Empower 3D Gaussian Splatting with Boundary Guidance and Box-Focused Sampling for 3D Object Detection
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6
 

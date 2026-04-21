@@ -1,5 +1,6 @@
 # DirectTriGS: Triplane-based Gaussian Splatting Field Representation for 3D Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

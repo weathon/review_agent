@@ -1,5 +1,6 @@
 # Planning in Strawberry Fields: Evaluating and Improving the Planning and Scheduling Capabilities of LRM o1
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 1
 

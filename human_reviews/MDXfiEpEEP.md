@@ -1,5 +1,6 @@
 # LNL+K: Enhancing Learning with Noisy Labels Through Noise Source Knowledge Integration
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 5, 3
 

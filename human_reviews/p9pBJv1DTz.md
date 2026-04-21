@@ -1,5 +1,6 @@
 # MindAgent: Emergent Gaming Interaction
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 3, 8
 

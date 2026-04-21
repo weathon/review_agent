@@ -1,5 +1,6 @@
 # DATASEA - AN AUTOMATIC FRAMEWORK FOR COMPREHENSIVE DATASET PROCESSING USING LARGE LANGUAGE MODELS
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Objectives Are All You Need: Solving Deceptive Problems Without Explicit Diversity Maintenance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

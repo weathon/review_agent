@@ -1,5 +1,6 @@
 # A is for Absorption: Studying Feature Splitting and Absorption in Sparse Autoencoders
 
+- Avg Score: 7.50
 - Decision: Reject
 - Scores: 8, 8, 6, 8
 

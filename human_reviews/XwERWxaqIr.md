@@ -1,5 +1,6 @@
 # AQUATIC-Diff: Additive Quantization for Truly Tiny Compressed Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

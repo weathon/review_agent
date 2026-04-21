@@ -1,5 +1,6 @@
 # Memory-Efficient Fine-Tuning via Structured Neural Network Pruning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

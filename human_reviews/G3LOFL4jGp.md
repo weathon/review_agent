@@ -1,5 +1,6 @@
 # MacDC: Masking-augmented Collaborative Domain Congregation for Multi-target Domain Adaptation in Semantic Segmentation
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

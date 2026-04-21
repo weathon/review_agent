@@ -1,5 +1,6 @@
 # Is margin all you need? An extensive empirical study of deep active learning on tabular data
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

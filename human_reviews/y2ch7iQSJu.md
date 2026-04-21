@@ -1,5 +1,6 @@
 # Budget-constrained Active Learning to De-censor Survival Data
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 3, 1, 1
 

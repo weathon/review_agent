@@ -1,5 +1,6 @@
 # LayerNAS: Neural Architecture Search in Polynomial Complexity
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 8, 5
 

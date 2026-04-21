@@ -1,5 +1,6 @@
 # Efficient Masked AutoEncoder for Video Object Counting and A Large-Scale Benchmark
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

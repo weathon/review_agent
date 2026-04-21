@@ -1,5 +1,6 @@
 # Improved Variational Inference in Discrete VAEs using Error Correcting Codes
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

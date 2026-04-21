@@ -1,5 +1,6 @@
 # Towards Explainable and Efficient Multi-Modality Learning: Domain-Agnostic Concept Space Paired with Domain-Specific Projection Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

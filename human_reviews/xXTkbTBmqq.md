@@ -1,5 +1,6 @@
 # OLMoE: Open Mixture-of-Experts Language Models
 
+- Avg Score: 8.67
 - Decision: Accept (Oral)
 - Scores: 10, 8, 8
 

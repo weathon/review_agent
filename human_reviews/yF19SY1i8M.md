@@ -1,5 +1,6 @@
 # Towards More Robust NLP System Evaluation: Handling Missing Scores in Benchmarks
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Evaluating and Finetuning Models For Financial Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

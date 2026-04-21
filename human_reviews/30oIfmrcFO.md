@@ -1,5 +1,6 @@
 # Seq-VCR: Preventing  Collapse in Intermediate Transformer Representations for Enhanced Reasoning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

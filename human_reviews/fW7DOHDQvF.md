@@ -1,5 +1,6 @@
 # Consistent Multi-Class Classification from Multiple Unlabeled Datasets
 
+- Avg Score: 6.80
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6, 6
 

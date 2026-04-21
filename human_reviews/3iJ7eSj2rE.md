@@ -1,5 +1,6 @@
 # Synergistic Weak-Strong Collaboration by Aligning Preferences
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # PatchSynth: a Patch-Text Pre-trained Model
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 10, 3, 3, 1
 

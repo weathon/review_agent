@@ -1,5 +1,6 @@
 # ToRA: A Tool-Integrated Reasoning Agent for Mathematical Problem Solving
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 8
 

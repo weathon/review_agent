@@ -1,5 +1,6 @@
 # Token-Aware Inference-Time Intervention for Large Language Model Alignment
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 5, 6, 8
 

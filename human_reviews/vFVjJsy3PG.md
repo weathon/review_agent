@@ -1,5 +1,6 @@
 # Geometric Representation Condition Improves Equivariant Molecule Generation
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 8, 3, 5, 5, 6
 

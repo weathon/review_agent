@@ -1,5 +1,6 @@
 # CulturalBench: a Robust, Diverse and Challenging Benchmark on Measuring (the Lack of) Cultural Knowledge of LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 5
 

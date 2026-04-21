@@ -1,5 +1,6 @@
 # Neural Translation of Input Specifications into Formal Grammars for Test Case Generation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 3
 

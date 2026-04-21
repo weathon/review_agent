@@ -1,5 +1,6 @@
 # Future Language Modeling from Temporal Document History
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 8, 6
 

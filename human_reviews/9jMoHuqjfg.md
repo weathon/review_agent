@@ -1,5 +1,6 @@
 # Learning to Reach Goals via Diffusion
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

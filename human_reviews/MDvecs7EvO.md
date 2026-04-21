@@ -1,5 +1,6 @@
 # Mechanistic Permutability: Match Features Across Layers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 8
 

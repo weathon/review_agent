@@ -1,5 +1,6 @@
 # On the Long Range Abilities of Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

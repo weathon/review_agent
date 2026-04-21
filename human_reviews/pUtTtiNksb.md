@@ -1,5 +1,6 @@
 # FFCA-Net: Stereo Image Compression via Fast Cascade Alignment of Side Information
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

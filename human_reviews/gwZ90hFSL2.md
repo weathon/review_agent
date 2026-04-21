@@ -1,5 +1,6 @@
 # Advancing Cross-Lingual Capabilities for Humanoid Robots: Leveraging Chinese NLP through Pictophonetic Advantages
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1
 

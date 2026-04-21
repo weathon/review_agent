@@ -1,5 +1,6 @@
 # Emergent Orientation Maps —— Mechanisms, Coding Efficiency and Robustness
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

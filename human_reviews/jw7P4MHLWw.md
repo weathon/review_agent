@@ -1,5 +1,6 @@
 # Personalized Representation from Personalized Generation
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6, 6
 

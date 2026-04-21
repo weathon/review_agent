@@ -1,5 +1,6 @@
 # CAML: Collaborative Auxiliary Modality Learning for Multi-Agent Systems
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

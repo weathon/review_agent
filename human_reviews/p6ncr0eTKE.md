@@ -1,5 +1,6 @@
 # Task-Adaptive Pretrained Language Models via Clustered-Importance Sampling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

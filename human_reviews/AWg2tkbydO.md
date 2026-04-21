@@ -1,5 +1,6 @@
 # Learning Efficient Positional Encodings with Graph Neural Networks
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 6, 3
 

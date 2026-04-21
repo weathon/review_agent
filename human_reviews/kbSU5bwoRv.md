@@ -1,5 +1,6 @@
 # SaMoye: Zero-shot Singing Voice Conversion Model Based on Feature Disentanglement and Enhancement
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

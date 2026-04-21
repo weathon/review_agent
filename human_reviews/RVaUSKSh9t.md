@@ -1,5 +1,6 @@
 # Continual Graph Learning for Thermal Analysis of Composite Materials under Interface Variations
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

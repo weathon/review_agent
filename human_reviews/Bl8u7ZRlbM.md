@@ -1,5 +1,6 @@
 # WildChat: 1M ChatGPT Interaction Logs in the Wild
 
+- Avg Score: 6.25
 - Decision: Accept (spotlight)
 - Scores: 5, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Reliable and Efficient Amortized Model-based Evaluation
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 5, 6, 8, 6, 8, 6
 

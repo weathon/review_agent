@@ -1,5 +1,6 @@
 # Wasserstein-Regularized Conformal Prediction under General Distribution Shift
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

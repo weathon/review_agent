@@ -1,5 +1,6 @@
 # Smoothing for exponential family dynamical systems
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

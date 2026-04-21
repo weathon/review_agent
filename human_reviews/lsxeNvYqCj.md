@@ -1,5 +1,6 @@
 # Bandits Meet Mechanism Design to Combat Clickbait in Online Recommendation
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 8
 

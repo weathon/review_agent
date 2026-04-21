@@ -1,5 +1,6 @@
 # Influencing Humans to Conform to Preference Models for RLHF
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

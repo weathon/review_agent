@@ -1,5 +1,6 @@
 # Bayesian Persuasion Is a Bargaining Game
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

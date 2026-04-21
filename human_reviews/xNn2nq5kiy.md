@@ -1,5 +1,6 @@
 # Plan-based Prompting Improves Literature Review Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 1
 

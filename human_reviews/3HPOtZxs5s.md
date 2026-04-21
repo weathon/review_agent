@@ -1,5 +1,6 @@
 # An Efficient Quantum Classifier Based on Hamiltonian Representations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

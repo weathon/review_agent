@@ -1,5 +1,6 @@
 # Emergent Symbol-Like Number Variables in Artificial Neural Networks
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

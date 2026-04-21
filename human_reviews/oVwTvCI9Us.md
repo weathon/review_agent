@@ -1,5 +1,6 @@
 # SEPAL: Scalable Feature Learning on Huge Knowledge Graphs
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

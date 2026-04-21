@@ -1,5 +1,6 @@
 # Boosting Concept Bottleneck Models with Supervised, Hierarchical Concept Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

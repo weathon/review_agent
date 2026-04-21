@@ -1,5 +1,6 @@
 # Unveiling Language Skills under Circuits
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5
 

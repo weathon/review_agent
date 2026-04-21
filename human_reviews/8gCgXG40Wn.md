@@ -1,5 +1,6 @@
 # IndianRoad: A Video Dataset of Diverse Atomic Visual Elements in Dense and Unpredictable Environments
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

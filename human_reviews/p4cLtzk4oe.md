@@ -1,5 +1,6 @@
 # Exploring Local Memorization in Diffusion Models via Bright Ending Attention
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

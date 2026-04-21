@@ -1,5 +1,6 @@
 # mOSCAR: A Large-scale Multilingual and Multimodal Document-Level Corpus
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Learning-Guided Rolling Horizon Optimization for Long-Horizon Flexible Job-Shop Scheduling
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6
 

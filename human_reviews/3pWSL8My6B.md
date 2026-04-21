@@ -1,5 +1,6 @@
 # Where We Have Arrived in Proving the Emergence of Sparse Interaction Primitives in DNNs
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

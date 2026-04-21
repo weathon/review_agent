@@ -1,5 +1,6 @@
 # A Study of Unsupervised Evaluation Metrics for Practical and Automatic Domain Adaptation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6, 3
 

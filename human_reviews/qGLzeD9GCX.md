@@ -1,5 +1,6 @@
 # EditMark: Training-free and Harmless Watermark for Large Language Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

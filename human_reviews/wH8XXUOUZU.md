@@ -1,5 +1,6 @@
 # Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

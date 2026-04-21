@@ -1,5 +1,6 @@
 # Fine-tuned In-Context Learning Transformers are Excellent Tabular Data Classifiers.
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

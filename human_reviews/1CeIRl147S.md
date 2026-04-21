@@ -1,5 +1,6 @@
 # Domain-specific Benchmarking of Vision-Language Models: A Task Augmentation Framework Using Metadata
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

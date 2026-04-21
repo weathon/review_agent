@@ -1,5 +1,6 @@
 # DynST: Large-Scale Spatial-Temporal Dataset for Transferable Traffic Forecasting with Dynamic Road Networks
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3, 5
 

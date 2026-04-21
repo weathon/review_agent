@@ -1,5 +1,6 @@
 # Param$\Delta$ for Direct Mixing: Post-Train Large Language Model At Zero Cost
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

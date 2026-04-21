@@ -1,5 +1,6 @@
 # Efficient Time Series Forecasting via Hyper-Complex Models and Frequency Aggregation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 1, 5
 

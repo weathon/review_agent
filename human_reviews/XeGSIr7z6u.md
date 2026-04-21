@@ -1,5 +1,6 @@
 # On the onset of memorization to generalization transition in diffusion  models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 1
 

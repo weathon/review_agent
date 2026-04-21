@@ -1,5 +1,6 @@
 # Token Statistics Transformer: Linear-Time Attention via Variational Rate Reduction
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

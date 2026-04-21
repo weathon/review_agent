@@ -1,5 +1,6 @@
 # Convex is back: \\ Solving Belief MDPs via Convexity-Informed Deep Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

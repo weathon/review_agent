@@ -1,5 +1,6 @@
 # Neural ODE Transformers: Analyzing Internal Dynamics and Adaptive Fine-tuning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 3
 

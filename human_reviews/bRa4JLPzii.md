@@ -1,5 +1,6 @@
 # CoMRes: Semi-Supervised Time Series Forecasting Utilizing Consensus Promotion of Multi-Resolution
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

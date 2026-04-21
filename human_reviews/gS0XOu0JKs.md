@@ -1,5 +1,6 @@
 # Improving the Reliability of Large Language Models by Leveraging Uncertainty-Aware In-Context Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # SFi-Former: Sparse Flow induced Attention for Graph Transformer
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5, 5
 

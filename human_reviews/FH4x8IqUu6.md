@@ -1,5 +1,6 @@
 # What Time Tells Us? Time-Aware Representation Learning from Static Images
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

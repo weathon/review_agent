@@ -1,5 +1,6 @@
 # Representation Alignment for Generation: Training Diffusion Transformers Is Easier Than You Think
 
+- Avg Score: 9.00
 - Decision: Accept (Oral)
 - Scores: 10, 8, 8, 10, 8, 10
 

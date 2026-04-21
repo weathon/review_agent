@@ -1,5 +1,6 @@
 # The Geometry of Concepts: Sparse Autoencoder Feature Structure
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3, 3
 

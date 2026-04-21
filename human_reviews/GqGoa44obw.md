@@ -1,5 +1,6 @@
 # RLHF with Inconsistent Multi-Agent Feedback Under General Function Approximation: A Theoretical Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

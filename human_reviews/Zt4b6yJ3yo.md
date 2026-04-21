@@ -1,5 +1,6 @@
 # Denial-of-Service Poisoning Attacks against Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

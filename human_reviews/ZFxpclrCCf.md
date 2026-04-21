@@ -1,5 +1,6 @@
 # Glad: A Streaming Scene Generator for Autonomous Driving
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 5, 3, 8, 6
 

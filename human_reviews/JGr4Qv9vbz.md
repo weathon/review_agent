@@ -1,5 +1,6 @@
 # Open-Ended 3D Metric-Semantic Representation Learning via Semantic-Embedded Gaussian Splatting
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 5
 

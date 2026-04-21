@@ -1,5 +1,6 @@
 # NeuroLM: A Universal Multi-task Foundation Model for Bridging the Gap between Language and EEG Signals
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

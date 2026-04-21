@@ -1,5 +1,6 @@
 # A Unified Causal View of Instruction Tuning
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

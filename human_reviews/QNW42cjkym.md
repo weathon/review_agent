@@ -1,5 +1,6 @@
 # A Data-Driven Solution for the Cold Start Problem in Biomedical Image Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Revisiting Zeroth-Order Optimization:  Minimum-Variance Two-Point Estimators and  Directionally Aligned Perturbations
 
+- Avg Score: 6.80
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 6, 6, 8
 

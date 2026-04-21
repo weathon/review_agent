@@ -1,5 +1,6 @@
 # Uncovering Gaps in How Humans and LLMs Interpret Subjective Language
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

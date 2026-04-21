@@ -1,5 +1,6 @@
 # Enhancing Perception Capabilities of Multimodal LLMs with Training-Free Fusions
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

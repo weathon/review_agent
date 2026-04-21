@@ -1,5 +1,6 @@
 # FIITED: Fine-grained embedding dimension optimization during training for recommender systems
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 3, 8, 3, 5
 

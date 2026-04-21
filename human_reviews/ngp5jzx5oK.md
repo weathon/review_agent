@@ -1,5 +1,6 @@
 # Encoding Speaker-Specific Latent Speech Feature for Speech Synthesis
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

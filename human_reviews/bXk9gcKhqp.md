@@ -1,5 +1,6 @@
 # Rethinking the Polynomial Filter of GNNs via Graph Information Activation Theory
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Graffe: Graph Representation Learning Enabled via Diffusion Probabilistic Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

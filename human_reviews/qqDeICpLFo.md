@@ -1,5 +1,6 @@
 # Global minima, recoverability thresholds, and higher-order structure in GNNs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

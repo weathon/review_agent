@@ -1,5 +1,6 @@
 # Contraction and Alienation: Towards Theoretical Understanding of Non-Contrastive Learning with Neighbor-Averaging Dynamics
 
+- Avg Score: 5.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 5
 

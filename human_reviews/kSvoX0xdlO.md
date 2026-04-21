@@ -1,5 +1,6 @@
 # Open-Set Graph Anomaly Detection via Normal Structure Regularisation
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 6
 

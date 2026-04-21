@@ -1,5 +1,6 @@
 # Harnessing the Power of Neural Operators with Automatically Encoded Conservation Laws
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Data-Driven Discovery of PDEs via the Adjoint Method
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

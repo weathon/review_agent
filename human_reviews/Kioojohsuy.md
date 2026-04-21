@@ -1,5 +1,6 @@
 # Ad-Hoc Human-AI Coordination Challenge
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

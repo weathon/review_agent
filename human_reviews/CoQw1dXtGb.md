@@ -1,5 +1,6 @@
 # SPDIM: Source-Free Unsupervised Conditional and Label Shift Adaptation in EEG
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6, 8
 

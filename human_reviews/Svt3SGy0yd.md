@@ -1,5 +1,6 @@
 # Growing Efficient Accurate and Robust Neural Networks on the Edge
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 5, 5, 6, 5, 8
 

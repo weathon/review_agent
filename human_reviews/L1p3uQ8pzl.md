@@ -1,5 +1,6 @@
 # Explore Outworld Knowledge in Large Language Models: A Case Study in Pokemon Game
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 6, 8, 6, 5
 

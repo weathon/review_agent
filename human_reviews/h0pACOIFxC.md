@@ -1,5 +1,6 @@
 # Meta-Learning Adaptable Foundation Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

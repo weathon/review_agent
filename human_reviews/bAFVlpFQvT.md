@@ -1,5 +1,6 @@
 # Mini-batch Coresets for Memory-efficient Language Model Training on Data Mixtures
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 8
 

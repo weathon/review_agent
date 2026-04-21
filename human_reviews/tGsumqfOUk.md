@@ -1,5 +1,6 @@
 # Learning Parameter Sharing with Tensor Decompositions and Sparsity
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Asynchronous Factorization for Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

@@ -1,5 +1,6 @@
 # Context Clues: Evaluating Long Context Models for Clinical Prediction Tasks on EHR Data
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 10, 6
 

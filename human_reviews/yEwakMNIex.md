@@ -1,5 +1,6 @@
 # UniCO: On Unified Combinatorial Optimization via Problem Reduction to Matrix-Encoded General TSP
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 6
 

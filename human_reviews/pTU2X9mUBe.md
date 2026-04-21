@@ -1,5 +1,6 @@
 # LaDe: The First Comprehensive Last-mile Express Dataset from Industry
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 5, 3, 5
 

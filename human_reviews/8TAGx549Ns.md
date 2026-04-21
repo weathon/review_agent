@@ -1,5 +1,6 @@
 # REX: Rapid Exploration and eXploitation for AI agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

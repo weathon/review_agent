@@ -1,5 +1,6 @@
 # Towards Mitigating Factual Hallucination in LLMs through Self-Alignment with Memory
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 1
 

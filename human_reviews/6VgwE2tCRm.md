@@ -1,5 +1,6 @@
 # POGEMA: A Benchmark Platform for Cooperative Multi-Agent Pathfinding
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6
 

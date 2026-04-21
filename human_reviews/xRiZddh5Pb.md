@@ -1,5 +1,6 @@
 # Learning from A Single Graph is All You Need for Near-Shortest Path Routing
 
+- Avg Score: 3.17
 - Decision: Reject
 - Scores: 3, 1, 3, 6, 3, 3
 

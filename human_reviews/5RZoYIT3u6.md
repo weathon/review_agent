@@ -1,5 +1,6 @@
 # You Only Prune Once: Designing Calibration-Free Model Compression With Policy Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

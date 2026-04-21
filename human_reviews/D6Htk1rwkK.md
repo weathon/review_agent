@@ -1,5 +1,6 @@
 # Exploring mechanisms of Neural Robustness: probing the bridge between geometry and spectrum
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

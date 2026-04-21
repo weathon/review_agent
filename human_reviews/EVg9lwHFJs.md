@@ -1,5 +1,6 @@
 # Fine-Grained Emotion Recognition with In-Context Learning: A Prototype Theory Approach
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

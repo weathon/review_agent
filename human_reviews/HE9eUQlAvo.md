@@ -1,5 +1,6 @@
 # "What Data Benefits My Classifier?" Enhancing Model Performance and Interpretability through Influence-Based Data Selection
 
+- Avg Score: 6.40
 - Decision: Accept (oral)
 - Scores: 6, 8, 6, 6, 6
 

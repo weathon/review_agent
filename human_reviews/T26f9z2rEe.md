@@ -1,5 +1,6 @@
 # Dynamic Mixture of Experts: An Auto-Tuning Approach for Efficient Transformer Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

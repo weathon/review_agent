@@ -1,5 +1,6 @@
 # Collaborative World Models: An Online-Offline Transfer RL Approach
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Unifying User Preferences and Critic Opinions: A Multi-View Cross-Domain Item-sharing Recommender System
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

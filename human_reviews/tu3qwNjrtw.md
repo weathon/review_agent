@@ -1,5 +1,6 @@
 # Composable Interventions for Language Models
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6, 8
 

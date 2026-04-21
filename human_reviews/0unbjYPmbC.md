@@ -1,5 +1,6 @@
 # ChatSearch: a Dataset and a Generative Retrieval Model for General Conversational Image Retrieval
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6
 

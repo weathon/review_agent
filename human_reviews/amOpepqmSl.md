@@ -1,5 +1,6 @@
 # HADAMRNN: BINARY AND SPARSE TERNARY ORTHOGONAL RNNS
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

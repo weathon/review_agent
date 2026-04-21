@@ -1,5 +1,6 @@
 # On the Convergence of Adam under Non-uniform Smoothness: Separability from SGDM and Beyond
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 1, 3, 8, 5
 

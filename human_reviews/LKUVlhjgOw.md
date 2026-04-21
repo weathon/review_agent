@@ -1,5 +1,6 @@
 # Guaranteed Neural PDE Boundary Control with Neural Barrier Function
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6
 

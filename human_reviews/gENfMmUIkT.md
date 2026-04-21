@@ -1,5 +1,6 @@
 # A Pipeline-Based Approach for Object Detection on Resource Constrained Internet of Things Devices
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 1, 1, 3
 

@@ -1,5 +1,6 @@
 # Multiple-Frequencies Population-Based Training
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 8, 3
 

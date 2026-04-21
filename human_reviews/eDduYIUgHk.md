@@ -1,5 +1,6 @@
 # Revisiting and Expanding Targeted Universal Adversarial Perturbations
 
+- Avg Score: 5.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6, 5, 5
 

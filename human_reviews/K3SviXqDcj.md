@@ -1,5 +1,6 @@
 # Invariance as A Necessary Condition for Online Continual Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5
 

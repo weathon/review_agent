@@ -1,5 +1,6 @@
 # Beyond IID weights: sparse and low-rank deep Neural Networks are also Gaussian Processes
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

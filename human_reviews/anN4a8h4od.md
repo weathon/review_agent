@@ -1,5 +1,6 @@
 # Filtered Semantic Search via Vector Arithmetic
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

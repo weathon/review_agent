@@ -1,5 +1,6 @@
 # TemporalBench: Towards Fine-grained Temporal Understanding for  Multimodal Video  Models
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Counterfactual Generative Modeling with Variational Causal Inference
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 3
 

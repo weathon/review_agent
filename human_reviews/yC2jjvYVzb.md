@@ -1,5 +1,6 @@
 # Confidence-Based Model Selection: When to Take Shortcuts in Spurious Settings
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 5, 8
 

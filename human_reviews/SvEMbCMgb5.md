@@ -1,5 +1,6 @@
 # $R^2$: Range Regularization for Model Compression and Quantization
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

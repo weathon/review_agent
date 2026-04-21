@@ -1,5 +1,6 @@
 # InstructEdit: Improving Automatic Masks for Diffusion-based Image Editing With User Instructions
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

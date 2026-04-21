@@ -1,5 +1,6 @@
 # Attacking for Inspection and Instruction: Debiasing Self-explaining Text Classification
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6, 5, 3
 

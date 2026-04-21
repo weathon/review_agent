@@ -1,5 +1,6 @@
 # Group Downsampling with Equivariant Anti-aliasing
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

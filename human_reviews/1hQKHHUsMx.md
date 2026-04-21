@@ -1,5 +1,6 @@
 # Procedural Knowledge in Pretraining Drives Reasoning in Large Language Models
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

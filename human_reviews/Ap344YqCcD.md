@@ -1,5 +1,6 @@
 # Imitation Bootstrapped Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6, 5
 

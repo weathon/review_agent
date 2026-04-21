@@ -1,5 +1,6 @@
 # Discovering Temporally Compositional Neural Manifolds with Switching Infinite GPFA
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # MMDT: Decoding the Trustworthiness and Safety of Multimodal Foundation Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

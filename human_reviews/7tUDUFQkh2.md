@@ -1,5 +1,6 @@
 # Ref-Diff: Zero-shot Referring Image Segmentation with Generative Models
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

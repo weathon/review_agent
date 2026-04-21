@@ -1,5 +1,6 @@
 # Propagation Alone is Enough for Graph Contrastive Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 5, 6
 

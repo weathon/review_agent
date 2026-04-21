@@ -1,5 +1,6 @@
 # MAP's not dead yet: Uncovering true language model modes by conditioning away degeneracy
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

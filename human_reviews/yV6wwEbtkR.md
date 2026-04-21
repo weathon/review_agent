@@ -1,5 +1,6 @@
 # Bayes Conditional Distribution Estimation for Knowledge Distillation Based on Conditional Mutual Information
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

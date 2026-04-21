@@ -1,5 +1,6 @@
 # Simplifying Transformer Blocks
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 8, 6
 

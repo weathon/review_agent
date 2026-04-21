@@ -1,5 +1,6 @@
 # On the Language of Thoughts in Large Language Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 1, 6, 6, 6
 

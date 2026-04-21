@@ -1,5 +1,6 @@
 # Fair Feature Importance Scores for Interpreting Tree-Based Methods and Surrogates
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

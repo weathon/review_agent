@@ -1,5 +1,6 @@
 # Application of Metric Transformation in One-Step Retrosynthesis
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 5, 1, 1
 

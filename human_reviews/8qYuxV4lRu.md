@@ -1,5 +1,6 @@
 # Recycled Attention: Efficient inference for long-context language models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 5, 5, 6
 

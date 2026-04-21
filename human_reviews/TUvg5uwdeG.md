@@ -1,5 +1,6 @@
 # Neural Sampling from Boltzmann Densities: Fisher-Rao Curves in the Wasserstein Geometry
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 5, 8
 

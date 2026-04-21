@@ -1,5 +1,6 @@
 # Pseudo-Labels are All You Need for Out-Of-Distribution Detection
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

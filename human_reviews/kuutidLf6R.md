@@ -1,5 +1,6 @@
 # Diffusion Attribution Score: Evaluating Training Data Influence in Diffusion Models
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 10, 6, 8
 

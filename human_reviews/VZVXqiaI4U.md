@@ -1,5 +1,6 @@
 # Attribute Based Interpretable Evaluation Metrics for Generative Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

@@ -1,5 +1,6 @@
 # Decoupled Alignment for Robust Plug-and-Play Adaptation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

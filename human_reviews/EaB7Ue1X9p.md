@@ -1,5 +1,6 @@
 # High-Dimensional Safe Exploration via Optimistic Local Latent Safe Optimization
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Fast Imitation via Behavior Foundation Models
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

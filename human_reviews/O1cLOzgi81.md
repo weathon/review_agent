@@ -1,5 +1,6 @@
 # MoDA: Mixture of Domain Adapters for Parameter-efficient Generalizable Person Re-Identification
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5, 3
 

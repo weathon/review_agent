@@ -1,5 +1,6 @@
 # Sum-of-Squares Programming for Ma-Trudinger-Wang Regularity of Optimal Transport Maps
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 5, 6, 6, 6
 

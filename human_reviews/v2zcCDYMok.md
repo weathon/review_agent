@@ -1,5 +1,6 @@
 # PostCast: Generalizable Postprocessing for Precipitation Nowcasting via Unsupervised Blurriness Modeling
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3
 

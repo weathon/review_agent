@@ -1,5 +1,6 @@
 # Low-Rank Correction for Quantized LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 6
 

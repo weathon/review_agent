@@ -1,5 +1,6 @@
 # MgNO: Efficient Parameterization of Linear Operators via Multigrid
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

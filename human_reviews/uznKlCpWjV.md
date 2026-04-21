@@ -1,5 +1,6 @@
 # On Stationary Point Convergence of PPO-Clip
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 3, 6, 8
 

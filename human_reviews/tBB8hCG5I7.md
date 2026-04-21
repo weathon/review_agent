@@ -1,5 +1,6 @@
 # BioNAS: Incorporating Bio-inspired Learning Rules to Neural Architecture Search
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

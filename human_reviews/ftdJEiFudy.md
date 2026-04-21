@@ -1,5 +1,6 @@
 # Robust-PIFu: Robust Pixel-aligned Implicit Function for 3D Human Digitalization from a Single Image
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

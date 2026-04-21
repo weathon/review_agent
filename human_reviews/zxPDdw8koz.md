@@ -1,5 +1,6 @@
 # CLIP meets Model Zoo Experts: Pseudo-Supervision for Visual Enhancement
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 8
 

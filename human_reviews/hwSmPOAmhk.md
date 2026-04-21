@@ -1,5 +1,6 @@
 # Understanding Factual Recall in Transformers via Associative Memories
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

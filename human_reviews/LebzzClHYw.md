@@ -1,5 +1,6 @@
 # Instructive Decoding: Instruction-Tuned Large Language Models are Self-Refiner from Noisy Instructions
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # BELT-2: Bootstrapping EEG-to-Language representation alignment for multi-task brain decoding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 1, 8, 6, 5, 5
 

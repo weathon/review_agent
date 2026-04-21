@@ -1,5 +1,6 @@
 # Beyond Random Masking: When Dropout meets Graph Convolutional Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

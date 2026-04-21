@@ -1,5 +1,6 @@
 # FPTQ: FINE-GRAINED POST-TRAINING QUANTIZATION FOR LARGE LANGUAGE MODELS
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

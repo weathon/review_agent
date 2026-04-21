@@ -1,5 +1,6 @@
 # Unsupervised Learning Based Object Detection Using Contrastive Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 1, 3
 

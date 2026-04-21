@@ -1,5 +1,6 @@
 # Detecting Hallucination Before Answering: Semantic Compression Through Instruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

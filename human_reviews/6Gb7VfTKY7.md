@@ -1,5 +1,6 @@
 # Parallel simulation for sampling under isoperimetry and score-based diffusion models
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

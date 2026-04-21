@@ -1,5 +1,6 @@
 # Accelerated Diffusion using Closed-form Discriminator Guidance
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

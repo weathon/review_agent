@@ -1,5 +1,6 @@
 # A Neural Sandbox Framework for Discovering Spurious Concpets in LLM Decisions
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 1, 3
 

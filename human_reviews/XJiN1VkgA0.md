@@ -1,5 +1,6 @@
 # Generating with Confidence: Uncertainty Quantification for Black-box Large Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

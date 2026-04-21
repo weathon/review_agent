@@ -1,5 +1,6 @@
 # ConML: A Universal Meta-Learning Framework with Task-Level Contrastive Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

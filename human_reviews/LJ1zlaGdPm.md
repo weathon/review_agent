@@ -1,5 +1,6 @@
 # From Scaling Law to Sub-Scaling Law: Understanding the Diminishing Returns of Larger Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 6, 6
 
@@ -81,7 +82,8 @@ Unlike loss, benchmark performance can be notoriously hard to predict (e.g., due
 
 To substantiate their claims, the authors train two models on two datasets, one with higher “data density” than the other. The one with higher “density” happens to perform better. N=2 is clearly insufficient to convincingly study the relationship between “data density” and performance.
 
-Note that the effect of data repetition has been comprehensively studied by Muennighoff et al. [2]. I do not see what this work adds to that of Muennighoff et al. 	
+Note that the effect of data repetition has been comprehensively studied by Muennighoff et al. [2]. I do not see what this work adds to that of Muennighoff et al.
+	
 > Low-density datasets, with more diverse data, align more closely with traditional scaling laws
 
 I believe that the authors aim to substantiate this claim with Figure 8. The experimental set-up here is fundamentally not adequate. Scaling laws do not aim to predict performance throughout training, as is presented in Figure 8. Rather, they aim to predict model performance across different compute scales. Thus, Figure 8 is not informative of the merits of neither “traditional scaling laws” nor the proposed law. Moreover, using intermediate checkpoints for fitting (let alone validating) scaling laws can have severe pitfalls [3, 4].

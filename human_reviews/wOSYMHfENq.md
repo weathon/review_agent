@@ -1,5 +1,6 @@
 # Batch normalization is sufficient for universal function approximation in CNNs
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 3, 8, 5
 

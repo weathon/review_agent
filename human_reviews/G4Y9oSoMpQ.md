@@ -1,5 +1,6 @@
 # HeteroSFL: Split Federated Learning with heterogeneous clients and non-IID data
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3
 

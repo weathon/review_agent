@@ -1,5 +1,6 @@
 # Replay across Experiments: A Natural Extension of Off-Policy RL
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

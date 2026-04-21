@@ -1,5 +1,6 @@
 # SEBRA : Debiasing through Self-Guided Bias Ranking
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

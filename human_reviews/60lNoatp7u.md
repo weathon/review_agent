@@ -1,5 +1,6 @@
 # NeurRev: Train Better Sparse Neural Network Practically via Neuron Revitalization
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

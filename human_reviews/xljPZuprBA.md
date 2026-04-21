@@ -1,5 +1,6 @@
 # Exploring Edge Probability Graph Models Beyond Edge Independency: Concepts, Analyses, and Algorithms
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

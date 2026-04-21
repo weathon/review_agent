@@ -1,5 +1,6 @@
 # Deep Weight Factorization: Sparse Learning Through the Lens of Artificial Symmetries
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 8, 5
 

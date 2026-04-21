@@ -1,5 +1,6 @@
 # Jorge: Approximate Preconditioning for GPU-Efficient Second-Order Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

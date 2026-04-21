@@ -1,5 +1,6 @@
 # Parrot: Seamless Spoken Dialogue Interaction with Double-Channel Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 3, 5, 3
 

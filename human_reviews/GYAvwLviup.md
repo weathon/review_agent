@@ -1,5 +1,6 @@
 # Aligning brain functions boosts the decoding of videos in novel subjects
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # RINGER: Conformer Ensemble Generation of Macrocyclic Peptides with Sequence-Conditioned Internal Coordinate Diffusion
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Neural Active Learning Beyond Bandits
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

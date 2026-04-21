@@ -1,5 +1,6 @@
 # DC-DPM: A Divide-and-Conquer Approach for Diffusion Reverse Process
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 6
 

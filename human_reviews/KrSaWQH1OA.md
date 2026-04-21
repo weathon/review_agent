@@ -1,5 +1,6 @@
 # AhmedML: High-Fidelity Computational Fluid Dynamics Dataset for Incompressible, Low-Speed Bluff Body Aerodynamics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3, 3, 5
 

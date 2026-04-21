@@ -1,5 +1,6 @@
 # CardBench: A Benchmark for Learned Cardinality  Estimation in Relational Databases
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

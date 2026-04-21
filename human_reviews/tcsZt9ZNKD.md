@@ -1,5 +1,6 @@
 # Scaling and evaluating sparse autoencoders
 
+- Avg Score: 8.20
 - Decision: Accept (Oral)
 - Scores: 10, 8, 10, 10, 3
 

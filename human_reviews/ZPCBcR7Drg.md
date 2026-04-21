@@ -1,5 +1,6 @@
 # Driving by the Rules: A Benchmark for Integrating Traffic Sign Regulations into Vectorized HD Map
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 6, 5
 

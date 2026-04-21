@@ -1,5 +1,6 @@
 # LoraHub: Efficient Cross-Task Generalization via Dynamic LoRA Composition
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

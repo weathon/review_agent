@@ -1,5 +1,6 @@
 # A Computational Framework for Solving Wasserstein Lagrangian Flows
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 3, 8, 5
 

@@ -1,5 +1,6 @@
 # MBR and QE Finetuning: Training-time Distillation of the Best and Most Expensive Decoding Methods
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

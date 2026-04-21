@@ -1,5 +1,6 @@
 # Supervised Knowledge Makes Large Language Models Better In-context Learners
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 5, 5, 5
 

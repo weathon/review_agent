@@ -1,5 +1,6 @@
 # OFASys: A Multi-Modal Multi-Task Learning System for Building Generalist Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3
 

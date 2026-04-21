@@ -1,5 +1,6 @@
 # POMONAG: Pareto-Optimal Many-Objective Neural Architecture Generator
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 5, 5, 3, 3
 

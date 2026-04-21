@@ -1,5 +1,6 @@
 # Understanding and Mitigating the Label Noise in Pre-training on Downstream Tasks
 
+- Avg Score: 8.50
 - Decision: Accept (spotlight)
 - Scores: 10, 8, 8, 8
 

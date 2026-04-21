@@ -1,5 +1,6 @@
 # Linearity of Relation Decoding in Transformer Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

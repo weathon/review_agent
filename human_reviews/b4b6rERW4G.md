@@ -1,5 +1,6 @@
 # Concealing Backdoors in Federated Learning by Trigger-Optimized Data Poisoning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

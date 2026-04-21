@@ -1,5 +1,6 @@
 # Meta-Guided Diffusion Models for Zero-Shot Medical Imaging Inverse Problems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

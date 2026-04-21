@@ -1,5 +1,6 @@
 # Privacy-Preserving In-Context Learning with Differentially Private Few-Shot Generation
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 8
 

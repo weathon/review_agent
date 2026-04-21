@@ -1,5 +1,6 @@
 # Learning Interactive Real-World Simulators
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # PartEdit: Fine-Grained Image Editing using Pre-Trained Diffusion Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Random Is All You Need: Random Noise Injection on Feature Statistics for Generalizable Deep Image Denoising
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6
 

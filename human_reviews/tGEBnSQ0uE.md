@@ -1,5 +1,6 @@
 # Sensitivity-Aware Differentially Private Decentralized Learning with Adaptive Noise
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6, 5
 

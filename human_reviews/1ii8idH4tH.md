@@ -1,5 +1,6 @@
 # Simple Minimax Optimal Byzantine Robust Algorithm for Nonconvex Objectives with Uniform Gradient Heterogeneity
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 3
 

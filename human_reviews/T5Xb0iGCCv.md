@@ -1,5 +1,6 @@
 # Neur2RO: Neural Two-Stage Robust Optimization
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

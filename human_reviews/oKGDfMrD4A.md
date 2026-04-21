@@ -1,5 +1,6 @@
 # Exploring Adversarial Robustness of Graph Neural Networks in Directed Graphs
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

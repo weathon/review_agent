@@ -1,5 +1,6 @@
 # LoRA-XS: Low-Rank Adaptation with Extremely Small Number of Parameters
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # VisualAgentBench: Towards Large Multimodal Models as Visual Foundation Agents
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3, 6
 

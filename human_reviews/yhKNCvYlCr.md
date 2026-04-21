@@ -1,5 +1,6 @@
 # Transfering Knowledge into Efficient Tiny Models for Object Detection with Dual Prompt Distillation
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

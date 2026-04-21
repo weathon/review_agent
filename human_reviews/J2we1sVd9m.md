@@ -1,5 +1,6 @@
 # Prototype-based Optimal Transport for Out-of-Distribution Detection
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 3, 6, 8, 3
 

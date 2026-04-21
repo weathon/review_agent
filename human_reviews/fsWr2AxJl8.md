@@ -1,5 +1,6 @@
 # T1: Scaling Diffusion Probabilistic Fields to High-Resolution on Unified Visual Modalities
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Binary Hyperbolic Embeddings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 1, 5
 

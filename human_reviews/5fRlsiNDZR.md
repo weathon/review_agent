@@ -1,5 +1,6 @@
 # FARV: Leveraging Facial and Acoustic Representation in Vocoder For Video-to-Speech Synthesis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

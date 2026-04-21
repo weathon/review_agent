@@ -1,5 +1,6 @@
 # Kill Two Birds with One Stone: Rethinking Data Augmentation for Deep Long-tailed Learning
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 8
 

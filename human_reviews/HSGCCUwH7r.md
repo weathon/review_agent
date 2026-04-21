@@ -1,5 +1,6 @@
 # Model Swarms: Collaborative Search to Adapt LLM Experts via Swarm Intelligence
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 8, 8, 6, 5
 

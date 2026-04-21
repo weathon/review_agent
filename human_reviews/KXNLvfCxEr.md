@@ -1,5 +1,6 @@
 # EvIL: Evolution Strategies for Generalisable Imitation Learning
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

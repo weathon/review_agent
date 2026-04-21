@@ -1,5 +1,6 @@
 # Unleashing the Power of Task-Specific Directions in Parameter Efficient Fine-tuning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

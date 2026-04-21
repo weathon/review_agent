@@ -1,5 +1,6 @@
 # Burning RED: Unlocking Subtask-Driven Reinforcement Learning and Risk-Awareness in Average-Reward Markov Decision Processes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 3, 6, 6
 

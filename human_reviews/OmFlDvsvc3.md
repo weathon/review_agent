@@ -1,5 +1,6 @@
 # The Perils of Optimizing Learned Reward Functions: Low Training Error Does Not Guarantee Low Regret
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

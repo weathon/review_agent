@@ -1,5 +1,6 @@
 # GradSkip: Communication-Accelerated Local Gradient Methods with Better Computational Complexity
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 5, 5, 5
 

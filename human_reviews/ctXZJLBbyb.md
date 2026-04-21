@@ -1,5 +1,6 @@
 # Understanding Heterophily for Graph Neural Networks
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 3, 6, 8
 

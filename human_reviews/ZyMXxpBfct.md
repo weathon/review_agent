@@ -1,5 +1,6 @@
 # Forward Explanation : Why Catastrophic Forgetting Occurs
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 1, 3, 1
 

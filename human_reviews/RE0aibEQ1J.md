@@ -1,5 +1,6 @@
 # IG-Net: Image-Goal Network for Offline Visual Navigation on A Large-Scale Game Map
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # A Theoretical Analysis of Self-Supervised Learning for Vision Transformers
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

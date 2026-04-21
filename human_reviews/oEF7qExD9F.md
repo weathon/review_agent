@@ -1,5 +1,6 @@
 # LMUFormer: Low Complexity Yet Powerful Spiking Model With Legendre Memory Units
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 3
 

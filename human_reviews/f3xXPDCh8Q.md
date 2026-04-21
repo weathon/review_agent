@@ -1,5 +1,6 @@
 # Unisolver: PDE-Conditional Transformers Are Universal PDE Solvers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 8, 3
 

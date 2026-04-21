@@ -1,5 +1,6 @@
 # Sobolev acceleration for neural networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

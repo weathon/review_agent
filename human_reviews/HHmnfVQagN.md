@@ -1,5 +1,6 @@
 # Flow of Reasoning: Training LLMs for Divergent Problem Solving with Minimal Examples
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 5, 8
 

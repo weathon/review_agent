@@ -1,5 +1,6 @@
 # Fine-grained Text-to-Image Synthesis with Semantic Refinement
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 5, 6
 

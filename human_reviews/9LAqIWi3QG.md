@@ -1,5 +1,6 @@
 # R3HF: Reward Redistribution for Enhancing Reinforcement Learning from Human Feedback
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 3, 3
 

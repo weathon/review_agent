@@ -1,5 +1,6 @@
 # Differentiation Through Black-Box Quadratic Programming Solvers
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

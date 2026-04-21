@@ -1,5 +1,6 @@
 # OmniMixup: Generalize Mixup with Mixing-Pair Sampling Distribution
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 5, 1, 5
 

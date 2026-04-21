@@ -1,5 +1,6 @@
 # NUDGE: Lightweight Non-Parametric Fine-Tuning of Embeddings for Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 5
 

@@ -568,6 +568,38 @@ def analyze_and_plot(path):
         auprc = auc(recall, precision)
         baseline_rate = n_pos / len(gt_binary)
         print(f"  AUPRC (score→A/R):     {auprc:.4f}  (baseline={baseline_rate:.4f})")
+
+        # Borderline AUROC: restrict to papers with human avg in [4, 6]
+        borderline_mask = (gt_avg >= 4) & (gt_avg <= 6)
+        bl_labels = gt_binary[borderline_mask]
+        bl_pred = pred[borderline_mask]
+        bl_n_pos = int(bl_labels.sum())
+        bl_n_neg = len(bl_labels) - bl_n_pos
+        if bl_n_pos > 0 and bl_n_neg > 0:
+            bl_auroc = roc_auc_score(bl_labels, bl_pred)
+            print(f"  Borderline AUROC (AI, gt 4-6):       {bl_auroc:.4f}  ({len(bl_labels)} papers, {bl_n_pos} accept / {bl_n_neg} reject)")
+        else:
+            print(f"  Borderline AUROC (AI, gt 4-6):       N/A ({len(bl_labels)} papers, {bl_n_pos} accept / {bl_n_neg} reject)")
+
+        bl_h_scores = []
+        bl_h_labels = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            if not borderline_mask[i]:
+                continue
+            label = int(gt_binary[i])
+            for c in gt_score_cols:
+                if pd.notna(row[c]):
+                    bl_h_scores.append(float(row[c]))
+                    bl_h_labels.append(label)
+        bl_h_scores = np.array(bl_h_scores)
+        bl_h_labels = np.array(bl_h_labels)
+        bl_h_pos = int(bl_h_labels.sum()) if len(bl_h_labels) else 0
+        bl_h_neg = len(bl_h_labels) - bl_h_pos
+        if bl_h_pos > 0 and bl_h_neg > 0:
+            bl_human_auroc = roc_auc_score(bl_h_labels, bl_h_scores)
+            print(f"  Borderline AUROC (human indiv, gt 4-6): {bl_human_auroc:.4f}  ({len(bl_h_scores)} individual scores)")
+        else:
+            print(f"  Borderline AUROC (human indiv, gt 4-6): N/A ({len(bl_h_scores)} individual scores)")
     else:
         auroc = None
         auroc_ci_val = None

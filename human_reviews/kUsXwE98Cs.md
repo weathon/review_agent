@@ -1,5 +1,6 @@
 # AutoBench-V: Can Large Vision-Language Models Benchmark Themselves?
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1, 6
 

@@ -1,5 +1,6 @@
 # Advancing Algorithmic Trading with Large Language Models: A Reinforcement Learning Approach for Stock Market Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 8, 6, 1
 

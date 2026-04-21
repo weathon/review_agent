@@ -1,5 +1,6 @@
 # VideoGrain: Modulating Space-Time Attention for Multi-Grained Video Editing
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

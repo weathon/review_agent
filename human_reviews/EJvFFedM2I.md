@@ -1,5 +1,6 @@
 # TRAM: Benchmarking Temporal Reasoning for Large Language Models
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 3, 6, 8, 6, 6
 

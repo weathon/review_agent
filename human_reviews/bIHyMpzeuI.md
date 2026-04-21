@@ -1,5 +1,6 @@
 # Sparse MoE as a New Treatment: Addressing Forgetting, Fitting, Learning Issues in Multi-Modal Multi-Task Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

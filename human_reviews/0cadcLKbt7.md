@@ -1,5 +1,6 @@
 # TPI-LLM: Serving 70B-scale LLMs Efficiently on Low-resource Edge Devices
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 1
 

@@ -1,5 +1,6 @@
 # Faster Inference of Flow-Based Generative Models via Improved Data-Noise Coupling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

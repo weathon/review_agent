@@ -1,5 +1,6 @@
 # Towards Efficient Trace Estimation for Optimal Transport in Domain Adaptation
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 1, 3, 3, 6
 

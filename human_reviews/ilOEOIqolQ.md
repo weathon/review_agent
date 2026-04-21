@@ -1,5 +1,6 @@
 # AI as Humanity’s Salieri: Quantifying Linguistic Creativity of Language Models via Systematic Attribution of Machine Text against Web Text
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Improved Generalization of cGAN using Vicinal Estimation and Early Stopping
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

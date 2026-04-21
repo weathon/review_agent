@@ -1,5 +1,6 @@
 # Only Pay for What Is Uncertain: Variance-Adaptive Thompson Sampling
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6, 5
 

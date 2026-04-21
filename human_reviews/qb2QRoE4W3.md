@@ -1,5 +1,6 @@
 # LLM-Cite: Cheap Fact Verification with Attribution via URL Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

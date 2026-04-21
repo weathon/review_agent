@@ -1,5 +1,6 @@
 # Score Regularized Policy Optimization through Diffusion Behavior
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 8
 

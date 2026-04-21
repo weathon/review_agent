@@ -1,5 +1,6 @@
 # Ensemble Systems Representation for Function Learning over Manifolds
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3
 

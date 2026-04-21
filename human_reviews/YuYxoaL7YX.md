@@ -1,5 +1,6 @@
 # Learning an Inventory Control Policy with General Inventory Arrival Dynamics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

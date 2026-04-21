@@ -1,5 +1,6 @@
 # Constraint-Free Structure Learning with Smooth Acyclic Orientations
 
+- Avg Score: 5.60
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6, 5
 

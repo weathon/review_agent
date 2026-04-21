@@ -1,5 +1,6 @@
 # Variable Forward Regularization to Replace Ridge in Online Linear Regression
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 1
 

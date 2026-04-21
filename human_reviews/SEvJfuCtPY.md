@@ -1,5 +1,6 @@
 # Phase-aware Training Schedule Simplifies Learning in Flow-Based Generative Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 3, 3, 1
 

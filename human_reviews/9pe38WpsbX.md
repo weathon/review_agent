@@ -1,5 +1,6 @@
 # MuDreamer: Learning Predictive World Models without Reconstruction
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

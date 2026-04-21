@@ -1,5 +1,6 @@
 # SSOLE: Rethinking Orthogonal Low-rank Embedding for Self-Supervised Learning
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 5
 

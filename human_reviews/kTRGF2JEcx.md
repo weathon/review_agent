@@ -1,5 +1,6 @@
 # Instructing Large Language Models to Identify and Ignore Irrelevant Conditions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

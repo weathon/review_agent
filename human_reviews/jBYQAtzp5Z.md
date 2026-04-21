@@ -1,5 +1,6 @@
 # Competitive Fair Scheduling with Predictions
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 8
 

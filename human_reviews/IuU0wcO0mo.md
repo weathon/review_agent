@@ -1,5 +1,6 @@
 # Multi-session, multi-task neural decoding from distinct cell-types and brain regions
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

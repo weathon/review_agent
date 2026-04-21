@@ -1,5 +1,6 @@
 # OR-Bench: An Over-Refusal Benchmark for Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 6, 1, 3, 5, 6, 5
 

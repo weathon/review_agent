@@ -1,5 +1,6 @@
 # DA-Bench: Benchmarking Unsupervised Domain Adaptation Methods with Realistic Validation On Diverse Modalities
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 6, 6, 6
 

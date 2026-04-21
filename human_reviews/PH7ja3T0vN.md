@@ -1,5 +1,6 @@
 # State Combinatorial Generalization In Decision Making With Conditional Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

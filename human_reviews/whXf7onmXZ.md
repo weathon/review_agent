@@ -1,5 +1,6 @@
 # Learning the Unseen: Peer-to-Peer Fine-tuning of Vision Transformers
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

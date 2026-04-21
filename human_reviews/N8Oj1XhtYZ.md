@@ -1,5 +1,6 @@
 # SANA: Efficient High-Resolution Text-to-Image Synthesis with Linear Diffusion Transformers
 
+- Avg Score: 8.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 10
 

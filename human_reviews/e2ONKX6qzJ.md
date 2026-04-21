@@ -1,5 +1,6 @@
 # Eliminating Oversaturation and Artifacts of High Guidance Scales in Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

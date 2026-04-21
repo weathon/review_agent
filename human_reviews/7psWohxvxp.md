@@ -1,5 +1,6 @@
 # Exploring a Principled Framework for Deep Subspace Clustering
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

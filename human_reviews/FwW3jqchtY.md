@@ -1,5 +1,6 @@
 # Identifying neural dynamics using interventional state space models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

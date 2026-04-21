@@ -1,5 +1,6 @@
 # Learning Identifiable Causal Structures with Pairwise Representation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 6, 3, 3
 

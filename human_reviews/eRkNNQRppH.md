@@ -1,5 +1,6 @@
 # (Pre-)training Dynamics: Scaling Generalization with First-Order Logic
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

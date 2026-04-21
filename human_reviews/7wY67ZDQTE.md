@@ -1,5 +1,6 @@
 # Cauchy-Schwarz Divergence Information Bottleneck for Regression
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6, 6
 

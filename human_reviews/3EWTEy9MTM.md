@@ -1,5 +1,6 @@
 # Chain of Thought Empowers Transformers to Solve Inherently Serial Problems
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 3, 8, 5
 

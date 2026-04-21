@@ -1,5 +1,6 @@
 # SIMPL: Scalable and hassle-free optimisation of neural representations from behaviour
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 6
 

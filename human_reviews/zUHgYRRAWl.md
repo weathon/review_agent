@@ -1,5 +1,6 @@
 # Objective-Agnostic Enhancement of Molecule Properties via Multi-Stage VAE
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 1
 

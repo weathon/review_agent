@@ -1,5 +1,6 @@
 # ASROB: Measuring Automatic Speech Recognition from One Book
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 5, 6
 

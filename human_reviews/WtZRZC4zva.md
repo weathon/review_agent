@@ -1,5 +1,6 @@
 # Privately Learning from Graphs with Applications in Fine-tuning Large Pretrained Models
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

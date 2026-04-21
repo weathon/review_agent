@@ -1,5 +1,6 @@
 # A Comprehensive Study of Privacy Risks in Curriculum Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

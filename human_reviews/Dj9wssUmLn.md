@@ -1,5 +1,6 @@
 # Beyond In-Context Learning: Enhancing Long-form Generation of Large Language Models via Task-Inherent Attribute Guidelines
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 6, 5, 6
 

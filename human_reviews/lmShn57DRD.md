@@ -1,5 +1,6 @@
 # Connecting the Patches: Multivariate Long-term Forecasting using Graph and Recurrent Neural Network
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

@@ -1,5 +1,6 @@
 # Differentiation of Multi-objective Data-driven Decision Pipeline
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

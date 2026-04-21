@@ -1,5 +1,6 @@
 # SWEb: A Large Web Dataset for the Scandinavian Languages
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

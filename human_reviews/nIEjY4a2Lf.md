@@ -1,5 +1,6 @@
 # Misspecified  $Q$-Learning with Sparse Linear Function Approximation: Tight Bounds on Approximation Error
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

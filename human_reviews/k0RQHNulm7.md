@@ -1,5 +1,6 @@
 # Generalizable Cross-Modality Distillation with Contrastive Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 5, 6
 

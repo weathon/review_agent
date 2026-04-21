@@ -1,5 +1,6 @@
 # LRVS-Fashion: Extending Visual Search with Referring Instructions
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 5, 8
 

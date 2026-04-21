@@ -1,5 +1,6 @@
 # MediConfusion: Can you trust your AI radiologist? Probing the reliability of multimodal medical foundation models
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 6
 

@@ -1,5 +1,6 @@
 # Global Well-posedness and Convergence Analysis of Score-based Generative Models via Sharp Lipschitz Estimates
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

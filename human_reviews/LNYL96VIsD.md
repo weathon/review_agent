@@ -1,5 +1,6 @@
 # Large Learning Rates without the Agonizing Pain: Dispelling the Curse of Singularities in Deep Neural Networks
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

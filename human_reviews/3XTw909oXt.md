@@ -1,5 +1,6 @@
 # RAG$^C$: Towards Copyright Protection for Knowledge Bases of Retrieval-augmented Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

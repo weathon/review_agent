@@ -1,5 +1,6 @@
 # From Local Explainability to Global Robustness: Improving the Robustness of Machine Learning Models Using Counterfactual Explanations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

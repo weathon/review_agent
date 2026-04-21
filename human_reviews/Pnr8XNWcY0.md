@@ -1,5 +1,6 @@
 # Roadmap towards Superhuman Speech Understanding using Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

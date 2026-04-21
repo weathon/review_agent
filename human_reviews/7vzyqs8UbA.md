@@ -1,5 +1,6 @@
 # LMCC-MBC: Metric-Constrained Model-Based Clustering with Wasserstein-2 Distance of Gaussian Markov Random Fields
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

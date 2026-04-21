@@ -1,5 +1,6 @@
 # A Feature-Aware Federated Learning Framework for Unsupervised Anomaly Detection in 5G Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

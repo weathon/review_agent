@@ -1,5 +1,6 @@
 # S4D: Streaming 4D Real-World Reconstruction with Gaussians and 3D Control Points
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

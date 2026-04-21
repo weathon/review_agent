@@ -1,5 +1,6 @@
 # Fast Salient Factor Concentration (FSFC) Recurrent Neural Network for Text Classification
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3
 

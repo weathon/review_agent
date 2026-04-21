@@ -1,5 +1,6 @@
 # Task Facet Learning: A Structured Approach to Prompt Optimization
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

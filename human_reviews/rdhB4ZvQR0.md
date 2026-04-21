@@ -1,5 +1,6 @@
 # Rethinking Graph Super-Resolution: Dual Frameworks for Topological Fidelity
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

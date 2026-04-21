@@ -1,5 +1,6 @@
 # Taming AI Bots: Controllability of Neural States in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 1, 5, 5
 

@@ -1,5 +1,6 @@
 # Global-to-Local Support Spectrums for Model Explainability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3
 

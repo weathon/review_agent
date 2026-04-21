@@ -1,5 +1,6 @@
 # Kosmos-G: Generating Images in Context with Multimodal Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

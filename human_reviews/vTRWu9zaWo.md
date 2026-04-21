@@ -1,5 +1,6 @@
 # Using Stochastic Gradient Descent to Smooth Nonconvex Functions: Analysis of Implicit Graduated Optimization
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 5, 3, 3, 6
 

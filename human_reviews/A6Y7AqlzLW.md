@@ -1,5 +1,6 @@
 # Rewarding Progress: Scaling Automated Process Verifiers for LLM Reasoning
 
+- Avg Score: 7.14
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8, 8, 6, 6
 

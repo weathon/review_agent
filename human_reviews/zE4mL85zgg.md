@@ -1,5 +1,6 @@
 # CLAD: A Contrastive Learning based Method for Multi-Class Anomaly Detection
 
+- Avg Score: 2.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 1, 3
 

@@ -1,5 +1,6 @@
 # On Limitation of Transformer for Learning HMMs
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

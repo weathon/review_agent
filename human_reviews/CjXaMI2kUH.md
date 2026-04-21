@@ -1,5 +1,6 @@
 # MrSteve: Instruction-Following Agents in Minecraft with What-Where-When Memory
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

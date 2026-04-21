@@ -1,5 +1,6 @@
 # Stylized Offline Reinforcement Learning: Extracting Diverse High-Quality Behaviors from Heterogeneous Datasets
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

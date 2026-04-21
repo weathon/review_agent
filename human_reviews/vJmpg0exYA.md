@@ -1,5 +1,6 @@
 # DiscQuant: A Quantization Method for Neural Networks Inspired by Discrepancy Theory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

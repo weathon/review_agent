@@ -1,5 +1,6 @@
 # Efficient Inverse Multiagent Learning
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 10, 6, 6
 

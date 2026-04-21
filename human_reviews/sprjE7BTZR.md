@@ -1,5 +1,6 @@
 # Transformers are Efficient Compilers, Provably
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 5, 6, 1, 3
 

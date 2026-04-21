@@ -1,5 +1,6 @@
 # Credal Wrapper of Model Averaging for Uncertainty Estimation in Classification
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 5, 8, 8, 8
 

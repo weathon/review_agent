@@ -1,5 +1,6 @@
 # DEL-Ranking: Ranking-Correction Denoising Framework for Elucidating Molecular Affinities in DNA-Encoded Libraries
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6
 

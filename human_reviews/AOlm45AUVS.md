@@ -1,5 +1,6 @@
 # Exploiting Structure in Offline Multi-Agent RL: The Benefits of Low Interaction Rank
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

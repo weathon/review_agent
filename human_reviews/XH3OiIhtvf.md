@@ -1,5 +1,6 @@
 # Unsupervised Federated Learning for Privacy Preserving in Face Recognition System
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 3, 1
 

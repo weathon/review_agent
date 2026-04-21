@@ -1,5 +1,6 @@
 # Alleviating the Effect of Data Imbalance on Adversarial Training
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 5
 

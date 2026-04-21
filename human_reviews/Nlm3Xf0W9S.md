@@ -1,5 +1,6 @@
 # A Watermark for Order-Agnostic Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 5
 

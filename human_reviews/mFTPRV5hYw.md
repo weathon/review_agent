@@ -1,5 +1,6 @@
 # Where have you been? A Study of Privacy Risk for Point-of-Interest Recommendation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 5, 6
 

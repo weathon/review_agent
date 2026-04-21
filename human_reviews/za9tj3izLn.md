@@ -1,5 +1,6 @@
 # A Unified View on Neural Message Passing with Opinion Dynamics for Social Networks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

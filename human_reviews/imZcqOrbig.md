@@ -1,5 +1,6 @@
 # Multi-View Representation is What You Need for Point-Cloud Pre-Training
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # A Variational Framework for Estimating Continuous Treatment Effects with Measurement Error
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 8, 6
 

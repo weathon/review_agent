@@ -1,5 +1,6 @@
 # Generalization of Spectral Graph Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 3, 3, 6
 

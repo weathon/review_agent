@@ -1,5 +1,6 @@
 # Sheared LLaMA: Accelerating Language Model Pre-training via Structured Pruning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 5
 

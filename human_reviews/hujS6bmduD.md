@@ -1,5 +1,6 @@
 # Harnessing Text to Image Diffusion for Dense Prediction Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # A Statistical Framework for Ranking LLM-based Chatbots
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5
 

@@ -1,5 +1,6 @@
 # Learning Epipolar Feature Fields for Multi-Image Super-Resolution
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 6, 3, 8, 10
 

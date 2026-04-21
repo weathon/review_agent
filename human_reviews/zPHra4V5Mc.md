@@ -1,5 +1,6 @@
 # Feature Averaging: An Implicit Bias of Gradient Descent Leading to Non-Robustness in Neural Networks
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

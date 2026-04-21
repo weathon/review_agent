@@ -1,5 +1,6 @@
 # Correlated Proxies: A New Definition and Improved Mitigation for Reward Hacking
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Federated Residual Low-Rank Adaptation of Large Language Models
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 5
 

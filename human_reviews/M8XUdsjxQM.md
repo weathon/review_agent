@@ -1,5 +1,6 @@
 # High dimensional Bayesian Optimization via Condensing-Expansion Projection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

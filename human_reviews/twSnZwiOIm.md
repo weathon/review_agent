@@ -1,5 +1,6 @@
 # Learning invariant representations of time-homogeneous stochastic dynamical systems
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

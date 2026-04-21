@@ -1,5 +1,6 @@
 # AlphaFold Distillation for Protein Design
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

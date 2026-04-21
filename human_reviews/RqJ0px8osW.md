@@ -1,5 +1,6 @@
 # A unified lightweight complex scenes-oriented network for infrared and visible image fusion
 
+- Avg Score: 6.80
 - Decision: Reject
 - Scores: 8, 8, 8, 5, 5
 

@@ -1,5 +1,6 @@
 # What Makes ImageNet Look Unlike LAION
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

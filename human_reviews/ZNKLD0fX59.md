@@ -1,5 +1,6 @@
 # CasualHDR: Robust High Dynamic Range 3D Gaussian Splatting from Casually Captured Videos
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 

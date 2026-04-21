@@ -1,5 +1,6 @@
 # SafeDiffuser: Safe Planning with Diffusion Probabilistic Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 1
 

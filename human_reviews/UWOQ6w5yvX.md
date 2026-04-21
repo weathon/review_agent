@@ -1,5 +1,6 @@
 # AGLP: A Graph Learning Perspective for Semi-supervised Domain Adaptation
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

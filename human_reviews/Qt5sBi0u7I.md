@@ -1,5 +1,6 @@
 # Symbolic Music Generation with Fine-grained Interactive Textural Guidance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 3, 8, 6
 

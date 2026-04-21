@@ -1,5 +1,6 @@
 # EvalAlign: Supervised Fine-Tuning Multimodal LLMs with Human-Aligned Data for Evaluating Text-to-Image Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

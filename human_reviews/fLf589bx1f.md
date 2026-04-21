@@ -1,5 +1,6 @@
 # $\mathcal{B}$-Coder: Value-Based Deep Reinforcement Learning for Program Synthesis
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # The Labyrinth of Links: Navigating the Associative Maze of Multi-modal LLMs
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 8
 

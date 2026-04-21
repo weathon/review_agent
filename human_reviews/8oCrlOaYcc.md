@@ -1,5 +1,6 @@
 # Don't flatten, tokenize! Unlocking the key to SoftMoE's efficacy in deep RL
 
+- Avg Score: 7.40
 - Decision: Accept (Spotlight)
 - Scores: 5, 8, 8, 8, 8
 

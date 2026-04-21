@@ -1,5 +1,6 @@
 # DAG-Jailbreak: Enhancing Black-box Jailbreak Attacks and Defenses through DAG Dependency Analysis
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

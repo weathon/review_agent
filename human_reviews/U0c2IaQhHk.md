@@ -1,5 +1,6 @@
 # Exploring the State and Action Space in Reinforcement Learning with Infinite-Dimensional Confidence Balls
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

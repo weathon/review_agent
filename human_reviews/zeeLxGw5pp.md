@@ -1,5 +1,6 @@
 # Enhancing Robustness of Deep Learning via Unified Latent Representation
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 1, 1, 8
 

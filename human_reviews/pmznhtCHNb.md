@@ -1,5 +1,6 @@
 # GaussianClin: Multimodal Featured Gaussian Splatting for Dynamic Clinical Videos
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

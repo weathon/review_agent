@@ -1,5 +1,6 @@
 # ObjectNet Captions: Models are not superhuman captioners
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

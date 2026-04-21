@@ -1,5 +1,6 @@
 # Evaluating Oversight Robustness with Incentivized Reward Hacking
 
+- Avg Score: 3.17
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 1, 3, 3
 

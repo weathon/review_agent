@@ -1,5 +1,6 @@
 # Tokenizing 3D Molecule Structure with Quantized Spherical Coordinates
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

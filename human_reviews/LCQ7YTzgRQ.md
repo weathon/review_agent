@@ -1,5 +1,6 @@
 # On the Role of Edge Dependency in Graph Generative Models
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # MoA: Mixture of Sparse Attention for Automatic Large Language Model Compression
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 8, 6, 3
 

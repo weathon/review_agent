@@ -1,5 +1,6 @@
 # Mitigating Distribution Shifts: Uncertainty-Aware Offline-to-Online Reinforcement Learning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 5, 3, 6
 

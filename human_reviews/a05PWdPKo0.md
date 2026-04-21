@@ -1,5 +1,6 @@
 # PAR-AdvGAN: Improving Adversarial Attack Capability with Progressive Auto-Regression AdvGAN
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

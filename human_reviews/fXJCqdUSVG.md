@@ -1,5 +1,6 @@
 # On Evaluating the Durability of Safeguards for Open-Weight LLMs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

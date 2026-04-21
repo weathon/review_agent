@@ -1,5 +1,6 @@
 # Zero-Shot Learning of Causal Models
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 6, 8
 

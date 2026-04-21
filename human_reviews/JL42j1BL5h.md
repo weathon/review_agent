@@ -1,5 +1,6 @@
 # All Languages Matter: On the Multilingual Safety of Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

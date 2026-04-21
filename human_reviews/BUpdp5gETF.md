@@ -1,5 +1,6 @@
 # Different Rates for Different Weights: Decoupled Relative Learning Rate Schedules
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

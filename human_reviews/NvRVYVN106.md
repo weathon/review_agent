@@ -1,5 +1,6 @@
 # Privacy Breach Detection by Non-Parametric Two-Sample Tests
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 5
 

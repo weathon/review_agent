@@ -1,5 +1,6 @@
 # Dissecting learning and forgetting in language model finetuning
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 5, 5
 

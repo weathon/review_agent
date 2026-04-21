@@ -1,5 +1,6 @@
 # Exposing Text-Image Inconsistency Using Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # Generalized Activation via Multivariate Projection
 
+- Avg Score: 6.67
 - Decision: Reject
 - Scores: 8, 6, 6
 

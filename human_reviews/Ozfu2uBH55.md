@@ -1,5 +1,6 @@
 # Preference Optimization with Multi-Sample Comparisons
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

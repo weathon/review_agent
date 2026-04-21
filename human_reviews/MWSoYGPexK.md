@@ -1,5 +1,6 @@
 # Towards Efficient and Scalable Multi-agent Reasoning via Bayesian Nash Equilibrium
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 3, 6
 

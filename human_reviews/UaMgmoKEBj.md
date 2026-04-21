@@ -1,5 +1,6 @@
 # Decoupling regularization from the action space
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 5, 6
 

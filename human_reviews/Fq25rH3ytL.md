@@ -1,5 +1,6 @@
 # Is Forward Gradient an Effective Tool for Explaining Black-box Models?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

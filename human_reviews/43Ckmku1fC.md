@@ -1,5 +1,6 @@
 # Towards Stabilizable Sequential Smoothing Spline Interpolation by Point Forecasting
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 8, 3, 6
 

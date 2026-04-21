@@ -1,5 +1,6 @@
 # Implicit Bias in Matrix Factorization and its Explicit Realization in a new Architecture
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 3
 

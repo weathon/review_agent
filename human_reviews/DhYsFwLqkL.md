@@ -1,5 +1,6 @@
 # Well-NeRF: Ensuring Well-Posed Neural Radiance Fields via View Frustum and Shadow Zone Based Regularization
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 3, 5, 6, 6
 

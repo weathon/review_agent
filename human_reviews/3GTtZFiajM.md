@@ -1,5 +1,6 @@
 # Justice or Prejudice? Quantifying Biases in LLM-as-a-Judge
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6
 

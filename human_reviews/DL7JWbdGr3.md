@@ -1,5 +1,6 @@
 # PEMs: Pre-trained Epidemic Time-Series Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

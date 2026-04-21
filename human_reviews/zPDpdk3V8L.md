@@ -1,5 +1,6 @@
 # Enhancing Clustered Federated Learning: Integration of Strategies and Improved Methodologies
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8
 

@@ -1,5 +1,6 @@
 # A Large-Scale 3D Face Mesh Video Dataset via Neural Re-parameterized Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Beautifying Diffusion Models: Learning Context-Aware Filters for Robust Dense Prediction on Test-Time Corrupted Images
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5
 

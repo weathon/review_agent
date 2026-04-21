@@ -1,5 +1,6 @@
 # DreamFuser: Value-guided Diffusion Policy for Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

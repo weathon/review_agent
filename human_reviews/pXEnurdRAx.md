@@ -1,5 +1,6 @@
 # Multi-Scale Generative Modeling in Wavelet Domain
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 8, 1
 

@@ -1,5 +1,6 @@
 # DGQ: Distribution-Aware Group Quantization for Text-to-Image Diffusion Models
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8, 6
 

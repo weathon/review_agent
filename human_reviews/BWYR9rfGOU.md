@@ -1,5 +1,6 @@
 # SATE: A Two-Stage Approach for Performance Prediction in Subpopulation Shift Scenarios
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

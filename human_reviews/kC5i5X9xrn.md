@@ -1,5 +1,6 @@
 # LightSeq: Sequence Level Parallelism for Distributed Training of Long Context Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

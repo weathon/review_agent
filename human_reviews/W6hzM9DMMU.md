@@ -1,5 +1,6 @@
 # The Benefit of Being Bayesian in Online Conformal Prediction
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 3, 8, 6
 

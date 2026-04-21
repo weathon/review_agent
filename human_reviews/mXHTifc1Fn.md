@@ -1,5 +1,6 @@
 # E(3)-equivariant models cannot learn chirality: Field-based molecular generation
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 8
 

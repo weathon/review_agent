@@ -1,5 +1,6 @@
 # Beyond task performance: evaluating and reducing the flaws of large multimodal models with in-context-learning
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 3, 3
 

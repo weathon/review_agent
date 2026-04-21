@@ -1,5 +1,6 @@
 # Towards continuous machine learning on periodic crystals by ultra-fast invariants
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

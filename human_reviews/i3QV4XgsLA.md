@@ -1,5 +1,6 @@
 # EquiJump: Protein Dynamics Simulation via SO(3)-Equivariant Stochastic Interpolants
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 6, 3, 6, 6
 

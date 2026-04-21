@@ -1,5 +1,6 @@
 # Regret measure in continuous time limit for a stochastic Multi-armed bandit problem
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 3, 1
 

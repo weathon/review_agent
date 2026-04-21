@@ -1,5 +1,6 @@
 # ActSafe: Active Exploration with Safety Constraints for Reinforcement Learning
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 8
 

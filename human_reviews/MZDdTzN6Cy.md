@@ -1,5 +1,6 @@
 # TVNet: A Novel Time Series Analysis Method Based on Dynamic Convolution and 3D-Variation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 6
 

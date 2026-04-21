@@ -1,5 +1,6 @@
 # Deep Generative Clustering with Multimodal Diffusion Variational Autoencoders
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

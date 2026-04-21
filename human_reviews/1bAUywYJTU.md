@@ -1,5 +1,6 @@
 # DreamTime: An Improved Optimization Strategy for Diffusion-Guided 3D Generation
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 8, 6, 3, 6
 

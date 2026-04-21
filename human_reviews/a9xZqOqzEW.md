@@ -1,5 +1,6 @@
 # A Logical Framework for Verification of AI Fairness
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 5, 3, 1, 1
 

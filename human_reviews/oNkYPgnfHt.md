@@ -1,5 +1,6 @@
 # Learning to Intervene on Concept Bottlenecks
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

@@ -1,5 +1,6 @@
 # EEGMamba: Bidirectional State Space Model with Mixture of Experts for EEG Multi-task Classification
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 5, 3, 6, 6
 

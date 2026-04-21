@@ -1,5 +1,6 @@
 # UniCBE: An Uniformity-driven Comparing Based Evaluation Framework with Unified Multi-Objective Optimization
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8, 6
 

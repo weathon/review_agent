@@ -1,5 +1,6 @@
 # Elephant in the Room: Unveiling the Pitfalls of Human Proxies in Alignment
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

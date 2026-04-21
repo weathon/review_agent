@@ -1,5 +1,6 @@
 # Detecting Out-of-Distribution Samples via Conditional Distribution Entropy with Optimal Transport
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 1, 8, 6
 

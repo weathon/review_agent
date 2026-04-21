@@ -1,5 +1,6 @@
 # Modelling brain connectomes networks: Solv is a worthy competitor to hyperbolic geometry!
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

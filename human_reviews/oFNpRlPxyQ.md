@@ -1,5 +1,6 @@
 # MSPipe: Minimal Staleness Pipeline for Efficient Temporal GNN Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 6, 6, 1
 

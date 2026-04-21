@@ -1,5 +1,6 @@
 # Does Spatial Cognition Emerge in Frontier Models?
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 5
 

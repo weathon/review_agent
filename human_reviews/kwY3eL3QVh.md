@@ -1,5 +1,6 @@
 # Feature-guided score diffusion for sampling conditional densities
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 5, 8, 6
 

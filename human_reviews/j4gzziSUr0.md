@@ -1,5 +1,6 @@
 # Optimizing importance weighting in the presence of sub-population shifts
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

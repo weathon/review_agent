@@ -1,5 +1,6 @@
 # Jumanji: a Diverse Suite of Scalable Reinforcement Learning Environments in JAX
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

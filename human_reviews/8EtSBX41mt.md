@@ -1,5 +1,6 @@
 # Can LLMs Separate Instructions From Data? And What Do We Even Mean By That?
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

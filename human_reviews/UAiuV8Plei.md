@@ -1,5 +1,6 @@
 # FBSVP: Video Prediction Based on Foreground-Background Separation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 3, 8
 

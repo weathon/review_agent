@@ -1,5 +1,6 @@
 # Lyfe Agents: generative agents for low-cost real-time social interactions
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 5, 3, 5, 5
 

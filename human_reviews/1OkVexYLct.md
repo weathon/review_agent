@@ -1,5 +1,6 @@
 # Revisiting the Othello World Model Hypothesis
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

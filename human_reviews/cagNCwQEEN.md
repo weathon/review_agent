@@ -1,5 +1,6 @@
 # Multimodal Instruction Tuning with Hybrid State Space Models
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 5, 3, 3
 

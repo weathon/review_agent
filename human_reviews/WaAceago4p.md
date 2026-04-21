@@ -1,5 +1,6 @@
 # Easing Non-IID Pain with Dual Relaxations in Federated Learning: SimFAFL redeems an enhanced efficacy
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 3
 

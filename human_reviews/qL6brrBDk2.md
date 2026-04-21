@@ -1,5 +1,6 @@
 # SAFLEX: Self-Adaptive Augmentation via Feature Label Extrapolation
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 8
 

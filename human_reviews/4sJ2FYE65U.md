@@ -1,5 +1,6 @@
 # Neural Multi-Objective Combinatorial Optimization via Graph-Image Multimodal Fusion
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 5
 

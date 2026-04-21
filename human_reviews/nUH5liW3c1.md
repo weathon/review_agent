@@ -1,5 +1,6 @@
 # When Hard Negative Sampling Meets Supervised Contrastive Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 5, 6
 

@@ -1,5 +1,6 @@
 # Embodied Instruction Following in Unknown Environments
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

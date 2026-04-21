@@ -1,5 +1,6 @@
 # ReferPix2Pix: Guiding  Multi-Modal LLMs for Image Editing with Referential Pixel Grounding
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

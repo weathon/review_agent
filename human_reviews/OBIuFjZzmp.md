@@ -1,5 +1,6 @@
 # MeZO-A$^{3}$dam: Memory-efficient Zeroth-order Adam with Adaptivity Adjustments for Fine-tuning LLMs
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5
 

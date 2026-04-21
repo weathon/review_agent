@@ -1,5 +1,6 @@
 # Identifying and Mitigating Vulnerabilities in LLM-Integrated Applications
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # Reasoning Elicitation in Language Models via Counterfactual Feedback
 
+- Avg Score: 6.25
 - Decision: Accept (Oral)
 - Scores: 6, 8, 5, 6
 

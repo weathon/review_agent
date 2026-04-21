@@ -1,5 +1,6 @@
 # Self-Supervision is Not All You Need: In Defense of Semi-Supervised Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

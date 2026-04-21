@@ -1,5 +1,6 @@
 # Don’t Discard, but Keep It Small: Context-Preserving KV Cache Compression with Importance-Aware Adaptive Precision
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6, 5
 

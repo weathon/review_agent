@@ -1,5 +1,6 @@
 # Patch Ranking Map: Explaining Relations among Top-Ranked Patches, Top-Ranked Features and Decisions of Convolutional Neural Networks for Image Classification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 5, 3, 1, 1
 

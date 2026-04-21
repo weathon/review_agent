@@ -1,5 +1,6 @@
 # Adversarial Inverse Reward-Constraint Learning with Reward-Feasibility Contrast Prior Inspired by Animal Behaviour
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

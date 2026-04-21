@@ -1,5 +1,6 @@
 # Mask Frozen-DETR: High Quality Instance Segmentation with One GPU
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 6
 

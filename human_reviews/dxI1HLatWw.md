@@ -1,5 +1,6 @@
 # Generalized Temporal Difference Learning Models for Supervised Learning
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 3, 6, 8
 

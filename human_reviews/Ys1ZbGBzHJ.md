@@ -1,5 +1,6 @@
 # Adversarial Contrastive Decoding: Aligning Large Language Models via Exploiting Their Safety and Harm
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

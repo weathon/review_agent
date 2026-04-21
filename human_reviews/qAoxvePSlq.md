@@ -1,5 +1,6 @@
 # DQ-LoRe: Dual Queries with Low Rank Approximation Re-ranking for In-Context Learning
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 6
 

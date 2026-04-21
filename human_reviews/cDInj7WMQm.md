@@ -1,5 +1,6 @@
 # UGC: UNIVERSAL GRAPH COARSENING
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6
 

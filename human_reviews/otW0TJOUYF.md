@@ -1,5 +1,6 @@
 # Hypothetical Minds: Scaffolding Theory of Mind for Multi-Agent Tasks with Large Language Models
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

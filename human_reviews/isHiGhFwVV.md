@@ -1,5 +1,6 @@
 # Anomaly Detection by Context Contrasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

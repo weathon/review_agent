@@ -1,5 +1,6 @@
 # Latent Score-Based Reweighting for Robust Classification on Imbalanced Tabular Data
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 8, 6
 

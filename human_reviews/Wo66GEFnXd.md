@@ -1,5 +1,6 @@
 # Learning Time-Dependent Density Functional Theory via Geometry and Physics Aware Latent Evolution
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 5, 6, 8, 8
 

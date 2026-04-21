@@ -1,5 +1,6 @@
 # Culture in Artificial Intelligence: A Literature Review & Proposal
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 8
 

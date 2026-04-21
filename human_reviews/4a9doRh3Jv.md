@@ -1,5 +1,6 @@
 # Fast and Slow Generating: An Empirical Study on Large and Small Language Models Collaborative Decoding
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

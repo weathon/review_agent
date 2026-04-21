@@ -1,5 +1,6 @@
 # Masked Audio Generation using a Single Non-Autoregressive Transformer
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 8, 6
 

@@ -1,5 +1,6 @@
 # MS$^3$M: Multi-Stage State Space Model for Motion Forecasting
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 3, 5, 3
 

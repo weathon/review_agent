@@ -1,5 +1,6 @@
 # Enhancing Multi-Step Reasoning Abilities of Language Models through Direct Q-Function Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

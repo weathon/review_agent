@@ -1,5 +1,6 @@
 # MIMOSA: Multimodal Concept-based representations
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1, 3, 5
 

@@ -1,5 +1,6 @@
 # OpenIns3D: Snap and Lookup for 3D Open-vocabulary Instance Segmentation
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

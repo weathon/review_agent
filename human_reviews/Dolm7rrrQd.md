@@ -1,5 +1,6 @@
 # Gone With the Bits: Revealing Racial Bias in Low-Rate Neural Compression for Facial Images
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 3
 

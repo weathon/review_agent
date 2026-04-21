@@ -1,5 +1,6 @@
 # Curvature-Informed SGD via General Purpose Lie-Group Preconditioners
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

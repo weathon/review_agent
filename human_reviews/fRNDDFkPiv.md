@@ -1,5 +1,6 @@
 # Controlling Forgetting with Test-Time Data in Continual Learning
 
+- Avg Score: 6.75
 - Decision: Reject
 - Scores: 5, 6, 8, 8
 

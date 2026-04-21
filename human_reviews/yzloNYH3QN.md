@@ -1,5 +1,6 @@
 # Attention in Large Language Models Yields Efficient Zero-Shot Re-Rankers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 3
 

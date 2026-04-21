@@ -1,5 +1,6 @@
 # BayesDiff: Estimating Pixel-wise Uncertainty in Diffusion via Bayesian Inference
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Entailment Progressions: A Robust Approach to Evaluating Reasoning Within Larger Discourse
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

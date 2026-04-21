@@ -1,5 +1,6 @@
 # TIEM: Enhancing Explanation of Video Prediction via Temporal Dynamics-Focused Dual Perturbation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

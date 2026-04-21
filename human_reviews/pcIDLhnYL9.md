@@ -1,5 +1,6 @@
 # Can the Training Loss be Predictive for Out-of-Distribution Generalization?
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

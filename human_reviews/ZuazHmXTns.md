@@ -1,5 +1,6 @@
 # Problem-Parameter-Free Federated Learning
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8, 8
 

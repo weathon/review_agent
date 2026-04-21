@@ -1,5 +1,6 @@
 # UniRestore3D: A Scalable Framework For General Shape Restoration
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5
 

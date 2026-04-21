@@ -1,5 +1,6 @@
 # AlphaMol: rigid neighborhood representation for small molecule structure prediction
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 5, 3
 

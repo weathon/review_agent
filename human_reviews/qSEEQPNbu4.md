@@ -1,5 +1,6 @@
 # econSG: Efficient and Multi-view Consistent Open-Vocabulary 3D Semantic Gaussians
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 3
 

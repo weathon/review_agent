@@ -1,5 +1,6 @@
 # Position-Query-Based Autoencoders for View Decoupled Cross Point Cloud Reconstruction and a Self-Supervised Learning Framework
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 8, 5, 8, 5, 5
 

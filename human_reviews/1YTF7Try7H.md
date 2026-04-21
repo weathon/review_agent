@@ -1,5 +1,6 @@
 # Implicit Bridge Consistency Distillation for One-Step Unpaired Image Translation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 5, 3
 

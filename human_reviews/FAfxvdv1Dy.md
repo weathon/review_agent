@@ -1,5 +1,6 @@
 # STAFF: Speculative Coreset Selection for Task-Specific Fine-tuning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

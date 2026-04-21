@@ -1,5 +1,6 @@
 # MindGPT: Interpreting What You See with Non-invasive Brain Recordings
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

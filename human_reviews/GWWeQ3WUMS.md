@@ -1,5 +1,6 @@
 # Unleashing the Potential of LLMs for Quantum Computing: A Study in Quantum Architecture Design
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1
 

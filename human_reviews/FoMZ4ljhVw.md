@@ -1,5 +1,6 @@
 # PnP Inversion: Boosting Diffusion-based Editing with 3 Lines of Code
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

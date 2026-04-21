@@ -1,5 +1,6 @@
 # Bidirectional Generative Retrieval with Multi-Modal LLMs for Text-Video Retrieval
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 3, 5, 8, 5
 

@@ -1,5 +1,6 @@
 # One-shot Federated Learning with Training-Free Client
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # PrivateChat: A Secure Encrypted Communication Framework with Black-box LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 1, 6, 6
 

@@ -1,5 +1,6 @@
 # Sketch2Diagram: Generating Vector Diagrams from Hand-Drawn Sketches
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

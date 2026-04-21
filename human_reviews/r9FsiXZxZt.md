@@ -1,5 +1,6 @@
 # Object centric architectures enable efficient causal representation learning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 8, 6, 6
 

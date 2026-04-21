@@ -1,5 +1,6 @@
 # Think or Remember? Detecting and Directing LLMs Towards Memorization or Generalization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

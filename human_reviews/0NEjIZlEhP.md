@@ -1,5 +1,6 @@
 # Verified Relative Output Margins for Neural Network Twins
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 6, 3, 5
 

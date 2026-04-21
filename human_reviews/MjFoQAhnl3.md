@@ -1,5 +1,6 @@
 # Representation Shattering in Transformers: A Synthetic Study with Knowledge Editing
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 3
 

@@ -1,5 +1,6 @@
 # Indeterminate Probability Theory
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 3, 1, 6
 

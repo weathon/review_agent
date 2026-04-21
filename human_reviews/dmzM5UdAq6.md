@@ -1,5 +1,6 @@
 # Progressive Token Length Scaling in Transformer Encoders for Efficient Universal Segmentation
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

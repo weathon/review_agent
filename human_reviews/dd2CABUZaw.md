@@ -1,5 +1,6 @@
 # ChartBench: A Benchmark for Complex Visual Reasoning in Charts
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 6, 6, 5
 

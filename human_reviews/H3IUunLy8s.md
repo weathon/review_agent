@@ -1,5 +1,6 @@
 # Increasing Model Capacity for Free: A Simple Strategy for Parameter Efficient Fine-tuning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

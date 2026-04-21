@@ -1,5 +1,6 @@
 # Ctrl-U: Robust Conditional Image Generation via Uncertainty-aware Reward Modeling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

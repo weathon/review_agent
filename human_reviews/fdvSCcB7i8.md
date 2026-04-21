@@ -1,5 +1,6 @@
 # Feature Level Instance Attribution
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

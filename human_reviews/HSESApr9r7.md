@@ -1,5 +1,6 @@
 # FedEve: On Bridging the Client Drift and Period Drift for Cross-device Federated Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

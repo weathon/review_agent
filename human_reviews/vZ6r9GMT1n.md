@@ -1,5 +1,6 @@
 # Understanding the Robustness of Randomized Feature Defense Against Query-Based Adversarial Attacks
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 3, 6, 6, 8
 

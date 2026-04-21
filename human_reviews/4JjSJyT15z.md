@@ -1,5 +1,6 @@
 # NaturalSigner: Diffusion Models are Natural Sign Language Generator
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 8, 3, 3
 

@@ -1,5 +1,6 @@
 # CycleAug: Cycle-Consistent Visual Augmentation for Large Multimodal Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 6
 

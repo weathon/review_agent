@@ -1,5 +1,6 @@
 # Impact of Molecular Representations on Deep Learning Model Comparisons in Drug Response Predictions
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 5
 

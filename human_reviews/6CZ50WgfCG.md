@@ -1,5 +1,6 @@
 # DrS: Learning Reusable Dense Rewards for Multi-Stage Tasks
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 8
 

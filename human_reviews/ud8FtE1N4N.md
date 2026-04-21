@@ -1,5 +1,6 @@
 # The Journey Matters: Average Parameter Count over Pre-training Unifies Sparse and Dense Scaling Laws
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

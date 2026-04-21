@@ -1,5 +1,6 @@
 # Digi-Q: Learning VLM Q-Value Functions for Training Device-Control Agents
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6, 3
 

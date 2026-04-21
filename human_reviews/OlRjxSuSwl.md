@@ -1,5 +1,6 @@
 # Beyond Content Relevance: Evaluating Instruction Following in Retrieval Models
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 3, 5, 6, 6, 8
 

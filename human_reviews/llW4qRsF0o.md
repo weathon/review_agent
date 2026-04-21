@@ -1,5 +1,6 @@
 # Physics-Transfer Learning: A Framework to Address the Accuracy-Performance Dilemma in Modeling Complexity Problems in Engineering Sciences
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 1, 5, 5
 

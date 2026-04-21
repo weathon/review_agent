@@ -1,5 +1,6 @@
 # Informed weight initialization of Graph Neural Networks and its effect on Oversmoothing
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

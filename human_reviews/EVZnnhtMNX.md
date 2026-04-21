@@ -1,5 +1,6 @@
 # Scalable Preference Learning for Large Language Models via Convex Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # LSTT:LONG SHORT-TERM TRANSFORMER FOR VIDEO SMALL OBJECT DETECTION
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

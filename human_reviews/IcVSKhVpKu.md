@@ -1,5 +1,6 @@
 # Improving Language Model Distillation through Hidden State Matching
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3
 

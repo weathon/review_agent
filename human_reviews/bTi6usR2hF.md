@@ -1,5 +1,6 @@
 # Building Vision Models upon Heat Conduction
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6
 

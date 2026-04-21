@@ -1,5 +1,6 @@
 # CoRe-GD: A Hierarchical Framework for Scalable Graph Visualization with GNNs
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 

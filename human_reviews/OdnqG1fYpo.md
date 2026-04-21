@@ -1,5 +1,6 @@
 # Moner: Motion Correction in Undersampled Radial MRI with Unsupervised Neural Representation
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

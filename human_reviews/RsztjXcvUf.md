@@ -1,5 +1,6 @@
 # A Primal-Dual Approach to Solving Variational Inequalities with General Constraints
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

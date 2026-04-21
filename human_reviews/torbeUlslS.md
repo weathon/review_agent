@@ -1,5 +1,6 @@
 # Rethinking Multiple-Instance Learning From Feature Space to Probability Space
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

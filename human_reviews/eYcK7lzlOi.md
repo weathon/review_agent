@@ -1,5 +1,6 @@
 # Unleashing Graph Transformers with Green and Martin Kernels
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 5, 5, 8, 8
 

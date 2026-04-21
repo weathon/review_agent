@@ -1,5 +1,6 @@
 # Creative Robot Tool Use with Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 1, 8, 6
 

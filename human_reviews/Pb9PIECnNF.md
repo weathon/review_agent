@@ -1,5 +1,6 @@
 # Can Pre-trained Networks Detect Familiar Out-of-Distribution Data?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

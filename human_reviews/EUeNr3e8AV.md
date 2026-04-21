@@ -1,5 +1,6 @@
 # R2Det: Exploring Relaxed Rotation Equivariance in 2D Object Detection
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

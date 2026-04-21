@@ -1,5 +1,6 @@
 # On Disentangled Training for Nonlinear Transform in Learned Image Compression
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

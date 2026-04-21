@@ -1,5 +1,6 @@
 # Domain Randomization via Entropy Maximization
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 6, 5, 8
 

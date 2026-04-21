@@ -1,5 +1,6 @@
 # QPM: Discrete Optimization for Globally Interpretable Image Classification
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

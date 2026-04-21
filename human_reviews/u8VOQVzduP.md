@@ -1,5 +1,6 @@
 # Exploring Prosocial Irrationality for LLM Agents: A Social Cognition View
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6
 

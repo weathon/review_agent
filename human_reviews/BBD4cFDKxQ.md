@@ -1,5 +1,6 @@
 # AdaProj: Adaptively Scaled Angular Margin Subspace Projections for Anomaly Detection with Auxiliary Classification Tasks
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

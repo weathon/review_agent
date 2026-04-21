@@ -1,5 +1,6 @@
 # OmniBind: Large-scale Omni Multimodal Representation via Binding Spaces
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5
 

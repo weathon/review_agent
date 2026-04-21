@@ -1,5 +1,6 @@
 # Achieving Certified Robustness and Maintaining Clean Accuracy via Vanilla Model Guide
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

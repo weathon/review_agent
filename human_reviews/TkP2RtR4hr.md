@@ -1,5 +1,6 @@
 # Regulating the level of manipulation in text augmentation with systematic adjustment and advanced sentence-embedding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5, 3
 

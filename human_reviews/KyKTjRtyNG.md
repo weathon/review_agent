@@ -1,5 +1,6 @@
 # Incremental Exploits: Efficient Jailbreaks on Large Language Models with Multi-round Conversational Jailbreaking
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 
@@ -163,9 +164,12 @@ The authors propose a method called Multi-round Conversation Jailbreak (MRCJ) to
 3. The experiments of MRCJ are comprehensive and well-delivered, which contributes to the soundness of this paper.
 
 ### Weaknesses
-This paper suffers from the following issues, which largely degrade the value of this paper: 
+This paper suffers from the following issues, which largely degrade the value of this paper:
 
-1. Lack of distinguishment from other multi-turn jailbreak literature. Purely prompt-based jailbreak work is starting to cause reviewer fatigue. If it were the ICLR 2024, maybe the existence of this paper would be very meaningful, but at this point in time, papers talking about multi-turn jailbreak alone have exploded [1-4]. The intuition is so simple that everyone in the safety community could think about on using ICL to cumulate the unsafe content so that to jailbreak the model—it is not counterintuitive, nor a fresh concept anymore today. The author mentions in the introduction that "Existing jailbreak methods focus mainly on single-turn interactions and face limitations in generalizability and practicality.”, this is so not true from my point of view.  While I understand that there is an inflated number of papers in the field of LLM security/safety, and there are many similar topics and similar methods. However I don't see enough sincerity from the author to mention these similar works in this manuscript. I think the author must compare the MRCJ with them closely, open a separate chapter in related work to explain the difference between your work and theirs, and pick 2+ representative works for experimental comparison so that this kind of paper can be accepted by a top ML conference like ICLR. 
+
+1. Lack of distinguishment from other multi-turn jailbreak literature. Purely prompt-based jailbreak work is starting to cause reviewer fatigue. If it were the ICLR 2024, maybe the existence of this paper would be very meaningful, but at this point in time, papers talking about multi-turn jailbreak alone have exploded [1-4]. The intuition is so simple that everyone in the safety community could think about on using ICL to cumulate the unsafe content so that to jailbreak the model—it is not counterintuitive, nor a fresh concept anymore today. The author mentions in the introduction that "Existing jailbreak methods focus mainly on single-turn interactions and face limitations in generalizability and practicality.”, this is so not true from my point of view.
+
+While I understand that there is an inflated number of papers in the field of LLM security/safety, and there are many similar topics and similar methods. However I don't see enough sincerity from the author to mention these similar works in this manuscript. I think the author must compare the MRCJ with them closely, open a separate chapter in related work to explain the difference between your work and theirs, and pick 2+ representative works for experimental comparison so that this kind of paper can be accepted by a top ML conference like ICLR. 
 
 
 2. Inappropriate baseline comparison leads to less convincing results. Similarly, the experiment in this article has a major drawback. The authors only compared some of the related work in 2023, and did not compare the similar work that leveraged ICL or multi-round dialogue, even though they already had it in the first half of 2024.
@@ -182,7 +186,8 @@ Considering these two biggest weaknesses, I reckon this article has only a contr
 [4] Yang X, Tang X, Hu S, et al. Chain of Attack: a Semantic-Driven Contextual Multi-Turn attacker for LLM[J]. arXiv preprint arXiv:2405.05610, 2024.
 
 ### Questions
-1. The difference of fabricated qa pairs and MRCJ is unclear. I see you mentioned that many-shot jailbreak leverages fabricated qa pairs and then prefill into the LLMs’ context but MRCJ does not rely on that. I get this point well but you said that in line 224 “for black-box LLMs, the prompt construction process based on user queries remains opaque.”, this is very misleading, I think user can submit LLM responses to a commercial LLM such as OpenAI ChatGPT. 
+1. The difference of fabricated qa pairs and MRCJ is unclear. I see you mentioned that many-shot jailbreak leverages fabricated qa pairs and then prefill into the LLMs’ context but MRCJ does not rely on that. I get this point well but you said that in line 224 “for black-box LLMs, the prompt construction process based on user queries remains opaque.”, this is very misleading, I think user can submit LLM responses to a commercial LLM such as OpenAI ChatGPT.
+
 
 2. Continuing on the first question, the difference between MRCJ and prefilled fabricated a by LLMs appeals not to be a “learning” problem, which further makes this paper unsuitable for ICLR. Besides, the idea of “INCREMENTAL EXPLOITS” is not well-emphasized and can not be regarded as a novelty of this paper (I think the authors need to double check related references and I think Crescendo is also about “INCREMENTAL EXPLOITS”).
 

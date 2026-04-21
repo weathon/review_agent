@@ -1,5 +1,6 @@
 # Rethinking Dataset Quantization: Efficient Core Set Selection via Semantically-Aware Data Augmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

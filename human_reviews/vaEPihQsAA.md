@@ -1,5 +1,6 @@
 # CyberHost: A One-stage Diffusion Framework for Audio-driven Talking Body Generation
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 10, 6, 6, 8
 

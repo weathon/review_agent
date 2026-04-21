@@ -1,5 +1,6 @@
 # Rethinking the Bias of Foundation Model under Long-tailed Distribution
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 6, 8, 5
 

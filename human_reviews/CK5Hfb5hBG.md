@@ -1,5 +1,6 @@
 # Channel Vision Transformers: An Image Is Worth 1 x 16 x 16 Words
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 5
 

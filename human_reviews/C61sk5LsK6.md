@@ -1,5 +1,6 @@
 # InfoBatch: Lossless Training Speed Up by Unbiased Dynamic Data Pruning
 
+- Avg Score: 7.00
 - Decision: Accept (oral)
 - Scores: 6, 8, 6, 8
 

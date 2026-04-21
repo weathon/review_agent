@@ -1,5 +1,6 @@
 # Mitigating Privacy Risk of Adversarial Examples with Counterfactual Explanations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

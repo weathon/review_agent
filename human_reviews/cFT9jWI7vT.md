@@ -1,5 +1,6 @@
 # Towards Architecture-Insensitive Untrained Network Priors for Accelerated MRI
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

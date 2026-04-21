@@ -1,5 +1,6 @@
 # One Initialization to Rule them All: Fine-tuning via Explained Variance Adaptation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

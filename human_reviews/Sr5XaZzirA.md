@@ -1,5 +1,6 @@
 # Fast Training of Sinusoidal Neural Fields via Scaling Initialization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

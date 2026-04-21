@@ -1,5 +1,6 @@
 # E$^{2}$GAN: Efficient Training of Efficient GANs for Image-to-Image Translation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3
 

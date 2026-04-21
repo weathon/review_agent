@@ -1,5 +1,6 @@
 # LoRA Done RITE: Robust Invariant Transformation Equilibration for LoRA Optimization
 
+- Avg Score: 8.67
 - Decision: Accept (Oral)
 - Scores: 8, 8, 10
 

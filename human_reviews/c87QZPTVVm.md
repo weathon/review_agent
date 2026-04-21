@@ -1,5 +1,6 @@
 # Think Beyond Size: Dynamic Prompting for More Effective Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 3, 1, 3
 

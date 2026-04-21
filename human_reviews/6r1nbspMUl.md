@@ -1,5 +1,6 @@
 # SKDream: Controllable Multi-view and 3D Generation with Arbitrary Skeletons
 
+- Avg Score: 5.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 3, 8
 

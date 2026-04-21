@@ -1,5 +1,6 @@
 # Improving Learning Conditions for Computer Science Students by Using the Flipped Classroom
 
+- Avg Score: 1.80
 - Decision: Reject
 - Scores: 1, 1, 3, 1, 3
 

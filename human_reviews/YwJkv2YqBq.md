@@ -1,5 +1,6 @@
 # Nesterov acceleration in benignly non-convex landscapes
 
+- Avg Score: 6.75
 - Decision: Accept (Spotlight)
 - Scores: 6, 5, 8, 8
 

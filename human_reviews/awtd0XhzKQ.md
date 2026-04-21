@@ -1,5 +1,6 @@
 # FLARE: Faithful Logic-Aided Reasoning and Exploration
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 6, 6, 3
 

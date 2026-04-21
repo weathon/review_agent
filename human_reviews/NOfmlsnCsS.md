@@ -1,5 +1,6 @@
 # Teach Multimodal LLMs to Comprehend Electrocardiographic Images
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 8, 6
 

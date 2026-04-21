@@ -1,5 +1,6 @@
 # Non-negative Probabilistic Factorization
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 8, 3, 5
 

@@ -1,5 +1,6 @@
 # The Devil is in the Neurons: Interpreting and Mitigating Social Biases in Language Models
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # A Benchmark Study For Limit Order Book (LOB) Models and Time Series Forecasting Models on LOB Data
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 3, 5, 5, 3
 

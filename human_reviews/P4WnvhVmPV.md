@@ -1,5 +1,6 @@
 # A Unified Theoretical Framework for Understanding Difficult-to-learn Examples in Contrastive Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

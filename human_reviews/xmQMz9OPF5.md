@@ -1,5 +1,6 @@
 # Exploring Target Representations for Masked Autoencoders
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 3
 

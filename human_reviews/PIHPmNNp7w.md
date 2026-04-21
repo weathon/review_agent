@@ -1,5 +1,6 @@
 # Retrieval-Augmented Decision Transformer: External Memory for In-context RL
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 1, 5, 8
 

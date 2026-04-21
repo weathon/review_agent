@@ -1,5 +1,6 @@
 # POUTA - Produce once, utilize twice for anomaly detection
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Influence-based Attributions can be Manipulated
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 5, 1, 3, 3
 

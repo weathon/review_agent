@@ -1,5 +1,6 @@
 # Beyond Worst-case Attacks: Robust RL with Adaptive Defense via Non-dominated Policies
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

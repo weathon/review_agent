@@ -1,5 +1,6 @@
 # Generalization Bounds for Canonicalization: A Comparative Study with Group Averaging
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 5
 

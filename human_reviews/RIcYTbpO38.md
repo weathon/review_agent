@@ -1,5 +1,6 @@
 # Don't Judge by the Look: Towards Motion Coherent Video Representation
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 3, 8, 6, 6
 
@@ -58,7 +59,8 @@ In addition, these prior works have tried to tackle the background bias or scene
 
 
 
-Weak motivation for hue jittering: The paper says “Among them, Color Jittering is widely used to transform color attributes like saturation, brightness, and contrast” in the introduction. Indeed it is true, but there are a tens of methods for augmentations implemented in famous libraries such as imageaug, albumentations, and kornia. However, there is no discussions or evidences why hue jittering is so important to explore. 
+Weak motivation for hue jittering: The paper says “Among them, Color Jittering is widely used to transform color attributes like saturation, brightness, and contrast” in the introduction. Indeed it is true, but there are a tens of methods for augmentations implemented in famous libraries such as imageaug, albumentations, and kornia. However, there is no discussions or evidences why hue jittering is so important to explore.
+
 
 Weak motivation for backbone model: Experiments used TSM, a 3D CNN with shift modules, however it is merely one of a vast amount of models for action recognition. Other models (slowfast and uniformer) are used but not for all datasets. It should be justified why TSM is the best for demonstrating the effect of the proposed method. Otherwise, recent methods (such as ones  referred in the paper) should also compared.
 

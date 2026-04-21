@@ -1,5 +1,6 @@
 # Navigating the Digital World as Humans Do: Universal Visual Grounding for GUI Agents
 
+- Avg Score: 7.75
 - Decision: Accept (Oral)
 - Scores: 10, 5, 8, 8
 

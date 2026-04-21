@@ -1,5 +1,6 @@
 # Exploring the Effectiveness of Diffusion Models in One-Shot Federated Learning
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5
 

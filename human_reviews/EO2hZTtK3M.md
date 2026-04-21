@@ -1,5 +1,6 @@
 # CM^2: Cross-Modal Contextual Modeling for Audio-Visual Speech Enhancement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

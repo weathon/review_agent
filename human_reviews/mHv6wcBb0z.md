@@ -1,5 +1,6 @@
 # Preventing Model Collapse in Deep Canonical Correlation Analysis by Noise Regularization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 6, 3, 3
 

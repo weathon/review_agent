@@ -1,5 +1,6 @@
 # PnP-Flow: Plug-and-Play Image Restoration with Flow Matching
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 3
 

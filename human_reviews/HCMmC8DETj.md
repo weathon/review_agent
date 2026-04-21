@@ -1,5 +1,6 @@
 # Analysis of Task Transferability in Large Pre-trained Classifiers
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

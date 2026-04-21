@@ -1,5 +1,6 @@
 # HAINAN: Fast and Accurate Transducer for Hybrid-Autoregressive ASR
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

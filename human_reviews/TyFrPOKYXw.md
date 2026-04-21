@@ -1,5 +1,6 @@
 # Safe RLHF: Safe Reinforcement Learning from Human Feedback
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

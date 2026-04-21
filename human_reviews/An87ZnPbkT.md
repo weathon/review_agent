@@ -1,5 +1,6 @@
 # GNNAS-Dock: Budget Aware Algorithm Selection with Graph Neural Networks for Molecular Docking
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 3
 

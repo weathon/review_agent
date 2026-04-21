@@ -1,5 +1,6 @@
 # Free-MoE: Tuning-Free Mixture-of-Experts Purifying LLMs to Thrive across Any Field
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

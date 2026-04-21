@@ -1,5 +1,6 @@
 # How Neural Networks With Derivative Labels Work: A Neural Tangent Kernel Perspective
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

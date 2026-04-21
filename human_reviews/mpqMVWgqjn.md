@@ -1,5 +1,6 @@
 # KW-Design: Pushing the Limit of Protein Design via Knowledge Refinement
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

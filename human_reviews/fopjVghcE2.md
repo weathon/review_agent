@@ -1,5 +1,6 @@
 # Diverse Genomic Embedding Benchmark for Functional Evaluation Across the Tree of Life
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

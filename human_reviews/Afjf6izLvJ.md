@@ -1,5 +1,6 @@
 # Grounding Robot Policies with Visuomotor Language Guidance
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

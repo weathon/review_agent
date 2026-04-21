@@ -1,5 +1,6 @@
 # Meta-Value Learning: a General Framework for Learning with Learning Awareness
 
+- Avg Score: 5.17
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 6, 5
 

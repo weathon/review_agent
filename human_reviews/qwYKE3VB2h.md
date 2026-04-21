@@ -1,5 +1,6 @@
 # From Graphs to Hypergraphs: Hypergraph Projection and its Reconstruction
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 8
 

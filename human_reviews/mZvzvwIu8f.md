@@ -1,5 +1,6 @@
 # Reducing class-wise confusion for incremental learning with disentangled manifolds
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Multilingual Visual Speech Recognition with a Single Model using Visual Speech Unit
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 6, 8, 5, 6
 

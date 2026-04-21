@@ -1,5 +1,6 @@
 # Improving Multimodal Protein Function Prediction Using Bidirectional Interaction and Dynamic Selection Mechanisms
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 5
 

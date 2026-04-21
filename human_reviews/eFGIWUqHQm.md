@@ -1,5 +1,6 @@
 # Region-Aware Generalized Face Anti-Spoofing via Chebyshev Convolutional Graph Networks
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # CO-MOT: Boosting End-to-end Transformer-based Multi-Object Tracking via Coopetition Label Assignment and Shadow Sets
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 6, 8, 6
 

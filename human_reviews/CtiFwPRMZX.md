@@ -1,5 +1,6 @@
 # A simple connection from loss flatness to compressed representations in neural networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 6, 3
 

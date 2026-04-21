@@ -1,5 +1,6 @@
 # Coeditor: Leveraging Repo-level Diffs for Code Auto-editing
 
+- Avg Score: 6.25
 - Decision: Accept (spotlight)
 - Scores: 5, 6, 8, 6
 

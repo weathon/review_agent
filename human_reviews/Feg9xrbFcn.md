@@ -1,5 +1,6 @@
 # Is $k \times k$ Matrix Eigendecomposition Sufficient for Spectral Clustering?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 1, 6, 5, 6
 

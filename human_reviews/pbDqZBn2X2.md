@@ -1,5 +1,6 @@
 # CADO: Cost-Aware Diffusion Models for Combinatorial Optimization via RL Fine-tuning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

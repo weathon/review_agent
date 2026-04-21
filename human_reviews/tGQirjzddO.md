@@ -1,5 +1,6 @@
 # Reasoning with Latent Diffusion in Offline Reinforcement Learning
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 8, 6
 

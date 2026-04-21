@@ -1,5 +1,6 @@
 # HR-Extreme: A High-Resolution Dataset for Extreme Weather Forecasting
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 5
 

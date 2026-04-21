@@ -1,5 +1,6 @@
 # From Language to 3D Worlds: Adapting Language Models for Point Cloud Perception
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Flag Aggregator: Scalable Distributed Training under Failures and Augmented Losses using Convex Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

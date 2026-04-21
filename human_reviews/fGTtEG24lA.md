@@ -1,5 +1,6 @@
 # Magic Insert: Style-Aware Drag-and-Drop
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

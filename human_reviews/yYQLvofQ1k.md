@@ -1,5 +1,6 @@
 # Two Heads Are Better Than One: A Multi-Agent System Has the Potential to Improve Scientific Idea Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

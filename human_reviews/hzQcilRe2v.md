@@ -1,5 +1,6 @@
 # Elastic and Balanced End-to-end Training of Dynamic LLMs with DynMo
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

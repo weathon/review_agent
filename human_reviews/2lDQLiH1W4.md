@@ -1,5 +1,6 @@
 # Instant3D: Fast Text-to-3D with Sparse-view Generation and Large Reconstruction Model
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 8, 6
 

@@ -1,5 +1,6 @@
 # New recipes for graph anomaly detection: Forward diffusion dynamics and graph generation
 
+- Avg Score: 5.17
 - Decision: Reject
 - Scores: 5, 5, 6, 5, 5, 5
 

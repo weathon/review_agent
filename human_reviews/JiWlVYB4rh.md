@@ -1,5 +1,6 @@
 # EchoQA: Tuning into the Heart of Echocardiogram Reports
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5
 

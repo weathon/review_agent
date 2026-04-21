@@ -1,5 +1,6 @@
 # Star Attention: Efficient LLM Inference over Long Sequences
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

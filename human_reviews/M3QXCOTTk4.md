@@ -1,5 +1,6 @@
 # The Curse of Diversity in Ensemble-Based Exploration
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # EmoAttack: Emotion-to-Image Diffusion Models for Emotional Backdoor Generation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 8, 5, 5
 

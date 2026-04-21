@@ -1,5 +1,6 @@
 # Model guidance via explanations turns image classifiers into segmentation models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 3, 8, 5
 

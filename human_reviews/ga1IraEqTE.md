@@ -1,5 +1,6 @@
 # A2Perf: Real-World Autonomous Agents Benchmark
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 5, 3
 

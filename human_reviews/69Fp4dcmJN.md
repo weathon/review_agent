@@ -1,5 +1,6 @@
 # Scaling up the Banded Matrix Factorization Mechanism for Large Scale Differentially Private ML
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8
 

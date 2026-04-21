@@ -1,5 +1,6 @@
 # On the Adversarial Vulnerability of Label-Free Test-Time Adaptation
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

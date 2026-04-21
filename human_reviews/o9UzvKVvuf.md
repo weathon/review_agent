@@ -1,5 +1,6 @@
 # Aligning With Human Values Without Revealing Human Judgements
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

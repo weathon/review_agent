@@ -1,5 +1,6 @@
 # Reward Adaptation Via Q-Manipulation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

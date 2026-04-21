@@ -1,5 +1,6 @@
 # SWGA: A Distributed Hyperparameter Search Method for Time Series Prediction Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 1, 3, 3
 

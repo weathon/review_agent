@@ -1,5 +1,6 @@
 # Restorer Guided Diffusion Models for Variational Inverse Problems
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 3
 

@@ -1,5 +1,6 @@
 # What's Wrong With Non-Autoregressive Graph Neural Networks in Neural Combinatorial Optimization
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 3
 

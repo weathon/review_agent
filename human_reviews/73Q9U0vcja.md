@@ -1,5 +1,6 @@
 # Diffusion Active Learning: Towards Data-Driven Experimental Design in Computed Tomography
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 5, 6
 

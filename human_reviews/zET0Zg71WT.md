@@ -1,5 +1,6 @@
 # Structure-aware Attention based on Vector Symbolic Architectures
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

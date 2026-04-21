@@ -1,5 +1,6 @@
 # Chain-of-thoughts for molecular understanding
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 3, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # SoftSignSGD(S3): An Enhanced Optimize for Practical DNN Training and Loss Spikes Minimization Beyond Adam
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 5, 6, 6, 8
 

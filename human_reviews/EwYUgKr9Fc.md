@@ -1,5 +1,6 @@
 # Semantic Membership Inference Attack against Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

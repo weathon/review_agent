@@ -1,5 +1,6 @@
 # Improved Function Space Variational Inference with Informative Priors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

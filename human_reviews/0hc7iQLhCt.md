@@ -1,5 +1,6 @@
 # HessianGrad: Optimizing AI Systems with Hessian-Aware Textual Gradients
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

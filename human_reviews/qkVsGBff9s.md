@@ -1,5 +1,6 @@
 # Q-Supervised Contrastive Representation: A State Decoupling Framework for Safe Offline Reinforcement Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

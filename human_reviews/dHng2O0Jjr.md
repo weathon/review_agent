@@ -1,5 +1,6 @@
 # ToolLLM: Facilitating Large Language Models to Master 16000+ Real-world APIs
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 8
 

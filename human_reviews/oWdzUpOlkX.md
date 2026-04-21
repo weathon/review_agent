@@ -1,5 +1,6 @@
 # AgentOccam: A Simple Yet Strong Baseline for LLM-Based Web Agents
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8
 

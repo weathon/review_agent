@@ -1,5 +1,6 @@
 # Understanding prompt engineering may not require rethinking generalization
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 8
 

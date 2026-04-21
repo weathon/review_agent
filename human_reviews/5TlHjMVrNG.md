@@ -1,5 +1,6 @@
 # Evaluating Robustness to Unforeseen Adversarial Attacks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # A/B testing under Identity Fragmentation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

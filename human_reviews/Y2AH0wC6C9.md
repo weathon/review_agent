@@ -1,5 +1,6 @@
 # Improving Zero-Shot Generalization of Instruction Tuning by Data Arrangement
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5, 3
 

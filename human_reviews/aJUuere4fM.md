@@ -1,5 +1,6 @@
 # Does Refusal Training in LLMs Generalize to the Past Tense?
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 1, 6, 8
 

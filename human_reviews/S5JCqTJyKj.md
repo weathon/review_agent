@@ -1,5 +1,6 @@
 # Deferred Backdoor Functionality Attacks on Deep Learning Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 1
 

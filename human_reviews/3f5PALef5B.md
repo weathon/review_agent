@@ -1,5 +1,6 @@
 # LEGO-Prover: Neural Theorem Proving with Growing Libraries
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 6, 8, 8
 

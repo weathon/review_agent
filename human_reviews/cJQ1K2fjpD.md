@@ -1,5 +1,6 @@
 # Fine-Grained Verifiers: Preference Modeling as Next-token Prediction in Vision-Language Alignment
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8, 6
 

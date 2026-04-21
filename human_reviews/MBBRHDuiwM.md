@@ -1,5 +1,6 @@
 # URLOST: Unsupervised Representation Learning without Stationarity or Topology
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 5, 8
 

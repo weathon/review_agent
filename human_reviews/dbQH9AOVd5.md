@@ -1,5 +1,6 @@
 # Stable Anisotropic Regularization
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 3, 8, 8
 

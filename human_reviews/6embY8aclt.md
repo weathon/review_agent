@@ -1,5 +1,6 @@
 # Graph-constrained Reasoning: Faithful Reasoning on Knowledge Graphs with Large Language Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

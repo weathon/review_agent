@@ -1,5 +1,6 @@
 # Molecular Conformation Generation via Shifting Scores
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

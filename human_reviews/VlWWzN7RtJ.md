@@ -1,5 +1,6 @@
 # iMotion-LLM: Motion Prediction Instruction Tuning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6, 3, 3
 

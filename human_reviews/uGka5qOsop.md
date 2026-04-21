@@ -1,5 +1,6 @@
 # A Temporally Correlated Latent Exploration for Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 5, 3
 

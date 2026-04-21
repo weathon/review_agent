@@ -1,5 +1,6 @@
 # Visually Guided Decoding: Gradient-Free Hard Prompt Inversion with Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

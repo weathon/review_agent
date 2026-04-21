@@ -1,5 +1,6 @@
 # Boosting Ray Search Procedure of Hard-label Attacks with Transfer-based Priors
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

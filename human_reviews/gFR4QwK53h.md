@@ -1,5 +1,6 @@
 # Gene Regulatory Network Inference in the Presence of Dropouts: a Causal View
 
+- Avg Score: 7.33
 - Decision: Accept (oral)
 - Scores: 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Eagle: Exploring The Design Space for Multimodal LLMs with Mixture of Encoders
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 6, 8
 

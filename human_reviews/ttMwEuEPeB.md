@@ -1,5 +1,6 @@
 # 3D-GPT: Procedural 3D Modeling with Large Language Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

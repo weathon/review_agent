@@ -1,5 +1,6 @@
 # Secure Diffusion Model Unlocked: Efficient Inference via Score Distillation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1
 

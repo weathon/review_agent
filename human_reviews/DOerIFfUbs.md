@@ -1,5 +1,6 @@
 # Enhancing Vision-Language Model with Unmasked Token Alignment at Scale
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

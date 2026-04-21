@@ -1,5 +1,6 @@
 # Stable Neural Stochastic Differential Equations in Analyzing Irregular Time Series Data
 
+- Avg Score: 6.67
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6
 

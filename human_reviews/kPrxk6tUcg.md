@@ -1,5 +1,6 @@
 # Neuron-Enhanced AutoEncoder Matrix Completion and Collaborative Filtering: Theory and Practice
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

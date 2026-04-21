@@ -1,5 +1,6 @@
 # ST-GCond: Self-supervised and Transferable Graph Dataset Condensation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

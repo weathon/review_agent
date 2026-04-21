@@ -1,5 +1,6 @@
 # Time Transfer: On Optimal Learning Rate and Batch Size In The Infinite Data Limit
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Defender of privacy and fairness: tiny but reversible generative model via mutually collaborative knowledge distillation
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

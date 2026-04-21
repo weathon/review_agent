@@ -1,5 +1,6 @@
 # Zero Bubble (Almost) Pipeline Parallelism
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

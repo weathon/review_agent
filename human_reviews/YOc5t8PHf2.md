@@ -1,5 +1,6 @@
 # Handling Delay in Real-Time Reinforcement Learning
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 5
 

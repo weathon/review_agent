@@ -1,5 +1,6 @@
 # Select to Perfect: Imitating desired behavior from large multi-agent data
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 8, 5
 

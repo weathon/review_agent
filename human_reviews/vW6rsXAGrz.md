@@ -1,5 +1,6 @@
 # CardiCat: a Variational Autoencoder for High-Cardinality Tabular Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

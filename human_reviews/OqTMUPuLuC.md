@@ -1,5 +1,6 @@
 # DiLu: A Knowledge-Driven Approach to Autonomous Driving with Large Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 5
 

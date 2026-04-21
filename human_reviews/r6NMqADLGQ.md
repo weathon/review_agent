@@ -1,5 +1,6 @@
 # How To Train Your Covariance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 1, 6, 5, 6
 

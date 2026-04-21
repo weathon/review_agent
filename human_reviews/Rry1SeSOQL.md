@@ -1,5 +1,6 @@
 # MT-Ranker: Reference-free machine translation evaluation by inter-system ranking
 
+- Avg Score: 6.75
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 5
 

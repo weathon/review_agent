@@ -1,5 +1,6 @@
 # IgBleng: Unifying 3D structures and sequences in antibody language models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

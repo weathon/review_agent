@@ -1,5 +1,6 @@
 # The Effect of Personalization in FedProx: A Fine-grained Analysis on Statistical Accuracy and Communication Efficiency
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 8, 6, 5, 1
 

@@ -1,5 +1,6 @@
 # Non-backtracking Graph Neural Networks
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 5, 6, 3
 

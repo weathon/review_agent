@@ -1,5 +1,6 @@
 # Graph Neural Networks for Edge Signals: Orientation Equivariance and Invariance
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

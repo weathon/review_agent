@@ -1,5 +1,6 @@
 # Unlocking Compositional Understanding of Vision-Language Models with Visualization Representation and Analysis
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 3, 8
 

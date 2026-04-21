@@ -1,5 +1,6 @@
 # Towards Explaining the Power of Constant-depth Graph Neural Networks for Structured Linear Programming
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Text Boosts Generalization: A Plug-and-Play Captioner for Real-World Image Restoration
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 3
 

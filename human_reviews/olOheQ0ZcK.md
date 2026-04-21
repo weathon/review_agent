@@ -1,5 +1,6 @@
 # Distance Estimation for High-Dimensional Distributions
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 1, 6, 8
 

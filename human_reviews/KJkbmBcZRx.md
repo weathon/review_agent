@@ -1,5 +1,6 @@
 # Block-to-Scene Pre-training for Point Cloud Hybrid-Domain Masked Autoencoders
 
+- Avg Score: 5.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 5, 5
 

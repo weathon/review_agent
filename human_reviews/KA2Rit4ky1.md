@@ -1,5 +1,6 @@
 # PDETime: Rethinking Long-term Multivariate Time Series Forecasting from the Perspective of Partial Differential Equations
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 3, 6, 3
 

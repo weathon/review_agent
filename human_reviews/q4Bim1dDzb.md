@@ -1,5 +1,6 @@
 # Fast Inverse Rendering by Unified Voxelization of Scene Representation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 5, 8
 

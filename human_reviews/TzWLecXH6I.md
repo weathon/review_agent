@@ -1,5 +1,6 @@
 # Towards Personalized AI: Early-stopping Low-Rank Adaptation of Foundation Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

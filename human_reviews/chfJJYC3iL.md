@@ -1,5 +1,6 @@
 # LiveCodeBench: Holistic and Contamination Free Evaluation of Large Language Models for Code
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

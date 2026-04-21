@@ -1,5 +1,6 @@
 # Genshin: General Shield for Natural Language Processing with Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 1
 

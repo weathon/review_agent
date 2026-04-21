@@ -1,5 +1,6 @@
 # Towards Secure Tuning: Mitigating Security Risks Arising from Benign Instruction Fine-Tuning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

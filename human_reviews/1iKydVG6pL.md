@@ -1,5 +1,6 @@
 # Discovering Mathematical Formulas from Data via LSTM-guided Monte Carlo Tree Search
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

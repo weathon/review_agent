@@ -1,5 +1,6 @@
 # VERT: A SystemVerilog Assertion Dataset to Improve Hardware Verification with LLMs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

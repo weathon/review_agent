@@ -1,5 +1,6 @@
 # Anti-Correlated Noise in Epoch-Based Stochastic Gradient Descent: Implications for Weight Variances
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

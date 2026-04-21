@@ -1,5 +1,6 @@
 # GEVRM: Goal-Expressive Video Generation Model For Robust Visual Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

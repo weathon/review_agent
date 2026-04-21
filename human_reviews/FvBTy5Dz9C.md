@@ -1,5 +1,6 @@
 # TimeDiT: General-purpose Diffusion Transformers for Time Series Foundation Model
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 6, 6, 6
 

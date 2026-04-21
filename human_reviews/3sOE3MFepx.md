@@ -1,5 +1,6 @@
 # PDE-Diffusion: Physic guided diffusion model for solving partial derivative equations
 
+- Avg Score: 2.20
 - Decision: Reject
 - Scores: 3, 3, 3, 1, 1
 

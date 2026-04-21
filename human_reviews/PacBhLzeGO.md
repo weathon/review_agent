@@ -1,5 +1,6 @@
 # Universal Image Restoration Pre-training via Degradation Classification
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

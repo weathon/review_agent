@@ -1,5 +1,6 @@
 # Bias A-head? Analyzing Bias in Transformer-Based Language Model Attention Heads
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Calibration Attack: A Framework For Adversarial Attacks Targeting Calibration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 1, 5, 5
 

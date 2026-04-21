@@ -1,5 +1,6 @@
 # BroGNet: Momentum-Conserving Graph Neural Stochastic Differential Equation for Learning Brownian Dynamics
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

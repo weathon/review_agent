@@ -1,5 +1,6 @@
 # Efficient Multi-agent Reinforcement Learning by Planning
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Agile Flight  with Optimization Embedded Networks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # The Distributional Reward Critic Architecture for Reinforcement Learning Under Confusion Matrix Reward Perturbations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

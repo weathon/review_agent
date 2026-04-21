@@ -1,5 +1,6 @@
 # Distilling Non-Autoregressive Model Knowledge for Autoregressive De Novo Peptide Sequencing
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

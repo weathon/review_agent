@@ -1,5 +1,6 @@
 # VChangeCodec: A High-efficiency Neural Speech Codec with Built-in Voice Changer for Real-time Communication
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 6, 6, 6
 

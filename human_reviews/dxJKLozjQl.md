@@ -1,5 +1,6 @@
 # Data Distribution Valuation with Incentive Compatibility
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 5
 

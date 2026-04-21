@@ -1,5 +1,6 @@
 # Compute Optimal Inference and Provable Amortisation Gap in Sparse Autoencoders
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 
@@ -29,7 +30,8 @@ The authors first theoretically show the existence of an “ammortization gap”
 - MLP features are shown to be equally interpretable to SAE features
 
 ### Weaknesses
-- The synthetic data experiments take up the majority of the paper, but these experiments have a couple large problems. The first problem is that the scale of the experiments is extremely small compared to actual SAEs, so it is hard to know how the synthetic results generalize. E.g. the following is a table containing my estimates for each quantity in reality vs. the experiments:  
+- The synthetic data experiments take up the majority of the paper, but these experiments have a couple large problems. The first problem is that the scale of the experiments is extremely small compared to actual SAEs, so it is hard to know how the synthetic results generalize. E.g. the following is a table containing my estimates for each quantity in reality vs. the experiments: 
+
 
 | Quantity           | Reality         | Experiments |
 |--------------------|-----------------|-------------|
@@ -38,7 +40,8 @@ The authors first theoretically show the existence of an “ammortization gap”
 | K                  | 20 - 200         | 3 - 9       |
 | M                  | 500 - 5000      | 8           |
 
--  Second, the distribution of latents used to generate the synthetic data is gaussian, but actual data is very much not so, see the plethora of recent work on structure in SAE latents (e.g. Not All Language Model Features Are Linear 2024, The Geometry of Categorical and Hierarchical Concepts in Large Language Models 2024). To be fair, the authors do note this second point in their limitations section.
+- 
+Second, the distribution of latents used to generate the synthetic data is gaussian, but actual data is very much not so, see the plethora of recent work on structure in SAE latents (e.g. Not All Language Model Features Are Linear 2024, The Geometry of Categorical and Hierarchical Concepts in Large Language Models 2024). To be fair, the authors do note this second point in their limitations section.
 - Experiments on GPT2 only compare SAEs and MLPs; why not SAE w/ ITO and sparse coding? Is it because sparse coding is computationally prohibitive? If so, this feels like a weakness that should be mentioned.
 - The performance difference of the models in section 5 may be mostly due to different amount of training compute (MLPs are more expensive to train) or the different number of dead neurons. The authors acknowledge that a weakness of their work is not using SOTA SAE architectues like topk, jumprelu, or gated; since these architectures lead to less dead features, I suspect that it might erase most of the difference between the models. (There now exist very good libraries for easily training SOTA SAEs, e.g. SAELens or the Eleuther SAE library).
 - The real model experiments are limited to one model, one layer, one SAE size, one sparsity, and one SAE architecutre. It would be much more helpful to vary at least 3 or 4 of these options.

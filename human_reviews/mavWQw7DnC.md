@@ -1,5 +1,6 @@
 # Explaining recommendation systems through contrapositive perturbations
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

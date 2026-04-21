@@ -1,5 +1,6 @@
 # Estimating Unknown Population Sizes Using Hypergeometric Maximum Likelihood
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

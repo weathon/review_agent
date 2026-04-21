@@ -1,5 +1,6 @@
 # Convolution goes higher-order: a biologically inspired mechanism empowers image classification.
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

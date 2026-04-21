@@ -1,5 +1,6 @@
 # Modular Learning of Deep Causal Generative Models for High-dimensional Causal Inference
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

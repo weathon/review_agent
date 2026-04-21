@@ -1,5 +1,6 @@
 # Representation learning for financial time series forecasting
 
+- Avg Score: 1.80
 - Decision: Reject
 - Scores: 3, 1, 1, 1, 3
 

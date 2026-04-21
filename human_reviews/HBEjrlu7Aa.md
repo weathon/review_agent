@@ -1,5 +1,6 @@
 # Object-level Data Augmentation for Visual 3D Object Detection in Autonomous Driving
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

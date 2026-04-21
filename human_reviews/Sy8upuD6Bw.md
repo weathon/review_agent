@@ -1,5 +1,6 @@
 # Emergent Communication with Conversational Repair
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 5
 

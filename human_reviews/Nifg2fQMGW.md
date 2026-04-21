@@ -1,5 +1,6 @@
 # UniEdit: A Unified Tuning-Free Framework for Video Motion and Appearance Editing
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 1, 5, 8, 5
 

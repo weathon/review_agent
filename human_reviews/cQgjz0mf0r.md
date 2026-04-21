@@ -1,5 +1,6 @@
 # Deep Network Partition Density Exhibits Double Descent
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # Towards Establishing Guaranteed Error for Learned Database Operations
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 3, 8, 5, 8
 

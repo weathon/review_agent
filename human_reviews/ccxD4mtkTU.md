@@ -1,5 +1,6 @@
 # Can LLM-Generated Misinformation Be Detected?
 
+- Avg Score: 4.75
 - Decision: Accept (poster)
 - Scores: 5, 8, 3, 3
 

@@ -1,5 +1,6 @@
 # Efficient Interactive Preference Learning in Evolutionary Algorithms: Active Dueling Bandits and Active Learning Integration
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

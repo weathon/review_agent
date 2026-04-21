@@ -1,5 +1,6 @@
 # Semantic Flow: Learning Semantic Fields of Dynamic Scenes from Monocular Videos
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 8, 6
 

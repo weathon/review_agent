@@ -1,5 +1,6 @@
 # $\pi$2vec: Policy Representation with Successor Features
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # HoTPP Benchmark: Are We Good at the Long Horizon Events Forecasting?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

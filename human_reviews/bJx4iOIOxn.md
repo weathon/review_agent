@@ -1,5 +1,6 @@
 # Facing the Elephant in the Room: Visual Prompt Tuning or Full finetuning?
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

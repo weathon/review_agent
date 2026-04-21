@@ -1,5 +1,6 @@
 # AnyText: Multilingual Visual Text Generation and Editing
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 6
 

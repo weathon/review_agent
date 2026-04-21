@@ -1,5 +1,6 @@
 # Horizon-Length Prediction: Advancing Fill-in-the-Middle Capabilities for Code Generation with Lookahead Planning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

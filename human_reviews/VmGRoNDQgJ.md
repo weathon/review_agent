@@ -1,5 +1,6 @@
 # Influencer Backdoor Attack on Semantic Segmentation
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

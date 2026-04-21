@@ -1,5 +1,6 @@
 # The impact of allocation strategies in subset learning on the expressive power of neural networks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 3
 

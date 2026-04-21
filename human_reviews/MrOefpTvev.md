@@ -1,5 +1,6 @@
 # Rethinking Texture Patterns in Transformer Neural NetWork for Medical Image Analysis
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 3, 1
 

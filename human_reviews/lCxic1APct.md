@@ -1,5 +1,6 @@
 # Balance Beam: adaptive computation for affordable training and inference with high-throughput offloading for LLMs
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5
 

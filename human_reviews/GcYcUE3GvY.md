@@ -1,5 +1,6 @@
 # Temporal Prompting Matters: Rethinking Referring Video Object Segmentation
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3, 5
 

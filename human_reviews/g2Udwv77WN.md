@@ -1,5 +1,6 @@
 # Improving Ordinal Conformal Prediction by Stepwise Adaptive Posterior Alignment
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5, 3, 5
 

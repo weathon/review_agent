@@ -1,5 +1,6 @@
 # Online Detecting LLM-Generated Texts via Sequential Hypothesis Testing by Betting
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 3, 5, 6, 8
 

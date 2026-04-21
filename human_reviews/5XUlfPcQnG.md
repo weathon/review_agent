@@ -1,5 +1,6 @@
 # A Calibrated Simulation for Offline Training of Reinforcement Learning Agents to Optimize Energy and Emission in Office Buildings
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 1, 5
 

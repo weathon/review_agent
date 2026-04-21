@@ -1,5 +1,6 @@
 # Fast Value Tracking for Deep Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 5
 

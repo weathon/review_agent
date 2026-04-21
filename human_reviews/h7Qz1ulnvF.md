@@ -1,5 +1,6 @@
 # Improving Complex Reasoning with Dynamic Prompt Corruption: A Soft Prompt Optimization Approach
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 3
 

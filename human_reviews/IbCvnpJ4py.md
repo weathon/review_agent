@@ -1,5 +1,6 @@
 # RoFt-Mol: Benchmarking Robust Fine-tuning with Molecular Graph Foundation Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Steer a Crowd: Learning to Persuade a Population in a Stackelberg Game
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5
 

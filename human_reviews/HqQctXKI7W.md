@@ -1,5 +1,6 @@
 # Casting Light on Large Generative Networks: Taming Epistemic Uncertainty in Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 6, 3
 

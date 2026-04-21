@@ -1,5 +1,6 @@
 # OPTune: Efficient Online Preference Tuning
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5, 5
 

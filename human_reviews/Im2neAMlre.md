@@ -1,5 +1,6 @@
 # Revisiting text-to-image evaluation with Gecko: on metrics, prompts, and human rating
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

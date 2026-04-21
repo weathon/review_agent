@@ -1,5 +1,6 @@
 # AutoGUI: Scaling GUI Grounding with Automatic Functionality Annotations from LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 3, 8, 6
 

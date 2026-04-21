@@ -1,5 +1,6 @@
 # DyVal: Dynamic Evaluation of Large Language Models for Reasoning Tasks
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Entity-Centric Reinforcement Learning for Object Manipulation from Pixels
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

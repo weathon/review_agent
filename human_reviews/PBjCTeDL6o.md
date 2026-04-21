@@ -1,5 +1,6 @@
 # Unlearning-based Neural Interpretations
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 10, 8
 

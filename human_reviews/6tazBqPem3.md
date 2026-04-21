@@ -1,5 +1,6 @@
 # Capacity Analysis of Vector Symbolic Architectures
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

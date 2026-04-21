@@ -1,5 +1,6 @@
 # Dataset Distillation via Knowledge Distillation: Towards Efficient Self-Supervised Pre-training of Deep Networks
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

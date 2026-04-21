@@ -1,5 +1,6 @@
 # In-Context Learning with Retrieval Augmented Encoder-Decoder Language Models
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6
 

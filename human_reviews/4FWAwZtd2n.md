@@ -1,5 +1,6 @@
 # Scaling LLM Test-Time Compute Optimally Can be More Effective than Scaling Parameters for Reasoning
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 8
 

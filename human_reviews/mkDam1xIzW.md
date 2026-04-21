@@ -1,5 +1,6 @@
 # Probabilistic Geometric Principal Component Analysis with application to neural data
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8
 

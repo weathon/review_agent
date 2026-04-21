@@ -1,5 +1,6 @@
 # Zodiac: A Cardiologist-Level LLM Framework for Multi-Agent Diagnostics
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3, 3
 

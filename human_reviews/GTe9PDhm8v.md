@@ -1,5 +1,6 @@
 # TesseraQ: Ultra Low-Bit LLM Post-Training Quantization with Block Reconstruction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6, 5
 

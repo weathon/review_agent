@@ -1,5 +1,6 @@
 # Sync4D: Video Guided Controllable Dynamics for Physics-Based 4D Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

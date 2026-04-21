@@ -1,5 +1,6 @@
 # VIPaint: Image Inpainting with Pre-Trained Diffusion Models via Variational Inference
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

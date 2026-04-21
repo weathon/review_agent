@@ -1,5 +1,6 @@
 # Sample-Efficiency in Multi-Batch Reinforcement Learning: The Need for Dimension-Dependent Adaptivity
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 5, 6
 

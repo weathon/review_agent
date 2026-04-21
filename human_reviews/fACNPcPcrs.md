@@ -1,5 +1,6 @@
 # Exploring the Upper Limits of Text-Based Collaborative Filtering Using Large Language Models: Discoveries and Insights
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 6, 5
 

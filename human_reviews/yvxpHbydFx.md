@@ -1,5 +1,6 @@
 # Understanding Diffusion-based Representation Learning via Low-Dimensional Modeling
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 8, 1, 5
 

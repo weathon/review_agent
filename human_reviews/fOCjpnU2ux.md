@@ -1,5 +1,6 @@
 # Multi-Group Tri-plane Based Local Occupancy Estimation for Object Grasping
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 6
 

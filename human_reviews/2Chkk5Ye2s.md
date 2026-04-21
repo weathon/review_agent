@@ -1,5 +1,6 @@
 # Be More Diverse than the Most Diverse: Optimal Mixtures of Generative Models via Mixture-UCB Bandit Algorithms
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6, 6
 

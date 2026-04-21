@@ -1,5 +1,6 @@
 # A Novel Kernel Sparse Coding Method with A Two-stage Acceleration Strategy
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 5
 

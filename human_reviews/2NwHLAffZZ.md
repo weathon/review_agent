@@ -1,5 +1,6 @@
 # Weak Correlations as the Underlying Principle for Linearization of Gradient-Based Learning Systems
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

@@ -1,5 +1,6 @@
 # Resolving Partial Observability in Decision Processes via the Lambda Discrepancy
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

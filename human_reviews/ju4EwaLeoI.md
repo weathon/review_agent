@@ -1,5 +1,6 @@
 # Ref-EMGBench: Benchmarking Reference Normalization for Electromyography Data
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 6, 3, 3
 

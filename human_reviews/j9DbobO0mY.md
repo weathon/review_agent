@@ -1,5 +1,6 @@
 # Sparse MoE as a New Retriever: Addressing Missing Modality Problem in Incomplete Multimodal Data
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 5, 3
 

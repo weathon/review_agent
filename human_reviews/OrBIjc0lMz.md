@@ -1,5 +1,6 @@
 # Gaze-Regularized Attention for Human Action Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

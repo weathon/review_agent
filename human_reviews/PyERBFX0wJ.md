@@ -1,5 +1,6 @@
 # Reflected Schr\"odinger Bridge for Constrained Generative Modeling
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

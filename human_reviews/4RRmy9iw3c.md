@@ -1,5 +1,6 @@
 # AutoAL: Automated Active Learning with Differentiable Query Strategy Search
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

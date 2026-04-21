@@ -1,5 +1,6 @@
 # Weighted Diversified Sampling for Efficient Data-Driven Single-Cell Gene-Gene Interaction Discovery
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5
 

@@ -1,5 +1,6 @@
 # Approximating Full Conformal Prediction for Neural Network Regression with Gauss-Newton Influence
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 6
 

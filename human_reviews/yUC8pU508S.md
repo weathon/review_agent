@@ -1,5 +1,6 @@
 # APE: Faster and Longer Context-Augmented Generation via Adaptive Parallel Encoding
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 6
 

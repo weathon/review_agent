@@ -1,5 +1,6 @@
 # Evaluating Multi-Agent Coordination Abilities in Large Language Models
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

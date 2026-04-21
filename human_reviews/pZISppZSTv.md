@@ -1,5 +1,6 @@
 # CLoSD: Closing the Loop between Simulation and Diffusion for multi-task character control
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

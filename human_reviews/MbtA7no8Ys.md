@@ -1,5 +1,6 @@
 # Deciphering and Enhancing Commonsense Reasoning in LLMs from the Perspective of Intrinsic Factual Knowledge Retrieval
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

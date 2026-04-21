@@ -1,5 +1,6 @@
 # Provable Length Generalization in Sequence Prediction via Spectral Filtering
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 3, 6
 

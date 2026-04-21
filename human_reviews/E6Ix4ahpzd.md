@@ -1,5 +1,6 @@
 # On the Safety of Open-Sourced Large Language Models: Does Alignment Really Prevent Them From Being Misused?
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

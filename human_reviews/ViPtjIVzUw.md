@@ -1,5 +1,6 @@
 # T-MARS: Improving Visual Representations by Circumventing Text Feature Learning
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

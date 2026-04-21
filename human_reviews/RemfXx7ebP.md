@@ -1,5 +1,6 @@
 # RDesign: Hierarchical Data-efficient Representation Learning for Tertiary Structure-based RNA Design
 
+- Avg Score: 4.00
 - Decision: Accept (poster)
 - Scores: 3, 3, 6
 

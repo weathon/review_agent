@@ -1,5 +1,6 @@
 # Training Language Models to Self-Correct via Reinforcement Learning
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

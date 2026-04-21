@@ -1,5 +1,6 @@
 # ChemAgent: Self-updating Memories in Large Language Models Improves Chemical Reasoning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5
 

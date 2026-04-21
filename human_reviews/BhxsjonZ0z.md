@@ -1,5 +1,6 @@
 # FedOD: Federated Outlier Detection via Neural Approximation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 1, 6, 3
 

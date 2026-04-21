@@ -1,5 +1,6 @@
 # On the power of graph neural networks and the role of the activation function
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 6, 3
 

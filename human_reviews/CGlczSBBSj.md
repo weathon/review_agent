@@ -1,5 +1,6 @@
 # SEAL: A Framework for Systematic Evaluation of Real-World Super-Resolution
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 6
 

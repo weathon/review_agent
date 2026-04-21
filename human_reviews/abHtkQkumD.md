@@ -1,5 +1,6 @@
 # Learnable Context-Aware Attention Mask for Multimodal Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

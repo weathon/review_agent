@@ -1,5 +1,6 @@
 # Grounding Continuous Representations in Geometry: Equivariant Neural Fields
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

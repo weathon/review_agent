@@ -1,5 +1,6 @@
 # Detail Loss in Super-Resolution Models Based on the Laplacian Pyramid and Repeated Upscaling-Downscaling Structure
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 5, 1
 

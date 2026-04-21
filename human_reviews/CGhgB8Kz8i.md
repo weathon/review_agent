@@ -1,5 +1,6 @@
 # Innovative Thinking, Infinite Humor: Humor Research of Large Language Models through Structured Thought Leaps
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 3, 6
 

@@ -1,5 +1,6 @@
 # Newton Losses: Using Curvature Information for Learning with Differentiable Algorithms
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

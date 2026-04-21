@@ -1,5 +1,6 @@
 # Leveraging Graph Neural Networks to Boost Fine-Grained Image Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

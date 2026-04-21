@@ -1,5 +1,6 @@
 # Provable Benefits of Multi-task RL under Non-Markovian Decision Making Processes
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6, 8
 

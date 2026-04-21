@@ -1,5 +1,6 @@
 # What If We Recaption Billions of Web Images with LLaMA-3?
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 3, 8
 

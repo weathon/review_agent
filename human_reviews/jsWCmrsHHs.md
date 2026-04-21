@@ -1,5 +1,6 @@
 # Deep Reinforcement Learning Guided Improvement Heuristic for Job Shop Scheduling
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Learning Label Shift Correction for Test-Agnostic Long-Tailed Recognition
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

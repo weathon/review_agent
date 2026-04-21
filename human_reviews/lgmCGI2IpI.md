@@ -1,5 +1,6 @@
 # An Efficient Query Strategy for Active Learning via Optimal Transport
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

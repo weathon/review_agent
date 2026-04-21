@@ -1,5 +1,6 @@
 # Learning Relational Invariance for Out-of-Distribution Molecular Relational Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # Diagnosing Transformers: Illuminating Feature Spaces for Clinical Decision-Making
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

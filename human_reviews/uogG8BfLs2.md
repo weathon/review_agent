@@ -1,5 +1,6 @@
 # Weak-to-Strong Generalization Through the Data-Centric Lens
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

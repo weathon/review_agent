@@ -1,5 +1,6 @@
 # Towards Efficient Mixture of Experts: A Holistic Study of Compression Techniques
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

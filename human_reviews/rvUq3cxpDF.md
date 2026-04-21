@@ -1,5 +1,6 @@
 # Learning to Act without Actions
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 8
 

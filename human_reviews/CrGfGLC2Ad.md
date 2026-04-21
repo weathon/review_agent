@@ -1,5 +1,6 @@
 # Discovering Factor Level Preferences to Improve Human-Model Alignment
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

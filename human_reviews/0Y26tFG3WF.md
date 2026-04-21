@@ -1,5 +1,6 @@
 # Inducing Precision in Lagrangian Neural Networks : Proof of concept application on Chaotic systems
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

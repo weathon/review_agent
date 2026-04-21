@@ -1,5 +1,6 @@
 # Hierarchical Self-Supervised Graph Contrastive Learning: Capturing Multi-Scale Structural Information
 
+- Avg Score: 2.60
 - Decision: Reject
 - Scores: 3, 3, 1, 3, 3
 

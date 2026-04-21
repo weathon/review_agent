@@ -1,5 +1,6 @@
 # Towards Scalable Semantic Representation for Recommendation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 6
 

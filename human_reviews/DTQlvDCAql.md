@@ -1,5 +1,6 @@
 # HERMES: temporal-coHERent long-forM understanding with Episodes and Semantics
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 3
 

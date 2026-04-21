@@ -1,5 +1,6 @@
 # A counterfactual-based approach to prevent crowding in intelligent subway systems
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 3, 1, 6
 

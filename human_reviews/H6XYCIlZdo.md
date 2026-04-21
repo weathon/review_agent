@@ -1,5 +1,6 @@
 # How far can we go without finetuning?
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 1
 

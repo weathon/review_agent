@@ -1,5 +1,6 @@
 # Prodigy: An Expeditiously Adaptive Parameter-Free Learner
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 1, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Integrating Protein Dynamics into Structure-Based Drug Design via Full-Atom Stochastic Flows
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 6, 6
 

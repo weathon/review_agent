@@ -1,5 +1,6 @@
 # Space-time self-attention for graph signal processing
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 3, 1, 5, 5
 

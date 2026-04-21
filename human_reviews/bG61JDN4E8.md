@@ -1,5 +1,6 @@
 # LANE: Label-Aware Noise Elimination for Fine-Grained Text Classification
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

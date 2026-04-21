@@ -1,5 +1,6 @@
 # GC-Mixer: A Novel Architecture for Time-varying Granger Causality Inference
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 6, 3, 3
 

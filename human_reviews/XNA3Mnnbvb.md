@@ -1,5 +1,6 @@
 # DartControl: A Diffusion-Based Autoregressive Motion Model for Real-Time Text-Driven Motion Control
 
+- Avg Score: 6.60
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 3, 8, 8
 

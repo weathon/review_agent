@@ -1,5 +1,6 @@
 # Causally Motivated Diffusion Sampling Frameworks for Harnessing Contextual Bias
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

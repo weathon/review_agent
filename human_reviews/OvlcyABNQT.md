@@ -1,5 +1,6 @@
 # Augmented Bayesian Policy Search
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8, 6
 

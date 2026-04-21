@@ -1,5 +1,6 @@
 # Transformers can optimally learn regression mixture models
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Amuro and Char: Analyzing the Relationship between Pre-Training and Fine-Tuning of Large Language Models
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # CViT: Continuous Vision Transformer for Operator Learning
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

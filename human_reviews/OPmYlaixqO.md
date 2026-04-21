@@ -1,5 +1,6 @@
 # SIFM:  A Foundation Model for Multi-granularity Arctic Sea Ice Forecasting
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

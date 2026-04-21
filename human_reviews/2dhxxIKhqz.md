@@ -1,5 +1,6 @@
 # Function-space Parameterization of Neural Networks for Sequential Learning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

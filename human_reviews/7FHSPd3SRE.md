@@ -1,5 +1,6 @@
 # WardropNet: Traffic Flow Predictions via Equilibrium-Augmented Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 8
 

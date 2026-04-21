@@ -1,5 +1,6 @@
 # Adaptive Regularization of Representation Rank as an Implicit Constraint of Bellman Equation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

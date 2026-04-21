@@ -1,5 +1,6 @@
 # Observation-Guided Diffusion Probabilistic Models
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5
 

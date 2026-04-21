@@ -1,5 +1,6 @@
 # Rationality of Thought Improves Reasoning in Large Language Models
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 6, 8, 6
 

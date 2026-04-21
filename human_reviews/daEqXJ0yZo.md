@@ -1,5 +1,6 @@
 # Generative Human Motion Stylization in Latent Space
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 6
 

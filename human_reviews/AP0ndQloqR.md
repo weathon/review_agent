@@ -1,5 +1,6 @@
 # Geometry of Neural Reinforcement Learning in Continuous State and Action Spaces
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8
 

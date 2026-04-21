@@ -1,5 +1,6 @@
 # Amortising the Gap between Pre-training and Fine-tuning for Video Instance Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

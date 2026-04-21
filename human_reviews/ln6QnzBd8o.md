@@ -1,5 +1,6 @@
 # Combining Analytical Smoothing with Surrogate Losses for Improved Decision-Focused Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 8, 5, 3, 5
 

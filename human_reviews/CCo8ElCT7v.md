@@ -1,5 +1,6 @@
 # Comprehensive Comparison between Vision Transformers and Convolutional Neural Networks for Face Recognition Tasks
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

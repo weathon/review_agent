@@ -1,5 +1,6 @@
 # DiRaGNN: Attention-Enhanced Entity Ranking for Sparse Graph Networks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 5
 

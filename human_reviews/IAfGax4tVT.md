@@ -1,5 +1,6 @@
 # Multi-Marginal Stochastic Flow Matching for Alignment of High-Dimensional Snapshot Data at Irregular Time Points
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

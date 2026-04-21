@@ -1,5 +1,6 @@
 # CausalLM is not optimal for in-context learning
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

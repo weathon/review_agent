@@ -1,5 +1,6 @@
 # Measurement Manipulation of the Matrix Sensing Problem to Improve Optimization Landscape
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # Lower-level Duality Based Penalty Methods for Hyperparameter Optimization
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3
 

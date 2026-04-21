@@ -1,5 +1,6 @@
 # Generalist Policy for k-Server Problem on Graphs using Deep Reinforcement Learning with Action-Value Decomposition
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

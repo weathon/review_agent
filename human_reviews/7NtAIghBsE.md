@@ -1,5 +1,6 @@
 # Covariances for Free: Exploiting Mean Distributions for Federated Learning with Pre-trained Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 8, 6, 3
 

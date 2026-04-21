@@ -1,5 +1,6 @@
 # Fast Ensembling with Diffusion Schrödinger Bridge
 
+- Avg Score: 6.60
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8, 5
 

@@ -1,5 +1,6 @@
 # Bias Learning: Quantifying and Mitigating Position Sensitivity in Text Embeddings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 
@@ -49,7 +50,8 @@ This paper investigates the impact of content position and input size on text em
 
 ### 2. Typo and Suggestions
 
-- L20: with with -> with 
+- L20: with with -> with
+
 - L39: “needles” -> ``needles’’
 - Citation format: use \citep in L184, L191, L194, and L197.
 - It is better to provide the full name of APE and RoPE in the abstract.

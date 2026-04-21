@@ -1,5 +1,6 @@
 # Gradient Regularization-based Cross-Prompt Attacks on Vision Language Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 3, 1
 

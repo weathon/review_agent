@@ -1,5 +1,6 @@
 # Multi-Resolution Learning with DeepONets and Long Short-Term Memory Neural Networks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

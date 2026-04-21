@@ -1,5 +1,6 @@
 # Learning a Reusable Meta Denoiser for Learning with Noisy Labels on Multiple Target Domains
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

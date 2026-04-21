@@ -1,5 +1,6 @@
 # Chat-UniVi: A Unified Vision-Language Model for Image and Video Understanding
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3
 

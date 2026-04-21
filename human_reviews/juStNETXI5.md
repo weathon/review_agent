@@ -1,5 +1,6 @@
 # Tiny-StyleWizard: Unleashing the Potential of Small Language Models in Complex Style Transfer
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

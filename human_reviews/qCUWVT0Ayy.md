@@ -1,5 +1,6 @@
 # LayoutNUWA: Revealing the Hidden Layout Expertise of Large Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 8
 

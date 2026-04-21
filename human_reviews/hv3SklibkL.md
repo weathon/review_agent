@@ -1,5 +1,6 @@
 # Graph Parsing Networks
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 3
 

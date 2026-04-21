@@ -1,5 +1,6 @@
 # PromptWizard: Task-Aware Prompt Optimization Framework
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 3, 5, 6
 

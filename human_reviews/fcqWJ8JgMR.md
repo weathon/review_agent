@@ -1,5 +1,6 @@
 # AuG-KD: Anchor-Based Mixup Generation for Out-of-Domain Knowledge Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

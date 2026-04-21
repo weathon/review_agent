@@ -1,5 +1,6 @@
 # Token Pruning Meets Audio: Investigating Unique Behaviors in Vision Transformer-Based Audio Classification
 
+- Avg Score: 5.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Adversarial Training on Purification (AToP): Advancing Both Robustness and Generalization
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 5, 6
 

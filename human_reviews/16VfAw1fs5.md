@@ -1,5 +1,6 @@
 # A Conservative Image Boundary Extraction Method with Application to the ILM Tumor Surgery
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3
 
@@ -65,7 +66,9 @@ This work presents a method for identifying a suitable conservative boundary bas
 The method is an iterative scheme applied to a boundary extracted from a binary image to refine a suitable area for surgical removal.
 
 ### Strengths
-The problem itself seems of interest although outside the scope of this reviewer’s expertise.   
+The problem itself seems of interest although outside the scope of this reviewer’s expertise. 
+
+
 
 The methods developed seem appropriate and are relatively well described.
 

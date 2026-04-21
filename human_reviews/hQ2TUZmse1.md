@@ -1,5 +1,6 @@
 # Refining Counterfactual Explanations With Joint-Distribution-Informed Shapley Towards Actionable Minimality
 
+- Avg Score: 7.00
 - Decision: Reject
 - Scores: 8, 6, 6, 8
 

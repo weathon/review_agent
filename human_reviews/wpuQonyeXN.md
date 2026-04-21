@@ -1,5 +1,6 @@
 # Provably Efficient Exploration in Quantum Reinforcement Learning with Logarithmic Worst-Case Regret
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

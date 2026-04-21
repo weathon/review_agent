@@ -1,5 +1,6 @@
 # Continuous Ensemble Weather Forecasting with Diffusion models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 5, 5, 5, 5
 

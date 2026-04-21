@@ -1,5 +1,6 @@
 # Multimodal LLM-guided Query Optimization for Visual-Language Retrieval
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

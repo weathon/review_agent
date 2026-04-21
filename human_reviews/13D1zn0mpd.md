@@ -1,5 +1,6 @@
 # Effective and Parameter-Efficient Reusing Fine-Tuned Models
 
+- Avg Score: 5.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 6
 

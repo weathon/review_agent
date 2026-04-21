@@ -1,5 +1,6 @@
 # Faster Approximation of Probabilistic and Distributional Values via Least Squares
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

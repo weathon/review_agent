@@ -1,5 +1,6 @@
 # EgoExo-Gen: Ego-centric Video Prediction by Watching Exo-centric Videos
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

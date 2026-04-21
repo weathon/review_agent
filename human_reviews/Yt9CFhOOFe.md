@@ -1,5 +1,6 @@
 # Concept Bottleneck Language Models For Protein Design
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Disentangled Representation Learning with the Gromov-Monge Gap
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6
 

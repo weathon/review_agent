@@ -1,5 +1,6 @@
 # Weak to Strong Generalization for Large Language Models with Multi-capabilities
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 5, 6
 

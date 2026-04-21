@@ -1,5 +1,6 @@
 # A Unified View of Delta Parameter Editing in Post-Trained Large-Scale Models
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

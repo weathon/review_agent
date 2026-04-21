@@ -1,5 +1,6 @@
 # IBCL: Zero-shot Model Generation under Stability-Plasticity Trade-offs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 8, 3
 

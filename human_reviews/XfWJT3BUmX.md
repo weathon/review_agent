@@ -1,5 +1,6 @@
 # DSConv: Dynamic Convolution On Serialized Point Cloud
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3, 3
 

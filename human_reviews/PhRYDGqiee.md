@@ -1,5 +1,6 @@
 # Organizing Unstructured Image Collections using Natural Language
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 8, 5, 3
 

@@ -1,5 +1,6 @@
 # Hierarchical Multimodal Knowledge Matching for Training-Free Open-Vocabulary Object Detection
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 6, 6
 

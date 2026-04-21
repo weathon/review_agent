@@ -1,5 +1,6 @@
 # Permutation-based Rank Test in the Presence of Discretization and Application in Causal Discovery with Mixed Data
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

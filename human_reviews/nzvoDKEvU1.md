@@ -1,5 +1,6 @@
 # DeepHandMesh-lite: Learning personalized hand shape using limited data and weak supervision
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

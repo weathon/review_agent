@@ -1,5 +1,6 @@
 # Generalizable Deep RL-Based TSP Solver via Approximate Invariance
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 1, 3, 3
 

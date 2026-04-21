@@ -1,5 +1,6 @@
 # LINK PREDICTION USING NEUMANN EIGENVALUES
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # FairMT-Bench: Benchmarking Fairness for Multi-turn Dialogue in Conversational LLMs
 
+- Avg Score: 7.00
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 6, 8
 

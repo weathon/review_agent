@@ -1,5 +1,6 @@
 # TULIP: Token-length Upgraded CLIP
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

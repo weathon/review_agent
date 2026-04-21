@@ -1,5 +1,6 @@
 # Causal Graphical Models for Vision-Language Compositional Understanding
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

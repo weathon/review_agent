@@ -1,5 +1,6 @@
 # Towards 3D Molecule-Text Interpretation in Language Models
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 6
 

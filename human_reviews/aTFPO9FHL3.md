@@ -1,5 +1,6 @@
 # Todyformer: Towards Holistic Dynamic Graph Transformers with Structure-Aware Tokenization
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

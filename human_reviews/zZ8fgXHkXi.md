@@ -1,5 +1,6 @@
 # h4rm3l: A Language for Composable Jailbreak Attack Synthesis
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 

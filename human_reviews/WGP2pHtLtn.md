@@ -1,5 +1,6 @@
 # Multiple Positive Views in Self-Supervised Learning
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5
 

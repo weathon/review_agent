@@ -1,5 +1,6 @@
 # Evaluating the Robustness of Text-to-image Diffusion Models against Real-world Attacks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 3, 5
 

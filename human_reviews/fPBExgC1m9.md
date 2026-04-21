@@ -1,5 +1,6 @@
 # Leveraging Natural Frequency Deviation for Diffusion-Generated Image Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 6
 

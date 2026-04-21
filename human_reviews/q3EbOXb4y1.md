@@ -1,5 +1,6 @@
 # Retri3D: 3D Neural Graphics Representation Retrieval
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

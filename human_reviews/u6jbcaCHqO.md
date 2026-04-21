@@ -1,5 +1,6 @@
 # SciBench: Evaluating College-Level Scientific Problem-Solving Abilities of Large Language Models
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 8, 5, 3, 6
 

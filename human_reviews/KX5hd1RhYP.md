@@ -1,5 +1,6 @@
 # Average Certified Radius is a Poor Metric for Randomized Smoothing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 5, 3
 

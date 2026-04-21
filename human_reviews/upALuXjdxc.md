@@ -1,5 +1,6 @@
 # Error Slice Discovery via Manifold Compactness
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 8, 6
 

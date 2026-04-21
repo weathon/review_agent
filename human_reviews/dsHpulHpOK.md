@@ -1,5 +1,6 @@
 # Reinforcement Learning for Control of Non-Markovian Cellular Population Dynamics
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6
 

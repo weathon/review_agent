@@ -1,5 +1,6 @@
 # Designing a Conditional Prior Distribution for Flow-Based Generative Models
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5
 

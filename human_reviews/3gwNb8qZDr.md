@@ -1,5 +1,6 @@
 # Visual Prompting Reimagined: The Power of Activation Prompts
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

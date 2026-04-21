@@ -1,5 +1,6 @@
 # Detecting, Explaining, and Mitigating Memorization in Diffusion Models
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

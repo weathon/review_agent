@@ -1,5 +1,6 @@
 # Node2ket: Efficient High-Dimensional Network Embedding in Quantum Hilbert Space
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

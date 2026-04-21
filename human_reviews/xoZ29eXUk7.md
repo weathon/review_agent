@@ -1,5 +1,6 @@
 # A Multi-Agent Reinforcement Learning Framework for Evaluating the U.S. ‘Ending the HIV Epidemic’ initiative
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

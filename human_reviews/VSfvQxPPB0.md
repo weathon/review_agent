@@ -1,5 +1,6 @@
 # SELU: Self-Learning Embodied MLLMs in Unknown Environments
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 6, 3
 

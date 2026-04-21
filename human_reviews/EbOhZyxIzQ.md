@@ -1,5 +1,6 @@
 # Overcoming Knowledge Barriers: Online Imitation Learning from Visual Observation with Pretrained World Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

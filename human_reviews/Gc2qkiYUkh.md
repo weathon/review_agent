@@ -1,5 +1,6 @@
 # Features are fate: a theory of transfer learning in high-dimensional regression
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 5, 3, 6
 

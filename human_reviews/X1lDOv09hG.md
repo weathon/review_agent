@@ -1,5 +1,6 @@
 # High variance score function estimates help diffusion models generalize
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

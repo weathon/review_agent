@@ -1,5 +1,6 @@
 # DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 8
 

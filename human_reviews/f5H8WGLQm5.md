@@ -1,5 +1,6 @@
 # UniAdapter: Unified Parameter-Efficient Transfer Learning for Cross-modal Modeling
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 8, 3, 6, 6
 

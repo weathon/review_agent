@@ -1,5 +1,6 @@
 # SyncFlow: Temporally Aligned Joint Audio-Video Generation from Text
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # Sufficient conditions for offline reactivation in recurrent neural networks
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 
@@ -218,7 +219,8 @@ Burak, Y. and Fiete, I.R., 2009. Accurate path integration in continuous attract
 ### Questions
 Would it be possible to discuss more explicitly how their results are connected or supported by the empirical data? In particular, how is the “diffusive reactivation” related to neural data?
 
- The mathematical analysis relies on a number of assumptions, to the extent that it is difficult to judge whether the conclusion would actually be applicable to the numerical experiments. Can these assumptions be justified or better motivated (beyond the sake of mathematical convenience)?
+
+The mathematical analysis relies on a number of assumptions, to the extent that it is difficult to judge whether the conclusion would actually be applicable to the numerical experiments. Can these assumptions be justified or better motivated (beyond the sake of mathematical convenience)?
 
 ### Soundness
 2 fair

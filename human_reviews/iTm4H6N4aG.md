@@ -1,5 +1,6 @@
 # ClassDiffusion: More Aligned Personalization Tuning with Explicit Class Guidance
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Towards Reliable Backdoor Attacks on Vision Transformers
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

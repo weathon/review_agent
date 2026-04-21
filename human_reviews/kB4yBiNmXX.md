@@ -1,5 +1,6 @@
 # FasterViT: Fast Vision Transformers with Hierarchical Attention
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6
 

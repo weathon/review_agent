@@ -1,5 +1,6 @@
 # PIANO PERFORMANCE EVALUATION DATASET WITH MULTI-LEVEL PERCEPTUAL FEATURES
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3, 6, 3
 

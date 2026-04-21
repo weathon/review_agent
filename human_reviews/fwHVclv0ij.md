@@ -1,5 +1,6 @@
 # Online Detection for Black-Box Large Language Models with Adaptive Prompt Selection
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

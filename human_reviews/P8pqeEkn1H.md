@@ -1,5 +1,6 @@
 # Diffusion Models Are Real-Time Game Engines
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 8, 5
 

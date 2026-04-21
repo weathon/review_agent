@@ -1,5 +1,6 @@
 # Bridge the Gap between SNN and ANN  for Image Restoration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

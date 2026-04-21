@@ -1,5 +1,6 @@
 # SimpleTM: A Simple Baseline for Multivariate Time Series Forecasting
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 5, 8
 

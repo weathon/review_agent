@@ -1,5 +1,6 @@
 # Optimal transport based adversarial patch to leverage large scale attack transferability
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6, 5
 

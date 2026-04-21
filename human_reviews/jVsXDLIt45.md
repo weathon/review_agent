@@ -1,5 +1,6 @@
 # Nugget 2D: Dynamic Contextual Compression for Scaling Decoder-only Language Models
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

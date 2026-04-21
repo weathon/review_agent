@@ -1,5 +1,6 @@
 # There and Back Again: On the relation between noises, images, and their inversions in diffusion models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 8, 3, 3
 

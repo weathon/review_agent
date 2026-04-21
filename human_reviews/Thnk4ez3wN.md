@@ -1,5 +1,6 @@
 # On Learning Representations for Tabular Dataset Distillation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

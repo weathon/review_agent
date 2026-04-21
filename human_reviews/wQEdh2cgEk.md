@@ -1,5 +1,6 @@
 # Process Reward Model with Q-value Rankings
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 3, 8, 8, 8, 5
 

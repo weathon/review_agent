@@ -1,5 +1,6 @@
 # LoRA vs Full Fine-tuning: An Illusion of Equivalence
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

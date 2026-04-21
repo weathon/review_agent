@@ -1,5 +1,6 @@
 # Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model
 
+- Avg Score: 7.60
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6, 8
 

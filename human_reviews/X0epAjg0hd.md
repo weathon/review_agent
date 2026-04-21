@@ -1,5 +1,6 @@
 # Reassessing How to Compare and Improve the Calibration of Machine Learning Models
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6
 

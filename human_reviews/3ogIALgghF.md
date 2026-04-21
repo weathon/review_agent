@@ -1,5 +1,6 @@
 # Automatic Curriculum Expert Iteration for Reliable LLM Reasoning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

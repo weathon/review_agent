@@ -1,5 +1,6 @@
 # Effective Learning by Node Perturbation in Deep Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 3, 5
 

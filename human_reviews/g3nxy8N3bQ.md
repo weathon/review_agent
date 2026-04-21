@@ -1,5 +1,6 @@
 # STEER-ME: Assessing the Microeconomic Reasoning of Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

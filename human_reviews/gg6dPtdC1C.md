@@ -1,5 +1,6 @@
 # Build-A-Scene: Interactive 3D Layout Control for Diffusion-Based Image Generation
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 3, 6
 

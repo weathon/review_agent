@@ -1,5 +1,6 @@
 # How Do Large Language Models Understand Graph Patterns? A Benchmark for Graph Pattern Comprehension
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 
@@ -88,7 +89,10 @@ Pros:
 Cons:
 - It would be great if o1-preview result can also be included, if feasible.
 - In molecular graphs, how is the molecule features being provided to the LLMs? I am curious about how the molecular graph is being converted to textual format and feed into the LLMs.  More details are encouraged to be included. If edge lists is utilized, then example of the edge list representing molecules are encouraged to be shown.
-- For the question, Can LLMs automatically discover graph patterns in real-world applications? A work using LLMs to find patterns in molecular data is encourage to be mentioned. The work has tried to use LLMs to identify key functional groups in molecular data for diverse molecular property prediction tasks[1].   [1] Zheng, Y., Koh, H. Y., Ju, J., Nguyen, A. T., May, L. T., Webb, G. I., & Pan, S. (2023). Large language models for scientific synthesis, inference and explanation. arXiv preprint arXiv:2310.07984.
+- For the question, Can LLMs automatically discover graph patterns in real-world applications? A work using LLMs to find patterns in molecular data is encourage to be mentioned. The work has tried to use LLMs to identify key functional groups in molecular data for diverse molecular property prediction tasks[1].
+
+
+[1] Zheng, Y., Koh, H. Y., Ju, J., Nguyen, A. T., May, L. T., Webb, G. I., & Pan, S. (2023). Large language models for scientific synthesis, inference and explanation. arXiv preprint arXiv:2310.07984.
 
 ### Questions
 Same as Cons

@@ -1,5 +1,6 @@
 # FedP3: Federated Personalized and Privacy-friendly Network Pruning under Model Heterogeneity
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 3, 6, 5, 8, 6
 

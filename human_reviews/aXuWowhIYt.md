@@ -1,5 +1,6 @@
 # Standardizing Structural Causal Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # TimewarpVAE: Simultaneous Time-Warping and Representation Learning of Trajectories
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

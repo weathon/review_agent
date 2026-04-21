@@ -1,5 +1,6 @@
 # Generate to Discriminate: Expert Routing for Continual Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

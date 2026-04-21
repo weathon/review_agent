@@ -1,5 +1,6 @@
 # Independently-Normalized SGD for Generalized-Smooth Nonconvex Optimization
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 5, 6
 

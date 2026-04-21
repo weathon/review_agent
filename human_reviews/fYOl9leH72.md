@@ -1,5 +1,6 @@
 # Neural Mutual Information Estimation with Reference Distributions
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 1, 5, 5, 5, 5
 

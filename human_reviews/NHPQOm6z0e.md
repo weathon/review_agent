@@ -1,5 +1,6 @@
 # On the Convergence of Tsetlin Machines for the AND and the OR Operators
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 3, 8, 8
 

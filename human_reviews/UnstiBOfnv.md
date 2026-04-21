@@ -1,5 +1,6 @@
 # Style Over Substance: Evaluation Biases for Large Language Models
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

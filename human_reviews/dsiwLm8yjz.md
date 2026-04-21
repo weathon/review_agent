@@ -1,5 +1,6 @@
 # Prompt Reverse Learning: Enhancing Visual Language Models for Rare Image Recognition
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

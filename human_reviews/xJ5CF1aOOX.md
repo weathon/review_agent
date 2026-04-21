@@ -1,5 +1,6 @@
 # A Self-Supervised Pre-Training Model for Time Series Classification based on Data Pre-Processing
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

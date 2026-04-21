@@ -1,5 +1,6 @@
 # Trace Reconstruction for DNA Data Storage using Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 8, 6
 

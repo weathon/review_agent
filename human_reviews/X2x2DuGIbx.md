@@ -1,5 +1,6 @@
 # Multi-level Certified Defense Against Poisoning Attacks in Offline Reinforcement Learning
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

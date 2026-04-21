@@ -1,5 +1,6 @@
 # LLM-Codebook for Extreme Compression of Large Language Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

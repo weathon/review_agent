@@ -1,5 +1,6 @@
 # MOUCHI: Mitigating Over-forgetting in Unlearning Copyrighted Information
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

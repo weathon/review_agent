@@ -1,5 +1,6 @@
 # Vision-LSTM: xLSTM as Generic Vision Backbone
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6, 6
 

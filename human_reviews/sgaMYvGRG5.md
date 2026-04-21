@@ -1,5 +1,6 @@
 # $\alpha$-OCC: Uncertainty-Aware Camera-based 3D Semantic Occupancy Prediction
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 6, 5, 6
 

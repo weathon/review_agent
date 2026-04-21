@@ -1,5 +1,6 @@
 # Blessing of Dimensionality for Approximating Sobolev Classes on Manifolds
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

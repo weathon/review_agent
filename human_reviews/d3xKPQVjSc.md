@@ -1,5 +1,6 @@
 # Bounds on Representation-Induced Confounding Bias for Treatment Effect Estimation
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 5, 8
 

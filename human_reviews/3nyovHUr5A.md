@@ -1,5 +1,6 @@
 # Learning with Instance-Dependent Noisy Labels by Hard Sample Selection with Anchor Hallucination
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

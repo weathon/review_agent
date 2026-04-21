@@ -1,5 +1,6 @@
 # Hyper Evidential Deep Learning to Quantify Composite Classification Uncertainty
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Evolving Virtual World with Delta-Engine
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 1, 3, 3
 

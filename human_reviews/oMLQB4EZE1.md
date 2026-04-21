@@ -1,5 +1,6 @@
 # DNABERT-2: Efficient Foundation Model and Benchmark For Multi-Species Genomes
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

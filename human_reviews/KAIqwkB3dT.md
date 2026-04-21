@@ -1,5 +1,6 @@
 # Prevalence of Negative Transfer in Continual Reinforcement Learning: Analyses and a Simple Baseline
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

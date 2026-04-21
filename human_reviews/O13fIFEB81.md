@@ -1,5 +1,6 @@
 # Robust Watermarking for Diffusion Models: A Unified Multi-Dimensional Recipe
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 5, 6, 5
 

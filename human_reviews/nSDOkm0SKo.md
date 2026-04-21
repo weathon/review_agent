@@ -1,5 +1,6 @@
 # Analyzing Complex Interdependencies in Financial Markets: A Neural Network-Based Approach for News Impact Assessment
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1
 

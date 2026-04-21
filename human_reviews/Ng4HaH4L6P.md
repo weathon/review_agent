@@ -1,5 +1,6 @@
 # SlideChat: A Large Vision-Language Assistant for Whole-Slide Pathology Image Understanding
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Understanding and Mitigating Memorization in Diffusion Models for Tabular Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

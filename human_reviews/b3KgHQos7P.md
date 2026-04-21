@@ -1,5 +1,6 @@
 # Backdooring Instruction-Tuned Large Language Models with Virtual Prompt Injection
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

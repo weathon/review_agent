@@ -1,5 +1,6 @@
 # Uncertainty-aware Distributional Offline Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3
 

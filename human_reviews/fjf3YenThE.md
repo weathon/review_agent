@@ -1,5 +1,6 @@
 # New Insight of Variance reduce in Zero-Order Hard-Thresholding: Mitigating Gradient Error and Expansivity Contradictions
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 6, 6, 3, 6, 5, 6
 

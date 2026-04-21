@@ -1,5 +1,6 @@
 # Radar: Fast Long-Context Decoding for Any Transformer
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 8, 8
 

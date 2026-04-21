@@ -1,5 +1,6 @@
 # Deep Neural Room Acoustics Primitive
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 6
 

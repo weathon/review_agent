@@ -1,5 +1,6 @@
 # Stochastic Diffusion: A Diffusion Based Model for Stochastic Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

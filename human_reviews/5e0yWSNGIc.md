@@ -1,5 +1,6 @@
 # Exposing the Silent Hidden Impact of Certified Training in Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

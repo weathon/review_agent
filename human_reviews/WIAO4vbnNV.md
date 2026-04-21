@@ -1,5 +1,6 @@
 # Motion Guidance: Diffusion-Based Image Editing with Differentiable Motion Estimators
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

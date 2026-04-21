@@ -1,5 +1,6 @@
 # Weak-to-Strong Preference Optimization: Stealing Reward from Weak Aligned Model
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 5
 

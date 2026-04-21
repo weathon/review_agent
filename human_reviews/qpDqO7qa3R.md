@@ -1,5 +1,6 @@
 # DiffIR2VR-Zero: Zero-Shot Video Restoration with Diffusion-based Image Restoration Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

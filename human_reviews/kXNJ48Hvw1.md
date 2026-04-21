@@ -1,5 +1,6 @@
 # Accelerated Sampling with Stacked Restricted Boltzmann Machines
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

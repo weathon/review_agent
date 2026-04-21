@@ -1,5 +1,6 @@
 # Tamper-Resistant Safeguards for Open-Weight LLMs
 
+- Avg Score: 5.83
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 5, 8, 6
 

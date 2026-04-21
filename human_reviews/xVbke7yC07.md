@@ -1,5 +1,6 @@
 # Enhancing Tropical Cyclone Formation Prediction Using Graph Neural Networks
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 1, 5
 

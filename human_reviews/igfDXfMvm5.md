@@ -1,5 +1,6 @@
 # USB-NeRF: Unrolling Shutter Bundle Adjusted Neural Radiance Fields
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 3, 8, 3, 8
 

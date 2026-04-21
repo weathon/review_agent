@@ -1,5 +1,6 @@
 # Reservoir Transformer at Infinite Horizon: the Lyapunov Time and the Butterfly Effect
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

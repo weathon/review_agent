@@ -1,5 +1,6 @@
 # PAGER: A Framework for Failure Analysis of Deep Regression Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

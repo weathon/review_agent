@@ -1,5 +1,6 @@
 # On Representation Complexity of Model-based and Model-free Reinforcement Learning
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 5, 6, 8
 

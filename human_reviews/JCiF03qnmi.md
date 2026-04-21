@@ -1,5 +1,6 @@
 # How Does Critical Batch Size Scale in Pre-training?
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8, 6
 

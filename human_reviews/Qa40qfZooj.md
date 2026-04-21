@@ -1,5 +1,6 @@
 # Bayesian Neural Networks with Domain Knowledge Priors
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 6, 5, 5, 5
 

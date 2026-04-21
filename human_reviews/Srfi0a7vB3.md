@@ -1,5 +1,6 @@
 # LLM4DV: Using Large Language Models for Hardware Test Stimuli Generation
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 8, 3, 3
 

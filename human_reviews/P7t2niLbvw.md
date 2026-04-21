@@ -1,5 +1,6 @@
 # Swift Hydra:  Self-Reinforcing Generative Framework for Anomaly Detection with Multiple Mamba Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

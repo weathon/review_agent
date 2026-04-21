@@ -1,5 +1,6 @@
 # 3D StreetUnveiler with Semantic-aware 2DGS - a simple baseline
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 8
 

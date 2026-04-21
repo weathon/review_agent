@@ -1,5 +1,6 @@
 # A Theoretical Study of Neural Network Expressive Power via Manifold Topology
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 5, 6, 6
 

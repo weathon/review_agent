@@ -1,5 +1,6 @@
 # Identifying Interpretable Features in Convolutional Neural Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 1, 5
 

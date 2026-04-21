@@ -1,5 +1,6 @@
 # Adaptive Federated Learning with Auto-Tuned Clients
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

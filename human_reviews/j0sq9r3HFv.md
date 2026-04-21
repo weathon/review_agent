@@ -1,5 +1,6 @@
 # Automated Parameter Extraction for Biologically Realistic Neural Networks: An Initial Exploration with Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 1, 3, 5
 

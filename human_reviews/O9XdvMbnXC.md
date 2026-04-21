@@ -1,5 +1,6 @@
 # Mitigating Forgetting in Continually Pretraining MoE-LLMs by Adding and Chilling Experts
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

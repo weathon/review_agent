@@ -1,5 +1,6 @@
 # Stable Offline Value Function Learning with Bisimulation-based Representations
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 6, 8, 6
 

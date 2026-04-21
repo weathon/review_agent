@@ -1,5 +1,6 @@
 # Revitalizing Channel-dimension Fourier Transform for Image Enhancement
 
+- Avg Score: 7.50
 - Decision: Reject
 - Scores: 8, 10, 6, 6
 

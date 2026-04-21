@@ -1,5 +1,6 @@
 # ChartMoE: Mixture of Diversely Aligned Expert Connector for Chart Understanding
 
+- Avg Score: 6.75
 - Decision: Accept (Oral)
 - Scores: 8, 8, 5, 6
 

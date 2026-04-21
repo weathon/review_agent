@@ -1,5 +1,6 @@
 # Boosting the visual interpretability of CLIP via adversarial fine-tuning
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 6
 

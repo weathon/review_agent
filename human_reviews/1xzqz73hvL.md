@@ -1,5 +1,6 @@
 # High-dimensional Analysis of Knowledge Distillation: Weak-to-Strong Generalization and Scaling Laws
 
+- Avg Score: 7.00
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 6, 8
 

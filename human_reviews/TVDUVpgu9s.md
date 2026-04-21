@@ -1,5 +1,6 @@
 # Zeroth-Order Optimization Meets Human Feedback: Provable Learning via Ranking Oracles
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

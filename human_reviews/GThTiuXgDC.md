@@ -1,5 +1,6 @@
 # 3D-AffordanceLLM: Harnessing Large Language Models for Open-Vocabulary Affordance Detection in 3D Worlds
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 5, 6
 

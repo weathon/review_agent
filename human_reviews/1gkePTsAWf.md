@@ -1,5 +1,6 @@
 # Self-Taught Optimizer (STOP): Recursively Self-Improving Code Generation
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 5, 6, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Theoretical Understanding of Learning from Adversarial Perturbations
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 5
 

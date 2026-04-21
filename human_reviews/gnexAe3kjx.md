@@ -1,5 +1,6 @@
 # Quantum Neural Fields
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 1, 8, 5
 

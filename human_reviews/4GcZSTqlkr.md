@@ -1,5 +1,6 @@
 # Tokenizer-Agnostic Transferable Attacks on Language Models for Enhanced Red Teaming
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

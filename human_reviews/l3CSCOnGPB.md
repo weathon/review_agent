@@ -1,5 +1,6 @@
 # Learning Semantic-Enhanced Dual Temporal Adjacent Maps for Video Moment Retrieval
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 3, 3
 

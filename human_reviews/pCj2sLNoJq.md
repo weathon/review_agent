@@ -1,5 +1,6 @@
 # A Generalist Hanabi Agent
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5, 6, 3, 5, 5, 3, 6, 6, 5
 

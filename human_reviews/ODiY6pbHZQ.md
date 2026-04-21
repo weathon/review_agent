@@ -1,5 +1,6 @@
 # Oryx MLLM: On-Demand Spatial-Temporal Understanding at Arbitrary Resolution
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

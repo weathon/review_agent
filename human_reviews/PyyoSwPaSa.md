@@ -1,5 +1,6 @@
 # MissDiff: Training Diffusion Models on Tabular Data with Missing Values
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 3, 6, 6
 

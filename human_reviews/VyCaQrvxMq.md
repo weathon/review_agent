@@ -1,5 +1,6 @@
 # Quantum-Inspired Reinforcement Learning in the Presence of Epistemic Ambivalence
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 8, 6
 

@@ -1,5 +1,6 @@
 # Spatial Speaker ID: Joint Spatial and Semantic Learning for Multi-Microphone Speaker Identification on Short Far-Field Utterances
 
+- Avg Score: 2.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 6
 

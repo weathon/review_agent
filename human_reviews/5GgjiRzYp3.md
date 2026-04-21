@@ -1,5 +1,6 @@
 # Intent3D: 3D Object Detection in RGB-D Scans Based on Human Intention
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 5
 

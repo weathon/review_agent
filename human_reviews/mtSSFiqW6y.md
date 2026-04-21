@@ -1,5 +1,6 @@
 # Judge Decoding: Faster Speculative Sampling Requires Going Beyond Model Alignment
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 10, 8, 8
 

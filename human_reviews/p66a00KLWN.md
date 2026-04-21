@@ -1,5 +1,6 @@
 # NExT-Mol: 3D Diffusion Meets 1D Language Modeling for 3D Molecule Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 3
 

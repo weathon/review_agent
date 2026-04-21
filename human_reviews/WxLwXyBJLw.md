@@ -1,5 +1,6 @@
 # Flow Matching for One-Step Sampling
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 3, 6
 

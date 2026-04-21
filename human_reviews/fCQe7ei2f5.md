@@ -1,5 +1,6 @@
 # Variational Learning of  Gaussian Process Latent Variable Models  through  Stochastic Gradient Annealed Importance Sampling
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 5, 8
 

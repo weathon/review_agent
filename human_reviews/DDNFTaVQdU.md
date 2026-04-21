@@ -1,5 +1,6 @@
 # Faster Algorithms for Structured Linear and Kernel Support Vector Machines
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

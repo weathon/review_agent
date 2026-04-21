@@ -1,5 +1,6 @@
 # Refining Corpora from a Model Calibration Perspective for Chinese Spelling Correction
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

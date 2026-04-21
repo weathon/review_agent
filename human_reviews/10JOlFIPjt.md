@@ -1,5 +1,6 @@
 # In vivo cell-type and brain region classification via multimodal contrastive learning
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

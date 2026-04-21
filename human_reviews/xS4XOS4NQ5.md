@@ -1,5 +1,6 @@
 # General Preference Modeling with Preference Representations for Aligning Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 3, 5
 

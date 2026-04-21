@@ -1,5 +1,6 @@
 # M-BioBERTa: Modular RoBERTa-based Model for Biobank-scale Unified Representations
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

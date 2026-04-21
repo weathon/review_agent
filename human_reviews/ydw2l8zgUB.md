@@ -1,5 +1,6 @@
 # EEGTrans: Transformer-Driven Generative Models for EEG Synthesis
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

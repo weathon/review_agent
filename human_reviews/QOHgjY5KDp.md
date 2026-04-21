@@ -1,5 +1,6 @@
 # Aligning Human Motion Generation with Human Perceptions
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 
@@ -121,14 +122,16 @@ The authors show that MotionCritic follows human perception closer than existing
 This paper addresses a common problem in generative motion synthesis: how to evaluate the motion quality of a generated sequence? In contrast to the often utilized FID score MotionCrititic operates on a per-sequence base, which allows for a much more granular evaluation.
 
 ### Weaknesses
-One major concern of the motion critic is its quality ceiling: MotionPercept is highly dependent on the generative models that produces the motion, so in turn MotionCritic is highly dependent on those generative models as well. That means that, for the model, the best possible motion is the best generative model of MotionPerecpt, potentially limiting the usefulness of the critic once generative models produce significantly better motion than has been produced for MotionPercept. Could the authors comment if there is a way to remedy this or if they have considered this a problem?
+One major concern of the motion critic is its quality ceiling: MotionPercept is highly dependent on the generative models that produces the motion, so in turn MotionCritic is highly dependent on those generative models as well. That means that, for the model, the best possible motion is the best generative model of MotionPerecpt, potentially limiting the usefulness of the critic once generative models produce significantly better motion than has been produced for MotionPercept.
+Could the authors comment if there is a way to remedy this or if they have considered this a problem?
 
 Another concern would be: how does MotionCritic behave when provided with unseen motion modalities? I.e. lets say MotionCritic was not trained with dancing motion but is now tasked to judge the motion quality of dancing: do the authors expect MotionCritic to continue being reliable or would retraining be required?
 
 Why did the authors choose 2.3s sequence lengths (60 frames @24Hz)? This seems very short for complex motion, i.e. a person “sitting down”. Were complex motions discarded for the dataset generation? Otherwise, only the motion initiation would have been recorded.
 Did the authors observe that the model tends to start from the same pose or position, i.e. a T-Pose? This might limit the application of MotionCiritic as it could favor motions and poses that are more similar to the “initialization” pose/motion.
 
-How can MotionCritic be applied to sequences of different lengths, i.e. [A] How can MotionCritic deal with sequences shorter than 60 frames and how does it perform ?
+How can MotionCritic be applied to sequences of different lengths, i.e.
+[A] How can MotionCritic deal with sequences shorter than 60 frames and how does it perform ?
 
 How is the input motion to MotionCritic normalized? Is the first frame translation at the origin? How is the global rotation set up? Are the first frame rotations set to the same rotation for each generation?
 

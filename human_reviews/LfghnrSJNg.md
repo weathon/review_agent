@@ -1,5 +1,6 @@
 # Diff-Prompt: Diffusion-Driven Prompt Generator with Mask Supervision
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6, 3
 

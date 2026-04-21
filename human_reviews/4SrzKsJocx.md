@@ -1,5 +1,6 @@
 # Simultaneous Dimensionality Reduction: A Data Efficient Approach for Multimodal Representations Learning
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 5
 

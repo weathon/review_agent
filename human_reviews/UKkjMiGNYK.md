@@ -1,5 +1,6 @@
 # MULTIMODAL GENERATIVE AI FOR STORY POINT ESTIMATION
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 
@@ -119,10 +120,12 @@ Some points they may add:
 * Intro references planning poker & traditional methods but don’t clearly explain the need for an automated solution to readers unfamiliar with Agile.
 * It’s not clear why image data, specifically, is vital to SP estimation (for me at least). An explanation of how visual data relates to Agile requirements probably would enhance understanding.
 * A deeper look into gen AI’s distinct benefits (e.g., context-awareness, adaptability) for Agile workflows would/might solidify the argument.
- 3. Related Work
+
+3. Related Work
 
 * While this section highlights the limitations of single-modal data, it doesn’t provide examples OR metrics from prior studies for contrast. (optional todo)
-* While a gap in Agile applications of multimodal AI is noted, discussing how multimodal models have succeeded in similar domains (e.g., sentiment analysis) would add depth. (optional todo) 
+* While a gap in Agile applications of multimodal AI is noted, discussing how multimodal models have succeeded in similar domains (e.g., sentiment analysis) would add depth. (optional todo)
+
 4. Approach and Methodology
 
 * Rationale for selecting Bugzilla could be elaborated. 
@@ -131,35 +134,42 @@ Some points they may add:
     * However, further justification for this selection would help—why not use a regression model instead of Fibonacci classes?
     * It’s unclear why specific embeddings were chosen for text and images (e.g., BERT and CNN as BERT is not a SOTA anymore !). Adding an explanation of alternative options considered and their pros and cons would enrich this section.
 * Short comparative analysis on why XGBoost performs better than other ensemble models could justify this choice.
-* This section lacks a clear explanation of its impact. How was severity expected to influence story point estimation, and why was it hypothesized to be a critical feature? 
+* This section lacks a clear explanation of its impact. How was severity expected to influence story point estimation, and why was it hypothesized to be a critical feature?
+
 5. Results and Discussion
 
 * The manuscript could use more detailed metrics (e.g., confusion matrices for all categories, especially complex SPs). 
 * It’s crucial to see how each story point level performed, including precise PR (recision-recall) data.
 * Model showed improvement w/o severity data, raising questions about the feature’s importance. Was this result surprising, or did it align with initial expectations? A short discussion on the reasoning behind severity’s impact, potentially with related literature support, would strengthen the analysis.
 * Misclassification trends are insightful but would benefit from a breakdown of the challenges in each category.
-* Mentioning possible approaches (e.g., SMOTE for synthetic sampling) to address the data imbalance would offer actionable insight for future readers. 
+* Mentioning possible approaches (e.g., SMOTE for synthetic sampling) to address the data imbalance would offer actionable insight for future readers.
+
 6. Limitations and Challenges
 
 * Limitations inherent to Bugzilla, such as domain-specific language or bias toward particular story types, might restrict generalizability. A discussion on this could be helpful.
 * The quality and relevance of images were acknowledged as variable, which introduces noise. Elaborating on specific image characteristics that were particularly challenging could clarify this point.
-* The process of integrating text, image, and categorical data has inherent challenges. Were there issues in aligning these modalities, and how were they addressed? 
+* The process of integrating text, image, and categorical data has inherent challenges. Were there issues in aligning these modalities, and how were they addressed?
+
 7. Future Work
 
 * Mentioning multimodal models like ViLBERT and CLIP was insightful, but discussing why these models might perform better for this task (e.g., handling of domain-specific data) would be beneficial.
 * Using synthetic data to balance categories would be a valuable experiment. An elaboration on which techniques might best suit this data would provide actionable direction.
-* While the idea of fine-tuning BERT on a domain-specific corpus was mentioned, further detail on where to source or create this corpus would provide clear next steps. 
+* While the idea of fine-tuning BERT on a domain-specific corpus was mentioned, further detail on where to source or create this corpus would provide clear next steps.
+
 8. Conclusion
 * Manuscript could include how the proposed model might directly benefit Agile teams in practice.
 * Ending with a statement on the transformative potential of multimodal AI in project management would provide a strong conclusion.
- Writing and Presentation
+
+Writing and Presentation
 
 * Terms such as "severity data," "multimodal integration," and "story points" may not be universally understood by all readers, particularly those outside Agile contexts. Including brief definitions or explanations would improve readability.
 * Figures could use more detailed captions, especially the confusion matrices, to guide readers through the results more effectively.
- Additional Observations
+
+Additional Observations
 * Bugzilla data may be limited to certain Agile frameworks or specific team practices. If so, this could limit applicability across broader Agile methodologies.
 * There is no mention of whether performance differences were statistically significant, which could validate or refute the observed improvement without severity data.
- In summary, the manuscript introduces a compelling approach to story point estimation using multimodal AI. Addressing these points would strengthen the work by enhancing clarity, rigor, and practical applicability.
+
+In summary, the manuscript introduces a compelling approach to story point estimation using multimodal AI. Addressing these points would strengthen the work by enhancing clarity, rigor, and practical applicability.
 
 ### Soundness
 2

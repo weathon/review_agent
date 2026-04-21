@@ -1,5 +1,6 @@
 # Learning Robust Representations for Medical Images via Unifying (Self-)Supervisions
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 6, 3, 5, 6, 3
 

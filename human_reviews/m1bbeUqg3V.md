@@ -1,5 +1,6 @@
 # HyperPg - Prototypical Gaussians on the Hypersphere for Interpretable Deep Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # SEMANTIC RHEOLOGY: THE FLOW OF IDEAS IN LANGUAGE MODELS
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 6, 1, 3, 3
 

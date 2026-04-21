@@ -1,5 +1,6 @@
 # Finite Sample Analyses for Continuous-time Linear Systems: System Identification and Online Control
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # GRepsNet: A Simple Equivariant Network for Arbitrary Matrix Groups
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 1, 8
 

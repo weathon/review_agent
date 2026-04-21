@@ -1,5 +1,6 @@
 # LogoRA: Local-Global Representation Alignment for Robust Time Series Classification
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 5, 6, 3
 

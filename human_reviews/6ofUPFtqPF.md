@@ -1,5 +1,6 @@
 # AutoModel: Autonomous Model Development for Image Classification with LLM Agents
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

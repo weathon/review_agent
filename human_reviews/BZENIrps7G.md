@@ -1,5 +1,6 @@
 # XAI Procedural Fairness Auditing Framework: avoid misguided outcomes by refocusing on fairness properties
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 3
 

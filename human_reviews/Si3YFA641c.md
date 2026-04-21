@@ -1,5 +1,6 @@
 # R-EDL: Relaxing Nonessential Settings of Evidential Deep Learning
 
+- Avg Score: 7.20
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 8, 8
 

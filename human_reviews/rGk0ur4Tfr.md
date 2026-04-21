@@ -1,5 +1,6 @@
 # Retrieval-Based Video Language Model for Efficient Long Video Question Answering
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

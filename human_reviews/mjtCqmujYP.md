@@ -1,5 +1,6 @@
 # Reward-Augmented Data Enhances Direct Preference Alignment of LLMs
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 5, 3, 6, 6, 6
 

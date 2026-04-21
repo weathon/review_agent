@@ -1,5 +1,6 @@
 # Minimizing Chebyshev Risk Magically Mitigates the Perils of Overfitting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Knowledge Card: Filling LLMs' Knowledge Gaps with Plug-in Specialized Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Topological Blindspots: Understanding and Extending Topological Deep Learning Through the Lens of Expressivity
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8
 

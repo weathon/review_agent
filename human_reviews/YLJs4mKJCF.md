@@ -1,5 +1,6 @@
 # Towards Poisoning Fair Representations
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 5, 3
 

@@ -1,5 +1,6 @@
 # Sparse Covariance Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 3, 3, 1
 

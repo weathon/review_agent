@@ -1,5 +1,6 @@
 # Bring Your Own Data!  Self-Supervised Evaluation for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

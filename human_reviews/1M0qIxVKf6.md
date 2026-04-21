@@ -1,5 +1,6 @@
 # Uncovering hidden geometry in Transformers via disentangling position and context
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

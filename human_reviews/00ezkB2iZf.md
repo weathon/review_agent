@@ -1,5 +1,6 @@
 # MedFuzz: Exploring the Robustness of Large Language Models in Medical Question Answering
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 6, 3
 

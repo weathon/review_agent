@@ -1,5 +1,6 @@
 # Robustness through Random Activation: Adversarial Training with  Bernoulli Rectified Linear Units
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 5, 1, 5, 3
 

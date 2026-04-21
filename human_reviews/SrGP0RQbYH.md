@@ -1,5 +1,6 @@
 # Adaptive backtracking line search
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5
 

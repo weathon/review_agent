@@ -1,5 +1,6 @@
 # Learning the greatest common divisor: explaining transformer predictions
 
+- Avg Score: 6.00
 - Decision: Accept (spotlight)
 - Scores: 5, 6, 8, 5
 

@@ -1,5 +1,6 @@
 # $\text{O}_\text{2}$VIS: Occupancy-aware Object Association for Temporally Consistent Video Instance Segmentation
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 3, 3
 

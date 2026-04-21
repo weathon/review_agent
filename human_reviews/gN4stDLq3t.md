@@ -1,5 +1,6 @@
 # Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 3
 

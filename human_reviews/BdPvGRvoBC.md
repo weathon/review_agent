@@ -1,5 +1,6 @@
 # An improved analysis of per-sample and per-update clipping in federated learning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 5, 5
 

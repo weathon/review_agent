@@ -1,5 +1,6 @@
 # CMMLU: Measuring massive multitask language understanding in Chinese
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 5, 6, 8
 

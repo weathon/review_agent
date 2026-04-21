@@ -1,5 +1,6 @@
 # Early Fusion Helps Vision Language Action Models Generalize Better
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 1, 3, 6
 

@@ -1,5 +1,6 @@
 # DICE: End-to-end Deformation Capture of Hand-Face Interactions from a Single Image
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # TACTiS-2: Better, Faster, Simpler Attentional Copulas for Multivariate Time Series
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 5
 

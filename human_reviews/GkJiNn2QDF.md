@@ -1,5 +1,6 @@
 # FeatUp: A Model-Agnostic Framework for Features at Any Resolution
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 3, 6, 6
 

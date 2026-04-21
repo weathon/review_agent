@@ -1,5 +1,6 @@
 # 'No' Matters: Out-of-Distribution Detection in Multimodality Long Dialogue
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 5, 5, 5, 5
 

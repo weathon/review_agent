@@ -1,5 +1,6 @@
 # LightSAM: Parameter-Agnostic Sharpness-Aware Minimization
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 
@@ -129,7 +130,9 @@ The benefits of the so-called Light SAM are not sufficiently presented in the ex
 ### Questions
 Questions & some advice:
 
-1. The main contribution of this work to me lies in the parameter-agnostic convergence results of SAM adopting to the adaptive optimizers presented in this work. However, in the experiments, such benefits are not elaborated. Firstly, the shown results only appear with incremental and quite marginal improvement; secondly, why not vary some parameters, e.g., $\rho$, to compare the results on acc and especially on convergence as claimed by the theorems; thirdly, more ablation studies should done for each of the proposed 3 versions.  E.g.,
+1. The main contribution of this work to me lies in the parameter-agnostic convergence results of SAM adopting to the adaptive optimizers presented in this work. However, in the experiments, such benefits are not elaborated. Firstly, the shown results only appear with incremental and quite marginal improvement; secondly, why not vary some parameters, e.g., $\rho$, to compare the results on acc and especially on convergence as claimed by the theorems; thirdly, more ablation studies should done for each of the proposed 3 versions.
+
+E.g.,
 
 - can it be understood that the proposed method only gives marginal improvements in table 4 and 5?
 
@@ -137,13 +140,22 @@ Questions & some advice:
 
 - compare the three proposed versions with other optimizers across different hyperparameter settings, rather than a single setup of hyperparameters in table 5; otherwise, how the hyperparameters are determined in comparisons.
 
-2. Can other optimizers also get such parameter agnostic properties, aside of the presented 3? What’s essential characteristics of those optimizers contributing to such agnostic properties in convergence?  
+2. Can other optimizers also get such parameter agnostic properties, aside of the presented 3? What’s essential characteristics of those optimizers contributing to such agnostic properties in convergence?
+
+
 
 -  discuss the key properties of the three optimizers that enable parameter-agnostic convergence, and whether these properties might extend to other optimizers.
 
-3. Some minor aspects:  (a) why name it as LightSAM, as there are more efficient SAM-related algorithms [1][2] (not limited to). Please justify the choice of name.  (b) I would suggest specify the footnote 1 in a earlier place, e.g., the abstract, or maybe reconsider the title with more focus on the convergence perspective, because the agnostic property lies in the convergence analysis rather than the hyperparameter tuning, if possible.  
+3. Some minor aspects: 
+(a) why name it as LightSAM, as there are more efficient SAM-related algorithms [1][2] (not limited to). Please justify the choice of name.
 
- [1] Revisiting Random Weight Perturbation for Efficiently Improving Generalization, TMLR, 2024. 
+(b) I would suggest specify the footnote 1 in a earlier place, e.g., the abstract, or maybe reconsider the title with more focus on the convergence perspective, because the agnostic property lies in the convergence analysis rather than the hyperparameter tuning, if possible.
+
+
+
+
+[1] Revisiting Random Weight Perturbation for Efficiently Improving Generalization, TMLR, 2024.
+
 
 [2] Friendly sharpness-aware minimization, CVPR, 2024.
 

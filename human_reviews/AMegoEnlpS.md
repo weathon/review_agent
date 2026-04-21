@@ -1,5 +1,6 @@
 # LoKO: Low-Rank Kalman Optimizer for Online Fine-Tuning of Large Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 3
 

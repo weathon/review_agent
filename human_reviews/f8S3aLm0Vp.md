@@ -1,5 +1,6 @@
 # DIAGNOSIS: Detecting Unauthorized Data Usages in Text-to-image Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

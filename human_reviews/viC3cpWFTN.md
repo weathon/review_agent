@@ -1,5 +1,6 @@
 # Clip21: Error Feedback for Gradient Clipping
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Rethinking Branching on Exact Combinatorial Optimization Solver: The First Deep Symbolic Discovery Framework
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

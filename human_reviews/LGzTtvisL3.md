@@ -1,5 +1,6 @@
 # FLea: Improving federated learning on scarce and label-skewed data via  privacy-preserving feature augmentation
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

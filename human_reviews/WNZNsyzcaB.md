@@ -1,5 +1,6 @@
 # Enhancing Deception Detection with Cognitive Load Features: An Audio-Visual Approach
 
+- Avg Score: 6.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 8, 5, 8
 

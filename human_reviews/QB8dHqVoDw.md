@@ -1,5 +1,6 @@
 # Transfer learning in Scalable Graph Neural Network for Improved Physical Simulation
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 5
 

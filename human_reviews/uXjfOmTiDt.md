@@ -1,5 +1,6 @@
 # Embodied Active Defense: Leveraging Recurrent Feedback to Counter Adversarial Patches
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 6, 5, 8
 
@@ -116,7 +117,8 @@ It would be helpful for the reader to get a better understanding for the followi
 2. The paper makes a claim that passive adversarial defense approach are not sufficient for dynamics environment. This claim should be supported by a passive defense used as a baseline. Also, it would be great to see the extra amount of training resources used to train the active embodied model vs a passive defense approach (for eg Madry's PGD adversarial training). It would also help the readers if some other active defenses would be used as a baseline in order to establish the efficacy of the proposed approach.
 3. The experimental (both training and evaluation) setting does not seem sufficient and scalable enough to make conclusions that it would general. For example “To train EAD for face recognition, we randomly sample images from 2, 500 distinct identities from the training set of CelebA-3D.” and “we report the white-box attack success rate (ASR) on 100 identity pairs in both impersonation and dodging attacks with various attack methods”.
 
-Minor Typo/ suggestions  
+Minor Typo/ suggestions 
+
 EAD comprises two primary submodules: -> EAD comprises of two primary submodules:
 
 Notely, it maintains or even improves standard accuracy due to -> Notably, it maintains or even improves standard accuracy due to
@@ -129,7 +131,9 @@ Formally, It derives a strategic action -> Formally, it derives
 
 from given scene x with its annotation y from another modal like CLIP -> from given scene x with its annotation y from another model like CLIP
 
-“In D.5 MORE EVALUATION RESULTS ON EG3D, We present the iterative defense process in Figure ??.”  
+“In D.5 MORE EVALUATION RESULTS ON EG3D, We present the iterative defense process in Figure ??.”
+
+
 
 In the statement “EAD presents a promising direction for enhancing robustness without any negative social impact”, it might be helpful to limit this statement as the one of the tasks being used is facial recognition that could have some unwanted impact .
 

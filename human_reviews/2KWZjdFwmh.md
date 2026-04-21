@@ -1,5 +1,6 @@
 # StEVE: Adaptive Optimization in a Kronecker-Factored Eigenbasis
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 3, 3
 

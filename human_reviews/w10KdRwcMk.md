@@ -1,5 +1,6 @@
 # Revisiting the Variational Information Bottleneck
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

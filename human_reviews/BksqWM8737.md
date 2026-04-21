@@ -1,5 +1,6 @@
 # ProteinBench: A Holistic Evaluation of Protein Foundation Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

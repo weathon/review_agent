@@ -1,5 +1,6 @@
 # Locret: Enhancing Eviction in Long-Context LLM Inference with Trained Retaining Heads
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 8, 5, 5, 3, 8
 

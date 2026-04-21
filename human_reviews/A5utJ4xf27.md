@@ -1,5 +1,6 @@
 # MindLoc: A Secure Brain-Based System for Object Localization
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

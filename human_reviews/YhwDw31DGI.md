@@ -1,5 +1,6 @@
 # MIPGen: Learning to Generate Scalable MIP Instances
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 8, 5, 3, 3
 

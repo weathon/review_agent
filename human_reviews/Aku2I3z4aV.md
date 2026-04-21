@@ -1,5 +1,6 @@
 # Intra-fused Gromov Wasserstein Discrepancy: A Smooth Metric for Cross-Domain structured Data
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 5, 3, 3
 

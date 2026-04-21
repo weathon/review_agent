@@ -1,5 +1,6 @@
 # Robustness via learned Bregman divergence
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 3, 6, 8
 

@@ -1,5 +1,6 @@
 # Mitigating Embedding Collapse in Diffusion Models for Categorical Data
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

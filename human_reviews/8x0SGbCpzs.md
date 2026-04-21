@@ -1,5 +1,6 @@
 # FreqPrior: Improving Video Diffusion Models with Frequency Filtering Gaussian Noise
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

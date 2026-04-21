@@ -1,5 +1,6 @@
 # Mixing It Up:  The Cocktail Effect of Multi-Task Fine-Tuning on LLM Performance - A Case Study in Finance
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5
 

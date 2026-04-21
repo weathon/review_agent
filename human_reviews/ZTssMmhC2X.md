@@ -1,5 +1,6 @@
 # How to Fine-Tune Vision Models with SGD
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6, 8
 

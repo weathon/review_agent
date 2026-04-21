@@ -1,5 +1,6 @@
 # How Social is It? A Benchmark for LLMs' Capabilities in Multi-user Multi-turn Social Agent Tasks
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

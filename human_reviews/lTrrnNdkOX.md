@@ -1,5 +1,6 @@
 # PT-T2I/V: An Efficient Proxy-Tokenized Diffusion Transformer for Text-to-Image/Video-Task
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6
 

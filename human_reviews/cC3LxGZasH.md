@@ -1,5 +1,6 @@
 # Beyond FVD: An Enhanced Evaluation Metrics for Video Generation Distribution Quality
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 3
 

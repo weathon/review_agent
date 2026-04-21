@@ -1,5 +1,6 @@
 # PyramidDrop: Accelerating Your Large Vision-Language Models via Pyramid Visual Redundancy Reduction
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

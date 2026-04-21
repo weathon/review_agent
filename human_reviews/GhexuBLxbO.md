@@ -1,5 +1,6 @@
 # StructRAG: Boosting Knowledge Intensive Reasoning of LLMs via Inference-time Hybrid Information Structurization
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 

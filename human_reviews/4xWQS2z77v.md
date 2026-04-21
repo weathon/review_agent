@@ -1,5 +1,6 @@
 # Exploring The Loss Landscape Of Regularized Neural Networks Via Convex Duality
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8, 8
 

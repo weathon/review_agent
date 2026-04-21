@@ -1,5 +1,6 @@
 # Fine-tuning can cripple foundation models; preserving features may be the solution
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

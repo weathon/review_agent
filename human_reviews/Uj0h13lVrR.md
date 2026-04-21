@@ -1,5 +1,6 @@
 # KL DIVERGENCE OPTIMIZATION WITH ENTROPY- RATIO ESTIMATION FOR STOCHASTIC GFLOWNETS
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1
 

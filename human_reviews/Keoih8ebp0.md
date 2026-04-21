@@ -1,5 +1,6 @@
 # BAP: BRANCH-AWARE PARALLEL EXECUTION FOR FASTER DNN INFERENCE ON MOBILE CPUS
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 5
 

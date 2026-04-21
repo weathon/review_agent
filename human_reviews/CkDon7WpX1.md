@@ -1,5 +1,6 @@
 # A Consistent Lebesgue Measure for Multi-label Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 

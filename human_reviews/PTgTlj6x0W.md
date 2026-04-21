@@ -1,5 +1,6 @@
 # TREANT: Red-teaming Text-to-Image Models with Tree-based Semantic Transformations
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 6, 8
 

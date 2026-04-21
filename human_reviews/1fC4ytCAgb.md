@@ -1,5 +1,6 @@
 # Self-Conditioned Diffusion Model for Consistent Human Image and Video Synthesis
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5, 3
 

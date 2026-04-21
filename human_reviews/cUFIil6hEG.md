@@ -1,5 +1,6 @@
 # Accelerating Training with Neuron Interaction and Nowcasting Networks
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

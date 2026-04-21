@@ -1,5 +1,6 @@
 # Leveraging metapaths for learning from knowledge graphs in the context of vision-based classification of object states
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 5, 3, 5, 3
 

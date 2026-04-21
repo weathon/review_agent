@@ -1,5 +1,6 @@
 # Bias Runs Deep: Implicit Reasoning Biases in Persona-Assigned LLMs
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 5, 5, 8
 

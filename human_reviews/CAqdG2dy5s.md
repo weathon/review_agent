@@ -1,5 +1,6 @@
 # Graph-based Virtual Sensing from Sparse and Partial Multivariate Observations
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 3
 

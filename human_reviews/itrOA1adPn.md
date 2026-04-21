@@ -1,5 +1,6 @@
 # A computational approach to visual ecology with deep reinforcement learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

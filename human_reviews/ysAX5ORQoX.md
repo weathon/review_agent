@@ -1,5 +1,6 @@
 # R2C: Mapping Room to Chessboard to Unlock LLM As Low-Level Action Planner
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3
 

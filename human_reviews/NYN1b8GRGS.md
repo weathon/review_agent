@@ -1,5 +1,6 @@
 # GIM: Learning Generalizable Image Matcher From Internet Videos
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 10, 8
 

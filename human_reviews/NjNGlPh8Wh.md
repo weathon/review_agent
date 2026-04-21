@@ -1,5 +1,6 @@
 # The Expressive Power of Transformers with Chain of Thought
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 8
 

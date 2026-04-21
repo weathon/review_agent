@@ -1,5 +1,6 @@
 # Meta-CoT: Generalizable Chain-of-Thought Prompting in Mixed-task Scenarios with Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

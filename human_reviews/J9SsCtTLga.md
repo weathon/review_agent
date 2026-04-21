@@ -1,5 +1,6 @@
 # GAN-based NeRF Noise Simulation in Mesh Denoising Task
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 6, 1, 6
 

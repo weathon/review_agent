@@ -1,5 +1,6 @@
 # One Model to Train Them All: A Unified Diffusion Framework for Multi-Context Neural Population Forecasting
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 6, 6, 3, 5, 3
 

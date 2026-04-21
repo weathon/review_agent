@@ -1,5 +1,6 @@
 # Conformal Prediction for Dose-Response Models with Continuous Treatments
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 5, 8, 3, 5, 8
 

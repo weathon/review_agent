@@ -1,5 +1,6 @@
 # Estimation error of gradient descent in deep regressions
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

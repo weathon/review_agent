@@ -1,5 +1,6 @@
 # Covariate-informed continuous-time gray-box modeling to identify responsiveness of post-surgical pain to opioid therapy
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

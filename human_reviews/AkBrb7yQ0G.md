@@ -1,5 +1,6 @@
 # Periodic Materials Generation using Text-Guided Joint Diffusion Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

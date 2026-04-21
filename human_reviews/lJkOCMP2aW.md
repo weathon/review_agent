@@ -1,5 +1,6 @@
 # Pathformer: Multi-scale Transformers with Adaptive Pathways for Time Series Forecasting
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

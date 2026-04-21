@@ -1,5 +1,6 @@
 # CLIPDrag: Combining Text-based and Drag-based Instructions for Image Editing
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 3, 8
 

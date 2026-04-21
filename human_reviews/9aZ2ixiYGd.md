@@ -1,5 +1,6 @@
 # Vision and Language Synergy for Rehearsal Free Continual Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 3, 3, 6, 8
 

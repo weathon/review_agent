@@ -1,5 +1,6 @@
 # Detection-Oriented Image-Text Pretraining for Open-Vocabulary Detection
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Long-Term Fairness in Reinforcement Learning with Bisimulation Metrics
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Offline Reinforcement Learning with Closed-loop Policy Evaluation and Diffusion World-Model Adaptation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

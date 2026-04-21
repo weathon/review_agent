@@ -1,5 +1,6 @@
 # Is Scale All You Need For Anomaly Detection?
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

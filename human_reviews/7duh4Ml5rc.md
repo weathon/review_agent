@@ -1,5 +1,6 @@
 # Based on What We Can Control Artificial Neural Networks
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 3, 1, 1
 

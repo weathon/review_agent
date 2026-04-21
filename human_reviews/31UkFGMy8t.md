@@ -1,5 +1,6 @@
 # Quantifying AI Psychology: A Psychometric Benchmark for Large Language Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 3, 8
 

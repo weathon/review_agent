@@ -1,5 +1,6 @@
 # 3D Object Representation Learning for Robust Classification and Pose estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

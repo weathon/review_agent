@@ -1,5 +1,6 @@
 # Two Facets of SDE Under an Information-Theoretic Lens: Generalization of SGD via Training Trajectories and via Terminal States
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

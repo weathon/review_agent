@@ -1,5 +1,6 @@
 # Joint Representations for Reinforcement Learning with Multiple Sensors
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 5, 3
 

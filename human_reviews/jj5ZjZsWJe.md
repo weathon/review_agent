@@ -1,5 +1,6 @@
 # Stochastic Controlled Averaging for Federated Learning with Communication Compression
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8
 

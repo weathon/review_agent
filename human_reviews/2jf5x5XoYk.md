@@ -1,5 +1,6 @@
 # GLoRa: A Benchmark to Evaluate the Ability to Learn Long-Range Dependencies in Graphs
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 8
 

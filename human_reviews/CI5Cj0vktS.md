@@ -1,5 +1,6 @@
 # Robust Barycenter Estimation using Semi-Unbalanced Neural Optimal Transport
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

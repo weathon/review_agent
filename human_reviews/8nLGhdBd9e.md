@@ -1,5 +1,6 @@
 # Score-based Neural Ordinary Differential Equations for Computing Mean Field Control Problems
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 5, 1
 

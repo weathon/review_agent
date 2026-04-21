@@ -1,5 +1,6 @@
 # RAPID: Retrieval Augmented Training of Differentially Private Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 5
 

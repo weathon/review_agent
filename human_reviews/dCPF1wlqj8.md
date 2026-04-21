@@ -1,5 +1,6 @@
 # CodePlan: Unlocking Reasoning Potential in Large Language Models by Scaling Code-form Planning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 3, 5, 6, 3, 8
 

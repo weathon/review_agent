@@ -1,5 +1,6 @@
 # Mixed-Type Tabular Data Synthesis with Score-based Diffusion in Latent Space
 
+- Avg Score: 6.75
 - Decision: Accept (oral)
 - Scores: 8, 6, 8, 5
 

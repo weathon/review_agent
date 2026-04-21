@@ -1,5 +1,6 @@
 # Insight Over Sight? Exploring the Vision-Knowledge Conflicts in Multimodal LLMs
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

@@ -1,5 +1,6 @@
 # Regularization is Enough for Last-Iterate Convergence in Zero-Sum Games
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 8
 

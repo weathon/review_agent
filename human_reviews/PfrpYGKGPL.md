@@ -1,5 +1,6 @@
 # The Entity-Deduction Arena: A playground for probing the conversational reasoning and planning capabilities of LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 3, 8
 

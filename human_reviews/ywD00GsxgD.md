@@ -1,5 +1,6 @@
 # Synthetic Data as Validation
 
+- Avg Score: 2.60
 - Decision: Reject
 - Scores: 3, 3, 3, 1, 3
 

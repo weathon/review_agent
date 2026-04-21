@@ -1,5 +1,6 @@
 # Towards Formally Verifying LLMs: Taming the Nonlinearity of the Transformer
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

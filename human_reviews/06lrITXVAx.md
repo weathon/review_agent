@@ -1,5 +1,6 @@
 # Dropout Enhanced Bilevel Training
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

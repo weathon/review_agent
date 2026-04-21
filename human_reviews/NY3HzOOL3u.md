@@ -1,5 +1,6 @@
 # Skill Reinforcement Learning and Planning for Open-World Long-Horizon Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

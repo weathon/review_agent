@@ -1,5 +1,6 @@
 # A Comprehensive Framework for Benchmarking Algorithms Across Hyperparameter Spaces
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 1, 3
 

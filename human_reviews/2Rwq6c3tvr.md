@@ -1,5 +1,6 @@
 # Time Travel in LLMs: Tracing Data Contamination in Large Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 6
 

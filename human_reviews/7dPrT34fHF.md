@@ -1,5 +1,6 @@
 # Realizable Abstractions: Near-Optimal Hierarchical Reinforcement Learning
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 3, 6, 8
 

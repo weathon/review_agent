@@ -1,5 +1,6 @@
 # Tractable Multi-Agent Reinforcement Learning through Behavioral Economics
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

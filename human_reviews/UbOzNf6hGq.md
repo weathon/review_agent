@@ -1,5 +1,6 @@
 # FiLM: Fill-in Language Models for Any-Order Generation
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 6, 3, 3
 

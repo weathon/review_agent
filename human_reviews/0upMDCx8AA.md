@@ -1,5 +1,6 @@
 # Post-Training Recovery from Injected Bias with Self-Influence
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

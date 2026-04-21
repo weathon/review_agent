@@ -1,5 +1,6 @@
 # Reinforcement Learning based Image Generation via Visual Consensus Evaluation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

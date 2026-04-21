@@ -1,5 +1,6 @@
 # Theoretical Analysis of Robust Overfitting for Wide DNNs: An NTK Approach
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6, 6
 

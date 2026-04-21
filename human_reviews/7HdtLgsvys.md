@@ -1,5 +1,6 @@
 # Tube Loss: A Novel Approach for High Quality Prediction Interval Estimation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

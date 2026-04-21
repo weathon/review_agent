@@ -1,5 +1,6 @@
 # Soft Prompts Go Hard: Steering Visual Language Models with Hidden Meta-Instructions
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

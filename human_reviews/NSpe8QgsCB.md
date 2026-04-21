@@ -1,5 +1,6 @@
 # EffoVPR: Effective Foundation Model Utilization for Visual Place Recognition
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

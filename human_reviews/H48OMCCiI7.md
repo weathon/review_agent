@@ -1,5 +1,6 @@
 # WATER-GS: Watermark-embedded 3D Gaussian Splatting via Plug-and-play Decoder
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 6, 3, 5
 

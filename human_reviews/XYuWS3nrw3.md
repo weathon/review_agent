@@ -1,5 +1,6 @@
 # Redefining Temporal Modeling in Video Diffusion: The Vectorized Timestep Approach
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3
 

@@ -1,5 +1,6 @@
 # Intelligent Switching for Reset-Free RL
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 6
 

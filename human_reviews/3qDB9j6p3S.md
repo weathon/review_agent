@@ -1,5 +1,6 @@
 # Labeled TrustSet Guided: Combining Batch Active Learning with Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

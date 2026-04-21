@@ -1,5 +1,6 @@
 # Village-Net clustering: A novel unsupervised manifold clustering method
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 3, 5, 3
 

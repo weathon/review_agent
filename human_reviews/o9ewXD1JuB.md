@@ -1,5 +1,6 @@
 # OLAPH: Improving Factuality in Biomedical Long-form Question Answering
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 6, 5
 

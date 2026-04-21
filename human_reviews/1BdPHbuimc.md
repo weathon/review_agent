@@ -1,5 +1,6 @@
 # Chain-of-Action: Faithful and Multimodal Question Answering through Large Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8
 

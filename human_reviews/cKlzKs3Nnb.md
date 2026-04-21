@@ -1,5 +1,6 @@
 # Diversity Empowers Intelligence: Integrating Expertise of Software Engineering Agents
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

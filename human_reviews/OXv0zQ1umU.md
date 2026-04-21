@@ -1,5 +1,6 @@
 # Evoke: Evoking Critical Thinking Abilities in LLMs via Reviewer-Author Prompt Editing
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 8
 

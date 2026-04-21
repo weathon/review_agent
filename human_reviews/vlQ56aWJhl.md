@@ -1,5 +1,6 @@
 # S-TLLR: STDP-inspired Temporal Local Learning Rule for Spiking Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

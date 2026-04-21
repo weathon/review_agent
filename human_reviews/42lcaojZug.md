@@ -1,5 +1,6 @@
 # Neural Rate Control for Learned Video Compression
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 5
 

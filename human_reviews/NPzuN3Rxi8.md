@@ -1,5 +1,6 @@
 # TAVRNN: Temporal Attention-enhanced Variational Graph RNN Captures Neuronal Dynamics and Behavior
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 3
 

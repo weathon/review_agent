@@ -1,5 +1,6 @@
 # ToEdit: How to Synthesize Text Data to Avoid Model Collapse?
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 8, 3
 

@@ -1,5 +1,6 @@
 # RRescue: Ranking LLM Responses to Enhance Reasoning Over Context
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

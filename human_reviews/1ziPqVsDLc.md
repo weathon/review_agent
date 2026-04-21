@@ -1,5 +1,6 @@
 # Revealing the Unseen: Guiding Personalized Diffusion Models to Expose Training Data
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

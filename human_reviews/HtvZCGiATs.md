@@ -1,5 +1,6 @@
 # Beyond DAGs: A Latent Partial Causal Model for Multimodal Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 6, 6, 6
 

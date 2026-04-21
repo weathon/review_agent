@@ -1,5 +1,6 @@
 # Model-Decoupling-Based Federated Learning with Consistency via Knowledge Distillation Using Conditional Generator
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Barycentric Alignment of Mutually Disentangled Modalities
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 5, 8, 6
 

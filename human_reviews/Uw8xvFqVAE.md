@@ -1,5 +1,6 @@
 # A representation-learning game for classes of prediction tasks
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 8
 

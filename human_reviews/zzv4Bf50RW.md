@@ -1,5 +1,6 @@
 # Learning SO(3)-Invariant Correspondence via Point-wise Local Shape Transform
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 5, 5
 

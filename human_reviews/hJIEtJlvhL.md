@@ -1,5 +1,6 @@
 # GI-GS: Global Illumination Decomposition on Gaussian Splatting for Inverse Rendering
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

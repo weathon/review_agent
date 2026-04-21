@@ -1,5 +1,6 @@
 # MOFI: Learning Image Representations from Noisy Entity Annotated Images
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 6
 

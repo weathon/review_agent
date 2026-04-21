@@ -1,5 +1,6 @@
 # Kinetix: Investigating the Training of General Agents through Open-Ended Physics-Based Control Tasks
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

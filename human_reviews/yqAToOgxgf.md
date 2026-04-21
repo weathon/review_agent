@@ -1,5 +1,6 @@
 # An old dog can learn (some) new tricks: A tale of a three-decade old architecture
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

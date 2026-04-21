@@ -1,5 +1,6 @@
 # The Role of Label Noise in the Feature Learning Process
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

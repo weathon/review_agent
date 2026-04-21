@@ -1,5 +1,6 @@
 # Code diffusion models are continuous human noise operators
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 8, 6, 5
 

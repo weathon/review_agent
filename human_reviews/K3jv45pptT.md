@@ -1,5 +1,6 @@
 # DSPart: A Large-scale Diffusion-generated Synthetic Dataset with Annotations from 3D Parts
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

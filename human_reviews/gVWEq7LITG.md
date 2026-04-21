@@ -1,5 +1,6 @@
 # TF-HOT: Training-Free Hand-Object Pose Tracking and Optimization for Dexterous Manipulation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

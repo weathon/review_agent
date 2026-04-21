@@ -1,5 +1,6 @@
 # MPC-Minimized Secure LLM Inference
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 5, 6
 

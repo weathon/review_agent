@@ -1,5 +1,6 @@
 # An empirical investigation of generalization dynamics in deep ReLU networks via nonlinear mode decomposition
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 3
 

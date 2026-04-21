@@ -1,5 +1,6 @@
 # Inducing High Energy-Latency of Large Vision-Language Models with Verbose Images
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

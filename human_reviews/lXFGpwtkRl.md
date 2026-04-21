@@ -1,5 +1,6 @@
 # Improving Model Alignment Through Collective Intelligence of Open-Source Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 5, 3, 5, 5
 

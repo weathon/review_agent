@@ -1,5 +1,6 @@
 # Large Multilingual Models Pivot Zero-Shot Multimodal Learning across Languages
 
+- Avg Score: 5.50
 - Decision: Accept (spotlight)
 - Scores: 3, 8, 6, 5
 

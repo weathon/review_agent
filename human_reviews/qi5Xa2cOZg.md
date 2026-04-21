@@ -1,5 +1,6 @@
 # Learning with Language-Guided State Abstractions
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 5, 6, 6
 

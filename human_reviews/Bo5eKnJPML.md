@@ -1,5 +1,6 @@
 # A Reasoning-Based Approach to Cryptic Crossword Clue Solving
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 5, 6
 

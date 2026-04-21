@@ -1,5 +1,6 @@
 # On the Power of Federated Learning for Online Sparse Linear Regression with Decentralized Data
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 3, 8
 

@@ -1,5 +1,6 @@
 # Compensating for Nonlinear Reduction with Linear Computations in Private Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 1, 5, 6
 

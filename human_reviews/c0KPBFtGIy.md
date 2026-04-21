@@ -1,5 +1,6 @@
 # Executing Arithmetic: Fine-Tuning Large Language Models as Turing Machines
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

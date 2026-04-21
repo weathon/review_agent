@@ -1,5 +1,6 @@
 # Spectral Truncation Kernels: Noncommutativity in $C^*$-algebraic Kernel Machines
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

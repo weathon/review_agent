@@ -1,5 +1,6 @@
 # Gradient descent for matrix factorization: Understanding large initialization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

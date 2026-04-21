@@ -1,5 +1,6 @@
 # FlightBench: Benchmarking Learning-based Methods for Ego-vision-based Quadrotors Navigation
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 
@@ -115,13 +116,17 @@ The paper introduces a benchmark, named FlightBench for ego-vision based quad ro
 In addition to comparing learning based methods vs optimization based methods, the paper aims to also analyze navigation performance across different difficulty settings, and the effect of system latency, and provides conclusions on flight quality, flight speed, compute cost, latency and the effectiveness of metrics.
 
 ### Strengths
-1. The paper is generally well-written, and well motivates the need for a 3D scene based benchmark for ego-vision agile navigation, which is currently unaddressed by other benchmarks.  
-2. The 3 proposed task-difficulty metrics, can comprehensively capture and quantify the challenge of a particular scene with obstacles. In addition, the proposed scenarios are diverse in terms of the task difficulty metrics and capture the different operating conditions often faced. 
+1. The paper is generally well-written, and well motivates the need for a 3D scene based benchmark for ego-vision agile navigation, which is currently unaddressed by other benchmarks. 
+
+2. The 3 proposed task-difficulty metrics, can comprehensively capture and quantify the challenge of a particular scene with obstacles. In addition, the proposed scenarios are diverse in terms of the task difficulty metrics and capture the different operating conditions often faced.
+
 3. A number of SOTA baselines have been used in the benchmark, covering both learning based, and optimization based methods, as well as methods that leverage additional environmental information. This helps the authors to analyze and remark on various factors in flight performance. Furthermore, the supplementary qualitatively discusses failure cases and their correlation with difficulty metrics.
 
 ### Weaknesses
-1. While the benchmark introduces a variety of scenes, it is still quite limited - as a dataset benchmark, I would have expected more scenarios.  
-2. Furthermore, the authors do not discuss and analyze the number of scenarios compared to previous baselines. It would be good to have this in the paper. The authors should also discuss the diversity of previous baselines in terms of their proposed task difficulty metrics. 
+1. While the benchmark introduces a variety of scenes, it is still quite limited - as a dataset benchmark, I would have expected more scenarios. 
+
+2. Furthermore, the authors do not discuss and analyze the number of scenarios compared to previous baselines. It would be good to have this in the paper. The authors should also discuss the diversity of previous baselines in terms of their proposed task difficulty metrics.
+
 3. Gazebo and ROS-Noetic is used as the simulation platform, which often does not provide realistic scene quality, which could be important for ego-vision based learning. This is also visible through the lack of realistic scene quality. I am curious why the authors did not choose a newer platform like Isaac-Sim and ROS-2 given that they support the new de-facto standards?
 
 Minor comments: This paper seems to be more suitable for a robotics conference/venue than ICLR.

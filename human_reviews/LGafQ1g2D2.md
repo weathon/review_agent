@@ -1,5 +1,6 @@
 # Can LLMs Understand Time Series Anomalies?
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 3, 6
 

@@ -1,5 +1,6 @@
 # A Unified Causal Framework for Auditing Recommender Systems for Ethical Concerns
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

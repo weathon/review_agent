@@ -1,5 +1,6 @@
 # Dynamic Assortment Selection and Pricing with Censored Preference Feedback
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

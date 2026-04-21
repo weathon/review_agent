@@ -1,5 +1,6 @@
 # Gaussian Process-Based Corruption-resilience Forecasting Models
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 5, 6
 

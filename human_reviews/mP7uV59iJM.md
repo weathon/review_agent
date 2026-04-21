@@ -1,5 +1,6 @@
 # GS-CPR: Efficient Camera Pose Refinement via 3D Gaussian Splatting
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 8
 

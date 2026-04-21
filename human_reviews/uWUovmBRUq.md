@@ -1,5 +1,6 @@
 # Semantic or Covariate? A Study on the Intractable Case of Out-of-Distribution Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

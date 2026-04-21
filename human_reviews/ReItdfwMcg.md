@@ -1,5 +1,6 @@
 # Optimality and Adaptivity of Deep Neural Features for Instrumental Variable Regression
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

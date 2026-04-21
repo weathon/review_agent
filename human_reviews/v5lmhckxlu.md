@@ -1,5 +1,6 @@
 # Integrated Model Explanations by Independent and Collaborative Feature Influence via Linear-Nonlinear Perspectives.
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 5, 3, 3, 3, 3
 

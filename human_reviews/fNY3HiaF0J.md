@@ -1,5 +1,6 @@
 # MoLE: Human-centric Text-to-image Diffusion with Mixture of Low-rank Experts
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

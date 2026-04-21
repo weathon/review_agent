@@ -1,5 +1,6 @@
 # Tex4D: Zero-shot 4D Scene Texturing with Video Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

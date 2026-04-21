@@ -1,5 +1,6 @@
 # Learning to Relax: Setting Solver Parameters Across a Sequence of Linear System Instances
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

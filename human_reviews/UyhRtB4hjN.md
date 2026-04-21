@@ -1,5 +1,6 @@
 # Decision Tree Induction Through LLMs via Semantically-Aware Evolution
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

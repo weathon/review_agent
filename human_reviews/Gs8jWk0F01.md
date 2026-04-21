@@ -1,5 +1,6 @@
 # Deep Reinforcement Learning for Dynamic Capacitated Vehicle Routing Problem
 
+- Avg Score: 2.20
 - Decision: Reject
 - Scores: 3, 1, 1, 3, 3
 

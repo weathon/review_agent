@@ -1,5 +1,6 @@
 # Towards Reliable and Efficient Backdoor Trigger Inversion via Decoupling Benign Features
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

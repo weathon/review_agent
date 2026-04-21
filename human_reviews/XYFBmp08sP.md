@@ -1,5 +1,6 @@
 # CIDA3D: Conformal Inference aided unsupervised Domain Adaptation for 3D-Aware Classification
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Diffusion$^2$: Dynamic 3D Content Generation via Score Composition of Video and Multi-view Diffusion Models
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 5
 

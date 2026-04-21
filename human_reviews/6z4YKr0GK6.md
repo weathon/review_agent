@@ -1,5 +1,6 @@
 # ScienceAgentBench: Toward Rigorous Assessment of Language Agents for Data-Driven Scientific Discovery
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 5
 

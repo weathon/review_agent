@@ -1,5 +1,6 @@
 # Domain constraints improve risk prediction when outcome data is missing
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 5
 

@@ -1,5 +1,6 @@
 # Collab: Controlled Decoding using Mixture of Agents for LLM Alignment
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 8
 

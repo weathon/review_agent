@@ -1,5 +1,6 @@
 # Learning Diverse Attacks on Large Language Models for Robust Red-Teaming and Safety Tuning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 5, 8
 

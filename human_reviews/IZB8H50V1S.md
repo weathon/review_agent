@@ -1,5 +1,6 @@
 # Learning Policy Committees for Effective Personalization in MDPs with Diverse Tasks
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 6, 6, 6
 

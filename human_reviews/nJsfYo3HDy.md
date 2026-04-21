@@ -1,5 +1,6 @@
 # Why are Modern GANs Poor Density Models?
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Deep Models modelled after human brain boost performance in action classification
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 1, 1, 3
 

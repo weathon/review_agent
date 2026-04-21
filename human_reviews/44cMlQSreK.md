@@ -1,5 +1,6 @@
 # On Quantizing Neural Representation for Variable-Rate Video Coding
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 6, 8
 

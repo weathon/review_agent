@@ -1,5 +1,6 @@
 # An Empirical Study on Enhancing LLMs' Alignment Capabilities through Restyled In-Context Learning Demonstration Examples
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

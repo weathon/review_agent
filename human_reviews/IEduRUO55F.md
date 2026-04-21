@@ -1,5 +1,6 @@
 # Eureka: Human-Level Reward Design via Coding Large Language Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 6
 

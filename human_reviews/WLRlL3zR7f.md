@@ -1,5 +1,6 @@
 # Vibroacoustic Frequency Response Prediction with Query-based Operator Networks
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # EgoLM: Multi-Modal Language Model of Egocentric Motions
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 6, 3
 

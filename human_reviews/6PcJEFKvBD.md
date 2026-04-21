@@ -1,5 +1,6 @@
 # offline_rl_ope: A Python package for off-policy evaluation of offline RL models with real world data
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

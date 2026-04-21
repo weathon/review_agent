@@ -1,5 +1,6 @@
 # Divide and Conquer: Provably Unveiling the Pareto Front with Multi-Objective Reinforcement Learning
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 6, 3, 3
 

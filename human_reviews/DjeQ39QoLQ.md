@@ -1,5 +1,6 @@
 # Robustifying State-space Models for Long Sequences via Approximate Diagonalization
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 8, 6
 

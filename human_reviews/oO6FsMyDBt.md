@@ -1,5 +1,6 @@
 # Graph Neural Networks for Learning Equivariant Representations of Neural Networks
 
+- Avg Score: 7.33
 - Decision: Accept (oral)
 - Scores: 8, 8, 6
 

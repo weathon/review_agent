@@ -1,5 +1,6 @@
 # Optimizing Latent Goal by Learning from Trajectory Preference
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 5, 6, 8
 

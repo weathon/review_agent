@@ -1,5 +1,6 @@
 # Soft Mixture Denoising: Beyond the Expressive Bottleneck of Diffusion Models
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # Seeing Through the Mask: Rethinking Adversarial Examples for CAPTCHAs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 3, 3
 

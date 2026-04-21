@@ -1,5 +1,6 @@
 # FTA: Stealthy and Adaptive Backdoor Attack with Flexible Triggers on Federated Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

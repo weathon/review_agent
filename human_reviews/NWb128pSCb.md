@@ -1,5 +1,6 @@
 # Evaluating Semantic Variation in Text-to-Image Synthesis: A Causal Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 5
 

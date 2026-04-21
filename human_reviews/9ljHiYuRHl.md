@@ -1,5 +1,6 @@
 # Failure Modes of LLMs for Causal Reasoning on Narratives
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

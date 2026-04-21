@@ -1,5 +1,6 @@
 # NeSyC: A Neuro-symbolic Continual Learner For Complex Embodied Tasks In Open Domains
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 10
 

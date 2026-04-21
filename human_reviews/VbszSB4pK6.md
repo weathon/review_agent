@@ -1,5 +1,6 @@
 # Fully Fine-Tuning Beats Parameter Efficient Fine-Tuning for CLIP in Data-Limited Scenarios
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

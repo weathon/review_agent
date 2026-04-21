@@ -1,5 +1,6 @@
 # LLM-guided spatio-temporal disease progression modelling
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 5, 1, 3
 
@@ -23,22 +24,31 @@ Understanding the interactions between biomarkers across brain regions during di
 The authors propose a novel LLM-guided spatio-temporal framework for modeling regional variable changes during disease progression. The key innovation of this paper lies in utilizing a large language model (LLM) to enhance graph initialization and regularization in both mechanistic and data-driven settings, demonstrating improvements in accuracy and convergence. The models were evaluated on regional tau-pathology propagation across the brain.
 
 ### Strengths
-1. The paper is well-written and engaging. The idea of leveraging LLM knowledge for graph initialization is particularly intriguing. Given the recent advancements in LLM, effectively incorporating this knowledge into fundamental clinical research is crucial, and the authors demonstrate this integration in a good way. 
-2. The authors provide solid background information that helps readers easily grasp the context of their work. 
-3. Sufficient detail is offered on critical components, including prompting strategies, clear mathematical definitions, and experimental details, allowing readers to understand the underlying processes. 
-4. The evaluation of the model through critical edge numbers is both interesting and effective, showcasing the advantages of LLM-based graphs. 
+1. The paper is well-written and engaging. The idea of leveraging LLM knowledge for graph initialization is particularly intriguing. Given the recent advancements in LLM, effectively incorporating this knowledge into fundamental clinical research is crucial, and the authors demonstrate this integration in a good way.
+
+2. The authors provide solid background information that helps readers easily grasp the context of their work.
+
+3. Sufficient detail is offered on critical components, including prompting strategies, clear mathematical definitions, and experimental details, allowing readers to understand the underlying processes.
+
+4. The evaluation of the model through critical edge numbers is both interesting and effective, showcasing the advantages of LLM-based graphs.
+
 5. The authors conduct an extensive analysis, covering prompt ablation, synthetic data, different contexts (both data-driven and mechanistic), and model convergence.
 
 ### Weaknesses
-1. I may have missed it, but the calculation of the metric "SSE" lacks a clear definition, making it challenging to assess its scale effectively. 
-2. The experiments appear to be conducted on a single data split, without cross-validation or random splitting. Given the relatively small variances reported in Table 2, it’s difficult to evaluate the significance of differences and reproducibility. Incorporating additional splits and reporting standard deviations would enhance the findings. 
-3. The representation of faster convergence (A.3), particularly between the second and third figures, could be clearer. Adjusting the scale might help elucidate this aspect. 
+1. I may have missed it, but the calculation of the metric "SSE" lacks a clear definition, making it challenging to assess its scale effectively.
+
+2. The experiments appear to be conducted on a single data split, without cross-validation or random splitting. Given the relatively small variances reported in Table 2, it’s difficult to evaluate the significance of differences and reproducibility. Incorporating additional splits and reporting standard deviations would enhance the findings.
+
+3. The representation of faster convergence (A.3), particularly between the second and third figures, could be clearer. Adjusting the scale might help elucidate this aspect.
+
 4. While the authors emphasize the importance of identifiability and interpretability, their discussion primarily revolves around reducing the number of edges in the graph. There is limited exploration or discussions on how the derived graphs enhance understanding of regional interactions and differences during disease progression compared to other graphs.
-5. In figure 4, descreasing the critical edge number throgu “7-factor” prompt is not very clear to me. It seems that the other factors provided by LLM does not lead to much advantages. 
+5. In figure 4, descreasing the critical edge number throgu “7-factor” prompt is not very clear to me. It seems that the other factors provided by LLM does not lead to much advantages.
+
 6. It appears that the model assumes a single typical progression path of phenotypes per disease, potentially overlooking disease heterogeneity. Recent research has demonstrated significant heterogeneity in disease progression, particularly in brain diseases, including amyloid and tau spreads.
 
 ### Questions
-1. In Section A.3, why is the summation limited to four types of brain connectivities rather than five? 
+1. In Section A.3, why is the summation limited to four types of brain connectivities rather than five?
+
 2. For clarification, when comparing Model 1 and Model 2, are the authors directly comparing the performance of these two methods, or are they comparing the graphs used in these models within the context of Method 3?
 
 ### Soundness

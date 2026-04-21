@@ -1,5 +1,6 @@
 # Scalable Multi-Domain Adaptation of Language Models using Modular Experts
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

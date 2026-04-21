@@ -1,5 +1,6 @@
 # Scaling Omni-modal Pretraining with Multimodal Context: Advancing Universal Representation Learning Across Modalities
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Homomorphism Counts as Structural Encodings for Graph Learning
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

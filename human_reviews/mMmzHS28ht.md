@@ -1,5 +1,6 @@
 # LLM Pruning and Distillation in Practice
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

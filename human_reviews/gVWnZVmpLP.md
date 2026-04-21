@@ -1,5 +1,6 @@
 # Central Force Field: Unifying Generative and Discriminative Models While Harmonizing Energy-Based and Score-Based Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

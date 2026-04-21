@@ -1,5 +1,6 @@
 # Long-LRM: Long-sequence Large Reconstruction Model for Wide-coverage Gaussian Splats
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 5
 

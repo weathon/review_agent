@@ -1,5 +1,6 @@
 # EpilepsyFM: Foundation Model for Learning Generalized Epileptic Representations from EEG and SEEG Signals
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 3, 6
 

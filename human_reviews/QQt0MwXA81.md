@@ -1,5 +1,6 @@
 # Do LLMs exhibit human-like response biases? A case study in survey design
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 5, 5, 5, 8, 8
 

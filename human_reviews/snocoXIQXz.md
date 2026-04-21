@@ -1,5 +1,6 @@
 # Towards Learning High-Precision Least Squares Algorithms with Sequence Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

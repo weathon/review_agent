@@ -1,5 +1,6 @@
 # Recombination Flow Matching Model for Protein Evolution
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 3, 5, 6, 8, 8
 

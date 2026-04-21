@@ -1,5 +1,6 @@
 # Slingshot Perturbation to Learning in Monotone Games
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 6, 5
 

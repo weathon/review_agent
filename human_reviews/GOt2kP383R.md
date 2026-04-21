@@ -1,5 +1,6 @@
 # Overcoming Distribution Mismatch in Quantizing Image Super-Resolution Networks
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

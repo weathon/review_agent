@@ -1,5 +1,6 @@
 # AlphaQCM: Alpha Discovery with Distributional Reinforcement Learning
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

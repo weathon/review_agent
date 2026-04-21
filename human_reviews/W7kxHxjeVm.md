@@ -1,5 +1,6 @@
 # ImAD: An End-to-End Method for Unsupervised Anomaly Detection in the Presence of Missing Values
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5
 

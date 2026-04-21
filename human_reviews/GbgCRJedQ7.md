@@ -1,5 +1,6 @@
 # SMT: Fine-Tuning Large Language Models with Sparse Matrices
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 5, 6
 

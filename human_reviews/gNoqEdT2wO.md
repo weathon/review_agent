@@ -1,5 +1,6 @@
 # A Multimodal Class-Incremental Learning benchmark for classification tasks
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 1, 3, 3, 3
 

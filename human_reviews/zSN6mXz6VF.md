@@ -1,5 +1,6 @@
 # Source-free Cross-modal Knowledge Transfer by Unleashing the Potential of Task-Irrelevant Data
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 5, 3, 5
 

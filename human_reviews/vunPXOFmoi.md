@@ -1,5 +1,6 @@
 # Benchmarking Agentic Workflow Generation
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6, 6
 

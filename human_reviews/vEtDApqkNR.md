@@ -1,5 +1,6 @@
 # MambaTS: Improved Selective State Space Models for Long-term Time Series Forecasting
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 8, 3, 6, 5
 

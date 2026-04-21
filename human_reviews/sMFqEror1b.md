@@ -1,5 +1,6 @@
 # MMToM-QA: Multimodal Theory of Mind Question Answering
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

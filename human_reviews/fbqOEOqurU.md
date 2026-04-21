@@ -1,5 +1,6 @@
 # Optimality of Matrix Mechanism on $\ell_p^p$-metric
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Balancing the Picture: Debiasing Vision-Language Datasets with Synthetic Contrast Sets
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 5, 6
 

@@ -1,5 +1,6 @@
 # On Sampling Information Sets to Learn from Imperfect Information
 
+- Avg Score: 1.67
 - Decision: Reject
 - Scores: 3, 1, 1
 

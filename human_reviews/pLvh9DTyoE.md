@@ -1,5 +1,6 @@
 # Integrating Visual Cues via Prompting for Low-Resource Multimodal Named Entity Recognition
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 1, 5
 

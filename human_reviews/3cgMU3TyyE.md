@@ -1,5 +1,6 @@
 # Broaden your SCOPE! Efficient Multi-turn Conversation Planning for LLMs with Semantic Space
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

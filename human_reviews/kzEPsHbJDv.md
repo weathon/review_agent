@@ -1,5 +1,6 @@
 # One for all and all for one: Efficient computation of partial Wasserstein distances on the line
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

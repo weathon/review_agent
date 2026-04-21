@@ -1,5 +1,6 @@
 # Zero-Shot Image Compression with Diffusion-Based Posterior Sampling
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 3
 

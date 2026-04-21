@@ -1,5 +1,6 @@
 # RA-DIT: Retrieval-Augmented Dual Instruction Tuning
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 8
 

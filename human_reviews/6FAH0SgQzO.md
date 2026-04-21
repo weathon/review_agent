@@ -1,5 +1,6 @@
 # FedRC: Tackling Diverse Distribution Shifts Challenge in Federated Learning by Robust Clustering
 
+- Avg Score: 7.00
 - Decision: Reject
 - Scores: 5, 8, 8
 

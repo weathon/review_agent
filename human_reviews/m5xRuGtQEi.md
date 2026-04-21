@@ -1,5 +1,6 @@
 # Latent Space Simulator for Unveiling Molecular Free Energy Landscapes and Predicting Transition Dynamics
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

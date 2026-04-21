@@ -1,5 +1,6 @@
 # Beyond Finite Data: Towards Data-free Out-of-distribution Generalization via Extrapolation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3
 

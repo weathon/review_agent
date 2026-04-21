@@ -1,5 +1,6 @@
 # Adaptive Slot Attention: Object Discovery with Dynamic Slot Number
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

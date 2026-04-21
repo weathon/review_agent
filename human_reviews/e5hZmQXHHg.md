@@ -1,5 +1,6 @@
 # VRAda: A Variance Reduced Adaptive Algorithm for Stochastic Parameter-Agnostic Minimax Optimizations
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 
@@ -209,7 +210,8 @@ The paper introduces VRAda, a parameter-agnostic, variance-reduced adaptive algo
 
 ### Questions
 **Theorems (1, 2):** Can the authors clarify the sources of randomness in the expectations, and assess whether the results extend to high-probability bounds? This would provide more comprehensive understanding of VRAda's performance in various conditions. 
- 
+
+
 
 **On Assumptions (1,2,3) and practical relevance:** Could the authors explore and discuss VRAda's main results in scenarios where the strong assumptions (1, 2, 3) are relaxed?
 

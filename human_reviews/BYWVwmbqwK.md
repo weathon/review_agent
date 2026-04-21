@@ -1,5 +1,6 @@
 # Unpaired Single-Cell Dataset Alignment with Wavelet Optimal Transport
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

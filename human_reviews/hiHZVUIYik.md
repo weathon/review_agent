@@ -1,5 +1,6 @@
 # A path-norm toolkit for modern networks: consequences, promises and challenges
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8
 

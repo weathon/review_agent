@@ -1,5 +1,6 @@
 # LogicMP: A Neuro-symbolic Approach for Encoding First-order Logic Constraints
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 5
 
@@ -73,17 +74,25 @@ The novelty of the paper is limited and cannot be assessed from the current pape
 
 The paper fails in positioning in the wider field of neuro-symbolic AI.
 
-The paper claims to be the first method capable of encoding FOLC (pag. 2, “Contributions”). This is not true. The authors themselves cite ExpressGNN. However, there are many other papers attempting at this. I will cite some here, but many more can be found following the corresponding citations: 
-Deep Logic Models, Marra et  al, ECML 2019 
-Relational Neural Machines, Marra et al, ECAI 2020 
-NeuPSL: Neural Probabilistic Soft Logic, Pryor et al, 2023 
+The paper claims to be the first method capable of encoding FOLC (pag. 2, “Contributions”). This is not true. The authors themselves cite ExpressGNN. However, there are many other papers attempting at this. I will cite some here, but many more can be found following the corresponding citations:
+
+Deep Logic Models, Marra et  al, ECML 2019
+
+Relational Neural Machines, Marra et al, ECAI 2020
+
+NeuPSL: Neural Probabilistic Soft Logic, Pryor et al, 2023
+
 DeepPSL: End-to-End Perception and Reasoning, Dasaratha et al, IJCAI 2023
-Backpropagating Through MLNs, Betz et al, IJCLR 2021  
+Backpropagating Through MLNs, Betz et al, IJCLR 2021
+
+
 
 Many of these systems have CV and citation networks experiments.
 
 ### Questions
-1) The paper mentions FOLC but it never defines them. All the examples, though, are definite clauses. Are non-definite clause supported? If yes, are you employing them in your experiments?  
+1) The paper mentions FOLC but it never defines them. All the examples, though, are definite clauses. Are non-definite clause supported? If yes, are you employing them in your experiments?
+
+
 
 2) Is there an impact in the size of the observed / non-observed split? Usually, there is a great imbalance between the two and it is not clear to me how this may impact the message passing / the pruning of messages.
 

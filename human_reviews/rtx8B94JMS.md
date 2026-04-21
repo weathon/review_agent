@@ -1,5 +1,6 @@
 # Variational Inference for SDEs Driven by Fractional Noise
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 5, 8
 

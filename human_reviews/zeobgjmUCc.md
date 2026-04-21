@@ -1,5 +1,6 @@
 # Using Machine Learning Models to Predict Genitourinary Involvement Among Gastrointestinal Stromal Tumour Patients
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1, 1
 

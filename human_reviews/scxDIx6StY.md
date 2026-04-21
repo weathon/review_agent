@@ -1,5 +1,6 @@
 # Adaptive Temperature Enhanced Dual-level Hypergraph Contrastive Learning
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 1, 3, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Meta Flow Matching: Integrating Vector Fields on the Wasserstein Manifold
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

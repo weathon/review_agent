@@ -1,5 +1,6 @@
 # Integration of neural solver and problem-specific solver through bilevel approach: a case study of min-max capacitated vehicle routing problem
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

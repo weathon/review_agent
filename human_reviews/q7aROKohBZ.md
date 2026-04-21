@@ -1,5 +1,6 @@
 # ESQA: Event Sequences Question Answering
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5
 

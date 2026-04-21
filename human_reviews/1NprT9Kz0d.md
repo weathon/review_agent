@@ -1,5 +1,6 @@
 # TexTailor: Customized Text-aligned Texturing via Effective Resampling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

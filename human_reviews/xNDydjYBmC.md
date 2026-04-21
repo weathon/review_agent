@@ -1,5 +1,6 @@
 # Enhancing PPB Affinity Prediction through Data Integration and Feature Alignment: Approaching Structural Model Performance with Sequences
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 5, 6, 3, 6
 

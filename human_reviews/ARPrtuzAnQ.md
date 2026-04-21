@@ -1,5 +1,6 @@
 # On the hardness of learning under symmetries
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8
 

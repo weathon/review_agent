@@ -1,5 +1,6 @@
 # Uncoupled and Convergent Learning in Monotone Games under Bandit Feedback
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3
 

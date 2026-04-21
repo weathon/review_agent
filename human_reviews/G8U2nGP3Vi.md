@@ -1,5 +1,6 @@
 # Singular Subspace Perturbation Bounds via Rectangular Random Matrix Diffusions
 
+- Avg Score: 5.40
 - Decision: Accept (Poster)
 - Scores: 3, 5, 6, 8, 5
 

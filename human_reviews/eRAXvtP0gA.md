@@ -1,5 +1,6 @@
 # Unsupervised Cognition
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 1, 3, 5
 

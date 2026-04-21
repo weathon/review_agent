@@ -1,5 +1,6 @@
 # Fine-Tuning Attention Modules Only: Enhancing Weight Disentanglement in Task Arithmetic
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 8
 

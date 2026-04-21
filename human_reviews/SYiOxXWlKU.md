@@ -1,5 +1,6 @@
 # EPINN: Physics-Informed Neural Network with exponential activation functions for solving stiff ODEs
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 1, 5
 

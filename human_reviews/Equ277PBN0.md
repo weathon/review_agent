@@ -1,5 +1,6 @@
 # Privacy-Preserving Personalized Federated Prompt Learning for Multimodal Large Language Models
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

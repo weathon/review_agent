@@ -1,5 +1,6 @@
 # ConvINT: A Semi-Structured Intention Framework for Conversational Understanding
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5
 

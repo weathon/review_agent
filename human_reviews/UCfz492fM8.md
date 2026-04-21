@@ -1,5 +1,6 @@
 # CrossLoco: Human Motion Driven Control of Legged Robots via Guided Unsupervised Reinforcement Learning
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

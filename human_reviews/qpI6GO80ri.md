@@ -1,5 +1,6 @@
 # Delving into Temperature Scaling for Adaptive Conformal Prediction
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 6, 3
 

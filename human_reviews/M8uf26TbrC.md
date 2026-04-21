@@ -1,5 +1,6 @@
 # Channel-Wise Mixed-Precision Quantization for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

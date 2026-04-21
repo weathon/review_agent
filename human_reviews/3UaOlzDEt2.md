@@ -1,5 +1,6 @@
 # CREMA: Generalizable and Efficient Video-Language Reasoning via Multimodal Modular Fusion
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 6
 

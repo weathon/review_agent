@@ -1,5 +1,6 @@
 # Does CLIP’s generalization performance mainly stem from high train-test similarity?
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 6
 

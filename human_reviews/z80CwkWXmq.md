@@ -1,5 +1,6 @@
 # GETMusic: Generating Music Tracks with a Unified Representation and Diffusion Framework
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 3, 6
 

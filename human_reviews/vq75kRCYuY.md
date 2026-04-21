@@ -1,5 +1,6 @@
 # SOLO: Surrogate Online Learning at Once for Spiking Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 5
 

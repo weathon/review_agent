@@ -1,5 +1,6 @@
 # PLS-based approach for Fair Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

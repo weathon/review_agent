@@ -1,5 +1,6 @@
 # Neural structure learning with stochastic differential equations
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Learning From Simplicial Data Based on Random Walks and 1D Convolutions
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 8, 5
 

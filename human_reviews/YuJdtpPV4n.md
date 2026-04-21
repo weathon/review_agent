@@ -1,5 +1,6 @@
 # MambaMatch: Learning Two-View Correspondences with Selective State Spaces
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 6
 

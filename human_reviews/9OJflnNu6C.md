@@ -1,5 +1,6 @@
 # Controllable Unlearning for Image-to-Image Generative Models via $\epsilon$-Constrained Optimization
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 
@@ -105,11 +106,15 @@ This submission formulates the controllable I2I unlearning problem as a $\epsilo
 The paper proposes a machine unlearning approach for generative image-to-image models. Machine unlearning algorithm in generative domain aims to make the model forget a specific subset samples (for e.g. defined by classes) while retaining its generalization capability on the other samples in order to address issues related to privacy and biases. The paper proposes a controllable unlearning algorithm flexible enough to balance between quality/degree of unlearning concepts and the model’s generalization capabilities. The approach uses a gradient based method to solve a constraint optimization objective where the constrain is to forget a certain specified set while retaining its reconstruction quality on remaining samples. The paper also shows theoretical analysis of its approach using Pareto optimality. The paper shows quantitative and qualitative results on in-painting/out-painting tasks to demonstrate the efficacy of the proposed approach.
 
 ### Strengths
-The paper explores an unlearning approach for generative image-to-image models that uses gradient based method to solve a constrained optimization objective. The paper explains the issues present in the current machine unlearning domain and address these issues using a controllable optimization where the users have control over the unlearning optimization (model unlearning while maintaining model generalization). The proposed framework shows better results on ImageNet-1k and Places-365 dataset for in-painting tasks compared to other baseline unlearning approaches. The paper provides detailed ablation experiments and theoretical analysis to explain its proposed algorithm. The paper is well-written, easy to follow and contains a pseudocode that explains the methodology clearly.
+The paper explores an unlearning approach for generative image-to-image models that uses gradient based method to solve a constrained optimization objective.
+The paper explains the issues present in the current machine unlearning domain and address these issues using a controllable optimization where the users have control over the unlearning optimization (model unlearning while maintaining model generalization). The proposed framework shows better results on ImageNet-1k and Places-365 dataset for in-painting tasks compared to other baseline unlearning approaches. The paper provides detailed ablation experiments and theoretical analysis to explain its proposed algorithm. The paper is well-written, easy to follow and contains a pseudocode that explains the methodology clearly.
 
 ### Weaknesses
-It would helpful for the reader to see some discussions around the robustness of the concepts removal. For example is it possible to use some attack that resurfaces the forget set, for example as shown in paper Petsiuk, Vitali, and Kate Saenko. "Concept Arithmetics for Circumventing Concept Inhibition in Diffusion Models." arXiv preprint arXiv:2404.13706 (2024).  
-It would be helpful for the readers if some more related unlearning papers are added as references: 
+It would helpful for the reader to see some discussions around the robustness of the concepts removal. For example is it possible to use some attack that resurfaces the forget set, for example as shown in paper Petsiuk, Vitali, and Kate Saenko. "Concept Arithmetics for Circumventing Concept Inhibition in Diffusion Models." arXiv preprint arXiv:2404.13706 (2024).
+
+
+It would be helpful for the readers if some more related unlearning papers are added as references:
+
 
 [1] Petsiuk, Vitali, and Kate Saenko. "Concept Arithmetics for Circumventing Concept Inhibition in Diffusion Models." arXiv preprint arXiv:2404.13706 (2024)
 

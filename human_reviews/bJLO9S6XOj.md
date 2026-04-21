@@ -1,5 +1,6 @@
 # Towards Fast Graph Generation via Autoregressive Filtration Modeling
 
+- Avg Score: 5.43
 - Decision: Reject
 - Scores: 8, 6, 6, 5, 3, 5, 5
 

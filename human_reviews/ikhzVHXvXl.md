@@ -1,5 +1,6 @@
 # Attaining Human's Desirable Outcomes in Indirect Human-AI Interaction via Multi-Agent Influence Diagrams
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

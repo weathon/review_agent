@@ -1,5 +1,6 @@
 # Empirical Study on Enhancing Efficiency in Masked Image Modeling Pre-training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 5, 6
 

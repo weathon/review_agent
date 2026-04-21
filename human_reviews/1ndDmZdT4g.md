@@ -1,5 +1,6 @@
 # Dynamic Sparse No Training:  Training-Free Fine-tuning for Sparse LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

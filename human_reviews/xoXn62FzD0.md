@@ -1,5 +1,6 @@
 # Syntactic and Semantic Control of Large Language Models via Sequential Monte Carlo
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

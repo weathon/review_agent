@@ -1,5 +1,6 @@
 # ADMM for Structured Fractional Minimization
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

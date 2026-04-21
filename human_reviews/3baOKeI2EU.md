@@ -1,5 +1,6 @@
 # UniCoTT: A Unified Framework for Structural Chain-of-Thought Distillation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

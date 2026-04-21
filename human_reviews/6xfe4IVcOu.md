@@ -1,5 +1,6 @@
 # Chain of Hindsight aligns Language Models with Feedback
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 8
 

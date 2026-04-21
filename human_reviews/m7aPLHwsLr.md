@@ -1,5 +1,6 @@
 # DRSM: De-Randomized Smoothing on Malware Classifier Providing Certified Robustness
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6, 5
 

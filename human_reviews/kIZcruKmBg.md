@@ -1,5 +1,6 @@
 # Physics-informed neural networks for transformed geometries and manifolds
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 1
 

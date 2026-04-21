@@ -1,5 +1,6 @@
 # Towards 4D Human Video Stylization
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

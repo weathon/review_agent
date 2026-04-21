@@ -1,5 +1,6 @@
 # Exponential-Wrapped Mechanisms for Differential Privacy on Hadamard Manifolds
 
+- Avg Score: 6.20
 - Decision: Reject
 - Scores: 6, 8, 5, 6, 6
 

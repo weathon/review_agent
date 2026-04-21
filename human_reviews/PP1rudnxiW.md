@@ -1,5 +1,6 @@
 # Transport meets Variational Inference: Controlled Monte Carlo Diffusions
 
+- Avg Score: 7.20
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8, 8
 

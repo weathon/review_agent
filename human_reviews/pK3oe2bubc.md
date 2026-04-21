@@ -1,5 +1,6 @@
 # LayerShuffle: Enhancing Robustness in Vision Transformers  by Randomizing Layer Execution Order
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 1, 5, 5
 

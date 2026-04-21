@@ -1,5 +1,6 @@
 # Large Pre-trained time series models for cross-domain Time series analysis tasks
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 5, 5, 3, 3
 

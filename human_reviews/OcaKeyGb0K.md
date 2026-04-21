@@ -1,5 +1,6 @@
 # A unified theory of scene representation learning and object representation learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

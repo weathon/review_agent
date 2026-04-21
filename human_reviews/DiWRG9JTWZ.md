@@ -1,5 +1,6 @@
 # MetaCoCo: A New Few-Shot Classification Benchmark with Spurious Correlation
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 8
 

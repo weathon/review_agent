@@ -1,5 +1,6 @@
 # NetFormer: An interpretable model for recovering dynamical connectivity in neuronal population dynamics
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 
@@ -67,11 +68,15 @@ The paper introduces NetFormer, a Transformer-based model designed to capture dy
 ### Weaknesses
 1. Model Interpretability in Practice: Although the model is interpretable in its mathematical formulation, it remains challenging to track how specific interactions are captured in real neural data, which may affect its transparency in biological applications. Visualization of the attention weights and their correspondence to neural trajectories could enhance interpretability.
 
-2. Limited Comparison with Advanced Baselines: The model's comparisons primarily involve classical methods or simpler RNN architectures. Recent models like Neural ODEs and dynamic GNNs, which have been shown to capture temporal and spatial interactions effectively, are not included. This absence weakens the claims of state-of-the-art performance 
+2. Limited Comparison with Advanced Baselines: The model's comparisons primarily involve classical methods or simpler RNN architectures. Recent models like Neural ODEs and dynamic GNNs, which have been shown to capture temporal and spatial interactions effectively, are not included. This absence weakens the claims of state-of-the-art performance
 
-3. Positional Encoding: The rationale behind applying positional encoding across the spatial dimension of time series data from multiple neurons is unclear and warrants further clarification. While positional encoding is typically well-suited for distinguishing between different time steps in a temporal sequence, the authors should explain the motivation and justification for using it in the spatial context of calcium imaging data. If the encoding is based on the physical locations of neurons, it should be specified, though this does not appear to be the case in this paper. Additionally, the reasoning for using positional embeddings to categorize neurons as excitatory or inhibitory requires a more detailed explanation.  
 
-4. Dataset Specificity and Transferability: The real neural data focuses on calcium imaging with lower temporal resolution than electrophysiological recordings. This choice may limit the model's applicability in higher-temporal-resolution neural data, which would be better suited for capturing fast synaptic interactions. Additionally, the use of positional embeddings in calcium imaging data needs further justification, as it might not correlate well with physical neuron placement. 
+3. Positional Encoding: The rationale behind applying positional encoding across the spatial dimension of time series data from multiple neurons is unclear and warrants further clarification. While positional encoding is typically well-suited for distinguishing between different time steps in a temporal sequence, the authors should explain the motivation and justification for using it in the spatial context of calcium imaging data. If the encoding is based on the physical locations of neurons, it should be specified, though this does not appear to be the case in this paper. Additionally, the reasoning for using positional embeddings to categorize neurons as excitatory or inhibitory requires a more detailed explanation.
+
+
+
+4. Dataset Specificity and Transferability: The real neural data focuses on calcium imaging with lower temporal resolution than electrophysiological recordings. This choice may limit the model's applicability in higher-temporal-resolution neural data, which would be better suited for capturing fast synaptic interactions. Additionally, the use of positional embeddings in calcium imaging data needs further justification, as it might not correlate well with physical neuron placement.
+
 
 5. Reproducibility: The authors have not provided any code repository or made their scripts publicly available, which raises concerns about the reproducibility of their results. Although pseudocode is included in the supplementary materials, it does not fully address the need for accessible implementation details to enable independent verification of their findings.
 

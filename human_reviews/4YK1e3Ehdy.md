@@ -1,5 +1,6 @@
 # Understanding Deep Neural Networks as Dynamical Systems: Insights into Training and Fine-tuning
 
+- Avg Score: 2.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 1, 3, 3
 

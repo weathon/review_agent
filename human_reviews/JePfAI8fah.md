@@ -1,5 +1,6 @@
 # iTransformer: Inverted Transformers Are Effective for Time Series Forecasting
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

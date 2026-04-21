@@ -1,5 +1,6 @@
 # Programmable Synthetic Data Generation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

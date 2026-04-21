@@ -1,5 +1,6 @@
 # Online Laplacian-Based Representation Learning in Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

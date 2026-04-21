@@ -1,5 +1,6 @@
 # Mixture Stochastic Block Model for Multi-Group Community Detection in Multiplex Graphs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 3, 5, 6
 

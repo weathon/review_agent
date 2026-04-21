@@ -1,5 +1,6 @@
 # Prediction without Preclusion: Recourse Verification with Reachable Sets
 
+- Avg Score: 6.00
 - Decision: Accept (spotlight)
 - Scores: 5, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # Exploration in the Face of Strategic Responses: Provable Learning of Online Stackelberg Games
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 6, 5, 3
 

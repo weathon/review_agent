@@ -1,5 +1,6 @@
 # Next state prediction gives rise to entangled, yet compositional representations of objects
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

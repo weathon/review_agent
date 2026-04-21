@@ -1,5 +1,6 @@
 # GoLLIE: Annotation Guidelines improve Zero-Shot Information-Extraction
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 6
 

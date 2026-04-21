@@ -1,5 +1,6 @@
 # Physics of Language Models: Part 2.1, Grade-School Math and the Hidden Reasoning Process
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

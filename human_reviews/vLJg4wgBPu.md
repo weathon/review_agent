@@ -1,5 +1,6 @@
 # GPT Is Becoming a Turing Machine: Here Are Some Ways to Program It
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

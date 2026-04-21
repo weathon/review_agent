@@ -1,5 +1,6 @@
 # AgentSquare: Automatic LLM Agent Search in Modular Design Space
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

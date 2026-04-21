@@ -1,5 +1,6 @@
 # Unveiling the Unseen: Identifiable Clusters in Trained Depthwise Convolutional Kernels
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 3, 6
 

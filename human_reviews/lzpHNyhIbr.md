@@ -1,5 +1,6 @@
 # CropNet: An Open Large-Scale Dataset with Multiple Modalities for Climate Change-aware Crop Yield Predictions
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 6, 3
 

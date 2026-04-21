@@ -1,5 +1,6 @@
 # Learning Planning Abstractions from Language
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 3
 

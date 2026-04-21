@@ -1,5 +1,6 @@
 # Towards Universal Robust Federated Learning via Meta Stackelberg Game
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

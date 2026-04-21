@@ -1,5 +1,6 @@
 # Consensus Optimization at Representation: Improving Personalized Federated Learning via Data-Centric Regularization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

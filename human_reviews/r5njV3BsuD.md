@@ -1,5 +1,6 @@
 # Nearly $d$-Linear Convergence Bounds for Diffusion Models via Stochastic Localization
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6, 6, 8
 

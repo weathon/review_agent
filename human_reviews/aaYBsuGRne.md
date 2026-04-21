@@ -1,5 +1,6 @@
 # Understanding In-context Learning with a Pelican Soup Hypothesis
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 3, 5, 6
 

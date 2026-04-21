@@ -1,5 +1,6 @@
 # Learning the Unlearnable: Adversarial Augmentations Suppress Unlearnable Example Attacks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 1
 

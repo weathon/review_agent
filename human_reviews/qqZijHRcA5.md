@@ -1,5 +1,6 @@
 # Impact of Dataset Properties on Membership Inference Vulnerability of Deep Transfer Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 8, 3, 3
 

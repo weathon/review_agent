@@ -1,5 +1,6 @@
 # Optimization over Sparse Restricted Convex Sets via Two Steps Projection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

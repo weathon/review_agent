@@ -1,5 +1,6 @@
 # Inverse Attention Agents for Multi-Agent Systems
 
+- Avg Score: 4.75
 - Decision: Accept (Poster)
 - Scores: 6, 3, 5, 5
 

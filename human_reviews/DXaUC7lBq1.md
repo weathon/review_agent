@@ -1,5 +1,6 @@
 # What Makes Your Model a Low-empathy or Warmth Person: Exploring the Origins of Personality in LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 5
 

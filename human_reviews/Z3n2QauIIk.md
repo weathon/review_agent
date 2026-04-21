@@ -1,5 +1,6 @@
 # A Finite-Time Analysis of Distributed Q-Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

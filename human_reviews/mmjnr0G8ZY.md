@@ -1,5 +1,6 @@
 # Multi-Resolution Diffusion Models for Time Series Forecasting
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

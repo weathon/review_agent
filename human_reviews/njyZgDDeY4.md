@@ -1,5 +1,6 @@
 # Efficient Predictive Counterfactual Regret Minimization$^+$ Algorithm in Solving Extensive-Form Games
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

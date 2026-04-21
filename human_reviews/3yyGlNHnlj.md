@@ -1,5 +1,6 @@
 # GraphECL: Towards Efficient Contrastive Learning for Graphs
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 6, 3, 6, 6
 

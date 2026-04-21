@@ -1,5 +1,6 @@
 # NovelQA: Benchmarking Question Answering on Documents Exceeding 200K Tokens
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6
 

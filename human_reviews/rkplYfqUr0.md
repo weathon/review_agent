@@ -1,5 +1,6 @@
 # Gen-Z: Generative Zero-Shot Text Classification with Contextualized Label Descriptions
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

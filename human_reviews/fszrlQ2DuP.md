@@ -1,5 +1,6 @@
 # Can We Evaluate Domain Adaptation Models Without Target-Domain Labels?
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

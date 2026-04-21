@@ -1,5 +1,6 @@
 # Beyond Trend and Periodicity: Guide Time Series Forecasting with Textual Cues
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

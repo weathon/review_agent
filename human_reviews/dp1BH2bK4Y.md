@@ -1,5 +1,6 @@
 # Re-TASK: Revisiting LLM Tasks from Capability, Skill, and Knowledge Perspectives
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

@@ -1,5 +1,6 @@
 # GTD-LLM: A Plug-and-Play LLM Reasoning Module for Gaze Target Detection
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 1, 3
 

@@ -1,5 +1,6 @@
 # Abstracting and Refining Provably Sufficient Explanations of Neural Network Predictions
 
+- Avg Score: 7.25
 - Decision: Reject
 - Scores: 8, 5, 8, 8
 

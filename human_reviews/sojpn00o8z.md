@@ -1,5 +1,6 @@
 # Likelihood Training of Cascaded Diffusion Models via Hierarchical Volume-preserving Maps
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 5
 

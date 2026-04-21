@@ -1,5 +1,6 @@
 # LVLM-CL: Make Large Vision-Language Models Work Better under Continual Learning Settings
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 3
 

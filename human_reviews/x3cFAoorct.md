@@ -1,5 +1,6 @@
 # Learning Arbitrary Logical Formula as a Sparse Neural Network Module
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 8, 3, 3
 

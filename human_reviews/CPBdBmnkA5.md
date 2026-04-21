@@ -1,5 +1,6 @@
 # AERO: Softmax-Only LLMs for Efficient Private Inference
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

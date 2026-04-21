@@ -1,5 +1,6 @@
 # Uncertainty Modeling in Graph Neural Networks via Stochastic Differential Equations
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 6, 10
 

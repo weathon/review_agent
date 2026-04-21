@@ -1,5 +1,6 @@
 # Breaking Free: Hacking Diffusion Models for Generating Adversarial Examples and Bypassing Safety Guardrails
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Transforming Smallholder Farmers Support with an AI-Powered FAQbot: A Comparison of Techniques
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

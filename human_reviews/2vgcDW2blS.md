@@ -1,5 +1,6 @@
 # Residual Kernel Policy Network: Enhancing Stability and Robustness in RKHS-Based Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 3, 8, 8, 5
 

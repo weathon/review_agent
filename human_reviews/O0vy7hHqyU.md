@@ -1,5 +1,6 @@
 # Fake News Detection via an Adaptive Feature Matching Optimization Framework
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

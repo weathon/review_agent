@@ -1,5 +1,6 @@
 # Multi-Agent Causal Discovery Using Large Language Models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3, 1
 

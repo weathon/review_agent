@@ -1,5 +1,6 @@
 # Sharper Bounds of Non-Convex Stochastic Gradient Descent with Momentum
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # MeanSparse: Post-Training Robustness Enhancement Through Mean-Centered Feature Sparsification
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

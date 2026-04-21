@@ -1,5 +1,6 @@
 # Advancing Beyond Identification: Multi-bit Watermark for Large Language Models
 
+- Avg Score: 5.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 6, 5
 

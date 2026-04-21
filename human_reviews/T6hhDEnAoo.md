@@ -1,5 +1,6 @@
 # Query Optimization Detection Transformer for Small Objects in Remote Sensing Images
 
+- Avg Score: 2.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 1, 1
 

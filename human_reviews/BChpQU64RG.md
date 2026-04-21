@@ -1,5 +1,6 @@
 # Mix-LN: Unleashing the Power of Deeper Layers by Combining Pre-LN and Post-LN
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5, 6
 

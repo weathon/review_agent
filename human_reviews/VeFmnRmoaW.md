@@ -1,5 +1,6 @@
 # MetroGNN: Metro Network Expansion with Deep Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

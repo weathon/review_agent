@@ -1,5 +1,6 @@
 # WenXinGPT: A Multimodal Conversational Model for Enhancing Orthopedic Expert Consultations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3
 

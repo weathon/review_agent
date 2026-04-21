@@ -1,5 +1,6 @@
 # Training Large Language Models for Retrieval-Augmented Question Answering through Backtracking Correction
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 5
 

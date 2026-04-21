@@ -1,5 +1,6 @@
 # EcoAct: Economic Agent Determines When to Register What Action
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 3, 3
 

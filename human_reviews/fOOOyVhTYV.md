@@ -1,5 +1,6 @@
 # A Multicover Approach to Neural Networks Sample Complexity
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 1, 3, 5, 5, 5
 

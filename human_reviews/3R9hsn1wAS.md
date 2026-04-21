@@ -1,5 +1,6 @@
 # MolStitch: Offline Multi-Objective Molecular Optimization with Molecular Stitching
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 6, 6, 3, 6
 

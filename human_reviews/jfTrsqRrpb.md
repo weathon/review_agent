@@ -1,5 +1,6 @@
 # Open-world Instance Segmentation: Top-down Learning with Bottom-up Supervision
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

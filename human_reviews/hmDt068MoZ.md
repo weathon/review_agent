@@ -1,5 +1,6 @@
 # Can Knowledge Editing Really Correct Hallucinations?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 5
 

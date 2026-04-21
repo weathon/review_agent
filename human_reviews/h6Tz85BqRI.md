@@ -1,5 +1,6 @@
 # VQGraph: Rethinking Graph Representation Space for Bridging GNNs and MLPs
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 5, 8, 8, 6, 5
 

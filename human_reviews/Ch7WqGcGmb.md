@@ -1,5 +1,6 @@
 # Error Feedback Reloaded: From Quadratic to Arithmetic Mean of Smoothness Constants
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 6
 

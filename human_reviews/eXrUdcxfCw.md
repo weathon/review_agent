@@ -1,5 +1,6 @@
 # Continual Test-Time Adaptation by Leveraging Source Prototypes and Exponential Moving Average Target Prototypes
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # FastAttention: Extend FlashAttention2 to NPUs and Low-resource GPUs for Efficient Inference
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

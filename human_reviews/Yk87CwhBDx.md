@@ -1,5 +1,6 @@
 # Can Large Language Models Understand Symbolic Graphics Programs?
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Build your own cell: Diffusion Models for Multichannel 3D Microscopy Image Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 3, 5
 

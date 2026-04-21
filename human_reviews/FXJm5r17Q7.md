@@ -1,5 +1,6 @@
 # In-Context Reinforcement Learning From Suboptimal Historical Data
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 3, 6, 6, 8
 

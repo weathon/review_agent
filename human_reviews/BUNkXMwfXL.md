@@ -1,5 +1,6 @@
 # Why Diffusion Models Are Stable and How to Make Them Faster: An Empirical Investigation and Optimization
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

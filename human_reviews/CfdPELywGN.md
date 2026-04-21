@@ -1,5 +1,6 @@
 # How language models extrapolate outside the training data: A Case study in Textualized Gridworld
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 8, 5, 5, 3, 5
 

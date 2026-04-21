@@ -1,5 +1,6 @@
 # Harmony World Models: Boosting Sample Efficiency for Model-based Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

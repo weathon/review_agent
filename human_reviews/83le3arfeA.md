@@ -1,5 +1,6 @@
 # Balanced Hyperbolic Embeddings Are Natural Out-of-Distribution Detectors
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 6, 5
 

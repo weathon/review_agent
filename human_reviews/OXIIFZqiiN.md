@@ -1,5 +1,6 @@
 # A Dual-Modal Framework Utilizing Visual Prompts for Enhanced Patch Analysis
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 1, 3, 1
 

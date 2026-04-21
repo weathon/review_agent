@@ -1,5 +1,6 @@
 # Diffusion Process with Implicit Latents via Energy Models
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

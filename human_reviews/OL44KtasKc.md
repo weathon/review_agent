@@ -1,5 +1,6 @@
 # SageAttention: Accurate 8-Bit Attention for Plug-and-play Inference Acceleration
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

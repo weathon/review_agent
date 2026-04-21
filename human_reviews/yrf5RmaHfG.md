@@ -1,5 +1,6 @@
 # JuxtAlign:  A Foundational Analysis on Alignment of Certified Reinforcement Learning
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

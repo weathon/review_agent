@@ -1,5 +1,6 @@
 # Neutral residues: revisiting adapters for model extension
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

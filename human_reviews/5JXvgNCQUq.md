@@ -1,5 +1,6 @@
 # Regularized Optimal Transport for Single-Cell Temporal Trajectory Analysis
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

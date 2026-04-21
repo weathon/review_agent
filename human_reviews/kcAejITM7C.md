@@ -1,5 +1,6 @@
 # The Role of Deductive and Inductive Reasoning in Large Language Models
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 5
 

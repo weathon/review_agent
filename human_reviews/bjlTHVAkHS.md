@@ -1,5 +1,6 @@
 # Intuitive or Dependent? Investigating LLms’ Robustness to Conflicting Prompts
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3
 

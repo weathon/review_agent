@@ -1,5 +1,6 @@
 # DebateGPT: Fine-tuning Large Language Models with Multi-agent Debate Supervision
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

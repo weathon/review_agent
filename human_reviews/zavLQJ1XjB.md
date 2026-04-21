@@ -1,5 +1,6 @@
 # On the Limitations of Temperature Scaling for Distributions with Overlaps
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

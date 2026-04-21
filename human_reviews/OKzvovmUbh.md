@@ -1,5 +1,6 @@
 # Learning Universal Features for Generalizable Image Forgery Localization
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3, 5
 

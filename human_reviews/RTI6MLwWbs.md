@@ -1,5 +1,6 @@
 # Physics-infused Intention Network for Crowd Simulation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 3, 5
 

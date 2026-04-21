@@ -1,5 +1,6 @@
 # Towards Provably Efficient Learning of Extensive-Form Games with Imperfect Information and Linear Function Approximation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

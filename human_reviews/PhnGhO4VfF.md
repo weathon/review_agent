@@ -1,5 +1,6 @@
 # Towards Understanding the Effect of Pretraining Label Granularity
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

@@ -1,5 +1,6 @@
 # LinFusion: 1 GPU, 1 Minute, 16K Image
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 6, 5, 6
 

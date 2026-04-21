@@ -1,5 +1,6 @@
 # MindSearch: Mimicking Human Minds Elicits Deep AI Searcher
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

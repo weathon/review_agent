@@ -1,5 +1,6 @@
 # Double Check My Desired Return: Transformer with Value Validation for Offline RL
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

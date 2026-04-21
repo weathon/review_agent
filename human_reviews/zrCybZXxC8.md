@@ -1,5 +1,6 @@
 # E-MCTS: Deep Exploration by Planning with Epistemic Uncertainty
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 5
 

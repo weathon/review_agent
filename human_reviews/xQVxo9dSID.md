@@ -1,5 +1,6 @@
 # Consistency Models Made Easy
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 

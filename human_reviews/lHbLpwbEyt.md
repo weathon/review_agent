@@ -1,5 +1,6 @@
 # Enhancing Cognition and Explainability of Multimodal Foundation Models with Self-Synthesized Data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # GenDataAgent: On-the-fly Dataset Augmentation with Synthetic Data
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 3
 

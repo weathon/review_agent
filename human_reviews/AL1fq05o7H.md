@@ -1,5 +1,6 @@
 # Mamba: Linear-Time Sequence Modeling with Selective State Spaces
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 8, 8, 6, 3
 

@@ -1,5 +1,6 @@
 # Robust LLM safeguarding via refusal feature adversarial training
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # Automated Proof Generation for Rust Code via Self-Evolution
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

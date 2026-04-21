@@ -1,5 +1,6 @@
 # ZeroP: Zero-Shot Quantization via Proxy Data
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 5, 6, 3
 

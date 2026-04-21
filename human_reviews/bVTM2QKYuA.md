@@ -1,5 +1,6 @@
 # The Geometry of Categorical and Hierarchical Concepts in Large Language Models
 
+- Avg Score: 6.75
 - Decision: Accept (Oral)
 - Scores: 5, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Inverted Activations: Reducing Memory Footprint in Neural Network Training
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 6, 5, 8
 

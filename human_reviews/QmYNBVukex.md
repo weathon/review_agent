@@ -1,5 +1,6 @@
 # Get more for less: Principled Data Selection for Warming Up Fine-Tuning in LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 3, 6
 

@@ -1,5 +1,6 @@
 # NDIM: Neuronal Diversity Inspired Model for Multisensory Emotion Recognition
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 5
 

@@ -1,5 +1,6 @@
 # Fast Fractional Natural Gradient Descent using Learnable Spectral Factorizations
 
+- Avg Score: 4.86
 - Decision: Reject
 - Scores: 5, 8, 3, 5, 5, 3, 5
 

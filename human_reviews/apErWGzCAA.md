@@ -1,5 +1,6 @@
 # Intelligent Go-Explore: Standing on the Shoulders of Giant Foundation Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

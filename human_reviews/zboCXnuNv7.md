@@ -1,5 +1,6 @@
 # Semialgebraic Neural Networks: From roots to representations
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 5, 8, 5, 8
 
@@ -77,7 +78,8 @@ Suggestions:
 This paper introduces a new class of neural network models, SANNs. The model is built on the basis of semialgebraic theory. The fead-forward network is defined using ODE and polynomial homotopy continuation method is used to ‘universality’ of the expressiveness of the neural networks. The paper focuses on theoretical aspects of the neural networks and contains abundant theoretical claims.
 
 ### Strengths
-- Building a neural network based on semialgebraic geometry is very refreshing and definitely new class of ML models.  
+- Building a neural network based on semialgebraic geometry is very refreshing and definitely new class of ML models. 
+
 - Using (the idea of neural)ODE as a computational graph of SANN also makes a quite sense assuming polynomial homology continuation method is used. 
 - Visualization of the homotopy continuation method is really helpful to foster the readers’ understanding.
 - Appendix covers exhuastive theoretical contents of the paper. Some applications are also discussed.

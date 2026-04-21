@@ -1,5 +1,6 @@
 # Calibrate to Discriminate:Improve In-Context Learning with Label-Free Comparative Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 6, 3
 

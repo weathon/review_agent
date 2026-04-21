@@ -1,5 +1,6 @@
 # Regularizing Energy among Training Samples for Out-of-Distribution Generalization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Embedding Safety into RL: A New Take on Trust Region Methods
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 8, 5, 3, 5, 6
 

@@ -1,5 +1,6 @@
 # On the Hyperparameter Loss Landscapes of Machine Learning Algorithms
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 5, 8
 

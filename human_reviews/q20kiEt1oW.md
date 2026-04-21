@@ -1,5 +1,6 @@
 # Strategies and impact of learning curve estimation for CNN-based image classification
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

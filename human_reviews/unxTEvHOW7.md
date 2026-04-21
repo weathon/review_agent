@@ -1,5 +1,6 @@
 # EXPLEME: A Study in Meme Interpretability, Diving Beyond Input Attribution
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8, 8
 

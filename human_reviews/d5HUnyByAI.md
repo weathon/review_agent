@@ -1,5 +1,6 @@
 # CLIBD: Bridging Vision and Genomics for Biodiversity Monitoring at Scale
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 3
 

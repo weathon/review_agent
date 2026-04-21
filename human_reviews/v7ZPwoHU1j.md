@@ -1,5 +1,6 @@
 # Statistically Optimal $K$-means Clustering via Nonnegative Low-rank Semidefinite Programming
 
+- Avg Score: 6.75
 - Decision: Accept (oral)
 - Scores: 8, 3, 8, 8
 

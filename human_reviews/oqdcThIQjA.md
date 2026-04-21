@@ -1,5 +1,6 @@
 # Very Fast Graph Clustering for Single and Multiple Views
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # BLEND: Behavior-guided Neural Population Dynamics Modeling via Privileged Knowledge Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 5, 8
 

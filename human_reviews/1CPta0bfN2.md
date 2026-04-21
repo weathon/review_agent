@@ -1,5 +1,6 @@
 # Adaptive Retrieval and Scalable Indexing for k-NN Search with Cross-Encoders
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 6
 

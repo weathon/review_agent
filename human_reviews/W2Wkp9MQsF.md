@@ -1,5 +1,6 @@
 # Forget the Data and Fine-Tuning! Just Fold the Network to Compress
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 6
 

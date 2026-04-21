@@ -1,5 +1,6 @@
 # Program Synthesis Benchmark for Visual Programming in XLogoOnline Environment
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 8, 8, 3, 5, 5
 

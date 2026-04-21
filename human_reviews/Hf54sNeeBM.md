@@ -1,5 +1,6 @@
 # Knowledge Accumulating Contrastive Prompt for Continual Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

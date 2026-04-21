@@ -1,5 +1,6 @@
 # Understanding Addition in Transformers
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 3, 8, 3
 

@@ -1,5 +1,6 @@
 # Active Continual Learning: On Balancing Knowledge Retention and Learnability
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

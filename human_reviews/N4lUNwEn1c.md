@@ -1,5 +1,6 @@
 # Broadening Discovery through Structural Models: Multimodal Combination of Local and Structural Properties for Predicting Chemical Features.
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5
 

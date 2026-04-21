@@ -1,5 +1,6 @@
 # Can LLMs Enhance Performance Prediction for Deep Learning Models?
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 5, 8, 6
 

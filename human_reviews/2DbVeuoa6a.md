@@ -1,5 +1,6 @@
 # Neural Spectral Methods: Self-supervised learning in the spectral domain
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 3
 

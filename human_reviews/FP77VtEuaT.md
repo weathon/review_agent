@@ -1,5 +1,6 @@
 # Can Large Language Models Reason? A Characterization via 3-SAT
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

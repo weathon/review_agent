@@ -1,5 +1,6 @@
 # Reasoning-Enhanced Healthcare Predictions with Knowledge Graph Community Retrieval
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 3, 6, 6, 5
 

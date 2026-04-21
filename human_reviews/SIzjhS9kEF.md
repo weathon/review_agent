@@ -1,5 +1,6 @@
 # Revisiting the Superficial Alignment Hypothesis
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

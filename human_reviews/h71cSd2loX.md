@@ -1,5 +1,6 @@
 # On Extending Direct Preference Optimization to Accommodate Ties
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 5, 6
 

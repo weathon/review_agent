@@ -1,5 +1,6 @@
 # M3GIA: A Cognition Inspired Multilingual and Multimodal General Intelligence Ability Benchmark
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

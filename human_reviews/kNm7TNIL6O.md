@@ -1,5 +1,6 @@
 # UPAR: A Kantian-Inspired Prompting Framework for Enhancing Large Language Model Capabilities
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

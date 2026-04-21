@@ -1,5 +1,6 @@
 # QA-LoRA: Quantization-Aware Low-Rank Adaptation of Large Language Models
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 5
 

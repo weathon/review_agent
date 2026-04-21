@@ -1,5 +1,6 @@
 # Are LLMs Better than Reported? Detecting Label Errors and Mitigating Their Effect on Model Performance
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 8, 6, 5
 

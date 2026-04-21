@@ -1,5 +1,6 @@
 # Pacmann: Efficient Private Approximate Nearest Neighbor Search
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

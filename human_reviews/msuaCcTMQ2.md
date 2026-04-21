@@ -1,5 +1,6 @@
 # Active Automated Machine Learning with Self-Training
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

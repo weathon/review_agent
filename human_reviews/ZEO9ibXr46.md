@@ -1,5 +1,6 @@
 # MLAE: Masked LoRA Experts for Visual Parameter-Efficient Fine-Tuning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

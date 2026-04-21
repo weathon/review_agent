@@ -1,5 +1,6 @@
 # ($\texttt{PASS}$) Visual Prompt Locates Good Structure Sparisty through a Recurent HyperNetwork
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 5, 5, 8, 5
 

@@ -1,5 +1,6 @@
 # Pseudo-Generalized Dynamic View Synthesis from a Video
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 3, 8
 

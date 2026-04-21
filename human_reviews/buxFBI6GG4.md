@@ -1,5 +1,6 @@
 # Breaking the $\log(1/\Delta_2)$ Barrier: Better Batched Best Arm Identification with Adaptive Grids
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 8
 

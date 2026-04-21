@@ -1,5 +1,6 @@
 # FireAct: Toward Language Agent Finetuning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

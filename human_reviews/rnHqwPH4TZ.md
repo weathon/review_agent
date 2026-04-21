@@ -1,5 +1,6 @@
 # T-Stitch: Accelerating Sampling in Pre-Trained Diffusion Models with Trajectory Stitching
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 5, 8, 6
 

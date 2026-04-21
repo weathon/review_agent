@@ -1,5 +1,6 @@
 # ChebyNet: Boosting Neural Network Fitting and Efficiency through Chebyshev Polynomial Layer Connections
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 5
 

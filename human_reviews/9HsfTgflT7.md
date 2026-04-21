@@ -1,5 +1,6 @@
 # Temporal Flexibility in Spiking Neural Networks: Towards Generalization Across Time Steps and Deployment Friendliness
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6, 5
 

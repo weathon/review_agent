@@ -1,5 +1,6 @@
 # Self-rationalization improves LLM as a fine-grained judge
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6, 5, 5
 

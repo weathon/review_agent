@@ -1,5 +1,6 @@
 # GTR: Semi-supervised Learning with Grouping and Transporting for Robust Thresholding
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 6, 5, 3
 

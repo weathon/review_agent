@@ -1,5 +1,6 @@
 # DRoC: Elevating Large Language Models for Complex Vehicle Routing via Decomposed Retrieval of Constraints
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

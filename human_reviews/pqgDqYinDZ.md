@@ -1,5 +1,6 @@
 # Learning From Multi-Expert Demonstrations: A Multi-Objective Inverse Reinforcement Learning Approach
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 5, 3, 3
 

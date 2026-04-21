@@ -1,5 +1,6 @@
 # Distribution-Free Data Uncertainty for Neural Network Regression
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 8
 

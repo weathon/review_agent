@@ -1,5 +1,6 @@
 # Automatic Truncation Position Selection in Singular Value Decomposition for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

@@ -1,5 +1,6 @@
 # TransAdapter: Vision Transformer for Feature-Centric Unsupervised Domain Adaptation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

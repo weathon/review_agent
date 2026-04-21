@@ -1,5 +1,6 @@
 # Attention-based Iterative Decomposition for Tensor Product Representation
 
+- Avg Score: 6.80
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6, 8
 

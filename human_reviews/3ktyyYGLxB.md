@@ -1,5 +1,6 @@
 # Commute Graph Neural Networks
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 8, 5, 5
 

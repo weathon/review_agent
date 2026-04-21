@@ -1,5 +1,6 @@
 # From Commands to Prompts: LLM-based Semantic File System for AIOS
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 8, 3, 5, 5
 

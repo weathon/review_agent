@@ -1,5 +1,6 @@
 # Beyond Memorization: Violating Privacy via Inference with Large Language Models
 
+- Avg Score: 7.20
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6, 6
 

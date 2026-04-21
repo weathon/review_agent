@@ -1,5 +1,6 @@
 # Dynamic Routing Mixture of Experts for Enhanced Multi-Label Image Classification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 3, 1
 

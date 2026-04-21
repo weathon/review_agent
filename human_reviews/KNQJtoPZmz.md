@@ -1,5 +1,6 @@
 # Simplicity Bias in Overparameterized Machine Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

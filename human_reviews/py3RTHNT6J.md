@@ -1,5 +1,6 @@
 # How big does your neural network have to be?: A Scaling Law Study in Multi-Spectral Remote Sensing
 
+- Avg Score: 2.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 3, 3
 

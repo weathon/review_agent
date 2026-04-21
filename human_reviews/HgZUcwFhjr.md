@@ -1,5 +1,6 @@
 # Can Transformers Capture Spatial Relations between Objects?
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 8, 5
 

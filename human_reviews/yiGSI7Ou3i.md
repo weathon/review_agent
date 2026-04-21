@@ -1,5 +1,6 @@
 # Text-to-Model: Text-Conditioned Neural Network Diffusion for Train-Once-for-All Personalization
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 3
 

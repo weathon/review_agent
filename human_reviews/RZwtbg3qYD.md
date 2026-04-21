@@ -1,5 +1,6 @@
 # HOPE for a Robust Parameterization of Long-memory State Space Models
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 5
 
@@ -135,7 +136,8 @@ Comments:
 1. Information on the actual runtime could be moved the main paper since now it is quite hard to find (it is in the last page of the appendix). 
 2. The paper could benefit from having a discussion on how HOPE differs from spectral SSMs (Agarwal et al.2023) and the stable parameterisation proposed by Wang & Li (2023), which are probably the closest works This could be placed in the appendix. Such discussion could potentially address pros and cons of each approach in addition to the brief discussion in the introduction.
 
-Minor: 
+Minor:
+
 - Line 159-161: Can the authors provide a definition of the function space $\ell^2(\mathbb{N})$   and $L^2([0,\infty])$?
 - Line 208: imaginal axis -> imaginary axis
 

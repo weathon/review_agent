@@ -1,5 +1,6 @@
 # Near-Optimal Solutions of Constrained Learning Problems
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 3, 6
 

@@ -1,5 +1,6 @@
 # Modeling Future Conversation Turns to Teach LLMs to Ask Clarifying Questions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 5, 8
 

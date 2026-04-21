@@ -1,5 +1,6 @@
 # Bag of Tricks to Boost Adversarial Transferability
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 8, 6
 

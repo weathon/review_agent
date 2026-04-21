@@ -1,5 +1,6 @@
 # NEURAL ADDITIVE TENSOR DECOMPOSITION FOR SPARSE TENSORS
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 3, 8
 

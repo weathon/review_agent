@@ -1,5 +1,6 @@
 # SELA: Tree-Search Enhanced LLM Agents for Automated Machine Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 1, 5, 3
 

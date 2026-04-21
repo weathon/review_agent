@@ -1,5 +1,6 @@
 # Variational Inequality Methods for Multi-Agent Reinforcement Learning: Performance and Stability Gains
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

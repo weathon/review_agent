@@ -1,5 +1,6 @@
 # FactTest: Factuality Testing in Large Language Models with Statistical Guarantees
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 3, 3
 

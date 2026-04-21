@@ -1,5 +1,6 @@
 # ADOPT: Modified Adam Can Converge with the Optimal Rate with Any Hyperparameters
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 6, 5
 

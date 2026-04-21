@@ -1,5 +1,6 @@
 # Variance-Reduced Normalized Zeroth Order Method for Generalized-Smooth Non-Convex Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

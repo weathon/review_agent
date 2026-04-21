@@ -1,5 +1,6 @@
 # OrthoRank: Token Selection via Sink Token Orthogonality for Efficient LLM inference
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

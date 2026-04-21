@@ -1,5 +1,6 @@
 # Self-Monitoring Large Language Models for Click-Through Rate Prediction
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 3, 5
 

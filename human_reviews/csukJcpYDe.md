@@ -1,5 +1,6 @@
 # Generalized Policy Iteration using Tensor Approximation for Hybrid Control
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

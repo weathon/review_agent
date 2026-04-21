@@ -1,5 +1,6 @@
 # Explaining How a Neural Network Play the Go Game and Let People Learn
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3
 

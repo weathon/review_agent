@@ -1,5 +1,6 @@
 # Minimax-optimal trust-aware multi-armed bandits
 
+- Avg Score: 7.50
 - Decision: Reject
 - Scores: 8, 6, 8, 8
 

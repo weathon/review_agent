@@ -1,5 +1,6 @@
 # Synthetic Data is Sufficient for Zero-Shot Visual Generalization from Offline Data
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # The Rise and Down of Babel Tower: Investigating the Evolution Process of Multilingual Code Large Language Model
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 6
 

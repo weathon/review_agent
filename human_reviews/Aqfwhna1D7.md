@@ -1,5 +1,6 @@
 # CrayonRobo: Toward Generic Robot Manipulation via Crayon Visual Prompting
 
+- Avg Score: 5.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Masked Autoencoders with Multi-Window Local-Global Attention Are Better Audio Learners
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 3
 

@@ -1,5 +1,6 @@
 # SafeAuto: Knowledge-Enhanced Safe Autonomous Driving with Multimodal Foundation Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

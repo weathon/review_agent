@@ -1,5 +1,6 @@
 # CHiP: Cross-modal Hierarchical Direct Preference Optimization for Multimodal LLMs
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8
 

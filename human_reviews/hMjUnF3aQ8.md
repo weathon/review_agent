@@ -1,5 +1,6 @@
 # SQT -- rough conservative actor critic
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 

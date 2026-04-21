@@ -1,5 +1,6 @@
 # Latent Abstractions in Generative Diffusion Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 6, 3
 

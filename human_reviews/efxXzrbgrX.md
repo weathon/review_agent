@@ -1,5 +1,6 @@
 # Black-box Targeted Adversarial Attack on Segment Anything (SAM)
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 1, 6
 

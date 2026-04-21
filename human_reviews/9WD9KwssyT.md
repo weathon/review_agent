@@ -1,5 +1,6 @@
 # Zipformer: A faster and better encoder for automatic speech recognition
 
+- Avg Score: 7.50
 - Decision: Accept (oral)
 - Scores: 8, 6, 8, 8
 

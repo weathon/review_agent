@@ -1,5 +1,6 @@
 # Gaussian Ensemble Belief Propagation for Efficient Inference in High-Dimensional, Black-box Systems
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

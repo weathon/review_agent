@@ -1,5 +1,6 @@
 # Periodicity Decoupling Framework for Long-term Series Forecasting
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 3, 8, 8
 

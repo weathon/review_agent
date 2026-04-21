@@ -1,5 +1,6 @@
 # Controllable Context Sensitivity and the Knob Behind It
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 3, 8, 8
 

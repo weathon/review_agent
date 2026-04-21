@@ -1,5 +1,6 @@
 # AttriBoT: A Bag of Tricks for Efficiently Approximating Leave-One-Out Context Attribution
 
+- Avg Score: 6.29
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 8, 6, 6
 

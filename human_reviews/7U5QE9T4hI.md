@@ -1,5 +1,6 @@
 # Learning to Extrapolate and Adjust: Two-Stage Meta-Learning for Concept Drift in Online Time Series Forecasting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 6, 3, 8, 5, 5
 

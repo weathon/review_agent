@@ -1,5 +1,6 @@
 # Knowledge-Infused Prompting: Assessing and Advancing Clinical Text Data Generation with Large Language Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 8, 3, 6
 

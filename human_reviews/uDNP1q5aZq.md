@@ -1,5 +1,6 @@
 # Boosting Backdoor Attack with A Learnable Poisoning Sample Selection Strategy
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 5, 6, 6
 

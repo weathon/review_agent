@@ -1,5 +1,6 @@
 # Simplifying and Stabilizing Model Selection in Unsupervised Domain Adaptation
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Prototypical Information Bottlenecking and Disentangling for Multimodal Cancer Survival Prediction
 
+- Avg Score: 7.25
 - Decision: Accept (spotlight)
 - Scores: 6, 5, 8, 10
 

@@ -1,5 +1,6 @@
 # Inverse Constitutional AI: Compressing Preferences into Principles
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 

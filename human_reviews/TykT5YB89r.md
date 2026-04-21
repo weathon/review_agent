@@ -1,5 +1,6 @@
 # Not Only Vision: Evolve Visual Speech Recognition via Peripheral Information
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 3
 

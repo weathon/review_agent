@@ -1,5 +1,6 @@
 # Robust Classification via Regression for Learning with Noisy Labels
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 6
 

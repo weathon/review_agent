@@ -1,5 +1,6 @@
 # Non-Commutative Spectral Geometry for Adaptive Quantum-Classical Drug-Target Interaction Prediction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 5, 1, 3
 

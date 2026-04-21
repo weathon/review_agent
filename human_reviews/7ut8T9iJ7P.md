@@ -1,5 +1,6 @@
 # Unleashing the Potential of Classification with Semantic Similarity for Deep Imbalanced Regression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

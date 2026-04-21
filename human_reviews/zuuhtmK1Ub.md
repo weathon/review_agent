@@ -1,5 +1,6 @@
 # Differentiable Implicit Solver on Graph Neural Networks for Forward and Inverse Problems
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 3, 1, 3
 

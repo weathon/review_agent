@@ -1,5 +1,6 @@
 # Reward Centering
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 5, 5, 6, 3
 

@@ -1,5 +1,6 @@
 # Fengbo: a Clifford Neural Operator pipeline for 3D PDEs in Computational Fluid Dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Taming Data and Transformers for Audio Generation
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

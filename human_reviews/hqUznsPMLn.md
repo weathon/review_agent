@@ -1,5 +1,6 @@
 # ACES: Generating Diverse Programming Puzzles with Autotelic Language Models and Semantic Descriptors
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

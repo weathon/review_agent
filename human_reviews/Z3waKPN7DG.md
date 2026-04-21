@@ -1,5 +1,6 @@
 # UNAST: Unified framework for Neural Architecture Search for Transformers
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

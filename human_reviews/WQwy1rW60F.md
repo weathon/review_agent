@@ -1,5 +1,6 @@
 # LV-Eval: A Balanced Long-Context Benchmark with 5 Length Levels Up to 256K
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

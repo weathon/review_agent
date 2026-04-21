@@ -1,5 +1,6 @@
 # On the Local Complexity of Linear Regions in Deep ReLU Networks
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 5, 6, 6, 6, 6
 

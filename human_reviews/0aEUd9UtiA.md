@@ -1,5 +1,6 @@
 # DiffCPS: Diffusion Model based Constrained Policy Search for Offline Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

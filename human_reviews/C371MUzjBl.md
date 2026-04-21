@@ -1,5 +1,6 @@
 # DAG-Based Column Generation for Adversarial Team Games
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 8, 6, 5
 

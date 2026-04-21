@@ -1,5 +1,6 @@
 # Leveraging deep learning for comprehensive classification of renal diseases: A transfer learning approach
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 1, 3, 3
 

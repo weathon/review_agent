@@ -1,5 +1,6 @@
 # Learn Your Reference Model for Real Good Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 3, 8
 

@@ -1,5 +1,6 @@
 # Optimal Action Abstraction for Imperfect Information Extensive-Form Games
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

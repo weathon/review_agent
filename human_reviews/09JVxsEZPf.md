@@ -1,5 +1,6 @@
 # Towards Comprehensive and Efficient Post Safety Alignment of Large Language Models via Safety Patching
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3, 5
 

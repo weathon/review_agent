@@ -1,5 +1,6 @@
 # Differentiable Trajectory Optimization as a Policy Class for Reinforcement and Imitation Learning
 
+- Avg Score: 8.00
 - Decision: Reject
 - Scores: 10, 8, 6, 8
 

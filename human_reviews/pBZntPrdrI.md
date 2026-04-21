@@ -1,5 +1,6 @@
 # Rethinking Fair Representation Learning for Performance-Sensitive Tasks
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Estimation of Concept Explanations Should be Uncertainty Aware
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 3, 6, 5, 6, 6
 

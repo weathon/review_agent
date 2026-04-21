@@ -1,5 +1,6 @@
 # Chain-of-Table: Evolving Tables in the Reasoning Chain for Table Understanding
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 6
 

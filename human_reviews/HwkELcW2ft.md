@@ -1,5 +1,6 @@
 # Searching For Robust Point Cloud Distillation
 
+- Avg Score: 3.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 6, 3
 
@@ -77,7 +78,8 @@ The paper proposes RDANAS, a framework combining Neural Architecture Search (NAS
 RDANAS combines NAS and knowledge distillation for robustness against adversarial attack.
 
 ### Weaknesses
-RDANAS seems to follow that same approach as RNAS-CL [1] but on point cloud data. All subsections of the method sections seems to be same as the RNAS-CL paper. Hence, it doesn’t seems to have any contribution other than testing RNAS-CL on point cloud data.  
+RDANAS seems to follow that same approach as RNAS-CL [1] but on point cloud data. All subsections of the method sections seems to be same as the RNAS-CL paper. Hence, it doesn’t seems to have any contribution other than testing RNAS-CL on point cloud data. 
+
 
 [1] Nath, U., Wang, Y., Turaga, P. et al. RNAS-CL: Robust Neural Architecture Search by Cross-Layer Knowledge Distillation. Int J Comput Vis (2024). https://doi.org/10.1007/s11263-024-02133-4
 

@@ -1,5 +1,6 @@
 # Systems with Switching Causal Relations: A Meta-Causal Perspective
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

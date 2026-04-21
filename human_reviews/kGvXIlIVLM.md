@@ -1,5 +1,6 @@
 # Toward Guidance-Free AR Visual Generation via Condition Contrastive Alignment
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 6, 8, 6
 

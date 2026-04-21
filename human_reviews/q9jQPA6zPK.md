@@ -1,5 +1,6 @@
 # Leveraging Hyperbolic Embeddings for Coarse-to-Fine Robot Design
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 6
 

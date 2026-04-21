@@ -1,5 +1,6 @@
 # DistRL: An Asynchronous Distributed Reinforcement Learning Framework for On-Device Control Agent
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6
 

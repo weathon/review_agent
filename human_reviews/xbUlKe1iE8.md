@@ -1,5 +1,6 @@
 # Doubly Robust Structure Identification from Temporal Data
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 3, 3, 6, 6, 6
 

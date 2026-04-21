@@ -1,5 +1,6 @@
 # Using Reinforcement Learning to Investigate Neural Dynamics During Motor Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 6, 5
 

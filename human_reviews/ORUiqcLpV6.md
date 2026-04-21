@@ -1,5 +1,6 @@
 # CoT3DRef: Chain-of-Thoughts Data-Efficient 3D Visual Grounding
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

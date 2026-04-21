@@ -1,5 +1,6 @@
 # M3C: A Framework towards Convergent, Flexible, and Unsupervised Learning of Mixture Graph Matching and Clustering
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

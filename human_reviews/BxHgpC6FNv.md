@@ -1,5 +1,6 @@
 # Benign Overfitting and Grokking in ReLU Networks for XOR Cluster Data
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 5, 6, 6
 

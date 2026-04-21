@@ -1,5 +1,6 @@
 # Rethinking the symmetry-preserving circuits for constrained variational quantum algorithms
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 8
 

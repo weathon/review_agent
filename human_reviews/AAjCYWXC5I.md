@@ -1,5 +1,6 @@
 # Review and Rebuttal: Zero-shot In-context Adversarial Learning for Improving Research Ideation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 6, 3
 

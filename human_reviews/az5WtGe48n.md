@@ -1,5 +1,6 @@
 # Diffusion Models are Few-shot Learners for Dense Vision Tasks
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 3, 8, 3, 6
 

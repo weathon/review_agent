@@ -1,5 +1,6 @@
 # Compositional Generative Multiphysics and Multi-component Simulation
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 5, 8, 5, 5, 6
 

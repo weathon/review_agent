@@ -1,5 +1,6 @@
 # Provable Learning for DEC-POMDPs: Factored Models and Memoryless Agents
 
+- Avg Score: 6.17
 - Decision: Reject
 - Scores: 6, 5, 8, 8, 5, 5
 

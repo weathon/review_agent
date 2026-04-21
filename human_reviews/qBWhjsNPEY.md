@@ -1,5 +1,6 @@
 # DeepZero: Scaling Up Zeroth-Order Optimization for Deep Model Training
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 3, 6, 8, 8, 6
 

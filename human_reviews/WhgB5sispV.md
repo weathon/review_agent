@@ -1,5 +1,6 @@
 # Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 6, 8
 

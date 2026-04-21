@@ -1,5 +1,6 @@
 # ADePT: Adaptive Decomposed Prompt Tuning for Parameter-Efficient Fine-tuning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

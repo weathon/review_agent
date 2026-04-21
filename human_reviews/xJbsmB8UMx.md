@@ -1,5 +1,6 @@
 # SALMON: Self-Alignment with Instructable Reward Models
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

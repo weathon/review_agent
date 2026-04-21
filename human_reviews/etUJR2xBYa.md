@@ -1,5 +1,6 @@
 # High-quality and controllable time series generation with diffusion in transformers
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 3, 3, 6, 6
 

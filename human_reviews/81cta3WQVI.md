@@ -1,5 +1,6 @@
 # EdgeRunner: Auto-regressive Auto-encoder for Artistic Mesh Generation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8, 6, 6, 3
 

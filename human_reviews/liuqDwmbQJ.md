@@ -1,5 +1,6 @@
 # ViLMA: A Zero-Shot Benchmark for Linguistic and Temporal Grounding in Video-Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

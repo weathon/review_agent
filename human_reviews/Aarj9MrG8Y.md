@@ -1,5 +1,6 @@
 # Towards the Universal Learning Principle for Graph Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

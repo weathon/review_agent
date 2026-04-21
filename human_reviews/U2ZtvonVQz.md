@@ -1,5 +1,6 @@
 # DC-PINNs: Physics-Informed Neural Networks for Solving Derivative-Constrained PDEs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

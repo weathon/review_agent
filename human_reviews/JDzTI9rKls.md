@@ -1,5 +1,6 @@
 # Efficient Off-Policy Learning for High-Dimensional Action Spaces
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

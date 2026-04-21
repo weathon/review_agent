@@ -1,5 +1,6 @@
 # Parametric Augmentation for Time Series Contrastive Learning
 
+- Avg Score: 6.60
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 8, 8
 

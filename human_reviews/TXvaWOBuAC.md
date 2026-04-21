@@ -1,5 +1,6 @@
 # Towards Explaining Deep Neural Network Compression Through a Probabilistic Latent Space
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 6, 3, 3
 

@@ -1,5 +1,6 @@
 # InstaTAP: Instance Motion Estimation for Tracking Any Point
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

@@ -1,5 +1,6 @@
 # ChemThinker: Thinking Like a Chemist with Multi-Agent LLMs for Deep Molecular Insights
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 5
 
@@ -27,7 +28,8 @@ Summary:
 * They use three strands of investigation - one looking at general molecular properties, one on the task specific properties, and one looking at “intuition”
 * The core idea is that LLMs pre-trained on huge quantities of high quality data often includes many scientific papers and textbooks, by prompting the models appropriately much of this information can be extracted for individual molecules / tasks. 
 * These textual properties are synthesised through a series of calls to the LLM to iteratively improve the outputs, and then these embeddings are combined and used as inputs to the final MLP layers for downstream tasks. 
-* Of particular interest was the component contribution analysis where the authors showed how different tasks relied on the different LLM pathways with different strengths,  
+* Of particular interest was the component contribution analysis where the authors showed how different tasks relied on the different LLM pathways with different strengths, 
+
 * This paper shows an interesting approach to extracting the knowledge contained in LLMs for scientific work - as demonstrated here, this is clearly a promising avenue.
 
 ### Strengths
@@ -40,7 +42,8 @@ Summary:
 * The questions shown (if they are the full extent of the prompts) could be improved / expanded. It prompts the question of why only 3? Why those three in that exact phrasing? 
 * The process was less transparent for the intuition driven thinking in 3.2 - I can tell the LLMs are given a persona to derive “rules” but no examples of this are shown. Given that these rules are used to control which RDKit features are generated this makes it hard to understand exactly what is being done here. 
 * I had a similar problem with the task specific thinking in 3.3 - It is not clear where the tailored insights to T are coming from / how that is being prompted of the LLM. An example is said to be in the appendix, but the appendix was missing from the PDF submitted to open Review. 
-* It is unclear the typical size of the total concatenated embedding vector that is extracted per molecule, the number of calls to each LLM to generate this, the prompt structure used for each “agent” and the size of the final MLP. Personally I would want to see these details to place the evaluation in context.  
+* It is unclear the typical size of the total concatenated embedding vector that is extracted per molecule, the number of calls to each LLM to generate this, the prompt structure used for each “agent” and the size of the final MLP. Personally I would want to see these details to place the evaluation in context. 
+
 * The comparison to other work was fairly extensive - but due to the limited detail on the ChemThinker pipeline / model configuration this made the comparisons harder to understand.
 
 ### Questions

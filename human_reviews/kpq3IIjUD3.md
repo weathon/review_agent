@@ -1,5 +1,6 @@
 # Learning local equivariant representations for quantum operators
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8
 

@@ -1,5 +1,6 @@
 # GEPCode: A Context-Aware 1M-Parameters Graph-Based Language Model for Source Code
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

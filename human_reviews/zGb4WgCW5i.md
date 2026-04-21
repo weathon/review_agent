@@ -1,5 +1,6 @@
 # Intervening Anchor Token: Decoding Strategy in Alleviating Hallucinations for MLLMs
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # InternVid: A Large-scale Video-Text Dataset for Multimodal Understanding and Generation
 
+- Avg Score: 7.00
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 8
 

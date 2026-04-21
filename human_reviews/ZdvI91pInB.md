@@ -1,5 +1,6 @@
 # Discovering Logic-Informed Intrinsic Rewards to Explain Human Policies
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

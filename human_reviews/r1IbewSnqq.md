@@ -1,5 +1,6 @@
 # FedQV: Leveraging Quadratic Voting in Federated Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

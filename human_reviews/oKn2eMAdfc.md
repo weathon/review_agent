@@ -1,5 +1,6 @@
 # OrthCaps: An Orthogonal CapsNet with Sparse Attention Routing and Pruning
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 6, 1, 3
 

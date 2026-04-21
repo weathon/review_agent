@@ -1,5 +1,6 @@
 # Text-driven Editing of 3D Scenes without Retraining
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 1, 5
 

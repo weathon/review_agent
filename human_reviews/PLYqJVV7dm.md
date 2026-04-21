@@ -1,5 +1,6 @@
 # CRAFT: Time Series Forecasting with Cross-Future Behavior Awareness
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 5, 6
 

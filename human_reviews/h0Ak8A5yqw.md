@@ -1,5 +1,6 @@
 # On the Role of Attention Heads in Large Language Model Safety
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 6
 

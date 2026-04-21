@@ -1,5 +1,6 @@
 # Hypergraph Neural Networks through the Lens of Message Passing: A Common Perspective to Homophily and Architecture Design
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

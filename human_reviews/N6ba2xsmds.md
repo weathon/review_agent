@@ -1,5 +1,6 @@
 # Outlier Synthesis via Hamiltonian Monte Carlo for Out-of-Distribution Detection
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

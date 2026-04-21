@@ -1,5 +1,6 @@
 # BodyGen: Advancing Towards Efficient Embodiment Co-Design
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

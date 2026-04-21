@@ -1,5 +1,6 @@
 # Batched Low-Rank Adaptation of Foundation Models
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

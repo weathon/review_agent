@@ -1,5 +1,6 @@
 # LoGra-Med: Long-Context Multi-Graph Alignment for Medical Visual-Language Models
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6
 

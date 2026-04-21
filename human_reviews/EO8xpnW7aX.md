@@ -1,5 +1,6 @@
 # SymmetricDiffusers: Learning Discrete Diffusion on Finite Symmetric Groups
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8, 8
 

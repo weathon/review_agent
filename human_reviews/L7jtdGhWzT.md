@@ -1,5 +1,6 @@
 # Toward $\textbf{F}$aithfulness-guided $\textbf{E}$nsemble $\textbf{I}$nterpretation of Neural Network
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 5, 3
 

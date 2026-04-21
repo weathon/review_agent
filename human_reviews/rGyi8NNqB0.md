@@ -1,5 +1,6 @@
 # Generating Likely Counterfactuals Using Sum-Product Networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 8
 

@@ -1,5 +1,6 @@
 # Error Bounds for Deep Learning-based Uncertainty Propagation in SDEs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

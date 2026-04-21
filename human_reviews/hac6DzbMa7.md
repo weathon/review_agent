@@ -1,5 +1,6 @@
 # Continual Learning with Orthogonal Weights and Knowledge Transfer
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

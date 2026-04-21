@@ -1,5 +1,6 @@
 # Contrastive Post-training Large Language Models on Data Curriculum
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # LIME-Eval: Rethinking Low-light Image Enhancement Evaluation via Object Detection
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 3, 8, 8
 

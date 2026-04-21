@@ -1,5 +1,6 @@
 # FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 10, 6
 

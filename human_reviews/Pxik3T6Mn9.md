@@ -1,5 +1,6 @@
 # Uncertainty-aware Human Mobility Modeling and Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

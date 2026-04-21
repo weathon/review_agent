@@ -1,5 +1,6 @@
 # Domain Indexing Collaborative Filtering for Recommender System
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 3, 6
 

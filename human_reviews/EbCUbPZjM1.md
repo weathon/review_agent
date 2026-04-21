@@ -1,5 +1,6 @@
 # ReGen: Generative Robot Simulation via Inverse Design
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 6, 3, 6, 6
 

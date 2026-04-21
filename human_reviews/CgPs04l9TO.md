@@ -1,5 +1,6 @@
 # Butterfly Effects of SGD Noise: Error Amplification in Behavior Cloning and Autoregression
 
+- Avg Score: 5.33
 - Decision: Accept (poster)
 - Scores: 3, 5, 8
 

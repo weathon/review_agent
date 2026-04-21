@@ -1,5 +1,6 @@
 # Hiding in Plain Sight: Disguising Data Stealing Attacks in Federated Learning
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6, 6
 

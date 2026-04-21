@@ -1,5 +1,6 @@
 # STARformer: STructural Attention tRansformer for Long-term Time Series Forecasting
 
+- Avg Score: 2.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 6, 1, 3
 

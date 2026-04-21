@@ -1,5 +1,6 @@
 # Implicit Reinforcement Learning Properties in Supervised Transformer-based Object Detection
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

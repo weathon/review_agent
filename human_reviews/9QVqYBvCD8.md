@@ -1,5 +1,6 @@
 # Asking Before Acting: Gather Information in Embodied Decision-Making with Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 6, 3
 

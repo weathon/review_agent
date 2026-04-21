@@ -1,5 +1,6 @@
 # Batch Bayesian Optimization of Delayed Effects Corrections for Thompson Sampling Bandits: A Practical Tuning Algorithm for Adaptive Interventions
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1
 

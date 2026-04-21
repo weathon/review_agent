@@ -1,5 +1,6 @@
 # ADOPD-Instruct: A Large-Scale Multimodal Dataset for Document Editing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

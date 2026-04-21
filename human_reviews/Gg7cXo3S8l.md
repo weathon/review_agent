@@ -1,5 +1,6 @@
 # Dictionary Contrastive Learning for Efficient Local Supervision without Auxiliary Networks
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

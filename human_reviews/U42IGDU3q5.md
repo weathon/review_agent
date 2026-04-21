@@ -1,5 +1,6 @@
 # CIRQRS: Evaluating Query Relevance Score in Composed Image Retrieval
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 5, 6
 

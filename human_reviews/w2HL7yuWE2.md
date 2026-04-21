@@ -1,5 +1,6 @@
 # Uncertainty-aware Guided Diffusion for Missing Data in Sequential Recommendation
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 5, 10, 5, 6
 

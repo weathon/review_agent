@@ -1,5 +1,6 @@
 # ROS: A GNN-based Relax-Optimize-and-Sample Framework for Max-$k$-Cut Problems
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

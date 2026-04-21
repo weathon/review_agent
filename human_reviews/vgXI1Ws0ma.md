@@ -1,5 +1,6 @@
 # Towards Empowerment Gain through Causal Structure Learning in Model-Based Reinforcement Learning
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 5
 

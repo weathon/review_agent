@@ -1,5 +1,6 @@
 # Scaling In-the-Wild Training for Diffusion-based Illumination Harmonization and Editing by Imposing Consistent Light Transport
 
+- Avg Score: 10.00
 - Decision: Accept (Oral)
 - Scores: 10, 10, 10, 10
 

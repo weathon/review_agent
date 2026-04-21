@@ -1,5 +1,6 @@
 # Explainable medical image clustering
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 1, 3, 3, 3
 

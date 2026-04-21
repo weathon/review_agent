@@ -1,5 +1,6 @@
 # Language Guided Representation Learning
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 5, 3, 5, 3
 

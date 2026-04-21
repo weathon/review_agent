@@ -1,5 +1,6 @@
 # Annotation by Clicks: A Point-Supervised Contrastive Variance Method for Medical Semantic Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

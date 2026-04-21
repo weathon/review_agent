@@ -1,5 +1,6 @@
 # Screener: Learning Conditional Distribution of Dense Self-supervised Representations for Unsupervised Pathology Segmentation in 3D Medical Images
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

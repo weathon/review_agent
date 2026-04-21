@@ -1,5 +1,6 @@
 # Learning Fine-Grained Representations through Textual Token Disentanglement in Composed Video Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 3
 

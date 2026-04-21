@@ -1,5 +1,6 @@
 # Does RLHF Scale? Exploring the Effects of Data, Model, and Method
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 3, 5
 

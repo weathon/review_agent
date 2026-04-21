@@ -1,5 +1,6 @@
 # EQA-MX: Embodied Question Answering using Multimodal Expression
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

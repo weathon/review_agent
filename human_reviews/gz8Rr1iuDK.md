@@ -1,5 +1,6 @@
 # Geometric and Physical Constraints Synergistically Improve Neural PDE Integration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

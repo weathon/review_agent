@@ -1,5 +1,6 @@
 # Leveraging Knowledge Distillation to Mitigate Model Collapse
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 1
 

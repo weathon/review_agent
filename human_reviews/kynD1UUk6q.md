@@ -1,5 +1,6 @@
 # Collapsed Language Models Promote Fairness
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 5, 8, 6
 
@@ -78,9 +79,12 @@ The paper is logically structured and easy to follow, with a clear progression f
 4. It is uncertain whether the method remains effective for aspects of fairness beyond gender
 
 ### Questions
-Clarifications Needed: 
-1. The σ symbol on line 161. 
-2. On line 235, the authors hypothesize that "noises in language data and the complexity of different fine-tuning methods make measurements of NC1/2/4 unstable and inconsistent." Could the authors elaborate on why they consider these factors to be influential? 
+Clarifications Needed:
+
+1. The σ symbol on line 161.
+
+2. On line 235, the authors hypothesize that "noises in language data and the complexity of different fine-tuning methods make measurements of NC1/2/4 unstable and inconsistent." Could the authors elaborate on why they consider these factors to be influential?
+
 3. Could the authors justify the rationale behind replacing class means with classifier weights in NC1/2?
 4. Besides gender-related words, have the authors explored other words that might cause the model to collapse more? This experiment would complement Section 3.3.
 5. I am curious about the effectiveness of the proposed method in fairness scenarios beyond gender. Firstly, what if it is challenging to obtain relevant word lists? Secondly, will the model’s general performance being affected by other word lists? I think the authors could counduct experiments by adding random words/high frequency words to the word list.

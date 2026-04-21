@@ -1,5 +1,6 @@
 # Learning with Language Inference and Tips for Continual Reinforcement Learning
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 1, 3, 3
 

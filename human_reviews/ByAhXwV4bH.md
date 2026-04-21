@@ -1,5 +1,6 @@
 # Adversarial Data Robustness via Implicit Neural Representation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 8, 3, 3, 3
 

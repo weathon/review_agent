@@ -1,5 +1,6 @@
 # Adversarial Attacks as Near-Zero Eigenvalues in The Empirical Kernel of Neural Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

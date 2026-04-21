@@ -1,5 +1,6 @@
 # RoleLLM: Benchmarking, Eliciting, and Enhancing Role-Playing Abilities of Large Language Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3, 5
 

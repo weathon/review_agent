@@ -1,5 +1,6 @@
 # Exploring the Edge of Stability: Insights from a Fine-Grained Analysis of Gradient Descent in Shallow ReLU Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 1
 

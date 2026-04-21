@@ -1,5 +1,6 @@
 # Masked Distillation Advances Self-Supervised Transformer Architecture Search
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Large Convolutional Model Tuning via Filter Subspace
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

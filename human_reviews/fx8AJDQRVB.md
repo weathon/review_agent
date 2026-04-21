@@ -1,5 +1,6 @@
 # Image Super-Resolution via Latent Diffusion: A Sampling-Space Mixture of Experts and Frequency-Augmented Decoder Approach
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 3, 6
 

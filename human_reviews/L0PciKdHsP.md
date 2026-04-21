@@ -1,5 +1,6 @@
 # MoIN: Mixture of Introvert Experts to Upcycle an LLM
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 3, 6, 6
 

@@ -1,5 +1,6 @@
 # Faster Language Models with Better Multi-Token Prediction Using Tensor Decomposition
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

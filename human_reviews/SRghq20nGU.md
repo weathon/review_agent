@@ -1,5 +1,6 @@
 # Learning the Optimal Stopping for Early Classification within Finite Horizons via Sequential Probability Ratio Test
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

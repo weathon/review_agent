@@ -1,5 +1,6 @@
 # Estimating the conformal prediction threshold from noisy labels
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 8, 5, 3, 5
 

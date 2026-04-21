@@ -1,5 +1,6 @@
 # RelationVLM: Making Large Vision-Language Models Understand Visual Relations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 5, 5, 6
 

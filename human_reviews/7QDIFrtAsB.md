@@ -1,5 +1,6 @@
 # Anomaly Detection by Estimating Gradients of the Tabular Data Distribution
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 5, 6
 

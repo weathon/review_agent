@@ -1,5 +1,6 @@
 # Dynamic Layer Tying for Parameter-Efficient Transformers
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 10, 6, 6
 

@@ -1,5 +1,6 @@
 # Beam Enumeration: Probabilistic Explainability For Sample Efficient Self-conditioned Molecular Design
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 3, 8, 8, 8
 

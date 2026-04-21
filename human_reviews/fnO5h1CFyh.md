@@ -1,5 +1,6 @@
 # Learning Successor Representations with Distributed Hebbian Temporal Memory
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

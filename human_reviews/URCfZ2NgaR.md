@@ -1,5 +1,6 @@
 # Structural Knowledge Informed Continual Multivariate Time Series Forecasting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 8, 5
 

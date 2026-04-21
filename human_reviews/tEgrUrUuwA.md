@@ -1,5 +1,6 @@
 # Partitioning Message Passing for Graph Fraud Detection
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 5, 6, 6
 

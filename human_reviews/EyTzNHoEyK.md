@@ -1,5 +1,6 @@
 # DrivAerML: High-Fidelity Computational Fluid Dynamics Dataset for Road-Car External Aerodynamics
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

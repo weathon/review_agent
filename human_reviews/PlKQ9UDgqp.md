@@ -1,5 +1,6 @@
 # MindFormer: Semantic Alignment of Multi-Subject fMRI  for Brain Decoding
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 6, 3
 

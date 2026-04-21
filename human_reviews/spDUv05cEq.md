@@ -1,5 +1,6 @@
 # Flow-based Variational Mutual Information: Fast and Flexible Approximations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Aggregation of Multi Diffusion Models for Enhancing Learned Representations
 
+- Avg Score: 3.71
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6, 3, 1, 5
 

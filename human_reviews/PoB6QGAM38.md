@@ -1,5 +1,6 @@
 # Neural Networks Decoded: Targeted and Robust Analysis of Neural Network Decisions via Causal Explanations and Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

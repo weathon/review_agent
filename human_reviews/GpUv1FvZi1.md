@@ -1,5 +1,6 @@
 # Towards counterfactual fairness through auxiliary variables
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 3, 5, 8
 

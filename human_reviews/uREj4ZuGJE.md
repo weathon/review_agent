@@ -1,5 +1,6 @@
 # In-context Autoencoder for Context Compression in a Large Language Model
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 8
 

@@ -1,5 +1,6 @@
 # TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 6
 

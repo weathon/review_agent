@@ -1,5 +1,6 @@
 # Less is More: Exploiting Feature Density for Enhanced Membership Inference Attacks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

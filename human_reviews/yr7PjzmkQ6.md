@@ -1,5 +1,6 @@
 # On the utility of Equivariance and Symmetry Breaking in Deep learning architectures on point clouds
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

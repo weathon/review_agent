@@ -1,5 +1,6 @@
 # MicroCrackAttentionNeXt: Advancing Microcrack Detection in Wave Field Analysis Using Deep Neural Networks through Feature Visualization.
 
+- Avg Score: 2.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 1, 3, 3
 

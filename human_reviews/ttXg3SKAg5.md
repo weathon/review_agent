@@ -1,5 +1,6 @@
 # Connect, Collapse, Corrupt: Learning Cross-Modal Tasks with Uni-Modal Data
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

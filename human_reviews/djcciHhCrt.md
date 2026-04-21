@@ -1,5 +1,6 @@
 # Misusing Tools in Large Language Models With Visual Adversarial Examples
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

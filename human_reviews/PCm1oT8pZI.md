@@ -1,5 +1,6 @@
 # Safe and Robust Watermark Injection with a Single OoD Image
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 3, 6
 

@@ -1,5 +1,6 @@
 # Leveraging Large Language Models for Optimised Coordination in Textual Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 6, 3, 5
 

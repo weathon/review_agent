@@ -1,5 +1,6 @@
 # Going Beyond Feature Similarity: Effective Dataset distillation based on Class-aware Conditional Mutual Information
 
+- Avg Score: 5.25
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 6
 

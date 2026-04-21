@@ -1,5 +1,6 @@
 # PEARL: Parallel Speculative Decoding with Adaptive Draft Length
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 3, 6, 6, 8
 

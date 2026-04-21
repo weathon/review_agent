@@ -1,5 +1,6 @@
 # Comparing and Contrasting Deep Learning Weather Prediction Backbones on Navier-Stokes and Atmospheric Dynamics
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 8, 3, 5, 3
 

@@ -1,5 +1,6 @@
 # A Super-Aligned Driving Generalist Is Your Cockpit
 
+- Avg Score: 3.83
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 1, 3, 3, 5
 

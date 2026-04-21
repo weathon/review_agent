@@ -1,5 +1,6 @@
 # Simple CNN for Vision
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

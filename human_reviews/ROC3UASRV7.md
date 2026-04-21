@@ -1,5 +1,6 @@
 # A Region-Shrinking-Based Acceleration for Classification-Based Derivative-Free Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 1, 6
 

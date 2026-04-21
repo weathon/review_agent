@@ -1,5 +1,6 @@
 # EarthquakeNPP: Benchmark Datasets for Earthquake Forecasting with Neural Point Processes
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 3, 6, 6
 

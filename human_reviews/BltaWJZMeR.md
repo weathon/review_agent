@@ -1,5 +1,6 @@
 # DataSciBench: An LLM Agent Benchmark for Data Science
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 6, 3, 3
 

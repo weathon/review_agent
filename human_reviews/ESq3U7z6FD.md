@@ -1,5 +1,6 @@
 # EHI: End-to-end learning of Hierarchical Index for Efficient Dense Retrieval
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 8, 5
 

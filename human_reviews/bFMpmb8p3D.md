@@ -1,5 +1,6 @@
 # Multitask Image-to-Image Diffusion Models with Fine-Grained Control
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

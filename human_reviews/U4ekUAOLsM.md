@@ -1,5 +1,6 @@
 # SCHEME: Scalable Channel Mixer for Vision Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

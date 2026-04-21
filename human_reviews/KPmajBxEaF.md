@@ -1,5 +1,6 @@
 # LEAP: Liberate Sparse-View 3D Modeling from Camera Poses
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 10, 5, 6, 6
 

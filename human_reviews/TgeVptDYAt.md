@@ -1,5 +1,6 @@
 # Towards Causal Foundation Model: on Duality between Causal Inference and Attention
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 10, 3
 

@@ -1,5 +1,6 @@
 # On-Device Transfer Learning based on Mixed Precision Partitioning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 1
 

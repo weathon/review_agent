@@ -1,5 +1,6 @@
 # Dobi-SVD: Differentiable SVD for LLM Compression and Some New Perspectives
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6, 6
 

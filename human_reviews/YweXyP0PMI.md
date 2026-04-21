@@ -1,5 +1,6 @@
 # Efficient Value Propagation with the Compositional Optimality Equation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

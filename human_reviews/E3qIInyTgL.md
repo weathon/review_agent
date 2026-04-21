@@ -1,5 +1,6 @@
 # CC-VFed: Client Contribution Detects Byzantine Attacks in Vertical Federated Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 3, 6, 1
 

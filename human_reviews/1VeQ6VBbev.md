@@ -1,5 +1,6 @@
 # Beyond Stationarity: Convergence Analysis of Stochastic Softmax Policy Gradient Methods
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 6, 8, 8
 

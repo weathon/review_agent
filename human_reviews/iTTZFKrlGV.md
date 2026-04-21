@@ -1,5 +1,6 @@
 # Gradual Domain Adaptation via Gradient Flow
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 6
 

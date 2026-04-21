@@ -1,5 +1,6 @@
 # SOLOS: Sparse Optimization For Long Sequence In Context Compression Enhanced LLMs
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

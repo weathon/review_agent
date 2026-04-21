@@ -1,5 +1,6 @@
 # Seeing Video Through Optical Scattering Media using Spatio-Temporal Diffusion Models
 
+- Avg Score: 6.33
 - Decision: Reject
 - Scores: 6, 8, 5
 

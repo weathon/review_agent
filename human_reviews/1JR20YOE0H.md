@@ -1,5 +1,6 @@
 # On Feature Diversity in Energy-based Models
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 5, 6, 6
 

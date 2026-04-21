@@ -1,5 +1,6 @@
 # Towards Auto-Regressive Next-Token Prediction: In-context Learning Emerges from Generalization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 5, 6, 6
 

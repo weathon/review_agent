@@ -1,5 +1,6 @@
 # Expressive Power of Graph Neural Networks for (Mixed-Integer) Quadratic Programs
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 8, 6, 6, 6, 3, 5
 

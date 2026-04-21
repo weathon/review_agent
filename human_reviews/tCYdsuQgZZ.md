@@ -1,5 +1,6 @@
 # Test-time Contrastive Concepts for Open-World Semantic Segmentation
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 5, 6
 

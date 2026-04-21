@@ -1,5 +1,6 @@
 # Label-Focused Inductive Bias over Latent Object Features in Visual Classification
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

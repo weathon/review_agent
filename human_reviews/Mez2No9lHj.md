@@ -1,5 +1,6 @@
 # CopyLens: Dynamically Flagging Copyrighted Sub-Dataset Contributions to LLM Outputs
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3
 

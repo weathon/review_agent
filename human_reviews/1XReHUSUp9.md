@@ -1,5 +1,6 @@
 # Monsters in the Dark: Sanitizing Hidden Threats with Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 3, 8
 

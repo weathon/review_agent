@@ -1,5 +1,6 @@
 # Solving Inverse Problems with Latent Diffusion Models via Hard Data Consistency
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6, 8
 

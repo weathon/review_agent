@@ -1,5 +1,6 @@
 # AIM: Adversarial Information Masking for Evaluating EEG-DL Interpretations
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 8
 

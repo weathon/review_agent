@@ -1,5 +1,6 @@
 # Prediction Tasks in Graphs: a Framework to Control the Interpretability-Performance Trade-off
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 5, 3
 

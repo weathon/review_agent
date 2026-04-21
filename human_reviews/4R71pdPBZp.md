@@ -1,5 +1,6 @@
 # Self-Evolving Multi-Agent Collaboration Networks for Software Development
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

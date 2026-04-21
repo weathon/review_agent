@@ -1,5 +1,6 @@
 # BIRB: A Generalization Benchmark for Information Retrieval in Bioacoustics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

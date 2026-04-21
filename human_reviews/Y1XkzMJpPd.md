@@ -1,5 +1,6 @@
 # OMNI-EPIC: Open-endedness via Models of human Notions of Interestingness with Environments Programmed in Code
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8, 3
 

@@ -1,5 +1,6 @@
 # Emergent properties with repeated examples
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 6
 

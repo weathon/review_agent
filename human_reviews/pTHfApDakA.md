@@ -1,5 +1,6 @@
 # SelfCheck: Using LLMs to Zero-Shot Check Their Own Step-by-Step Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # CaPo: Cooperative Plan Optimization for Efficient Embodied Multi-Agent Cooperation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 5, 5, 6
 

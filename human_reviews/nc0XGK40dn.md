@@ -1,5 +1,6 @@
 # Never Forget the Basics: In-distribution Knowledge Retention for Continual Test-time Adaptation in Human Motion Prediction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 5, 6
 

@@ -1,5 +1,6 @@
 # The Blessing of Smooth Initialization for Video Diffusion Models
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

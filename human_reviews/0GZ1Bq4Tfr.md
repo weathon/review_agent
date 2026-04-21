@@ -1,5 +1,6 @@
 # Layer-wise Pre-weight Decay
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

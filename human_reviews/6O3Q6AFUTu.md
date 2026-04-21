@@ -1,5 +1,6 @@
 # NoiseDiffusion: Correcting Noise for Image  Interpolation  with Diffusion Models beyond Spherical Linear Interpolation
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8
 

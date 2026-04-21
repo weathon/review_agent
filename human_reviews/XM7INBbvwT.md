@@ -1,5 +1,6 @@
 # Does Calibration Affect Human Actions?
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 3, 5, 6
 

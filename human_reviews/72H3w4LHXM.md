@@ -1,5 +1,6 @@
 # SCOPE: Scalable and Adaptive Evaluation of Misguided Safety Refusal in LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 8, 3
 

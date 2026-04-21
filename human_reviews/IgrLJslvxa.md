@@ -1,5 +1,6 @@
 # PoisonBench: Assessing Large Language Model Vulnerability to Data Poisoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 6, 5, 6, 3
 

@@ -1,5 +1,6 @@
 # Self-Supervised Heterogeneous Graph Learning:  a Homophily and Heterogeneity View
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6, 6, 8
 

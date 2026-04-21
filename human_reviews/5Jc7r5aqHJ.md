@@ -1,5 +1,6 @@
 # Energy-based Backdoor Defense Against Federated Graph Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6
 

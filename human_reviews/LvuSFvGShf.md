@@ -1,5 +1,6 @@
 # House of Cards: Massive Weights in LLMs
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 5, 8, 5
 

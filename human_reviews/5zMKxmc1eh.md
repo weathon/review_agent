@@ -1,5 +1,6 @@
 # OscillationInversion: Understand the structure of Large Flow Model through the Lens of Inversion Method
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

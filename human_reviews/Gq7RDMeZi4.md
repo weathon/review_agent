@@ -1,5 +1,6 @@
 # MuseGNN: Forming Scalable, Convergent GNN Layers that Minimize a Sampling-Based Energy
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

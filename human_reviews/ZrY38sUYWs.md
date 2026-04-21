@@ -1,5 +1,6 @@
 # Feature Map Matters in Out-of-distribution Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

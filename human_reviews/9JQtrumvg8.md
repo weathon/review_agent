@@ -1,5 +1,6 @@
 # A Real-World WebAgent with Planning, Long Context Understanding, and Program Synthesis
 
+- Avg Score: 7.25
 - Decision: Accept (oral)
 - Scores: 5, 8, 8, 8
 

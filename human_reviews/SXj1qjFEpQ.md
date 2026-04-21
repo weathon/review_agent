@@ -1,5 +1,6 @@
 # Generalizing to New Dynamical Systems via Frequency Domain Adaptation
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

@@ -1,5 +1,6 @@
 # Clustering Entity Specific Embeddings Towards a Prescribed Distribution
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

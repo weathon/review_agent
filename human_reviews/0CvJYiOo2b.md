@@ -1,5 +1,6 @@
 # Revisiting PCA for Time Series Reduction in Temporal Dimension
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

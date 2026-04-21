@@ -1,5 +1,6 @@
 # A Flexible Generative Model for Heterogeneous Tabular EHR with Missing Modality
 
+- Avg Score: 5.60
 - Decision: Accept (poster)
 - Scores: 6, 5, 5, 6, 6
 

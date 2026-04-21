@@ -1,5 +1,6 @@
 # APC: Predict Global Representation From Local Observation In Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 3, 5, 5
 

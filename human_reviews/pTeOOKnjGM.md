@@ -1,5 +1,6 @@
 # TEASER: Token Enhanced Spatial Modeling for Expressions Reconstruction
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

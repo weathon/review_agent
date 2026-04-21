@@ -1,5 +1,6 @@
 # Full Elastic Weight Consolidation via the Surrogate Hessian-Vector Product
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

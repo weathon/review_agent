@@ -1,5 +1,6 @@
 # Improving Branching in Neural Network Verification with Bound Implication Graph
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 5, 8
 

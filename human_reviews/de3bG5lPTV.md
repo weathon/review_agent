@@ -1,5 +1,6 @@
 # Multi-agent Optimistic Soft Q-Learning: A co-MARL Algorithm with a Global Convergence Guarantee
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6
 

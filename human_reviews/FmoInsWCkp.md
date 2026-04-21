@@ -1,5 +1,6 @@
 # Predicting Time-Varying Flux and Balance in Metabolic Systems using Structured Neural ODE Processes
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

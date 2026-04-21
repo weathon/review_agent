@@ -1,5 +1,6 @@
 # Big Learning Variational Auto-Encoders
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 5, 5, 5, 3
 

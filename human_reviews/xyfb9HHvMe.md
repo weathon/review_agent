@@ -1,5 +1,6 @@
 # DSPO: Direct Score Preference Optimization for Diffusion Model Alignment
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8
 

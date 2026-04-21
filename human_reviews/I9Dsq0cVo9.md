@@ -1,5 +1,6 @@
 # Maximizing the Potential of Synthetic Data: Insights from Random Matrix Theory
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 6, 3, 8
 

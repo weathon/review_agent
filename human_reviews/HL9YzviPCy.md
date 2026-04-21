@@ -1,5 +1,6 @@
 # PrACTiS: Perceiver-Attentional Copulas for Time Series
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 3, 5
 

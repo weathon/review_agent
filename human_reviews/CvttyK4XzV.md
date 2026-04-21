@@ -1,5 +1,6 @@
 # Beyond Single Concept Vector: Modeling Concept Subspace in LLMs with Gaussian Distribution
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 8
 

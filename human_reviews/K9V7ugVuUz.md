@@ -1,5 +1,6 @@
 # Robust Similarity Learning with Difference Alignment Regularization
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 8, 5, 6
 

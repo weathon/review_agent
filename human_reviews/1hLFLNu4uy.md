@@ -1,5 +1,6 @@
 # Split and Merge: Aligning Position Biases in Large Language Model based Evaluators
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

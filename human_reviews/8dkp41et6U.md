@@ -1,5 +1,6 @@
 # LongLLMLingua: Accelerating and Enhancing LLMs in Long Context Scenarios via Prompt Compression
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 6, 5, 6
 

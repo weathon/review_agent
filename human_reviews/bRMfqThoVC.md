@@ -1,5 +1,6 @@
 # Leveraging Diffusion Transformers for Stock Factor Augmentation in Financial Markets
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 5, 3, 5
 

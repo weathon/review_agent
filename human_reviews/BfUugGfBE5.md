@@ -1,5 +1,6 @@
 # Distilling Reinforcement Learning Algorithms for In-Context Model-Based Planning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

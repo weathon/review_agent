@@ -1,5 +1,6 @@
 # Inferring from Logits: Exploring Best Practices for Decoding-Free Generative Candidate Selection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

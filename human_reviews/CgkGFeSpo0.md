@@ -1,5 +1,6 @@
 # Resolving Complex Social Dilemmas by Aligning Preferences with Counterfactual Regret
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

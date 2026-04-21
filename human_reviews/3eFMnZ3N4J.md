@@ -1,5 +1,6 @@
 # Efficient-3Dim: Learning a Generalizable Single-image Novel-view Synthesizer in One Day
 
+- Avg Score: 7.25
 - Decision: Accept (poster)
 - Scores: 8, 8, 8, 5
 

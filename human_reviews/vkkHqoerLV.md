@@ -1,5 +1,6 @@
 # Alice Benchmarks: Connecting Real World Re-Identification with the Synthetic
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6
 

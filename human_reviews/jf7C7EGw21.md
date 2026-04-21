@@ -1,5 +1,6 @@
 # VTDexManip: A Dataset and Benchmark for Visual-tactile Pretraining and Dexterous Manipulation with Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 5
 

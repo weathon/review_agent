@@ -1,5 +1,6 @@
 # LRR: Language-Driven Resamplable Continuous Representation against Adversarial Tracking Attacks
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 5, 6, 6
 

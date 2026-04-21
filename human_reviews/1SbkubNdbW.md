@@ -1,5 +1,6 @@
 # Be Careful What You Smooth For: Label Smoothing Can Be a Privacy Shield but Also a Catalyst for Model Inversion Attacks
 
+- Avg Score: 6.20
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6, 6
 

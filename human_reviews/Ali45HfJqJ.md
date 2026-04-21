@@ -1,5 +1,6 @@
 # Observer Uncertainty of Learning in Games from a Covariance Perspective
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Diffusion-Based Planning for Autonomous Driving with Flexible Guidance
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6
 

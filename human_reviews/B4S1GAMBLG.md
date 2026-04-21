@@ -1,5 +1,6 @@
 # H-QLoRA: Enhancing Quantized LLMs with Hierarchical Residual Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 1
 

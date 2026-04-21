@@ -1,5 +1,6 @@
 # ASMR: Activation-Sharing Multi-Resolution Coordinate Networks for Efficient Inference
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 5
 

@@ -1,5 +1,6 @@
 # ISCUTE: Instance Segmentation of Cables Using Text Embedding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

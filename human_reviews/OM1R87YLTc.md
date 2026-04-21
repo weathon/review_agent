@@ -1,5 +1,6 @@
 # Multi-Task Perception in Unstructured Environments: Anti-Degradation Complementary Learning and SAMEnhancer
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 1
 

@@ -1,5 +1,6 @@
 # Discrete Distribution Networks
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5
 

@@ -1,5 +1,6 @@
 # AnoLLM: Large Language Models for Tabular Anomaly Detection
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 6
 

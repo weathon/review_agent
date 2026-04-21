@@ -1,5 +1,6 @@
 # MiniPLM: Knowledge Distillation for Pre-training Language Models
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 6
 

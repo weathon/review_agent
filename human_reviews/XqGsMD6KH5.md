@@ -1,5 +1,6 @@
 # MultiHot Embedding: A Multiple Activation Embedding Model for Numerical Features in Deep Learning
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 3, 5, 3, 5
 

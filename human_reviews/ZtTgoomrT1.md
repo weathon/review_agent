@@ -1,5 +1,6 @@
 # Enhancing Solutions for Complex PDEs: Introducing Translational Equivariant Attention in Fourier Neural Operators
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Revisiting Knowledge Tracing: A Simple and Powerful Model
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

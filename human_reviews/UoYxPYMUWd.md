@@ -1,5 +1,6 @@
 # Outcome-Driven Action Flexibility for Robust Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3, 5
 

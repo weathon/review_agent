@@ -1,5 +1,6 @@
 # BENO: Boundary-embedded Neural Operators for Elliptic PDEs
 
+- Avg Score: 6.60
 - Decision: Accept (poster)
 - Scores: 6, 8, 5, 6, 8
 

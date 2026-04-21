@@ -1,5 +1,6 @@
 # Depthwise Hyperparameter Transfer in Residual Networks: Dynamics and Scaling Limit
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

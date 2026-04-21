@@ -1,5 +1,6 @@
 # REAL: Rectified Adversarial Sample via Max-Min Entropy for Test-Time Defense
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 3, 3
 

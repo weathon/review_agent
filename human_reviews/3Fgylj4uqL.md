@@ -1,5 +1,6 @@
 # Interpretable Causal Representation Learning for Biological Data in the Pathway Space
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Depth-Guided Self-Supervised Learning: Seeing the World in 3D
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 5, 3, 3
 

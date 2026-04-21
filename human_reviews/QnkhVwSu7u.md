@@ -1,5 +1,6 @@
 # ELEMENTAL: Interactive Learning from Demonstrations and Vision-Language Models for Interpretable Reward Design in Robotics
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 3, 8, 5, 5
 

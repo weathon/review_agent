@@ -1,5 +1,6 @@
 # Modeling Spatiotemporal Heterogeneity in Earth Science Machine Learning: An End-to-End Approach
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 6
 

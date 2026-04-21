@@ -1,5 +1,6 @@
 # Go beyond End-to-End Training: Boosting Greedy Local Learning with Context Supply
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5
 

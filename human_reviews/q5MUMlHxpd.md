@@ -1,5 +1,6 @@
 # VOILA: Evaluation of MLLMs For Perceptual Understanding and Analogical Reasoning
 
+- Avg Score: 5.80
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Noise Balance and Stationary Distribution of Stochastic Gradient Descent
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 6, 3
 

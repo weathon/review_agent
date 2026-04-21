@@ -1,5 +1,6 @@
 # Towards Off-Road Autonomous Driving via Planner Guided Policy Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 1, 6
 

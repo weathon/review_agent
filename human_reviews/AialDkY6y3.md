@@ -1,5 +1,6 @@
 # Deep Graph Predictions using Dirac-Bianconi Graph Neural Networks
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 5, 3, 5, 3
 

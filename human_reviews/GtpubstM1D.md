@@ -1,5 +1,6 @@
 # Advancing Mathematical Reasoning in Language Models: The Impact of Problem-Solving Data, Data Synthesis Methods, and Training Stages
 
+- Avg Score: 5.71
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 3, 1, 8
 

@@ -1,5 +1,6 @@
 # The Emergence of Reproducibility and Consistency in Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 8, 3
 

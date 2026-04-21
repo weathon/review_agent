@@ -1,5 +1,6 @@
 # MATT: Random Local Implicit Purification for Defending Query-based Attacks
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

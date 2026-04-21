@@ -1,5 +1,6 @@
 # Embedding Learning for Approximating Person-specific Cognitive Similarity
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 3, 6, 6, 5, 3
 

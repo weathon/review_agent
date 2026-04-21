@@ -1,5 +1,6 @@
 # An efficient implementation for solving the all pairs minimax path problem in an undirected dense graph
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1, 1
 

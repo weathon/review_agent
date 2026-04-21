@@ -1,5 +1,6 @@
 # Efficient PDE Solutions using Hartley Neural Operators in Physics-Informed Networks: Potentials and Limitations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

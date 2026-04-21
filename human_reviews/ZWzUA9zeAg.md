@@ -1,5 +1,6 @@
 # Effective Data Augmentation With Diffusion Models
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

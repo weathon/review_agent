@@ -1,5 +1,6 @@
 # Allostatic Control of Persistent States in Spiking Neural Networks for Perception and Computation
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5
 

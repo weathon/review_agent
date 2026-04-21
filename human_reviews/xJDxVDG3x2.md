@@ -1,5 +1,6 @@
 # MolSpectra: Pre-training 3D Molecular Representation with Multi-modal Energy Spectra
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5
 

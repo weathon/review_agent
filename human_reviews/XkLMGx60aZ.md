@@ -1,5 +1,6 @@
 # Climate-sensitive Urban Planning through Optimization of Tree Placements
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 6, 8
 

@@ -1,5 +1,6 @@
 # Paramanu-Ganita: An Efficient Pre-trained Generative Mathematics Language Model with Chain-of-Thought Instruction Fine-Tuning
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 1, 3
 

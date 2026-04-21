@@ -1,5 +1,6 @@
 # Dynamic Neighborhood Construction for Structured Large Discrete Action Spaces
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 8
 

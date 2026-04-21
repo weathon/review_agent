@@ -1,5 +1,6 @@
 # LARGE LANGUAGE MODELS FOR BIOMEDICAL KNOWLEDGE GRAPH CONSTRUCTION
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3, 3, 3
 

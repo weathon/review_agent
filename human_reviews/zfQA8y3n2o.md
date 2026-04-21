@@ -1,5 +1,6 @@
 # Divide-Verify-Refine: Aligning LLM Responses with Complex Instructions
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 3, 6, 8, 5
 

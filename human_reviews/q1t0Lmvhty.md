@@ -1,5 +1,6 @@
 # Understanding Matrix Function Normalizations in Covariance Pooling through the Lens of Riemannian Geometry
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # PFDiff: Training-Free Acceleration of Diffusion Models Combining Past and Future Scores
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

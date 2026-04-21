@@ -1,5 +1,6 @@
 # Transformers versus LSTMs for electronic trading
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5, 3
 

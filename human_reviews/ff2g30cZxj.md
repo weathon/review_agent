@@ -1,5 +1,6 @@
 # From Posterior Sampling to Meaningful Diversity in Image Restoration
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 8, 6, 8
 

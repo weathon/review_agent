@@ -1,5 +1,6 @@
 # The Expressive Leaky Memory Neuron: an Efficient and Expressive Phenomenological Neuron Model Can Solve Long-Horizon Tasks.
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 8
 

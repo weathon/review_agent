@@ -1,5 +1,6 @@
 # Understanding and Controlling a Maze-Solving Policy Network
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 5, 3
 

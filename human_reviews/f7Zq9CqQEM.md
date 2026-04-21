@@ -1,5 +1,6 @@
 # Path-Tracing Distillation: Enhancing Stability in Text-to-3D Generation by Mitigating Out-of-Distribution Issues
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # RD2Bench: Toward Data-Centric Automatic R&D
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 5, 8, 3
 

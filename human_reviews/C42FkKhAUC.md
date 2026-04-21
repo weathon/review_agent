@@ -1,5 +1,6 @@
 # IMPROVING ADVERSARIAL TRAINING WITH MARGIN- WEIGHTED PERTURBATION BUDGET
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

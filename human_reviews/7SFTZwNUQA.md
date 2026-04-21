@@ -1,5 +1,6 @@
 # Patch-Based Diffusion Models Beat Whole-Image Models for Mismatched Distribution Inverse Problems
 
+- Avg Score: 5.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6, 5
 

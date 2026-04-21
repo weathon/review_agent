@@ -1,5 +1,6 @@
 # Branches: A Fast Dynamic Programming and Branch & Bound Algorithm for Optimal Decision Trees
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 6, 3, 5, 5
 

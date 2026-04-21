@@ -1,5 +1,6 @@
 # CABS: Conflict-Aware and Balanced Sparsification for Enhancing Model Merging
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 3, 5
 

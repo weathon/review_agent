@@ -1,5 +1,6 @@
 # KEYPOINT-GUIDED 4D GAUSSIAN SPLATTING WITH DECOUPLED SPATIO-TEMPORAL FLOW REFINEMENT
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3
 

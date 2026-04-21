@@ -1,5 +1,6 @@
 # A Unified Framework for Bayesian Optimization under Contextual Uncertainty
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 8, 5, 5, 6
 

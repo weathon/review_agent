@@ -1,5 +1,6 @@
 # Paramanu: A Family of Novel Efficient Generative Foundation Language Models for Indian Languages
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 1, 3, 5
 

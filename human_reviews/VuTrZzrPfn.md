@@ -1,5 +1,6 @@
 # OSCAR: Operating System Control via State-Aware Reasoning and Re-Planning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

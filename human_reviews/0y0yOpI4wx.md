@@ -1,5 +1,6 @@
 # General-Purpose In-Context Learning by Meta-Learning Transformers
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 5, 1, 6
 

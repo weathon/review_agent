@@ -1,5 +1,6 @@
 # Class-Relational Label Smoothing for Lifelong Visual Place Recognition
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 6
 

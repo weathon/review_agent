@@ -1,5 +1,6 @@
 # Recurrent Diffusion for Large-Scale Parameter Generation
 
+- Avg Score: 4.83
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3, 5, 5
 

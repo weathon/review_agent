@@ -1,5 +1,6 @@
 # Subgraph Diffusion for 3D Molecular Representation Learning: Combining Continuous and Discrete
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

@@ -1,5 +1,6 @@
 # Emergence of meta-stable clustering in mean-field transformer models
 
+- Avg Score: 7.80
 - Decision: Accept (Oral)
 - Scores: 8, 5, 10, 8, 8
 

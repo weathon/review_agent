@@ -1,5 +1,6 @@
 # AutoDAN: Automatic and Interpretable Adversarial Attacks on Large Language Models
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 10, 5, 5
 

@@ -1,5 +1,6 @@
 # Differentiable Sensor Layouts for End-to-End Learning of Task-Specific Camera Parameters
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 5, 8, 5
 

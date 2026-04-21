@@ -1,5 +1,6 @@
 # Efficient Interpolation between Extragradient and Proximal Methods for Weak MVIs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

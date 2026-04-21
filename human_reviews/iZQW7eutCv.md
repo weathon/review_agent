@@ -1,5 +1,6 @@
 # pEBR: A Probabilistic Approach to Embedding Based Retrieval
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

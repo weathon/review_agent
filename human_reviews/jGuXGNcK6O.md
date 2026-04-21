@@ -1,5 +1,6 @@
 # The Fundamental Limits of Least-Privilege Learning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 6, 5, 5, 6, 5
 

@@ -1,5 +1,6 @@
 # Younger: The First Dataset for Artificial Intelligence-Generated Neural Network Architecture
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 6, 5
 

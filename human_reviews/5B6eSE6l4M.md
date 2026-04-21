@@ -1,5 +1,6 @@
 # Performance Heterogeneity in Message-Passing and Transformer-based Graph Neural Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 1, 3, 5, 5
 

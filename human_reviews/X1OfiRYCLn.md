@@ -1,5 +1,6 @@
 # Dynamic Multimodal Evaluation with Flexible Complexity by Vision-Language Bootstrapping
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 8
 

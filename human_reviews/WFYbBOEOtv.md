@@ -1,5 +1,6 @@
 # V-JEPA: Latent Video Prediction for Visual Representation Learning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 5, 5, 6, 3
 

@@ -1,5 +1,6 @@
 # CGD: Modifying the Loss Landscape by Gradient Regularization
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3, 3
 

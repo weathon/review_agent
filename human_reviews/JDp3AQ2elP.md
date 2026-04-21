@@ -1,5 +1,6 @@
 # Revisiting Familiar Places in an Infinite World: Continuing RL in Unbounded State Spaces
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

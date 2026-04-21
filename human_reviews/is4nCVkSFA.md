@@ -1,5 +1,6 @@
 # Can Neural Networks Achieve Optimal Computational-statistical Tradeoff? An Analysis on Single-Index Model
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

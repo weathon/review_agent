@@ -1,5 +1,6 @@
 # VipAct: Visual-Perception Enhancement via Specialized VLM Agent Collaboration and Tool-use
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

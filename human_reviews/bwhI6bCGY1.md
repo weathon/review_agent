@@ -1,5 +1,6 @@
 # ReMatching Dynamic Reconstruction Flow
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 5, 6, 6
 

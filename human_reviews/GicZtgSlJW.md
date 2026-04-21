@@ -1,5 +1,6 @@
 # Primal-Dual Continual Learning: Stability and Plasticity through Lagrange Multipliers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

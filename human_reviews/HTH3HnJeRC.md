@@ -1,5 +1,6 @@
 # DER-Solomon: A Large Number of CVRPTW Instances Generated Based on the Solomon Benchmark Distribution
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # 3D Diffuser Actor: Multi-task 3D Robot Manipulation with Iterative Error Feedback
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 5, 1, 6, 3
 

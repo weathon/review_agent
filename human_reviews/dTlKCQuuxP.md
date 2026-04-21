@@ -1,5 +1,6 @@
 # Neural Polynomial Gabor Fields for Macro Motion Analysis
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

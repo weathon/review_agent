@@ -1,5 +1,6 @@
 # Conformal Generative Modeling with Improved Sample Efficiency through Sequential Greedy Filtering
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

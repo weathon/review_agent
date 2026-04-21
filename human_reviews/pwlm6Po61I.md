@@ -1,5 +1,6 @@
 # Delving into LLMs’ visual understanding ability using SVG to bridge image and text
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 6, 6, 5
 

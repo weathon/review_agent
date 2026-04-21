@@ -1,5 +1,6 @@
 # LLM Performance Predictors are good initializers for Architecture Search
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6
 

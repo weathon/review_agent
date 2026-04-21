@@ -1,5 +1,6 @@
 # DLEFT-MKC: Dynamic Late Fusion Multiple Kernel Clustering with Robust Tensor Learning via Min-Max Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 6
 

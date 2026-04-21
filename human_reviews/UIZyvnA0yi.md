@@ -1,5 +1,6 @@
 # Self-Supervised Grid Cells Without Path Integration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

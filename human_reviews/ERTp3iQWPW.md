@@ -1,5 +1,6 @@
 # A Framework for PromptOps in GenAI Application Development Lifecycle
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 3, 1, 3
 

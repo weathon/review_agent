@@ -1,5 +1,6 @@
 # Skin, Muscles, and Bones in MultiSensory Simulation
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 6, 6, 6
 

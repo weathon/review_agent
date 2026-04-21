@@ -1,5 +1,6 @@
 # Mixture-of-Experts Meets Instruction Tuning: A Winning Combination for Large Language Models
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 8
 

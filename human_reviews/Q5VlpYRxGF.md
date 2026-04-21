@@ -1,5 +1,6 @@
 # Model Tells You Where to Merge: Adaptive KV Cache Merging for LLMs on Long-Context Tasks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Language Imbalance Driven Rewarding for Multilingual Self-improving
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3
 

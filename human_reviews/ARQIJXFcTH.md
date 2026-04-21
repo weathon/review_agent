@@ -1,5 +1,6 @@
 # AtomSurf: Surface Representation for Learning on Protein Structures
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 8
 

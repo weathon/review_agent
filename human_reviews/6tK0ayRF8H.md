@@ -1,5 +1,6 @@
 # Angle-optimized Text Embeddings
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6
 

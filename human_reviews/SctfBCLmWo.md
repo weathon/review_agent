@@ -1,5 +1,6 @@
 # A Decade's Battle on Dataset Bias: Are We There Yet?
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Lottery Ticket Adaptation: Mitigating Destructive Interference in LLMs
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 5
 
@@ -135,7 +136,8 @@ Questions:
 - What is the reason of the choice of RMSProp optimizer? Do the results differ for Adam optimizer, which is de facto a standard for NN optimization?
 - Are the experiments repeated for different random seeds, and results averaged?
 - Line 249, "As a representative task, we use ARC-easy." Why?
-- Regarding experiments in section 5.2, is LoRA completely forgetting Task A also when using lower rank, e.g. 8? Work by Biderman et al. (mentioned at line 353) shows that lower rank leads to less forgetting. Moreover, are the results similar after swapping Task A with Task B? What are the results for Llama3-8B?
+- Regarding experiments in section 5.2, is LoRA completely forgetting Task A also when using lower rank, e.g. 8?
+Work by Biderman et al. (mentioned at line 353) shows that lower rank leads to less forgetting. Moreover, are the results similar after swapping Task A with Task B? What are the results for Llama3-8B?
 
 Suggestions (mostly regarding presentation):
 - Line 263, "finetuning method OpenAI are using in their fine-tuning API (presumably FFT)." It's not a known fact, and in my opinion also unlikely one - such speculations should not be part of a paper.

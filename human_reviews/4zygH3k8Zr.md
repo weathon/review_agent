@@ -1,5 +1,6 @@
 # Replacement Learning: Training Vision Tasks with Fewer Learnable Parameters
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 1, 3, 8
 

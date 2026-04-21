@@ -1,5 +1,6 @@
 # Poor Teaching: Explore and Question Knowledge Distillation under Distribution Shift
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 3
 

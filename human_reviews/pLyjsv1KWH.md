@@ -1,5 +1,6 @@
 # Divide And Conquer: Efficiently Decoupling Consensus And Divergence For Federated Large Language Model Fine-Tuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 5
 

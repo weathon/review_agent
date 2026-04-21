@@ -1,5 +1,6 @@
 # Assessing Large Language Models for Valid and Correct Code Reasoning
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

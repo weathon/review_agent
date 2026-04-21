@@ -1,5 +1,6 @@
 # GraphFM: A generalist graph transformer that learns transferable representations across diverse domains
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 3
 

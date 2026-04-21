@@ -1,5 +1,6 @@
 # Rethinking Language-Alignment in Human Visual Cortex with Syntax Manipulation and Word Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

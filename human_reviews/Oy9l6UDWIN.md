@@ -1,5 +1,6 @@
 # DLGrapher: Dual Latent Diffusion for Attributed Graph Generation
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3, 3
 

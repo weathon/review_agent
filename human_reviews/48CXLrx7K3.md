@@ -1,5 +1,6 @@
 # Revealing Unintentional Information Leakage in Low-Dimensional Facial Portrait Representations
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 5, 8, 3
 

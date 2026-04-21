@@ -1,5 +1,6 @@
 # Reinforcement Learning on Synthetic Navigation Data allows Safe Navigation in Blind Digital Twins
 
+- Avg Score: 3.17
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 1, 5, 6
 

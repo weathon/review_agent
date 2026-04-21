@@ -1,5 +1,6 @@
 # MetaMath: Bootstrap Your Own Mathematical Questions for Large Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

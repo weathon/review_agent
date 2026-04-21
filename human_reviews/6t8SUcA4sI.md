@@ -1,5 +1,6 @@
 # Ratio-Residual Diffusion Model for Image Restoration
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 8
 

@@ -1,5 +1,6 @@
 # Availability Attacks Need to Create Shortcuts for Contrastive Learning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 3, 5, 5, 6
 

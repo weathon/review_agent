@@ -1,5 +1,6 @@
 # ExpanDyNeRF: Expanding the Viewpoint of Dynamic Scenes beyond Constrained Camera Motions
 
+- Avg Score: 4.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 6, 5, 6
 

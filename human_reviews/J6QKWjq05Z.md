@@ -1,5 +1,6 @@
 # TreeDQN: Learning to minimize Branch-and-Bound tree
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

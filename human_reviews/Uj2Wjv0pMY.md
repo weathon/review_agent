@@ -1,5 +1,6 @@
 # Put on your detective hat: What’s wrong in this video?
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 5, 3
 

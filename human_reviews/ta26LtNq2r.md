@@ -1,5 +1,6 @@
 # Learning to Reject Meets Long-tail Learning
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

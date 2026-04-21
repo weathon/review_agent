@@ -1,5 +1,6 @@
 # IMProv: Inpainting-based Multimodal Prompting for Computer Vision Tasks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 3, 6, 5
 

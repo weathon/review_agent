@@ -1,5 +1,6 @@
 # Topology Matters in Fair Graph Learning: a Theoretical Pilot Study
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

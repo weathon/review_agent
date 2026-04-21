@@ -1,5 +1,6 @@
 # Unsupervised open-vocabulary action recognition with an autoregressive model
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 8, 5, 5, 3
 

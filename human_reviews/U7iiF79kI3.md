@@ -1,5 +1,6 @@
 # CALICO: Self-Supervised Camera-LiDAR Contrastive Pre-training for BEV Perception
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

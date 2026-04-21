@@ -1,5 +1,6 @@
 # KinDEL: DNA-Encoded Library Dataset for Kinase Inhibitors
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Red Pill or Blue Pill? Thresholding Strategies for Neural Network Monitoring
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 3, 5
 

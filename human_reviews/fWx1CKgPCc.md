@@ -1,5 +1,6 @@
 # Towards Reliable Offline Reinforcement Learning via Lyapunov Uncertainty Control
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3
 

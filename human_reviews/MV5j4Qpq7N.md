@@ -1,5 +1,6 @@
 # Leveraging System-Prompt Attention to Counteract Novel Jailbreak Attacks
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 3, 3, 1
 

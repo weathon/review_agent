@@ -1,5 +1,6 @@
 # Generative modeling for RNA splicing code predictions and design
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

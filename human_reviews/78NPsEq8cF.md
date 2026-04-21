@@ -1,5 +1,6 @@
 # Parrot: Multilingual Visual Instruction Tuning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

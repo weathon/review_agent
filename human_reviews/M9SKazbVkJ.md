@@ -1,5 +1,6 @@
 # Rethinking Invariance Regularization in Adversarial Training to Improve Robustness-Accuracy Trade-off
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

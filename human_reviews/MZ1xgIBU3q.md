@@ -1,5 +1,6 @@
 # A GENERALIZABLE AND EFFICIENT SYMBOLIC RE- GRESSION METHOD FOR TIME SERIES ANALYSIS
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

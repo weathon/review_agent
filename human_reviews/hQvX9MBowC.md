@@ -1,5 +1,6 @@
 # DiTTo-TTS: Diffusion Transformers for Scalable Text-to-Speech without Domain-Specific Factors
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 6
 

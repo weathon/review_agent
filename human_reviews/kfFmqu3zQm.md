@@ -1,5 +1,6 @@
 # Freeze and Cluster: A simple baseline for Rehearsal-Free Continual Category Discovery
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

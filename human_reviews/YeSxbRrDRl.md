@@ -1,5 +1,6 @@
 # Dist Loss: Enhancing Regression in Few-Shot Region through Distribution Distance Constraint
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

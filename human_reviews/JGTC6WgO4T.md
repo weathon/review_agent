@@ -1,5 +1,6 @@
 # Label Space-Induced Pseudo Label Refinement for Multi-Source Black-Box Domain Adaptation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 3
 

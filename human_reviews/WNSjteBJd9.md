@@ -1,5 +1,6 @@
 # Who Leaked the Model? Tracking IP Infringers in Accountable Federated Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 3, 5
 

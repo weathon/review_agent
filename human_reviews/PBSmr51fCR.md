@@ -1,5 +1,6 @@
 # URRL-IMVC: Unified and Robust Representation Learning for Incomplete Multi-View Clustering
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

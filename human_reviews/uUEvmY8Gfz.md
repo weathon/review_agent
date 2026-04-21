@@ -1,5 +1,6 @@
 # De novo Drug Design using Reinforcement Learning with Dynamic Vocabulary
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 
@@ -124,11 +125,14 @@ This research presents RLDV, a method for creating new drugs through generative 
 
 ### Weaknesses
 * Chemical Relevance of New Tokens:
-    * The introduction of new tokens like cc, c(, C), and c2, as illustrated in Figure 2, does not seem to significantly enhance their chemical relevance compared to traditional atomic-level tokens such as C and c. A more detailed explanation regarding the choice and meaning of these new tokens is necessary to justify their incorporation into the vocabulary. 
+    * The introduction of new tokens like cc, c(, C), and c2, as illustrated in Figure 2, does not seem to significantly enhance their chemical relevance compared to traditional atomic-level tokens such as C and c. A more detailed explanation regarding the choice and meaning of these new tokens is necessary to justify their incorporation into the vocabulary.
+
 * Static vs. Dynamic Vocabulary:
-    * The paper does not provide sufficient reasoning for opting for a dynamic vocabulary over a static one with a larger token set. Given that the chemical vocabulary is relatively constrained compared to the broader language domain, the benefits of employing a dynamic vocabulary in this context are not clearly articulated. It might be beneficial to elaborate on the advantages of dynamic token updating in relation to the specific chemical domain under consideration. 
+    * The paper does not provide sufficient reasoning for opting for a dynamic vocabulary over a static one with a larger token set. Given that the chemical vocabulary is relatively constrained compared to the broader language domain, the benefits of employing a dynamic vocabulary in this context are not clearly articulated. It might be beneficial to elaborate on the advantages of dynamic token updating in relation to the specific chemical domain under consideration.
+
 * Marginal Performance Gain:
-    * The performance comparison presented in Table 1 reveals a marginal improvement with the proposed method (RLDV) achieving an aggregate performance of 18.060, slightly outperforming the second-best method (Graph GA) with a score of 17.983. The difference appears to be relatively minor.  
+    * The performance comparison presented in Table 1 reveals a marginal improvement with the proposed method (RLDV) achieving an aggregate performance of 18.060, slightly outperforming the second-best method (Graph GA) with a score of 17.983. The difference appears to be relatively minor. 
+
 * Novelty of Dynamic Vocabulary Usage:
     * The primary contribution of this paper revolves around the utilization of a dynamic vocabulary. However, the novelty of this approach is somewhat limited from my perspective. Further exploration of the unique advantages or applications enabled by this dynamic vocabulary within the realm of chemical analysis would strengthen the paper's originality and impact.
 

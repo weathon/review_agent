@@ -1,5 +1,6 @@
 # Noise-guided Unsupervised Outlier Detection
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

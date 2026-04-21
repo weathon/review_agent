@@ -1,5 +1,6 @@
 # Understanding MLP-Mixer as a wide and sparse MLP
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 6, 6, 5, 6, 6
 

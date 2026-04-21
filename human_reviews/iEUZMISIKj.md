@@ -1,5 +1,6 @@
 # SwitchLoRA: Switched Low-Rank Adaptation Can Learn Full-Rank Information
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

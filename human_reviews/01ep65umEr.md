@@ -1,5 +1,6 @@
 # TeLLMe what you see: Using LLMs to Explain Neurons in Vision Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 5, 5, 5
 

@@ -1,5 +1,6 @@
 # PDDFormer: Pairwise Distance Distribution Graph Transformer for Crystal Material Property Prediction
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

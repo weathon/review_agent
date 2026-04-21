@@ -1,5 +1,6 @@
 # Instruction Contrastive Tuning for Zero-shot Composed Image Retrieval
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 6
 

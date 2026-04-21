@@ -1,5 +1,6 @@
 # Beyond Scale: The Diversity Coefficient as a Data Quality Metric for Variability in Natural Language Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 3, 5, 5
 

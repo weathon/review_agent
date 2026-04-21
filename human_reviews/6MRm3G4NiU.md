@@ -1,5 +1,6 @@
 # SaProt: Protein Language Modeling with Structure-aware Vocabulary
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 6
 

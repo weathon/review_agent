@@ -1,5 +1,6 @@
 # Robust Feature Learning for Multi-Index Models in High Dimensions
 
+- Avg Score: 6.86
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 8, 6, 6
 

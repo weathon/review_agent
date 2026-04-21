@@ -1,5 +1,6 @@
 # Math for AI: On the Generalization of Learning Mathematical Problem Solving
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Advancing Portfolio Optimization: Hybrid Relaxation and Heuristic Approaches for Cardinality-Constrained MIQP Problems
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 3, 3
 

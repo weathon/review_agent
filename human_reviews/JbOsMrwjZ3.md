@@ -1,5 +1,6 @@
 # BioCoder: A Benchmark for Bioinformatics Code Generation with Contextual Pragmatic Knowledge
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 5, 6, 6, 8
 

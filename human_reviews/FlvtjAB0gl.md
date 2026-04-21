@@ -1,5 +1,6 @@
 # Unified Language-Vision Pretraining in LLM with Dynamic Discrete Visual Tokenization
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 6
 

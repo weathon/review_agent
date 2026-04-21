@@ -1,5 +1,6 @@
 # BSPA: Exploring Black-box Stealthy Prompt Attacks against Image Generators
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 5, 3
 

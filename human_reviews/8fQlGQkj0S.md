@@ -1,5 +1,6 @@
 # A Theoretical Analysis of In-context Task Retrieval and Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 3, 6, 5, 6, 6
 

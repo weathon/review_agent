@@ -1,5 +1,6 @@
 # Safety Alignment Should be Made More Than Just a Few Tokens Deep
 
+- Avg Score: 9.50
 - Decision: Accept (Oral)
 - Scores: 10, 8, 10, 10
 

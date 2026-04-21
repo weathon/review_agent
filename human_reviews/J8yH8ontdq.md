@@ -1,5 +1,6 @@
 # Audio-Agent: Leveraging LLMs For Audio Generation, Editing and Composition
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 3, 5, 1
 

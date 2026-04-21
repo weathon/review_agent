@@ -1,5 +1,6 @@
 # Train Small, Infer Large: Memory-Efficient LoRA Training for Large Language Models
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 6, 8
 

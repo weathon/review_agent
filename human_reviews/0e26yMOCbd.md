@@ -1,5 +1,6 @@
 # CHARGE DIRICHLET ENERGY: Geometric Perspectives on Over-smoothing in Deep Graph Neural Networks
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 5
 

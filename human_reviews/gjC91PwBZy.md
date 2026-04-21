@@ -1,5 +1,6 @@
 # GC4NC: A Benchmark Framework for Graph Condensation on Node Classification with New Insights
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 5
 

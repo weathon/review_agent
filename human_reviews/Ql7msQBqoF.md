@@ -1,5 +1,6 @@
 # MAC-CAFE: Multi-actor, Centralized Critic Architecture for Feedback-driven Editing
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 1, 3, 3, 6
 

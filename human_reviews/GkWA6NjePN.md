@@ -1,5 +1,6 @@
 # Multi-agent cooperation through learning-aware policy gradients
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 5, 6
 

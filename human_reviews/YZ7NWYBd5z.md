@@ -1,5 +1,6 @@
 # An Explainable AI-based Complementary Attention Mechanism for Detecting Identity Swaps
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 1, 5, 3
 

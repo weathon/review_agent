@@ -1,5 +1,6 @@
 # Reward-RAG: Enhancing RAG with Reward Driven Supervision
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 3
 

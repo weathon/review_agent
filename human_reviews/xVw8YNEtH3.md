@@ -1,5 +1,6 @@
 # Reset Method based on the Theory of Manifold Optimization on Real Manifolds
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 5, 1
 

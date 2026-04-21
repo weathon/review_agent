@@ -1,5 +1,6 @@
 # Contrastive Diffuser: Planning Towards High Return States via Contrastive Learning
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 3, 3, 10
 

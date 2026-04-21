@@ -1,5 +1,6 @@
 # Leveraging Behavioral Cloning for Representation Alignment in Cross-Domain Policy Transfer
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 5, 5, 3, 5, 3
 

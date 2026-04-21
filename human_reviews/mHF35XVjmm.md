@@ -1,5 +1,6 @@
 # MADiff: Offline Multi-agent Learning with Diffusion Models
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 5, 6, 5, 6
 

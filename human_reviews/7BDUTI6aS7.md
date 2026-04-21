@@ -1,5 +1,6 @@
 # Risk Quadrangle and Robust Optimization Based on $\varphi$-Divergence
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 1, 3, 3
 

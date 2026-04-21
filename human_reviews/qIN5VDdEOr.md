@@ -1,5 +1,6 @@
 # Do LLMs ``know'' internally when they follow instructions?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Training One-Dimensional Graph Neural Networks is NP-Hard
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 8
 

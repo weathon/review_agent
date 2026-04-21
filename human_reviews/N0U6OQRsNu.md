@@ -1,5 +1,6 @@
 # ATTENDING: Federated Learning with Personalized Attentive Pruning for Heterogeneous Clients
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 5, 3
 

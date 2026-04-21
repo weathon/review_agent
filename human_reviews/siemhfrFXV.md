@@ -1,5 +1,6 @@
 # CrysFormer: Protein Structure Prediction via 3d Patterson Maps and Partial Structure Attention
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

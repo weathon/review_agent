@@ -1,5 +1,6 @@
 # Cyclic Contrastive Knowledge Transfer for Open-Vocabulary Object Detection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 5, 8
 

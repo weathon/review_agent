@@ -1,5 +1,6 @@
 # OmniBench: Towards The Future of  Universal Omni-Language Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 3, 8, 6
 

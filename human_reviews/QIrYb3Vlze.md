@@ -1,5 +1,6 @@
 # Isometric Representation Learning for Disentangled Latent Space of Diffusion Models
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 8, 6
 

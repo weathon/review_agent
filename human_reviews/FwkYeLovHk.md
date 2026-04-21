@@ -1,5 +1,6 @@
 # Exploring Weak-to-Strong Generalization for CLIP-based Classification
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3, 3, 3
 

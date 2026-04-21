@@ -1,5 +1,6 @@
 # SiT:   Symmetry-invariant Transformers for Generalisation in Reinforcement Learning
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 3, 8, 6
 

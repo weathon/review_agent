@@ -1,5 +1,6 @@
 # Privacy-Preserving Federated Learning via Homomorphic Adversarial Networks
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5, 3, 3, 5
 

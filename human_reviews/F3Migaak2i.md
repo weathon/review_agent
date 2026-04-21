@@ -1,5 +1,6 @@
 # Model-diff: A Tool for Comparative Study of Language Models in the Input Space
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 3
 

@@ -1,5 +1,6 @@
 # Dancing with Discrepancies: Commonality Specificity Attention GAN for Weakly Supervised Medical Lesion Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 3, 5
 

@@ -1,5 +1,6 @@
 # Towards Holistic Multimodal Interaction: An Information-Theoretic Perspective
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

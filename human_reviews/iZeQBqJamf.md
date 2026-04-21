@@ -1,5 +1,6 @@
 # Language models scale reliably with over-training and on downstream tasks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

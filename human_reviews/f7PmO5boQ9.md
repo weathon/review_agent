@@ -1,5 +1,6 @@
 # DynaEval: A Dynamic Interaction-based Evaluation Framework for Assessing LLMs in Real-world Scenarios
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

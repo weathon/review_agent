@@ -1,5 +1,6 @@
 # Towards LLM4QPE: Unsupervised Pretraining of Quantum Property Estimation and A Benchmark
 
+- Avg Score: 8.00
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 8
 

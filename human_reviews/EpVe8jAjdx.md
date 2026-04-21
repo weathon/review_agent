@@ -1,5 +1,6 @@
 # Privileged Sensing Scaffolds Reinforcement Learning
 
+- Avg Score: 8.50
 - Decision: Accept (spotlight)
 - Scores: 10, 8, 8, 8
 

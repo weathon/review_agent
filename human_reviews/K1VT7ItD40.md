@@ -1,5 +1,6 @@
 # Evolving Symbolic 3D Visual Grounder with Weakly Supervised Reflection
 
+- Avg Score: 4.17
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 6, 3, 5
 

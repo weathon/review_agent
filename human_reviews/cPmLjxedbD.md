@@ -1,5 +1,6 @@
 # A path toward primitive machine intelligence: LMM not LLM is what you need.
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 1, 1, 1, 1
 

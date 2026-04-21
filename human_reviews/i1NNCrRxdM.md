@@ -1,5 +1,6 @@
 # SymDiff: Equivariant Diffusion via Stochastic Symmetrisation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8
 

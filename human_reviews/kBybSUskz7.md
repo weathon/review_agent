@@ -1,5 +1,6 @@
 # Reinforcement Learning and Heuristics for Hardware-Efficient Constrained Code Design
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 3, 5, 5, 6
 

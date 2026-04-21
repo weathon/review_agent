@@ -1,5 +1,6 @@
 # SqueezeAttention: 2D Management of KV-Cache in LLM Inference via Layer-wise Optimal Budget
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 5, 3, 6
 

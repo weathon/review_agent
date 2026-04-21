@@ -1,5 +1,6 @@
 # Variational Diffusion Posterior Sampling with Midpoint Guidance
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Locate-then-Unlearn: An Effective Method of Multi-Task Continuous Learning for Large Language Models
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

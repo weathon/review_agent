@@ -1,5 +1,6 @@
 # 3DGS-Drag: Dragging Gaussians for Intuitive Point-Based 3D Editing
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

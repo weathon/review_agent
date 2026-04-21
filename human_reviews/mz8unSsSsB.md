@@ -1,5 +1,6 @@
 # SnapMem: Snapshot-based 3D Scene Memory for Embodied  Exploration and Reasoning
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

@@ -1,5 +1,6 @@
 # SENSEI: Semantic Exploration Guided by Foundation Models to Learn Versatile World Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 8, 6, 3
 

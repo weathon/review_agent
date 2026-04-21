@@ -1,5 +1,6 @@
 # CodeIt: Abstract Reasoning with Iterative Policy-Guided Program Synthesis
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 5, 6
 

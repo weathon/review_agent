@@ -1,5 +1,6 @@
 # Revisiting Link Prediction: a data perspective
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 5
 

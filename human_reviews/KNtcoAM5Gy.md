@@ -1,5 +1,6 @@
 # BaFTA: Backprop-Free Test-Time Adaptation for Zero-shot Vision Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

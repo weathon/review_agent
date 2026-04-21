@@ -1,5 +1,6 @@
 # Non-Vacuous Generalization Bounds for Large Language Models
 
+- Avg Score: 6.60
 - Decision: Reject
 - Scores: 6, 8, 6, 5, 8
 

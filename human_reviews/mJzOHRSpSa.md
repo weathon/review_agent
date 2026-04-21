@@ -1,5 +1,6 @@
 # Random Logit Scaling: Defending Deep Neural Networks Against Black-Box Score-Based Adversarial Example Attacks
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

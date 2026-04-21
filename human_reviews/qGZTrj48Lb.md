@@ -1,5 +1,6 @@
 # Reuse and Diffuse: Iterative Denoising for Text-to-Video Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 3
 

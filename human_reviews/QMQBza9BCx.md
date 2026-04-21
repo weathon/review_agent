@@ -1,5 +1,6 @@
 # Persistent homology for high-dimensional data based on spectral methods
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 3, 3, 6
 

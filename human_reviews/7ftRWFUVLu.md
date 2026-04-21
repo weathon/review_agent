@@ -1,5 +1,6 @@
 # A lightweight Transformer guided by features from multiple receptive fields for few-shot fine-grained image classification
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5, 5
 

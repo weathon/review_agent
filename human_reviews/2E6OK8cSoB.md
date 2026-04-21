@@ -1,5 +1,6 @@
 # Semantic-Aware Diffusion Model for Sequential Recommendation
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

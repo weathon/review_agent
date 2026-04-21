@@ -1,5 +1,6 @@
 # SinPoint: A Novel Topological Consistent Augmentation for Point Cloud Understanding
 
+- Avg Score: 5.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 6, 3
 

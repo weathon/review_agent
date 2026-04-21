@@ -1,5 +1,6 @@
 # Video In-context Learning: Autoregressive Transformers are Zero-Shot Video Imitators
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

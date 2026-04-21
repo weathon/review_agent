@@ -1,5 +1,6 @@
 # Fast Direct: Query-Efficient  Online Black-box Guidance  for Diffusion-model Target Generation
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 5
 

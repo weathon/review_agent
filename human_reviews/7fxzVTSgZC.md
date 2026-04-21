@@ -1,5 +1,6 @@
 # Offline Imitation Learning without Auxiliary High-quality Behavior Data
 
+- Avg Score: 6.25
 - Decision: Reject
 - Scores: 6, 5, 8, 6
 

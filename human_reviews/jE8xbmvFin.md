@@ -1,5 +1,6 @@
 # Language Models Represent Space and Time
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 8
 

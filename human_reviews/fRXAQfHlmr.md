@@ -1,5 +1,6 @@
 # studentSplat: Your Student Model Learns Single-view 3D Gaussian Splatting
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 5, 3
 

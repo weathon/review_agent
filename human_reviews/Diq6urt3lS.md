@@ -1,5 +1,6 @@
 # Cleanba: A Reproducible and Efficient Distributed Reinforcement Learning Platform
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 3, 6
 

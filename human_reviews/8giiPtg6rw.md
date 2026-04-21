@@ -1,5 +1,6 @@
 # DataFreeShield: Defending Adversarial Attacks without Training Data
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

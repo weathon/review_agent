@@ -1,5 +1,6 @@
 # Entropy Reveals What You Know: An Entropy-Guided Method for Enhancing the Reliability of Large Language Models
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

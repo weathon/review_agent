@@ -1,5 +1,6 @@
 # Efficient Quantization-aware Training with Adaptive Coreset Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

@@ -1,5 +1,6 @@
 # Efficient Dynamics Modeling in Interactive Environments with Koopman Theory
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 8, 5, 6, 3
 

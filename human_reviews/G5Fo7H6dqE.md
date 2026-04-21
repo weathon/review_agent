@@ -1,5 +1,6 @@
 # Iterated Deep $Q$-Network: Efficient Learning of Bellman Iterations for Deep Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 3, 5, 3
 

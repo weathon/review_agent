@@ -1,5 +1,6 @@
 # Non-ergodicity in reinforcement learning: robustness via ergodic transformations
 
+- Avg Score: 3.40
 - Decision: Reject
 - Scores: 3, 1, 3, 5, 5
 

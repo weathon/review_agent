@@ -1,5 +1,6 @@
 # Language Models Are Good Tabular Learners
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 8, 3, 6, 5
 

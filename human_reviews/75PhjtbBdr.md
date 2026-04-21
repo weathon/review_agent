@@ -1,5 +1,6 @@
 # Multi-Label Test-Time Adaptation with Bound Entropy Minimization
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 5
 

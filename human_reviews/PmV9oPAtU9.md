@@ -1,5 +1,6 @@
 # From Logits to Hierarchies: Hierarchical Clustering made Simple
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 5, 3, 3, 5, 3
 

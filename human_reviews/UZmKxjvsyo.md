@@ -1,5 +1,6 @@
 # Multiclass Alignment of Confidences and Softened Target Occurrences for Train-time Calibration
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5, 5
 

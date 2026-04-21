@@ -1,5 +1,6 @@
 # Balancing Act: Diversity and Consistency in Large Language Model Ensembles
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 8
 

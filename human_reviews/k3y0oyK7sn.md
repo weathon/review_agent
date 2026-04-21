@@ -1,5 +1,6 @@
 # Predictive Uncertainty Quantification for Bird's Eye View Segmentation: A Benchmark and Novel Loss Function
 
+- Avg Score: 5.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 6, 6
 

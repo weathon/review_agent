@@ -1,5 +1,6 @@
 # Constraining embedding learning with Self-Matrix Factorization
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

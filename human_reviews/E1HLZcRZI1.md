@@ -1,5 +1,6 @@
 # Arti-PG: A Procedural Toolbox to Synthesize Large-Scale and Diverse Articulated Objects with Rich Annotations
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 6
 

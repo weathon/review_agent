@@ -1,5 +1,6 @@
 # Hierarchical Multi-Grained Reasoning for Object Concept Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

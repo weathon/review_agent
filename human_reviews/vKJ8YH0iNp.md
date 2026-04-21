@@ -1,5 +1,6 @@
 # MGD$^3$: Mode-Guided Dataset Distillation using Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 3, 3
 

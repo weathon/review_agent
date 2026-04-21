@@ -1,5 +1,6 @@
 # Graph neural processes and their application to molecular functions
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

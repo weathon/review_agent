@@ -1,5 +1,6 @@
 # Provably Robust Conformal Prediction with Improved Efficiency
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 6
 

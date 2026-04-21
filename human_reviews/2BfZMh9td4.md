@@ -1,5 +1,6 @@
 # Beyond One-Preference-for-All: Multi-Objective Direct Preference Optimization
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 5, 6, 10, 5
 

@@ -1,5 +1,6 @@
 # Benchmarking Structural Inference Methods for Interacting Dynamical Systems with Synthetic Data
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 6, 5
 

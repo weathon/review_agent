@@ -1,5 +1,6 @@
 # Compositional simulation-based inference for time series
 
+- Avg Score: 6.17
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 5, 6
 

@@ -1,5 +1,6 @@
 # Risk-Aware Distributional Intervention Policies for Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 3, 8
 

@@ -1,5 +1,6 @@
 # Language Models Trained to do Arithmetic Predict Human Risky and Intertemporal Choice
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

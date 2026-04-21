@@ -1,5 +1,6 @@
 # Interpreting CLIP's Image Representation via Text-Based Decomposition
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8, 8
 

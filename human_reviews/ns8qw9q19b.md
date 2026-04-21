@@ -1,5 +1,6 @@
 # Hybrid Defense Strategy for Face Recognition Model Inversion Attack
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 5
 

@@ -1,5 +1,6 @@
 # Data Selection via Optimal Control for Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 10, 6, 8, 8, 8
 

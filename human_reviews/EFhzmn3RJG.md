@@ -1,5 +1,6 @@
 # Taming Gradient Oversmoothing and Expansion in Graph Neural Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 3
 

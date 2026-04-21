@@ -1,5 +1,6 @@
 # Speaking Guided by Listening: Unsupervised Text-to-Speech Generative Model Guided by End-to-End Speech Recognition
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5
 

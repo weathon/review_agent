@@ -1,5 +1,6 @@
 # GTA: A Geometry-Aware Attention Mechanism for Multi-View Transformers
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 6, 8
 

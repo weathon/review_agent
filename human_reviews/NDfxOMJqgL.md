@@ -1,5 +1,6 @@
 # CAST: Cluster-Aware Self-Training for Tabular Data
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 5, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Cross-Domain Reinforcement Learning Under Distinct State-Action Spaces Via Hybrid Q Functions
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

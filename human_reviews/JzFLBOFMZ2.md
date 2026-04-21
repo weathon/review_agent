@@ -1,5 +1,6 @@
 # Causal Structure Learning Supervised by Large Language Model
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 1, 3, 3, 3, 6
 

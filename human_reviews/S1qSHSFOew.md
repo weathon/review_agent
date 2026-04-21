@@ -1,5 +1,6 @@
 # CSI: Enhancing the Robustness of 3D Point Cloud Recognition against Corruption
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 3, 8, 5, 6
 

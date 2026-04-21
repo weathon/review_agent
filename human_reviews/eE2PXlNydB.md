@@ -1,5 +1,6 @@
 # Learning Clustering-based Prototypes for Compositional Zero-Shot Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

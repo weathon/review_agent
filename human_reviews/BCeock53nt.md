@@ -1,5 +1,6 @@
 # Kolmogorov-Arnold Transformer
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

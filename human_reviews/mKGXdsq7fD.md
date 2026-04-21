@@ -1,5 +1,6 @@
 # Decision Rules are in the Pixels: Towards Pixel-level Evaluation of Saliency-based XAI Models
 
+- Avg Score: 4.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5
 

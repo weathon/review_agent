@@ -1,5 +1,6 @@
 # RotPruner: Large Language Model Pruning in Rotated Space
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

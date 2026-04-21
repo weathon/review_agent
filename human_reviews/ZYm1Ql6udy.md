@@ -1,5 +1,6 @@
 # Bayesian Bi-clustering of Neural Spiking Activity with Latent Structures
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

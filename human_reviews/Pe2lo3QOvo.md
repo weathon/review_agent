@@ -1,5 +1,6 @@
 # Making RL with Preference-based Feedback Efficient via Randomization
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 8
 

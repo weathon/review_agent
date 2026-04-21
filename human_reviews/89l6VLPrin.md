@@ -1,5 +1,6 @@
 # Graph layouts and graph contrastive learning via neighbour embeddings
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

@@ -1,5 +1,6 @@
 # PHI-S: Distribution Balancing for Agglomerative Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 8, 3, 5
 

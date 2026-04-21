@@ -1,5 +1,6 @@
 # Independent-Set Design of Experiments for Estimating Treatment and Spillover Effects under Network Interference
 
+- Avg Score: 5.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 5, 6
 

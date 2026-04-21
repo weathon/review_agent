@@ -1,5 +1,6 @@
 # Explore Theory of Mind: program-guided adversarial data generation for theory of mind reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

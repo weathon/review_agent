@@ -1,5 +1,6 @@
 # RAVL: Reach-Aware Value Learning for the Edge-of-Reach Problem in Offline Model-Based Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 8, 3
 

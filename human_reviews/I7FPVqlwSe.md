@@ -1,5 +1,6 @@
 # Reward Translation via Reward Machine in Semi-Alignable MDPs
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

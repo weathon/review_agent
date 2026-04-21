@@ -1,5 +1,6 @@
 # Diagonalizing Affinity Matrix to Identify Clustering Structure
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

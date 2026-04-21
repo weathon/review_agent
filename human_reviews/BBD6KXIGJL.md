@@ -1,5 +1,6 @@
 # Hybrid Directional Graph Neural Network for Molecules
 
+- Avg Score: 7.33
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8
 

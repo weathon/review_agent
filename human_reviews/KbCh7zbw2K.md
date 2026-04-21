@@ -1,5 +1,6 @@
 # Ranking-aware adapter for text-driven image ordering with CLIP
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 3
 

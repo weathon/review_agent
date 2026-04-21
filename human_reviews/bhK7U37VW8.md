@@ -1,5 +1,6 @@
 # AutoDAN-Turbo: A Lifelong Agent for Strategy Self-Exploration to Jailbreak LLMs
 
+- Avg Score: 7.17
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 8, 8, 3
 

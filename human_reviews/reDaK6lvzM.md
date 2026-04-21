@@ -1,5 +1,6 @@
 # Amazing Combinatorial Creation: Acceptable Swap-Sampling for Combinatorial Text-to-Image Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 3, 6
 

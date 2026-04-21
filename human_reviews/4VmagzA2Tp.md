@@ -1,5 +1,6 @@
 # Improving Molecule-Language Alignment with Hierarchical Graph Tokenization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 6, 3, 6
 

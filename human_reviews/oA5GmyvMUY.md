@@ -1,5 +1,6 @@
 # Robust Federated Learning Frameworks Guarding Against Data Flipping Threats for Autonomous Vehicles
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 1, 3, 3, 5, 3
 

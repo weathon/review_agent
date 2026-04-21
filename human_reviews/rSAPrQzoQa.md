@@ -1,5 +1,6 @@
 # Subject Clustering by an Improved IF-PCA Algorithm
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

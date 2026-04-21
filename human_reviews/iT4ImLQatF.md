@@ -1,5 +1,6 @@
 # A Semi-Supervised Clustering Approach For Graph Learning with Neural Networks
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 5, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # P-BERT: Hardware-Aware Optimization of BERT Using Evolutionary Techniques
 
+- Avg Score: 3.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 5, 5
 

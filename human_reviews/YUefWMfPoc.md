@@ -1,5 +1,6 @@
 # How to fix a broken confidence estimator: Evaluating post-hoc methods for selective classification with deep neural networks
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

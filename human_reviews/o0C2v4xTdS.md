@@ -1,5 +1,6 @@
 # CoarsenConf: Equivariant Coarsening with Aggregated Attention for Molecular Conformer Generation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 6, 5, 8
 

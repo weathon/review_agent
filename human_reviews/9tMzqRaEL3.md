@@ -1,5 +1,6 @@
 # Exploring How LLMs Capture and Represent Domain-Specific Knowledge
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 5, 5, 5, 3
 

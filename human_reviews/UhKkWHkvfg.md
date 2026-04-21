@@ -1,5 +1,6 @@
 # Analytic Continual Test-Time Adaptation for Multi-Modality Corruption
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

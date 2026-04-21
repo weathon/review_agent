@@ -1,5 +1,6 @@
 # O(d/T) Convergence Theory for Diffusion Probabilistic Models under Minimal Assumptions
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

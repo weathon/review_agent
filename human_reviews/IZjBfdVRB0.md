@@ -1,5 +1,6 @@
 # Parameter-Efficient Fine-Tuning   via Circular Convolution
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6
 

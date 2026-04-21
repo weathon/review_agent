@@ -1,5 +1,6 @@
 # Stability Analysis of Various Symbolic Rule Extraction Methods from Recurrent Neural Network
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 5, 5
 

@@ -1,5 +1,6 @@
 # Near-optimal Active Regression of Single-Index Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 5, 5
 

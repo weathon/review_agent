@@ -1,5 +1,6 @@
 # GLoRA: Geometric Adaptive Ranks for Efficient LoRA Fine-Tuning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 6, 5, 5
 

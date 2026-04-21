@@ -1,5 +1,6 @@
 # LMSYS-Chat-1M: A Large-Scale Real-World LLM Conversation Dataset
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Spatial Matching Loss Function for Mass Segmentation on Whole Mammography Images
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 3, 3, 5
 

@@ -1,5 +1,6 @@
 # Goal2FlowNet: Learning Diverse Policy Covers using GFlowNets for Goal-Conditioned RL
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

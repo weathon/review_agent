@@ -1,5 +1,6 @@
 # Crafting Zero-Cost Proxy Metrics for Neural Architecture Search via Symbolic Regression
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

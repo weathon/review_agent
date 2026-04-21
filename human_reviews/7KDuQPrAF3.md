@@ -1,5 +1,6 @@
 # A Foundation Model for Error Correction Codes
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 8, 3, 6, 8
 

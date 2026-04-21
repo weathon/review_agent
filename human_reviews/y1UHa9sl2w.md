@@ -1,5 +1,6 @@
 # OntoFAR: Hierarchical Multi-Ontology Fusion Better Augments EHR Representation
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 5, 5, 6, 6, 5
 

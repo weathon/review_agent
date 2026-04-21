@@ -1,5 +1,6 @@
 # Is Memorization Actually Necessary for Generalization?
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 3, 3, 6, 5, 5
 

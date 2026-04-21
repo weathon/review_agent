@@ -1,5 +1,6 @@
 # Towards Efficient Adaptation of Pruning Strategy in Large Language Models
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 3, 3, 8, 8, 6
 

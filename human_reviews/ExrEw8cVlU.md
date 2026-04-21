@@ -1,5 +1,6 @@
 # Poison-splat: Computation Cost Attack on 3D Gaussian Splatting
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8, 8
 

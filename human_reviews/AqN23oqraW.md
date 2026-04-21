@@ -1,5 +1,6 @@
 # KoLA: Carefully Benchmarking World Knowledge of Large Language Models
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 8
 

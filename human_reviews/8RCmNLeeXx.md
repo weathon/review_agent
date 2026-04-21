@@ -1,5 +1,6 @@
 # Forking Paths in Neural Text Generation
 
+- Avg Score: 6.33
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8
 

@@ -1,5 +1,6 @@
 # Adversarial Score identity Distillation: Rapidly Surpassing the Teacher in One Step
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 6
 

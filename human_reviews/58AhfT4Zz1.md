@@ -1,5 +1,6 @@
 # Causal-aware Graph Neural Architecture Search under Distribution Shifts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 3, 6, 6
 

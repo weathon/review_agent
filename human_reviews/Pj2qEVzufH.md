@@ -1,5 +1,6 @@
 # InfoGS: Efficient Structure-Aware 3D Gaussians via Lightweight Information Shaping
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

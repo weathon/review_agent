@@ -1,5 +1,6 @@
 # Interpreting Age Predictions from Brain Maps via Deep Neural Activations and Tensor Decomposition
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 1
 

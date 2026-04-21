@@ -1,5 +1,6 @@
 # Label Privacy Source Coding in Vertical Federated Learning
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 5
 

@@ -1,5 +1,6 @@
 # Adversarially Robust Out-of-Distribution Detection Using Lyapunov-Stabilized Embeddings
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 6, 8
 

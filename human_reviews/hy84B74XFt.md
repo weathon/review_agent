@@ -1,5 +1,6 @@
 # Towards Interpretable Controllability in Object-Centric Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 1, 8, 6
 

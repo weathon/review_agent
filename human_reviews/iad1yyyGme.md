@@ -1,5 +1,6 @@
 # CausalTime: Realistically Generated Time-series for Benchmarking of Causal Discovery
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 6, 8, 8, 5
 

@@ -1,5 +1,6 @@
 # Large Language Models as Rational Players in Competitive Economics Games
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3, 3
 

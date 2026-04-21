@@ -1,5 +1,6 @@
 # Residual Connections and Normalization Can Provably Prevent Oversmoothing in GNNs
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

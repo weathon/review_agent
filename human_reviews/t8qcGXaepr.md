@@ -1,5 +1,6 @@
 # Uncovering Overfitting in Large Language Model Editing
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

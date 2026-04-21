@@ -1,5 +1,6 @@
 # A Symmetry-Aware Exploration of Bayesian Neural Network Posteriors
 
+- Avg Score: 5.60
 - Decision: Accept (poster)
 - Scores: 6, 3, 5, 6, 8
 

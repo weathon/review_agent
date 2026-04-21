@@ -1,5 +1,6 @@
 # Hyperbolic Embeddings in Sequential Self-Attention for Improved Next-Item Recommendations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 5, 3, 3, 3
 

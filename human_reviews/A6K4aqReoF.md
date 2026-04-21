@@ -1,5 +1,6 @@
 # Stateful Dynamics for Training of Binary Activation Recurrent Networks
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 8, 3, 3
 

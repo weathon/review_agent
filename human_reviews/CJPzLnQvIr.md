@@ -1,5 +1,6 @@
 # QuickDrop: Efficient Federated Unlearning by Integrated Dataset Distillation
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 6, 3, 3, 3
 

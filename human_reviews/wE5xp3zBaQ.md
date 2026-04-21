@@ -1,5 +1,6 @@
 # The Good, the Bad and the Ugly: Watermarks, Transferable Attacks and Adversarial Defenses
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 5, 3
 

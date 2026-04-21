@@ -1,5 +1,6 @@
 # TUVF: Learning Generalizable Texture UV Radiance Fields
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # A Novel Variational Lower Bound For Inverse Reinforcement Learning
 
+- Avg Score: 2.75
 - Decision: Reject
 - Scores: 1, 1, 6, 3
 

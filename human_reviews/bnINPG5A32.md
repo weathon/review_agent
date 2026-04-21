@@ -1,5 +1,6 @@
 # RB-Modulation: Training-Free Stylization using Reference-Based Modulation
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 10
 

@@ -1,5 +1,6 @@
 # Poisson-Dirac Neural Networks for Modeling Coupled Dynamical Systems across Domains
 
+- Avg Score: 6.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 5
 

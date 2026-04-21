@@ -1,5 +1,6 @@
 # Real-time computer vision on low-end boards via clustering motion vectors
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 6, 3
 

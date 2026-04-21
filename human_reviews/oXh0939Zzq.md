@@ -1,5 +1,6 @@
 # Dynamic Low-Rank Sparse Adaptation for Large Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 3, 3, 6, 6, 8
 

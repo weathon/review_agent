@@ -1,5 +1,6 @@
 # Structure-Rich Text Benchmark for Knowledge Inference Evaluation
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 3, 1, 3, 6
 

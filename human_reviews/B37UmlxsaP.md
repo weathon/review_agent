@@ -1,5 +1,6 @@
 # Revealing The Intrinsic Ability of Generative Text Summarizers for Outlier Paragraph Detection
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

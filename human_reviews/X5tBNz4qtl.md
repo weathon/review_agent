@@ -1,5 +1,6 @@
 # Offline Safe Policy Optimization From Human Feedback
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3
 

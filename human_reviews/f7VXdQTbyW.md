@@ -1,5 +1,6 @@
 # ThreadsGAN: Enhancing Coherence and Diversity in Discussion Thread Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 3, 1, 1
 

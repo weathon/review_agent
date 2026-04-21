@@ -1,5 +1,6 @@
 # Enhancing Tail Performance in Extreme Classifiers by Label Variance Reduction
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 5, 8, 6, 6
 

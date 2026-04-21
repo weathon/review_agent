@@ -1,5 +1,6 @@
 # Benign Overfitting in Single-Head Attention
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

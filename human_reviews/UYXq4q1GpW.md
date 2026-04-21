@@ -1,5 +1,6 @@
 # A Healthy Food Recommender System Using Collaborative Filtering and Transformers
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 3, 1, 1
 

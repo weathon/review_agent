@@ -1,5 +1,6 @@
 # Deep-Learning Approaches for Optimized Web Accessibility: Correcting Violations and Enhancing User Experience
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 3, 5, 5
 

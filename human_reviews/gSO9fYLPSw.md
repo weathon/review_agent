@@ -1,5 +1,6 @@
 # DEGS: Deformable Event-based 3D Gaussian Splatting from RGB and Event Stream
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 5, 1
 

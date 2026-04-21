@@ -1,5 +1,6 @@
 # IMPUS: Image Morphing with Perceptually-Uniform Sampling Using Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

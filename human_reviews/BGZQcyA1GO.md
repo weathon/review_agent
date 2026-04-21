@@ -1,5 +1,6 @@
 # Beyond the Alphabet: Deep Signal Embedding for Enhanced DNA Clustering
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 8, 5, 3
 

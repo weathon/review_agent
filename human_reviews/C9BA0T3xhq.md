@@ -1,5 +1,6 @@
 # Optimizing Q-Learning Using Expectile Regression: A Dual Approach to Handle In-Sample and Out-of-Sample Data
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 3, 1, 3, 1
 

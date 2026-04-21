@@ -1,5 +1,6 @@
 # LiNeS: Post-training Layer Scaling Prevents Forgetting and Enhances Model Merging
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6
 

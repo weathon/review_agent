@@ -1,5 +1,6 @@
 # ZO-Offloading: Fine-Tuning LLMs with 100 Billion Parameters on a Single GPU
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 8
 

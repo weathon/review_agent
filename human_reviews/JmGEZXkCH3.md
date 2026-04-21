@@ -1,5 +1,6 @@
 # Beyond Transformations: Augmenting Anything for Image Super-Resolution via Diffusion Model
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3
 

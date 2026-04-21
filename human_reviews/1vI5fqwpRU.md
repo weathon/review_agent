@@ -1,5 +1,6 @@
 # RayE-Sub: Countering Subgraph Degradation via Perfect Reconstruction
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3
 

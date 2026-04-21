@@ -1,5 +1,6 @@
 # A Large-scale Training Paradigm for Graph Generative Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 5, 5, 6
 

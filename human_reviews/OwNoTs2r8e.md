@@ -1,5 +1,6 @@
 # No Free Lunch: Fundamental Limits of Learning Non-Hallucinating Generative Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 8, 8, 1
 

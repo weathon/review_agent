@@ -1,5 +1,6 @@
 # Heterogeneity of Regularization between adjacent periods
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 1, 5
 

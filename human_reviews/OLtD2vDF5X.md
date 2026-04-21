@@ -1,5 +1,6 @@
 # HyperINF: Unleashing the HyperPower of the Schulz's Method for Data Influence Estimation
 
+- Avg Score: 4.88
 - Decision: Reject
 - Scores: 5, 5, 5, 5, 5, 3, 5, 6
 

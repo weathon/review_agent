@@ -1,5 +1,6 @@
 # Mixture-of-Diffusers: Dual-Stage Diffusion Model for Improved Time Series Generation
 
+- Avg Score: 5.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 3, 3, 8
 

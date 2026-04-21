@@ -1,5 +1,6 @@
 # See What You Are Told: Visual Attention Sink in Large Multimodal Models
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 3, 8
 

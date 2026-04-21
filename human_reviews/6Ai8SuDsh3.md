@@ -1,5 +1,6 @@
 # Diverse Policies Recovering via Pointwise Mutual Information Weighted Imitation Learning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

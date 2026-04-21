@@ -1,5 +1,6 @@
 # CRVR: Continuous Representation-Driven Video Frame Modulation Against rPPG Heart Rate Measurement
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 3, 3
 

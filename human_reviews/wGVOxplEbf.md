@@ -1,5 +1,6 @@
 # SaRA: High-Efficient Diffusion Model Fine-tuning with Progressive Sparse Low-Rank Adaptation
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5, 6
 

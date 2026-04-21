@@ -1,5 +1,6 @@
 # Last One Standing: A Comparative Analysis of Security and Privacy of Soft Prompt Tuning, LoRA, and In-Context Learning
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 8, 1, 5
 

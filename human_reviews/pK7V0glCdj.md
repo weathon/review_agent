@@ -1,5 +1,6 @@
 # BOtied: Multi-objective Bayesian optimization with tied multivariate ranks
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 5, 3, 3
 

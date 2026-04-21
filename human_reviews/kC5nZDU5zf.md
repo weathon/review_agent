@@ -1,5 +1,6 @@
 # Selective Visual Representations Improve Convergence and Generalization for Embodied AI
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 8, 8
 

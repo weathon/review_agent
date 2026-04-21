@@ -1,5 +1,6 @@
 # Dual Variance Reduction with Momentum for Imbalanced Black-Box Discrete Prompt Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

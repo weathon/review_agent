@@ -1,5 +1,6 @@
 # Scaling Laws of RoPE-based Extrapolation
 
+- Avg Score: 8.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 10
 

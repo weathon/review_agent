@@ -1,5 +1,6 @@
 # L-Eval: Instituting Standardized Evaluation for Long Context Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 5, 8, 5
 

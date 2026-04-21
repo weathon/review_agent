@@ -1,5 +1,6 @@
 # Not Every Image is Worth a Thousand Words: Quantifying Originality  in Stable Diffusion
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 3, 5
 

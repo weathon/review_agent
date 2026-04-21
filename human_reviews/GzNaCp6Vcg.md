@@ -1,5 +1,6 @@
 # PINNACLE: PINN Adaptive ColLocation and Experimental points selection
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 8, 6
 

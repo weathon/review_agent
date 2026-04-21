@@ -1,5 +1,6 @@
 # AugUndo: Scaling Up Augmentations for Unsupervised Depth Completion
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 3, 3, 3
 

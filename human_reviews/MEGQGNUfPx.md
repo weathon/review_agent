@@ -1,5 +1,6 @@
 # The Effectiveness of Random Forgetting for Robust Generalization
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Enhanced Bayesian Optimization via Preferential Modeling of Abstract Properties
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 5, 1, 3, 3
 

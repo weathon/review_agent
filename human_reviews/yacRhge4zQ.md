@@ -1,5 +1,6 @@
 # Regulation Games for Trustworthy Machine Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 3, 5
 

@@ -1,5 +1,6 @@
 # Optimization without retraction on the random generalized Stiefel manifold for canonical correlation analysis
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 10, 5, 5, 6
 

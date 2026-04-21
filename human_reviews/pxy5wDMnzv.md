@@ -1,5 +1,6 @@
 # InvestAlign: Align LLMs with Investor Decision-Making under Herd Behavior
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 3, 6
 

@@ -1,5 +1,6 @@
 # Formally Specifying the High-Level Behavior of LLM-Based Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 3, 3
 

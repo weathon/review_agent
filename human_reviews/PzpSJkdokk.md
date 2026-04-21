@@ -1,5 +1,6 @@
 # Radiologist-like Progressive Radiology Report Generation and Benchmarking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 6, 3, 6
 

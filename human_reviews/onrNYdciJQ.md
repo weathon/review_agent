@@ -1,5 +1,6 @@
 # Improving Consistency Models with Generator-Induced Flows
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 3, 5, 8
 

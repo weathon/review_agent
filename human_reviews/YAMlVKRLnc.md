@@ -1,5 +1,6 @@
 # ClinicalLab: Aligning Agents for Multi-Departmental Clinical Diagnostics in the Real World
 
+- Avg Score: 4.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 3, 6, 3
 

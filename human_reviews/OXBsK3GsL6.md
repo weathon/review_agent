@@ -1,5 +1,6 @@
 # Soft iEP: On the Exploration Inefficacy of Gradient Based Strong Lottery Exploration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6, 5
 

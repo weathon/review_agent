@@ -1,5 +1,6 @@
 # SeaKR: Self-aware Knowledge Retrieval for Adaptive Retrieval Augmented Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 3, 8, 6
 

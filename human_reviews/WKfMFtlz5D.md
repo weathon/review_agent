@@ -1,5 +1,6 @@
 # MG-NeRF: Multimodal Representation Learning for Generalizable NeRF
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 5, 3, 1
 

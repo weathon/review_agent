@@ -1,5 +1,6 @@
 # The Consensus Game: Language Model Generation via Equilibrium Search
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 6, 8, 6, 10
 

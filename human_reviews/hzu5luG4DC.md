@@ -1,5 +1,6 @@
 # Evaluating Adversarial Defense in the Era of Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 3, 3
 

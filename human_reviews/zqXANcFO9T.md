@@ -1,5 +1,6 @@
 # Compressed Decentralized Learning with Error-Feedback under Data Heterogeneity
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3
 

@@ -1,5 +1,6 @@
 # Knowing Your Target: Target-Aware Transformer Makes Better Spatio-Temporal Video Grounding
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

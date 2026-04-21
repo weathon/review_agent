@@ -1,5 +1,6 @@
 # Spectral Spatial Traversing in Point Clouds: Enhancing Data Analysis with Mamba Networks
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6, 5
 

@@ -1,5 +1,6 @@
 # Inference Scaling Laws: An Empirical Analysis of Compute-Optimal Inference for LLM Problem-Solving
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 3, 6
 

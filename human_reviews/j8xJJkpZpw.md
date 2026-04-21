@@ -1,5 +1,6 @@
 # CAT: Concept-level backdoor ATtacks for Concept Bottleneck Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 3, 5
 

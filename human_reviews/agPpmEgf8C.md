@@ -1,5 +1,6 @@
 # Predictive auxiliary objectives in deep RL mimic learning in the brain
 
+- Avg Score: 8.00
 - Decision: Accept (oral)
 - Scores: 8, 8, 8
 

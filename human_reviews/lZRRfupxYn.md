@@ -1,5 +1,6 @@
 # A new perspective on applying mesoscience to explore the model generalizability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3
 

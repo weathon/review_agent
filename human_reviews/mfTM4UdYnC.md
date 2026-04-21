@@ -1,5 +1,6 @@
 # LogicJitter: Let LLMs play Logic Games and they will Detect Misinformation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

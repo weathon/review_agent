@@ -1,5 +1,6 @@
 # Cross-modal Mitigation of Spurious Correlation for Prompt-tuning in VLMs with Causally Motivated Logic Alignment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

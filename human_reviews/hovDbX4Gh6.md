@@ -1,5 +1,6 @@
 # AutoG: Towards automatic graph construction from tabular data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

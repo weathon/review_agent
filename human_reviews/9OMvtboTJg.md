@@ -1,5 +1,6 @@
 # LLMOPT: Learning to Define and Solve General Optimization Problems from Scratch
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # Causal Disentangled Representation Learning with VAE and Causal Flows
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 3
 

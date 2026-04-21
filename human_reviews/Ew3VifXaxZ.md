@@ -1,5 +1,6 @@
 # Local-Prompt: Extensible Local Prompts for Few-Shot Out-of-Distribution Detection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

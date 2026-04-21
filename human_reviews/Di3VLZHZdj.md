@@ -1,5 +1,6 @@
 # Efficient Fatigue Modeling: Applying Operator Networks for Stress Intensity Factor Prediction and Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 5, 5, 3, 3
 

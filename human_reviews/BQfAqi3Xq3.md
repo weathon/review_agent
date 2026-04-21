@@ -1,5 +1,6 @@
 # INDOOR-3.6M : A Multi-Modal Image Dataset for Indoor Geolocation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 3, 6
 

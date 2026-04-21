@@ -1,5 +1,6 @@
 # Precise Parameter Localization for Textual Generation in Diffusion Models
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 5
 

@@ -1,5 +1,6 @@
 # TUAP: Targeted Universal Adversarial Perturbations for CLIP
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 8, 3, 3, 3
 

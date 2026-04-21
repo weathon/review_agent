@@ -1,5 +1,6 @@
 # Multi-Modal and Multi-Attribute Generation of Single Cells with CFGen
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 5, 8, 8
 

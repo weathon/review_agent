@@ -1,5 +1,6 @@
 # Hard View Selection for Contrastive Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 3, 5
 
@@ -68,7 +69,8 @@ Does the introduction of "harder" samples through HVS have any noticeable impact
 The paper proposes an approach to improve self-supervised contrastive learning methods (computer vision) that aim to learn features invariant to different views (i.e. augmentation) of an input image. The paper introduces a simple (and easy to implement) algorithm “Hard View Selection (HSV)” for selecting the view pair used in SSL contrastive training. The goal of HSV algorithm is to select relatively hard views that improve the model's performance. HSV comprises of making forward calls with a set of randomly selected views, then making forward calls to pick out the view pair with highest loss for backpropagation step. The paper hypothesizes that selecting the view pair that are dependent on the current state of the model parameters yields the most benefits rather than using a fixed/random/learned adversary policy. The benefit of the proposed method is to empirically improve the SSL feature representation so that it could be show improvement for other downstream tasks (classification, detection, etc.). The paper shows that HSV is compatible with other contrastive methods like DINO, SimSiam and SimCLR.
 
 ### Strengths
-The paper explores a strategy (HSV) for selecting the views (image augmentation pairs in contrastive learning) that leads to performance improvement on downstream tasks. HSV is a simple and easy to implement view-selection strategy that achieves improvement on ImageNet linear classification accuracy (order of 0.55% - 1.93%). The paper provides detailed ablation experiments to find an alternative view-sampling strategy (both learning-based eg. STN and statistics-based approach). Ablation experiments regarding the initial number of view pairs that determine the hardness of the selected view pair is also provided.(higher initial pool of view pairs would lead to more adversarial view selection for CL training). The paper is well-written and easy to follow. The paper provides code for reproducibility.
+The paper explores a strategy (HSV) for selecting the views (image augmentation pairs in contrastive learning) that leads to performance improvement on downstream tasks.
+HSV is a simple and easy to implement view-selection strategy that achieves improvement on ImageNet linear classification accuracy (order of 0.55% - 1.93%). The paper provides detailed ablation experiments to find an alternative view-sampling strategy (both learning-based eg. STN and statistics-based approach). Ablation experiments regarding the initial number of view pairs that determine the hardness of the selected view pair is also provided.(higher initial pool of view pairs would lead to more adversarial view selection for CL training). The paper is well-written and easy to follow. The paper provides code for reproducibility.
 
 ### Weaknesses
 It would be helpful for the reader to get a better understanding of the following questions/suggestions:

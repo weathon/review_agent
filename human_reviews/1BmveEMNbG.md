@@ -1,5 +1,6 @@
 # Rethinking Complex Queries on Knowledge Graphs with Neural Link Predictors
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 8, 6, 6
 

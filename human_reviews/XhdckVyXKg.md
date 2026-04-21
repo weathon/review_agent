@@ -1,5 +1,6 @@
 # Toward Foundation Model for Multivariate Wearable Sensing of Physiological Signals
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # Deepfake Detection with Contrastive Learning in Curved Spaces
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 6, 5, 3
 

@@ -1,5 +1,6 @@
 # FedPop: Federated Population-based Hyperparameter Tuning
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 5, 3, 3, 5
 

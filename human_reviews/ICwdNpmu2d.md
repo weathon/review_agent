@@ -1,5 +1,6 @@
 # LLM-based Stock Market Trend Prediction
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 1, 3, 1, 1
 

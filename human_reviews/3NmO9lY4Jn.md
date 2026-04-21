@@ -1,5 +1,6 @@
 # Don't Play Favorites: Minority Guidance for Diffusion Models
 
+- Avg Score: 5.25
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 3
 

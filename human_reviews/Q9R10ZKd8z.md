@@ -1,5 +1,6 @@
 # PolyNet: Learning Diverse Solution Strategies for Neural Combinatorial Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

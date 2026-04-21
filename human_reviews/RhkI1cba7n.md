@@ -1,5 +1,6 @@
 # Debiasing Text-to-image Diffusion Models with Self-discovering Latent Directions
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6
 

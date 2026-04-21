@@ -1,5 +1,6 @@
 # Active Task Disambiguation with LLMs
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8
 

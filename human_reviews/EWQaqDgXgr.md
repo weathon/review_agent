@@ -1,5 +1,6 @@
 # Sparse Repellency for Shielded Generation in Text-to-Image Diffusion Models
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 5, 6, 6
 

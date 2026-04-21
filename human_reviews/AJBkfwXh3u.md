@@ -1,5 +1,6 @@
 # Causality-Inspired Spatial-Temporal Explanations for Dynamic Graph Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 5, 5, 8, 6
 

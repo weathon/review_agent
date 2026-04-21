@@ -1,5 +1,6 @@
 # Diffusion-Nested Auto-Regressive Synthesis of Heterogeneous Tabular Data
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 3, 5, 6
 

@@ -1,5 +1,6 @@
 # A Provably Robust Algorithm for Differentially Private Clustered Federated Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 8, 3
 

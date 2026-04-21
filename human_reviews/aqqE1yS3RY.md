@@ -1,5 +1,6 @@
 # Towards Better Evaluation of GNN Expressiveness with BREC Dataset
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 5, 6, 6
 

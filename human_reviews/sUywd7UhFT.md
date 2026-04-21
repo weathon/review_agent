@@ -1,5 +1,6 @@
 # Unifying All Species: LLM-based Hyper-Heuristics for Multi-objective Optimization
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 1
 

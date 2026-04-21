@@ -1,5 +1,6 @@
 # Quest: Query-centric Data Synthesis Approach for Long-context Scaling of Large Language Model
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 3
 

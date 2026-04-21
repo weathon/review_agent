@@ -1,5 +1,6 @@
 # Protein-Ligand Interaction Prior for Binding-aware 3D Molecule Diffusion Models
 
+- Avg Score: 6.25
 - Decision: Accept (poster)
 - Scores: 6, 5, 8, 6
 

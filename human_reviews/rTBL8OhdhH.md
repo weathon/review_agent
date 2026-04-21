@@ -1,5 +1,6 @@
 # Towards Lossless Dataset Distillation via Difficulty-Aligned Trajectory Matching
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 6
 

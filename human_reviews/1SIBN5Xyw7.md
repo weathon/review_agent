@@ -1,5 +1,6 @@
 # Spike-driven Transformer V2: Meta Spiking Neural Network Architecture Inspiring the Design of Next-generation Neuromorphic Chips
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 5, 6, 6
 

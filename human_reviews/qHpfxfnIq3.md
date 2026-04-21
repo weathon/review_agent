@@ -1,5 +1,6 @@
 # ToolComp: A Multi-Tool Reasoning & Process Supervision Benchmark
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 3, 5, 8, 6, 5
 

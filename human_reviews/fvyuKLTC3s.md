@@ -1,5 +1,6 @@
 # Cayley Maze: Universal Open-Ended Reinforcement Learning Environment
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 1, 3, 5, 6
 

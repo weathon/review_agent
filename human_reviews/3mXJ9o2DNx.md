@@ -1,5 +1,6 @@
 # Connecting Domains and Contrasting Samples: A Ladder for Domain Generalization
 
+- Avg Score: 4.60
 - Decision: Reject
 - Scores: 5, 5, 3, 5, 5
 

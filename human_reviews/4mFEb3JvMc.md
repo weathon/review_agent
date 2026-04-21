@@ -1,5 +1,6 @@
 # A case for data valuation transparency via DValCards
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 5, 6, 3
 

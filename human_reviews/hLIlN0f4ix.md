@@ -1,5 +1,6 @@
 # Do better language models have crisper vision?
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 3, 6, 5
 

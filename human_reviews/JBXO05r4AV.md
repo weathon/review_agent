@@ -1,5 +1,6 @@
 # From Few to Many: Self-Improving Many-Shot Reasoners Through Iterative Optimization and Generation
 
+- Avg Score: 6.25
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 5
 

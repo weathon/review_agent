@@ -1,5 +1,6 @@
 # Implicit bias of SGD in $L_2$-regularized linear DNNs: One-way jumps from high to low rank
 
+- Avg Score: 7.75
 - Decision: Accept (spotlight)
 - Scores: 8, 8, 5, 10
 

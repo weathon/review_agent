@@ -1,5 +1,6 @@
 # Bellman Diffusion: Generative Modeling as Learning a Linear Operator in the Distribution Space
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 5, 5, 6, 3
 

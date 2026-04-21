@@ -1,5 +1,6 @@
 # Vision-Language Foundation Models as Effective Robot Imitators
 
+- Avg Score: 6.50
 - Decision: Accept (spotlight)
 - Scores: 6, 6, 6, 8
 

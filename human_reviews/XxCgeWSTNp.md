@@ -1,5 +1,6 @@
 # Improved Sampling Algorithms for Lévy-Itô Diffusion Models
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 5, 6, 8, 8
 

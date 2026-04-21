@@ -1,5 +1,6 @@
 # Hallucinating LLM Could Be Creative
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 8, 3
 

@@ -1,5 +1,6 @@
 # Towards domain-invariant Self-Supervised Learning with Batch Styles Standardization
 
+- Avg Score: 5.80
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6, 6
 

@@ -1,5 +1,6 @@
 # X-SHOT: A Single System to Handle Frequent, Few-shot and Zero-shot Labels in Classification
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5, 3
 

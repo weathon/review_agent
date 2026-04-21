@@ -1,5 +1,6 @@
 # State-drive Implicit Modeling
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 
@@ -103,7 +104,8 @@ Listed in the weakness
 Training previous implicit models usually relies on expensive implicit differentiation for backward propagation. This work circumvent the costly backward computations by constraining the internal states and outputs to match that of a baseline model, which they name State-driven Implicit Modeling (SIM). Another advantage is that SIM can be implemented in a parallel manner. The author also demonstrates that SIM can be extended to parameter reduction and robust training.
 
 ### Strengths
-1. The paper writing is crystal clear for people who doesn’t know implicit model a lot. It explains the concept clearly at the beginning and is consistent within the entire paper. 
+1. The paper writing is crystal clear for people who doesn’t know implicit model a lot. It explains the concept clearly at the beginning and is consistent within the entire paper.
+
 2. The idea of bypassing the expensive backward computation by matching the internal states and output is novel, as far as I know. 
 3. The experiments demonstrate that by using SIM, the model gains better performance in parameter reduction and under the adversarial attack.
 
@@ -115,7 +117,9 @@ Training previous implicit models usually relies on expensive implicit different
 5. Typo: figure 2 & 3 right side, the sparsity (%) is somehow occluded.
 
 ### Questions
-1. What is the motivation of constraining the states and outputs of the implicit model to match those baseline states? Is this idea inspired by any previous work? Has any previous work that tries to use constraining internal states to represent a baseline model?  
+1. What is the motivation of constraining the states and outputs of the implicit model to match those baseline states? Is this idea inspired by any previous work? Has any previous work that tries to use constraining internal states to represent a baseline model?
+
+
 
 2. In Figure 4, why the sparsity increase and the L1-norm model gains better prediction accuracy under the attack? It’s between sparsity 15 to 25, and and 25 to 55.
 

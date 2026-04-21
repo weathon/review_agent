@@ -1,5 +1,6 @@
 # Label-encoding Risk Minimization under Label Insufficient Scenarios
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 6, 6, 3
 

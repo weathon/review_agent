@@ -1,5 +1,6 @@
 # NoisyTraj: Robust Trajectory Prediction with Noisy Observations
 
+- Avg Score: 5.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 8, 6, 3
 

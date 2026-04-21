@@ -1,5 +1,6 @@
 # Structure and Behavior in Weight Space Representation Learning
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 3, 3, 6
 

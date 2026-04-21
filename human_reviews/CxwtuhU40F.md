@@ -1,5 +1,6 @@
 # Interpretable Dimensionality Reduction by Feature-preserving Manifold Approximation and Projection
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 5, 6, 5, 6, 6
 

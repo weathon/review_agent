@@ -1,5 +1,6 @@
 # Audio Large Language Models Can Be Descriptive Speech Quality Evaluators
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 5
 

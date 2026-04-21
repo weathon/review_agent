@@ -1,5 +1,6 @@
 # PooDLe🐩: Pooled and dense self-supervised learning from naturalistic videos
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

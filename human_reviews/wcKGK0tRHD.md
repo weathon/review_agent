@@ -1,5 +1,6 @@
 # The Trifecta: Three simple techniques for training deeper Forward-Forward networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 6, 5
 

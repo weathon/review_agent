@@ -1,5 +1,6 @@
 # Real2Code: Reconstruct Articulated Objects via Code Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6
 

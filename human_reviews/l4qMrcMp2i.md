@@ -1,5 +1,6 @@
 # Symmetric Space Learning for Combinatorial Generalization
 
+- Avg Score: 4.75
 - Decision: Reject
 - Scores: 3, 5, 6, 5
 

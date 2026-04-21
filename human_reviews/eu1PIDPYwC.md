@@ -1,5 +1,6 @@
 # Exploring Selective Layer Fine-Tuning in Federated Learning
 
+- Avg Score: 4.20
 - Decision: Reject
 - Scores: 3, 3, 5, 5, 5
 

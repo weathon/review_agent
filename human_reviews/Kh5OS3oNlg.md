@@ -1,5 +1,6 @@
 # PARSE-Ego4D: Personal Action Recommendation Suggestions for Ego-Centric Videos
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

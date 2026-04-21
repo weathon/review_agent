@@ -1,5 +1,6 @@
 # Synergizing Motion and Appearance: Multi-Scale Compensatory Codebooks for Talking Head Video Generation
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 5, 5, 5
 

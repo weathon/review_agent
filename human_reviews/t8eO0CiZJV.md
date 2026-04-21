@@ -1,5 +1,6 @@
 # Tailoring Self-Rationalizers with Multi-Reward Distillation
 
+- Avg Score: 6.40
 - Decision: Accept (poster)
 - Scores: 6, 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Early Neuron Alignment in Two-layer ReLU Networks with Small Initialization
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 5, 8, 5, 8
 

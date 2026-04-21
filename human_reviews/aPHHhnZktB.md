@@ -1,5 +1,6 @@
 # FairDen: Fair Density-Based Clustering
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5, 6
 

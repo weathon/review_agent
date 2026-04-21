@@ -1,5 +1,6 @@
 # On Rademacher Complexity-based Generalization Bounds for Deep Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 3, 3
 

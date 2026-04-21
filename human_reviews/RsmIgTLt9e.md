@@ -1,5 +1,6 @@
 # Preserving the Unique Heritage of Chinese Ancient Architecture in Diffusion Models with Text and Image Integration
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 5, 6, 3, 3
 

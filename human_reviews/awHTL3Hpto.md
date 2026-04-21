@@ -1,5 +1,6 @@
 # Expressivity of ReLU-Networks under Convex Relaxations
 
+- Avg Score: 6.33
 - Decision: Accept (poster)
 - Scores: 6, 5, 8
 

@@ -1,5 +1,6 @@
 # CUS3D: A New Comprehensive Urban-Scale Semantic Segmentation 3D Benchmark Dataset
 
+- Avg Score: 5.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 6
 

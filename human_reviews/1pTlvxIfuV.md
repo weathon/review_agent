@@ -1,5 +1,6 @@
 # A Reparameterized Discrete Diffusion Model for Text Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 5, 3, 6
 

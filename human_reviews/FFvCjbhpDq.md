@@ -1,5 +1,6 @@
 # The Role of Forgetting in Fine-Tuning Reinforcement Learning Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

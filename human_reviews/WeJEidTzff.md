@@ -1,5 +1,6 @@
 # A Large-scale Dataset and Benchmark for Commuting Origin-Destination Flow Generation
 
+- Avg Score: 6.75
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 5
 

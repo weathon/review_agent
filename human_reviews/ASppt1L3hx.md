@@ -1,5 +1,6 @@
 # Cooperative Minibatching in Graph Neural Networks
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 1, 6, 6
 

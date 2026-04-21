@@ -1,5 +1,6 @@
 # Physics-Guided Learning of Meteorological Dynamics for Weather Forecasting and Downscaling
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 3, 5
 

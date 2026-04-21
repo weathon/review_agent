@@ -1,5 +1,6 @@
 # Efficient Diffusion Transformer Policies with Mixture of Expert Denoisers for Multitask Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 6, 6
 

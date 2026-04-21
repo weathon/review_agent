@@ -1,5 +1,6 @@
 # From Overconnectivity to Sparsity: Emulating Synaptic Pruning with Long Connections
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 5, 5, 6
 

@@ -1,5 +1,6 @@
 # Task structure and nonlinearity jointly determine learned representational geometry
 
+- Avg Score: 6.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 8, 8
 

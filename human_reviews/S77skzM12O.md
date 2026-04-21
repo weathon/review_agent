@@ -1,5 +1,6 @@
 # PROTO: Iterative Policy Regularizied Offline-to-Online Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 8, 3, 6, 6
 

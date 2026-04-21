@@ -1,5 +1,6 @@
 # Continuous Multi-step Predictions of Highly Imbalanced Multivariate Time Series via Deep Learning Network
 
+- Avg Score: 3.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 3, 5
 

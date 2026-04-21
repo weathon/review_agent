@@ -1,5 +1,6 @@
 # Efficient Action-Constrained Reinforcement Learning via Acceptance-Rejection Method and Augmented MDPs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

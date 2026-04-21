@@ -1,5 +1,6 @@
 # Heterogeneous Domain Generalization for Single-Source Cross-Dataset Person ReID: An Adaptive Adversarial Augmentation Approach
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 3
 

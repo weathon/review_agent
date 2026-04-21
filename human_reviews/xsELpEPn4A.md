@@ -1,5 +1,6 @@
 # JudgeLM: Fine-tuned Large Language Models are Scalable Judges
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Image as First-Order Norm+Linear Autoregression: Unveiling Mathematical Invariance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 5, 6, 6
 

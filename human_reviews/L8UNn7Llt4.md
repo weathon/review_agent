@@ -1,5 +1,6 @@
 # ODICE: Revealing the Mystery of Distribution Correction Estimation via Orthogonal-gradient Update
 
+- Avg Score: 7.50
 - Decision: Accept (spotlight)
 - Scores: 8, 6, 8, 8
 

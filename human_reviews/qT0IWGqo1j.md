@@ -1,5 +1,6 @@
 # Training on test proteins improves fitness, structure, and function prediction
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 6, 5
 

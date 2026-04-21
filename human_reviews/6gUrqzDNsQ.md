@@ -1,5 +1,6 @@
 # PackNets: A Variational Autoencoder-Like Approach for Packing Circles in Any Shape
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 1, 6, 5
 

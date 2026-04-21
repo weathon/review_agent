@@ -1,5 +1,6 @@
 # Same Accuracy, Twice As Fast: Continual Learning Surpasses Retraining From Scratch
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 3, 5, 3, 6, 3
 

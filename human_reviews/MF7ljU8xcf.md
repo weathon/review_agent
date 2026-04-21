@@ -1,5 +1,6 @@
 # Compute-Optimal LLMs Provably Generalize Better with Scale
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 5, 5
 

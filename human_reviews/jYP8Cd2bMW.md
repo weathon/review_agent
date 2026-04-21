@@ -1,5 +1,6 @@
 # FedMAP: Unlocking Potential in Personalized Federated Learning through Bi-Level MAP Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 6, 5
 

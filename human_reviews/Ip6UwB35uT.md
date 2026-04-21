@@ -1,5 +1,6 @@
 # Conditional Testing based on Localized Conformal $p$-values
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Fit Like You Sample: Sample-Efficient Generalized Score Matching from Fast Mixing Diffusions
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 5, 5, 8
 

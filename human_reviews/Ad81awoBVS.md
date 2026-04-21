@@ -1,5 +1,6 @@
 # Rotation Has Two Sides: Evaluating Data Augmentation for Deep One-class Classification
 
+- Avg Score: 5.40
 - Decision: Accept (spotlight)
 - Scores: 6, 3, 6, 6, 6
 

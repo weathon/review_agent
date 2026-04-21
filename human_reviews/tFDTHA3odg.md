@@ -1,5 +1,6 @@
 # ThinkBot: Embodied Instruction Following with Thought Chain Reasoning
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

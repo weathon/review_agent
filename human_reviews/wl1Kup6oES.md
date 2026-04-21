@@ -1,5 +1,6 @@
 # From Appearance to Motion: Aligning Visual Representations for Robotic Manipulation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 5, 3
 

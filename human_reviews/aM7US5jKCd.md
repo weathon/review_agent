@@ -1,5 +1,6 @@
 # Towards Reliable Evaluation and Fast Training of Robust Semantic Segmentation Models
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 5, 6, 5, 5
 

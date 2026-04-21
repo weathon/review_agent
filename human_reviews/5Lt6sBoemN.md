@@ -1,5 +1,6 @@
 # When and Why Momentum Accelerates SGD: An Empirical Study
 
+- Avg Score: 3.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 3
 

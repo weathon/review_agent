@@ -1,5 +1,6 @@
 # Certified Defense Against Complex Adversarial Attacks with Dynamic Smoothing
 
+- Avg Score: 2.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3
 

@@ -1,5 +1,6 @@
 # LayerDAG: A Layerwise Autoregressive Diffusion Model for Directed Acyclic Graph Generation
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 6, 6
 

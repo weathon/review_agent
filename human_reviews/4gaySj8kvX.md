@@ -1,5 +1,6 @@
 # Accelerating Goal-Conditioned Reinforcement Learning Algorithms and Research
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 8
 

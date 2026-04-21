@@ -1,5 +1,6 @@
 # Bayesian Optimization of Antibodies Informed by a Generative Model of Evolving Sequences
 
+- Avg Score: 7.25
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 8, 5
 

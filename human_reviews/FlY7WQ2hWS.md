@@ -1,5 +1,6 @@
 # Incentive-Aware Federated Learning with Training-Time Model Rewards
 
+- Avg Score: 5.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 3
 

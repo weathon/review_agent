@@ -1,5 +1,6 @@
 # Hierarchical-Latent Generative Models are Robust View Generators for Contrastive Representation Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3
 

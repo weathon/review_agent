@@ -1,5 +1,6 @@
 # Stabilized E(n)-Equivariant Graph Neural Networks-assisted Generative Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 5, 3, 6
 

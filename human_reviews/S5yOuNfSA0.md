@@ -1,5 +1,6 @@
 # Understanding Transferable Representation Learning and Zero-shot Transfer in CLIP
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

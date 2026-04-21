@@ -1,5 +1,6 @@
 # Understanding Chain-of-Thought in LLMs Through Information Theory
 
+- Avg Score: 6.40
 - Decision: Reject
 - Scores: 8, 5, 8, 5, 6
 

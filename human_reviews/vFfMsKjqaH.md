@@ -1,5 +1,6 @@
 # Interpreting Categorical Distributional Reinforcement Learning: An Implicit Risk-Sensitive Regularization Effect
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 6, 3, 5, 3
 

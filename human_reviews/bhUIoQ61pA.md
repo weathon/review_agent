@@ -1,5 +1,6 @@
 # HuWo：Building Physical Interaction World Models for Humanoid Robot Locomotion
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 5, 6, 3
 

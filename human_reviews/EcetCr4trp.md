@@ -1,5 +1,6 @@
 # Understanding Convergence and Generalization in Federated Learning through Feature Learning Theory
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 5
 

@@ -1,5 +1,6 @@
 # PoSE: Efficient Context Window Extension of LLMs via Positional Skip-wise Training
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

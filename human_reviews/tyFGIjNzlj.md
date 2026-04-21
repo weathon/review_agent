@@ -1,5 +1,6 @@
 # Algorithmic Language Models with Neurally Compiled Libraries
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 1, 3, 6, 5
 

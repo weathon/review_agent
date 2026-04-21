@@ -1,5 +1,6 @@
 # SlotSAM: Bootstrap Segmentation Foundation Model under Real-world Shifts via Object-Centric Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 5, 3
 

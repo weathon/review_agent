@@ -1,5 +1,6 @@
 # ShEPhERD: Diffusing shape, electrostatics, and pharmacophores for bioisosteric drug design
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 10, 8
 

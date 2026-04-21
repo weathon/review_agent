@@ -1,5 +1,6 @@
 # Fast and unified path gradient estimators for normalizing flows
 
+- Avg Score: 7.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 8, 8
 

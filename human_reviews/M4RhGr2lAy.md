@@ -1,5 +1,6 @@
 # Fairness-Aware Graph Learning: A Benchmark
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 3, 3, 5, 5
 

@@ -1,5 +1,6 @@
 # Reinforcement Learning for Control with Stability Guarantee
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 3, 1, 3, 3
 

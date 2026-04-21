@@ -1,5 +1,6 @@
 # Utilizing Visual Properties to Achieve Better Representations of Objects
 
+- Avg Score: 2.20
 - Decision: Reject
 - Scores: 1, 1, 3, 3, 3
 

@@ -1,5 +1,6 @@
 # The Human-AI Substitution game: active learning from a strategic labeler
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6
 

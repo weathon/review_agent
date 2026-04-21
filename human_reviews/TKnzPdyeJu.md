@@ -1,5 +1,6 @@
 # Structural Inference with Dynamics Encoding and Partial Correlation Coefficients
 
+- Avg Score: 7.33
 - Decision: Accept (poster)
 - Scores: 10, 6, 6
 

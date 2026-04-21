@@ -1,5 +1,6 @@
 # Derail Yourself: Multi-turn LLM Jailbreak Attack through self-discovered clues
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 5
 

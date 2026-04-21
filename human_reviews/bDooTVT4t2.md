@@ -1,5 +1,6 @@
 # Universally Amplifying Randomized Smoothing for Certified Robustness with Anisotropic Noise
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

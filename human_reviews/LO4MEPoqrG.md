@@ -1,5 +1,6 @@
 # Does Safety Training of LLMs Generalize to Semantically Related Natural Prompts?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 5, 6, 3, 6
 

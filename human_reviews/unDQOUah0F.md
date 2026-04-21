@@ -1,5 +1,6 @@
 # VideoWebArena:  Evaluating Long Context Multimodal Agents with Video Understanding Web Tasks
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 5
 

@@ -1,5 +1,6 @@
 # SWE-Bench+: Enhanced Coding Benchmark for LLMs
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

@@ -1,5 +1,6 @@
 # GSBA$^K$: $top$-$K$ Geometric Score-based Black-box Attack
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

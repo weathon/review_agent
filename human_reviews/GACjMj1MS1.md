@@ -1,5 +1,6 @@
 # Empirical Likelihood for Fair Classification
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 5, 6, 6
 

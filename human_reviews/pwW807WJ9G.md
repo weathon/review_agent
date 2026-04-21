@@ -1,5 +1,6 @@
 # InterpGNN: Understand and Improve Generalization Ability of Transdutive GNNs through the Lens of Interplay between Train and Test Nodes
 
+- Avg Score: 6.00
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Horizon Generalization in Reinforcement Learning
 
+- Avg Score: 4.25
 - Decision: Accept (Poster)
 - Scores: 6, 5, 3, 3
 

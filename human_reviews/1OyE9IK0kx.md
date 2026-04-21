@@ -1,5 +1,6 @@
 # On the Hardness of Faithful Chain-of-Thought Reasoning in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 5, 5, 6
 

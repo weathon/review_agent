@@ -1,5 +1,6 @@
 # Estimating Post-Synaptic Effects for Online Training of Feed-Forward SNNs
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 5, 3, 5
 

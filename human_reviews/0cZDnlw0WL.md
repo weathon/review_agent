@@ -1,5 +1,6 @@
 # Causal Discovery with Unobserved Variables: A Proxy Variable Approach
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 6
 

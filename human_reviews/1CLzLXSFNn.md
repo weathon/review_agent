@@ -1,5 +1,6 @@
 # TimeMixer++: A General Time Series Pattern Machine for Universal Predictive Analysis
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 10
 

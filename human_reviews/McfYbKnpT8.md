@@ -1,5 +1,6 @@
 # L2P-MIP: Learning to Presolve for Mixed Integer Programming
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 8, 6, 6, 6
 

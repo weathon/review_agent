@@ -1,5 +1,6 @@
 # FlexGen: Flexible Multi-View Generation from Text and Image Inputs
 
+- Avg Score: 4.25
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 3, 5
 

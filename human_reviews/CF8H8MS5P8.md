@@ -1,5 +1,6 @@
 # The Generative AI Paradox: “What It Can Create, It May Not Understand”
 
+- Avg Score: 7.00
 - Decision: Accept (poster)
 - Scores: 6, 8, 6, 8
 

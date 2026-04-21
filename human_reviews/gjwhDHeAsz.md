@@ -1,5 +1,6 @@
 # Score Forgetting Distillation: A Swift, Data-Free Method for Machine Unlearning in Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 5, 5, 8, 8
 

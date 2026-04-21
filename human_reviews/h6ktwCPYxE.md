@@ -1,5 +1,6 @@
 # Second Order Bounds for Contextual Bandits with Function Approximation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 5, 8, 6, 5
 

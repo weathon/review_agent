@@ -1,5 +1,6 @@
 # Flow to Better: Offline Preference-based Reinforcement Learning via Preferred Trajectory Generation
 
+- Avg Score: 5.67
 - Decision: Accept (poster)
 - Scores: 6, 5, 6
 

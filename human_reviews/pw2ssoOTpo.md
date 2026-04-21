@@ -1,5 +1,6 @@
 # CIFAR-10-Warehouse: Broad and More Realistic Testbeds in Model Generalization Analysis
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

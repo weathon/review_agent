@@ -1,5 +1,6 @@
 # MoveAnything: Controllable Scene Generation with Text-to-Image Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 5, 5
 

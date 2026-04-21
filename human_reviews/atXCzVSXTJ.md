@@ -1,5 +1,6 @@
 # KAA: Kolmogorov-Arnold Attention for Enhancing Attentive Graph Neural Networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

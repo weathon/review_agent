@@ -1,5 +1,6 @@
 # OSTQuant: Refining Large Language Model Quantization with Orthogonal and Scaling Transformations for Better Distribution Fitting
 
+- Avg Score: 6.20
 - Decision: Accept (Poster)
 - Scores: 5, 6, 6, 6, 8
 

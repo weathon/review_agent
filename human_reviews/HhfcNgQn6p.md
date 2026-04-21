@@ -1,5 +1,6 @@
 # Towards a statistical theory of data selection under weak supervision
 
+- Avg Score: 7.75
 - Decision: Accept (oral)
 - Scores: 8, 5, 8, 10
 

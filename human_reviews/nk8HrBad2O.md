@@ -1,5 +1,6 @@
 # Task-Guided Biased Diffusion Models for Point Localization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 5, 5, 5, 5
 

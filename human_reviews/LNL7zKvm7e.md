@@ -1,5 +1,6 @@
 # Frame-Voyager: Learning to Query Frames for Video Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

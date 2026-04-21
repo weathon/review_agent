@@ -1,5 +1,6 @@
 # Explicit Foundation Model Optimization with Self-Attentive Feed-Forward Neural Units
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 1, 3, 5
 

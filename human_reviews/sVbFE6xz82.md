@@ -1,5 +1,6 @@
 # MFN: Metadata-Free Real-World Noisy Image Generation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 3, 8, 8, 5
 

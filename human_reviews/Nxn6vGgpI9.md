@@ -1,5 +1,6 @@
 # WEAR: An Outdoor Sports Dataset for Wearable and Egocentric Activity Recognition
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 5, 6, 3
 

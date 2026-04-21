@@ -1,5 +1,6 @@
 # Fairness-enhancing mixed effects deep learning improves fairness on in- and out-of-distribution clustered (non-iid) data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

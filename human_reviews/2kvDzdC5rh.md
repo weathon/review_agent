@@ -1,5 +1,6 @@
 # IntentGPT: Few-Shot Intent Discovery with Large Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 5, 3, 6, 3, 5
 

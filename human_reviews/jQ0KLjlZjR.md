@@ -1,5 +1,6 @@
 # CookingCLIP：Learning a Contextualized Multimodal Embedding from Instructional Cooking Videos for Zero-shot Recipe Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 3, 1
 

@@ -1,5 +1,6 @@
 # FedHC: Proximal Correction with Hessian and Cosine Correlation for Federated Learning
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3
 

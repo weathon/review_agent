@@ -1,5 +1,6 @@
 # Automatic Calibration and Error Correction for Generative Large Language Models via Pareto Optimal Self-Supervision
 
+- Avg Score: 5.75
 - Decision: Reject
 - Scores: 6, 6, 6, 5
 

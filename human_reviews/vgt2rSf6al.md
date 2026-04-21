@@ -1,5 +1,6 @@
 # MindSimulator: Exploring Brain Concept Localization via Synthetic fMRI
 
+- Avg Score: 5.75
 - Decision: Accept (Poster)
 - Scores: 6, 6, 5, 6
 

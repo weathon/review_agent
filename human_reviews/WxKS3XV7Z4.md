@@ -1,5 +1,6 @@
 # Boosting Real-World Super-Resolution with RAW Data: a New Perspective, Dataset and Baseline
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 5, 5
 

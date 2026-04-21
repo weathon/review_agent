@@ -1,5 +1,6 @@
 # Investigating the chaotic dynamics produced by deep reinforcement learning controllers
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 6, 3
 

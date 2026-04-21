@@ -1,5 +1,6 @@
 # Efficient Denoising Diffusion via Probabilistic Masking
 
+- Avg Score: 7.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Provably Accurate Shapley Value Estimation via Leverage Score Sampling
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 8
 

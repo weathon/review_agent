@@ -1,5 +1,6 @@
 # TRAIN THE LATENT, NOT THE IMAGE: JOINT IMAGE COMPRESSION AND STEGANOGRAPHY
 
+- Avg Score: 3.75
 - Decision: Reject
 - Scores: 3, 3, 3, 6
 

@@ -1,5 +1,6 @@
 # Improving Generalization for Missing Data Imputation via Dual Corruption Denoising Autoencoders
 
+- Avg Score: 3.80
 - Decision: Reject
 - Scores: 3, 3, 3, 5, 5
 

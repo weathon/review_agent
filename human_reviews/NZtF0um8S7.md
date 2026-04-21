@@ -1,5 +1,6 @@
 # Exploiting the Potential of Seq2Seq Models as Robust Few-Shot Learners
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 5, 5
 

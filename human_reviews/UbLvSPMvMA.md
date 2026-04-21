@@ -1,5 +1,6 @@
 # Sparsity beyond TopK: A Novel Cosine Loss for Sparse Binary Representations
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 1, 3
 

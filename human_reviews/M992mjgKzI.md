@@ -1,5 +1,6 @@
 # OGBench: Benchmarking Offline Goal-Conditioned RL
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

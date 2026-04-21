@@ -1,5 +1,6 @@
 # Does resistance to style-transfer equal Shape Bias? Evaluating shape bias by distorted shape
 
+- Avg Score: 5.25
 - Decision: Reject
 - Scores: 6, 6, 3, 6
 

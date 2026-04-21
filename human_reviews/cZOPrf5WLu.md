@@ -1,5 +1,6 @@
 # Learning on LoRAs: GL-Equivariant Processing of Low-Rank Weight Spaces for Large Finetuned Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 3, 5, 8
 

@@ -1,5 +1,6 @@
 # Can Differentiable Decision Trees Learn Interpretable Reward Functions?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 3, 6, 5, 6
 

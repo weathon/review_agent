@@ -1,5 +1,6 @@
 # Unsupervised Disentanglement of Content and Style via Variance-Invariance Constraints
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6
 

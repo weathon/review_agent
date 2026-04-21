@@ -1,5 +1,6 @@
 # Rethinking Backdoor Attacks on Dataset Distillation: A Kernel Method Perspective
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 5, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # An Information-Theoretic Approach to Diversity Evaluation of Prompt-based Generative Models
 
+- Avg Score: 4.25
 - Decision: Reject
 - Scores: 3, 3, 3, 8
 

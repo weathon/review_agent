@@ -1,5 +1,6 @@
 # Complexity of Formal Explainability for Sequential  Models
 
+- Avg Score: 5.80
 - Decision: Reject
 - Scores: 5, 6, 6, 6, 6
 

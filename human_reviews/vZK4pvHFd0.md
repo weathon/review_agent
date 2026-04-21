@@ -1,5 +1,6 @@
 # HyDance: A Novel Hybrid  Dance Generation Network with temporal and  frequency features
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 5, 6, 6, 5
 

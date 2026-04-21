@@ -1,5 +1,6 @@
 # Towards Dynamic Graph Neural Networks with Provably High-Order Expressive Power
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 6, 5, 5
 

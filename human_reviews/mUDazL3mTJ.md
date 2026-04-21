@@ -1,5 +1,6 @@
 # FDN: Interpretable Spatiotemporal Forecasting with Future Decomposition Networks
 
+- Avg Score: 4.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3, 5
 

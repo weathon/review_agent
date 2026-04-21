@@ -1,5 +1,6 @@
 # LASER: Linear Compression in Wireless Distributed Optimization
 
+- Avg Score: 5.83
 - Decision: Reject
 - Scores: 6, 6, 6, 6, 8, 3
 

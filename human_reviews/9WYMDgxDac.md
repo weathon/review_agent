@@ -1,5 +1,6 @@
 # Sample then Identify: A General Framework for Risk Control and Assessment in Multimodal Large Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (Spotlight)
 - Scores: 8, 6, 6, 8
 

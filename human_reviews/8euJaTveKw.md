@@ -1,5 +1,6 @@
 # Prometheus: Inducing Fine-Grained Evaluation Capability in Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (poster)
 - Scores: 5, 6, 1, 6
 

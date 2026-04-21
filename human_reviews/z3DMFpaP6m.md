@@ -1,5 +1,6 @@
 # On the Entropy of Language Models in Getting Semantic from Tokens
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 1, 3
 

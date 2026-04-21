@@ -1,5 +1,6 @@
 # BigCodeBench: Benchmarking Code Generation with Diverse Function Calls and Complex Instructions
 
+- Avg Score: 9.00
 - Decision: Accept (Oral)
 - Scores: 10, 10, 8, 8
 

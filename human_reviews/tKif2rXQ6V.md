@@ -1,5 +1,6 @@
 # SteBen: Steiner Tree Problem Benchmark for Neural Combinatorial Optimization on Graphs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 3, 3, 5, 3
 

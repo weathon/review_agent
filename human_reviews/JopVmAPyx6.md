@@ -1,5 +1,6 @@
 # How does representation impact in-context learning: An exploration on a synthetic task
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 3, 5, 5, 5
 

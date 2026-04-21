@@ -1,5 +1,6 @@
 # Discovering Physics Laws of Dynamical Systems via Invariant Function Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 3, 5, 6, 5
 

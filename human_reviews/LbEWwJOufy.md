@@ -1,5 +1,6 @@
 # TANGO: Co-Speech Gesture Video Reenactment with Hierarchical Audio Motion Embedding and Diffusion Interpolation
 
+- Avg Score: 8.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 10
 

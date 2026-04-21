@@ -1,5 +1,6 @@
 # Anti-Exposure Bias in Diffusion Models
 
+- Avg Score: 7.20
 - Decision: Accept (Spotlight)
 - Scores: 6, 8, 8, 6, 8
 

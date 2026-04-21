@@ -1,5 +1,6 @@
 # COAT: Compressing Optimizer states and Activations for Memory-Efficient FP8 Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

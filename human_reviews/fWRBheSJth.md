@@ -1,5 +1,6 @@
 # GReaTer: Gradients Over Reasoning Makes Smaller Language Models Strong Prompt Optimizers
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

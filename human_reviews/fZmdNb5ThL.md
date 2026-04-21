@@ -1,5 +1,6 @@
 # ShiftAddAug: Augment Multiplication-Free Tiny Neural Network with Hybrid Computation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 3, 3, 6
 

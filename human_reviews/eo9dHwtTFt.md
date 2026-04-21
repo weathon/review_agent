@@ -1,5 +1,6 @@
 # Consciousness-Inspired Spatio-Temporal Abstractions for Better Generalization in Reinforcement Learning
 
+- Avg Score: 5.75
 - Decision: Accept (poster)
 - Scores: 6, 6, 5, 6
 

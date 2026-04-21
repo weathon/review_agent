@@ -1,5 +1,6 @@
 # Inverse Prompt Engineering for Task-Specific LLM Safety
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 3, 3, 3, 3
 

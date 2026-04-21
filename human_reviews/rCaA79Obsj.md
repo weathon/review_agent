@@ -1,5 +1,6 @@
 # Towards zero shot multivariate time series anomaly detection - A Realistic Evaluation
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 3, 5, 5, 8, 5
 

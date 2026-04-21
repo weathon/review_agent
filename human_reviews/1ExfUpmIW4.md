@@ -1,5 +1,6 @@
 # Towards Robust and Parameter-Efficient Knowledge Unlearning for LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

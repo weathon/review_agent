@@ -1,5 +1,6 @@
 # Linear Spherical Sliced Optimal Transport: A Fast Metric for Comparing Spherical Data
 
+- Avg Score: 7.50
 - Decision: Accept (Spotlight)
 - Scores: 6, 10, 6, 8
 

@@ -1,5 +1,6 @@
 # Optimal Noise Pursuit for Augmenting Text-to-Video Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 5, 5, 5
 

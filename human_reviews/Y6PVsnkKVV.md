@@ -1,5 +1,6 @@
 # Reason to Behave: Achieving Human-Like Task Execution for Physics-Based Characters
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 3, 1, 5
 

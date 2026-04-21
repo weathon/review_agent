@@ -1,5 +1,6 @@
 # Symphony: Symmetry-Equivariant Point-Centered Spherical Harmonics for 3D Molecule Generation
 
+- Avg Score: 6.50
 - Decision: Accept (poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # GDL-DS: A Benchmark for Geometric Deep Learning under Distribution Shifts
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 8, 3, 6
 

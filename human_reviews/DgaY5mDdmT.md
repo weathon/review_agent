@@ -1,5 +1,6 @@
 # MLLMs Know Where to Look: Training-free Perception of Small Visual Details with Multimodal LLMs
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 5
 

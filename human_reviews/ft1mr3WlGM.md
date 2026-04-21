@@ -1,5 +1,6 @@
 # Improved Probabilistic Image-Text Representations
 
+- Avg Score: 6.67
 - Decision: Accept (poster)
 - Scores: 6, 8, 6
 

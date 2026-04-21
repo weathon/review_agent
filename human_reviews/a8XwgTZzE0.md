@@ -1,5 +1,6 @@
 # Reconstruct the Understanding of Grokking through Dynamical Systems
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 1, 5, 1, 1
 

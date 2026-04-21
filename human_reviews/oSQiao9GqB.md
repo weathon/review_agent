@@ -1,5 +1,6 @@
 # LLaVA-Interleave: Tackling Multi-image, Video, and 3D in Large Multimodal Models
 
+- Avg Score: 7.33
 - Decision: Accept (Spotlight)
 - Scores: 8, 8, 6
 

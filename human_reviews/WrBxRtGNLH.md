@@ -1,5 +1,6 @@
 # On Convergence Rates of Deep Nonparametric Regression under Covariate Shift
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 6, 3
 

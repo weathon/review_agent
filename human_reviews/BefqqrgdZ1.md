@@ -1,5 +1,6 @@
 # UltraLightUNet: Rethinking U-shaped Network with Multi-kernel Lightweight Convolutions for Medical Image Segmentation
 
+- Avg Score: 2.75
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 3, 6, 1, 1
 

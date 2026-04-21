@@ -1,5 +1,6 @@
 # Federated Learning Empowered by Generative Content
 
+- Avg Score: 5.67
 - Decision: Reject
 - Scores: 8, 6, 3
 

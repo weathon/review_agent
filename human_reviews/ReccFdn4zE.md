@@ -1,5 +1,6 @@
 # Cross Attention for Oddly Shaped Data and Applications in Ionospheric Modeling
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 1, 3, 3, 1
 

@@ -1,5 +1,6 @@
 # Momentum-driven Noise-free Guided Conditional Sampling for Denoising Diffusion Probabilistic Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 5, 5
 

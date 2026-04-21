@@ -1,5 +1,6 @@
 # Power Characterization of Noisy Quantum Kernels
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 5, 6, 5, 5, 3
 

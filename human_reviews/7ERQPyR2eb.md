@@ -1,5 +1,6 @@
 # Real3D-Portrait: One-shot Realistic 3D Talking Portrait Synthesis
 
+- Avg Score: 8.50
 - Decision: Accept (spotlight)
 - Scores: 8, 10, 8, 8
 

@@ -1,5 +1,6 @@
 # Dual-Balancing for Multi-Task Learning
 
+- Avg Score: 5.40
 - Decision: Reject
 - Scores: 8, 6, 3, 5, 5
 

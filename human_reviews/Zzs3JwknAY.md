@@ -1,5 +1,6 @@
 # One-for-All Few-Shot Anomaly Detection via Instance-Induced Prompt Learning
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 6
 
