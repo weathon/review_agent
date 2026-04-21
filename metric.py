@@ -470,8 +470,8 @@ def analyze_and_plot(path):
     print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
     if one_vs_rest is not None:
         print(f"  {'─'*45}")
-        print(f"  Human one-vs-rest baseline ({one_vs_rest['n_pairs']} held-out reviews):")
-        print(f"    Note:                high human baseline: each paper contributes multiple leave-one-reviewer-out comparisons, while AI gets one score per paper")
+        print(f"  Human panel-to-reviewer consistency ({one_vs_rest['n_pairs']} held-out reviews):")
+        print(f"    Note:                group-human baseline: mean(other reviewers) predicts the held-out reviewer, across all leave-one-reviewer-out splits")
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
@@ -503,8 +503,8 @@ def analyze_and_plot(path):
         )
     if split_half is not None:
         print(f"  {'─'*45}")
-        print(f"  Human split-half baseline ({split_half['n_pairs']} exact split pairs):")
-        print(f"    Note:                high human baseline: humans are compared against other humans from the same paper, and papers with more reviewers contribute more split pairs")
+        print(f"  Human subgroup-to-subgroup consistency ({split_half['n_pairs']} exact split pairs):")
+        print(f"    Note:                group-human baseline: one reviewer subgroup predicts another reviewer subgroup on the same paper")
         print(f"    Spearman:            {split_half['spearman']:.4f}")
         print(f"    Pearson:             {split_half['pearson']:.4f}")
         print(f"    MAE:                 {split_half['mae']:.4f}")
