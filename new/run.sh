@@ -2,8 +2,8 @@ export OPENAI_DEFAULT_MODEL="glm-5.1"
 export HARSH_MODEL="glm-5.1"
 export MERGER_MODEL="glm-5.1"
 export NEUTRAL_MODEL="glm-5.1"
-export OUTPUT_CSV="results/bench_scores_glm.csv"
-export MERGE_LOG="results/pipeline_whole_glm.log"
+export OUTPUT_CSV="results/bench_scores_glm_or.csv"
+export MERGE_LOG="results/pipeline_whole_glm_or.log"
 export CONCURRENCY=10
 # rm bench_scores_qwen.log
 ollama serve & 
