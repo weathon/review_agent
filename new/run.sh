@@ -1,11 +1,11 @@
 conda activate neg
 export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
-export HARSH_MODEL="kimi-k2.6"
+export HARSH_MODEL="ollama:glm-5.1:cloud"
 export MERGER_MODEL="ollama:glm-5.1:cloud"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
-export OUTPUT_CSV="results/bench_scores_kimi_splited.csv"
-export MERGE_LOG="results/pipeline_whole_kimi_splited.log"
-export CONCURRENCY=10
+export OUTPUT_CSV="results/bench_scores_glm_splited.csv"
+export MERGE_LOG="results/pipeline_whole_glm_splited.log"
+export CONCURRENCY=7
 # rm bench_scores_qwen.log
 ollama serve & 
 echo "==============================" > $MERGE_LOG
