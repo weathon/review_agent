@@ -1,100 +1,105 @@
-Now I have all the information I need. Let me compile the final review.
+Now I have enough information to write the final consolidated review. Let me synthesize everything.
+
+---
 
 ## Summary
+"Perceptual Piercing" proposes a three-stage pipeline for object detection in foggy/hazy conditions: a lightweight YOLO (YOLOv5s or YOLOv8n) scans the full image to identify regions of interest, a modified AOD-Net (AOD-NetX, which adds a spatial attention layer derived from preliminary bounding boxes) dehazees only those regions, and a heavier YOLO (YOLOv5x or YOLOv8x) performs the final detection pass. The method is evaluated on Foggy Cityscapes and RESIDE-β (OTS and RTTS). The paper presents this as achieving state-of-the-art performance inspired by human visual mechanisms.
 
-The paper proposes Perceptual Piercing, a multi-stage object detection framework for low-visibility (foggy) conditions. A lightweight YOLO model first identifies regions of interest, which are then used to construct a spatial attention map that modulates the dehazing transmission map in a modified AOD-Net (called AOD-NetX). The dehazed image is finally processed by a larger YOLO model for refined detection. The approach is inspired by human visual mechanisms (selective attention, foveation), and is evaluated on Foggy Cityscapes and RESIDE-β datasets.
+---
 
 ## Strengths
 
-- **Valid in-distribution improvement on foggy detection**: Table 2 shows the YOLOv5s+AOD-NetX+YOLOv5x pipeline achieves 0.6152 mAP on foggy Foggy Cityscapes, a meaningful improvement over the bare YOLOv5x baseline (0.485, ~27% relative gain) and over the uniform-dehazing AOD-Net+YOLOv5x (0.5822, ~5.7% relative gain). This demonstrates that selective region-based dehazing can improve foggy-scene detection when operating within the training distribution.
+- **Targeted (region-specific) dehazing outperforms uniform full-image dehazing on in-distribution foggy data (Table 2):** YOLOv5s+AOD-NetX+YOLOv5x achieves foggy mAP of 0.6152, versus AOD-Net+YOLOv5x at 0.5822 and plain YOLOv5x at 0.485. This is the paper's single genuine empirical finding — selective dehazing guided by preliminary detection does provide a lift over naive full-image dehazing on the in-distribution test set.
 
-- **Transparent reporting of OOD failure modes**: The authors include Table 3 (OOD evaluation) and Section 5.1 (Limitations), acknowledging that dehazing degrades performance on OOD data and providing an explanation (the dehazing embedding space is predominantly foggy). Including negative results strengthens credibility.
+- **AOD-NetX improves over AOD-Net on in-distribution dehazing quality (Table 1):** The spatial-attention extension yields measurable gains on Foggy Cityscapes (SSIM 0.998 vs. 0.994; PSNR 27.22 vs. 26.74) and RESIDE-β OTS (SSIM 0.945 vs. 0.920; PSNR 25.80 vs. 24.14), providing at least partial validation of the attention-guided transmission map idea.
 
-- **Modular, plug-and-play design**: As stated in Section 4, the YOLO detectors use MS-COCO pre-training without fine-tuning, allowing users to integrate the dehazing module with their own detection pipeline without retraining — a practical advantage over end-to-end joint-training approaches.
+- **Dual evaluation on synthetic and real-world hazy images:** Using both Foggy Cityscapes (synthetic) and RESIDE-β RTTS (real-world hazy) follows good practice and partially reveals the domain-gap issue that the paper ultimately does not resolve.
+
+---
 
 ## Weaknesses
 
 ### Fatal
-None.
+
+- **The paper's central claim directly contradicts its own reported numbers.** Section 5 (Discussion) states: *"this methodology not only meets but exceeds the performance benchmarks set by state-of-the-art (SOTA) object detection models when tested against the same dataset distribution."* The Conclusion doubles down: *"Our proposed AODNetX architecture outperforms state-of-the-art models, excelling in both standard and out-of-distribution datasets."* Table 3 — the paper's own OOD results — flatly refutes this. The plain YOLOv8x baseline (no dehazing) achieves mAP 0.7125 (OTS) and 0.6978 (RTTS), versus the full pipeline's 0.5779 / 0.5312 — a ~13–17 point gap *against* the proposed method. Section 5.1 even acknowledges this: *"in Out-of-Distribution (OOD) testing, the performance degrades compared to a more generalized model."* A paper cannot simultaneously claim SOTA performance and acknowledge the opposite in the same document. This is not a framing issue; the SOTA claim is simply false per the paper's own evidence.
+
+- **No comparison with any prior published fog-detection or detection-under-haze method.** The related work surveys PDE, PKAL, YOLOv5s FMG, enhanced YOLOv8 with deformable convolutions, and others. None appear in Tables 2 or 3; all baselines are vanilla frozen-YOLO variants. A claim to "set new performance standards" cannot be evaluated — let alone supported — without measuring against the methods one claims to surpass. This is not a missing ablation; it is the experiment the paper's central argument depends on.
 
 ### Major
 
-- **The proposed method degrades detection performance on OOD data and clear images, contradicting the paper's core claims**: Table 3 shows that every variant with dehazing performs substantially worse than the bare YOLO models on OOD data. For example, YOLOv5x alone achieves 0.6944/0.6655 mAP (OTS/RTTS), while the proposed YOLOv5s+AOD-NetX+YOLOv5x drops to 0.5679/0.5297 — a ~13 mAP decline. Even AOD-Net+YOLOv5x degrades to 0.6325/0.6156. Table 2 shows the same pattern on clear images: YOLOv5x+AOD-NetX scores 0.4896 mAP, *worse* than bare YOLOv5x at 0.5644. Yet the conclusion (Section 6) claims the method "outperforms state-of-the-art models, excelling in both standard and out-of-distribution datasets," which directly contradicts Table 3. Similarly, Section 4.2 states that AOD-NetX "consistently improves object detection performance in both clear and foggy conditions," which is false for clear conditions (0.4896 < 0.5644). These misrepresentations of the paper's own results are a serious concern. Any real-world deployment would encounter mixed conditions, making this a fundamental limitation.
+- **No efficiency measurements despite efficiency being a core claimed contribution.** The abstract, introduction, Discussion, and Conclusion all assert that region-specific dehazing delivers "considerably fewer computations" and is suited for "real-time applications." No FPS, latency, FLOPs, or memory figures appear anywhere. Critically, Section 5.1 (Limitations) even hedges: *"the two-tiered detection process coupled with intensive region-specific dehazing may still require substantial computational resources, potentially limiting its applicability in real-time scenarios."* A two-pass YOLO pipeline plus a dehazing module is plausibly *slower* than a single large YOLO; the paper asserts efficiency while simultaneously expressing uncertainty about it and never measuring it.
 
-- **No comparison with any established foggy-detection baseline**: The paper cites multiple directly relevant methods in related work — PKAL (Yang et al., 2023b), PDE (Li et al., 2022), YOLOv5s FMG (Zheng et al., 2023), deformable-conv YOLOv8 (Wu & Gao, 2023) — but includes zero experimental comparisons with any of them. The "state-of-the-art" claims in the abstract and conclusion are entirely unsupported without such comparisons.
-
-- **AOD-NetX catastrophically degrades image quality on real-world hazy data**: Table 1 shows AOD-NetX achieves SSIM of 0.656 on RTTS (the only real-world hazy test set), compared to AOD-Net's 0.932 — a 0.276 SSIM drop. For a dehazing method, this indicates severe structural distortion on real-world data. The paper mentions this in one sentence ("AOD-Net may retain more structural details in this particular dataset") without analyzing why or showing visual examples, making it impossible to assess whether the attention mechanism creates destructive artifacts.
+- **In-distribution improvement is confounded by experimental design.** In Table 2, all YOLO models are frozen at MS-COCO weights and never fine-tuned on Foggy Cityscapes. The baseline YOLO scores (YOLOv5x foggy mAP 0.485) are depressed precisely because the detector is unadapted to this domain — not because fog is inherently difficult for detection. The pipeline "wins" partly because AOD-NetX acts as a domain adapter for the frozen weights. This does not generalize: Table 3 shows the same frozen YOLO baselines *outperform* the pipeline on a different distribution. The design choice conflates dehazing quality with detection adaptation in a way that makes results misleading and unlikely to hold in properly fine-tuned settings.
 
 ### Minor
 
-- **The core contribution (spatial attention mechanism) accounts for a marginal fraction of the total performance gain**: On foggy Foggy Cityscapes, the improvement from AOD-Net+YOLOv5x (0.5822) to AOD-NetX+YOLOv5x (0.6152) is only 0.033 mAP, while the improvement from bare YOLOv5x (0.485) to AOD-Net+YOLOv5x (0.5822) is 0.097 mAP. The selective attention mechanism that is the paper's primary novelty contributes ~25% of the total gain, with standard dehazing accounting for ~75%. Without an ablation isolating the spatial attention component (e.g., comparing AOD-NetX with different attention configurations), the contribution of the core mechanism is insufficiently substantiated.
+- **AOD-NetX SSIM collapse on RTTS is mischaracterized.** Table 1 shows AOD-Net SSIM=0.932 vs. AOD-NetX SSIM=0.656 on RTTS — a 0.276 drop, which is substantial and not "slight." The paper's commentary ("AOD-Net may retain more structural details in this particular dataset") understates the failure, and the conclusion "AOD-NetX is more effective in most scenarios" is an overstatement given this magnitude of structural degradation on the most practically relevant (real-world) test set.
 
-- **The "human visual cortex" framing is metaphorical rather than methodologically substantive**: Section 3.2 devotes substantial text to selective attention, foveation, eye tracking, and bottom-up/top-down processing, but these analogies do not inform any specific design decision. The resulting pipeline — lightweight detection → region-based dehazing → robust detection — is a standard coarse-to-fine engineering approach that would emerge from straightforward reasoning without neuroscience inspiration. The framing inflates perceived novelty.
+- **Pipeline degrades performance on clear images without acknowledgment.** Table 2 shows YOLOv5s+AOD-NetX+YOLOv5x at mAP 0.4896 under clear conditions versus plain YOLOv5x at 0.5644 — nearly 8 mAP points worse. This failure mode (harming clean-image detection) is relevant to deployment, but the paper does not analyze or even mention it.
 
-- **AOD-NetX architecture is underspecified**: Section 3.3 and Figure 2 show the spatial attention module, but the paper does not explain how bounding boxes from the lightweight detector are converted into the spatial attention map. Is it a binary mask? A Gaussian-weighted mask? Does it have trainable parameters? This is essential for reproducibility and understanding.
-
-- **No computational efficiency metrics reported despite claiming efficiency**: The abstract claims "significantly optimizing computational efficiency," and the discussion states the approach yields "superior results with considerably fewer computations." Yet no FLOPs, latency, throughput, or parameter counts are reported anywhere. The two-tiered detection process (lightweight YOLO + dehazing + large YOLO) likely adds significant overhead.
-
-- **Training protocol is ambiguous**: Section 4 states "the object detection models (various YOLO versions) remain as pre-trained on the MS-COCO dataset," but Table 2's header says "Train- Foggy Cityscapes." It is unclear what is trained and what uses frozen COCO weights, which affects interpretation of the results.
+- **Bio-inspiration framing is largely decorative.** Section 3.2 devotes substantial text to selective attention, foveal/peripheral vision, gaze-direction, and top-down/bottom-up processing. The actual implementation reduces to: run YOLOv5s, extract bounding boxes, mask the transmission map within those boxes, run YOLOv5x. The spatial attention module (Figure 2) is a sigmoid over bounding-box-derived binary masks, not a mechanism operationalizing the cited perceptual literature. This is not a hard disqualifier, but it overpromises in the framing.
 
 ### Trivial
 
-- The Section 4.2 discussion of Table 2 incorrectly states that AOD-NetX "consistently improves" detection on clear conditions, when it actually degrades it (0.4896 vs. 0.5644 for YOLOv5x).
+- None (formatting/parser artifacts excluded per policy).
+
+---
 
 ## Nice-to-Haves
 
-- Comparison with at least one existing foggy-detection method (e.g., PDE, PKAL) to contextualize the in-distribution results.
-- Failure analysis on OOD data: visual comparisons of AOD-Net vs. AOD-NetX dehazed images on RTTS to reveal whether the attention mechanism creates destructive artifacts.
-- Ablation isolating the spatial attention mechanism (e.g., AOD-NetX with different attention configurations vs. AOD-Net with all else held constant).
-- Computational efficiency measurements (FLOPs, latency) for each pipeline stage.
+- Fine-tune the YOLO detection heads on Foggy Cityscapes and re-evaluate — this would allow meaningful comparison to published benchmarks and yield more interpretable mAP numbers.
+- Report runtime (FLOPs or latency) to either substantiate or retract the efficiency claim.
+- Analyze failure modes of AOD-NetX on RTTS (e.g., visualize what the spatial attention map looks like on real versus synthetic haze, to understand whether the SSIM collapse reflects over-smoothing, artifact generation, or domain mismatch).
+- Add a cascade-gating mechanism that skips dehazing on clear images (already mentioned in Section 5.2), which would also address the clear-image mAP regression.
+
+---
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **RTTS dataset splits suspicious**: The harsh critic questioned the train/val/test splits (3000/500/1500) for RTTS, noting it was originally a test-only subset. While the splits are non-standard, creating custom splits is a common practice and not inherently wrong. The authors should clarify their split construction, but this is not a critical flaw.
+- **Harsh Critic §3.1: RTTS used as training set conflicting with benchmark protocol.** The paper states the dehazing training split is "3000 images, validated on 500 images, test set 1500 images" in the RTTS description. The 3000+500+1500=5000 exceeds RTTS's 4322 images, suggesting this description may refer to RESIDE-β OTS splits rather than RTTS. This is ambiguous without additional context and cannot be confirmed from the paper text alone. Excluded to avoid falsely attributing a protocol violation.
 
-- **Missing appendix/proofs**: Per rules, appendix content is stripped by the parser and assumed to exist in the original submission.
+- **Harsh Critic: Dataset split inconsistency (Foggy Cityscapes count).** The paper describes "training set consists of 2975 images, validated on 500 images, and the test set had 1525 images" — these numbers are consistent with the standard Foggy Cityscapes split (20,550 images total with the beta=0.02 variant restricted to the Cityscapes splits). No inconsistency found.
 
-- **Demand for conditional dehazing implementation**: The harsh critic suggested the authors should implement the haze-index-gated dehazing they propose as future work. This is beyond the paper's stated scope and is a nice-to-have, not a weakness.
+- **Strength Finder: "Honest and transparent reporting of OOD failure modes."** While Section 5.1 does acknowledge OOD degradation, the Conclusion explicitly states the method "excels in both standard and out-of-distribution datasets" — directly contradicting Section 5.1. The "transparency" is negated by the conclusion's false claim. This strength conflicts with the verified Fatal weakness and is therefore dropped.
+
+- **Strength Finder: "Clear architectural mapping from biological inspiration to implementation."** As noted under Minor weaknesses, the mapping is largely metaphorical. This generic strength claim lacks specific evidence of mechanism-level correspondence. Dropped.
+
+- **Strength Finder: "Modular, plug-and-play design."** True in a narrow sense, but given that the pipeline degrades both OOD performance and clear-image performance, plug-and-play integration would require careful gating. Too generic to count as a substantive strength.
+
+---
 
 ## Novel Insights
 
-The most revealing observation from this review is the asymmetric behavior of AOD-Net vs. AOD-NetX on clear vs. foggy images within the *same* distribution (Table 2). Standard AOD-Net improves clear-condition performance (0.5644→0.6813) while AOD-NetX degrades it (0.5644→0.4896). This suggests the spatial attention mask doesn't merely suppress unnecessary dehazing — it may be *incorrectly* modulating the transmission map in regions without objects, introducing artifacts that actively harm detection. This pattern, combined with the catastrophic SSIM drop on RTTS (0.656 vs. 0.932), points to a fundamental issue with how bounding-box-derived attention interacts with the dehazing transmission map, rather than a simple OOD generalization problem.
+None beyond the paper's own contributions. The core observation — that masking dehazing to detector-proposed regions is better than full-image dehazing on in-distribution foggy data — is sensible, but the evaluation design (frozen detectors, no comparison to published methods, no OOD improvement) prevents this insight from being actionable or verifiable.
+
+---
 
 ## Suggestions
 
-- Retract or heavily qualify the SOTA claims in the abstract and conclusion. The current claims ("set new performance standards," "outperforms state-of-the-art models, excelling in both standard and out-of-distribution datasets") are contradicted by the paper's own data and should be replaced with honest, qualified statements.
-- Add visual comparisons of AOD-Net vs. AOD-NetX dehazed images on RTTS to diagnose whether the attention mechanism creates destructive artifacts — this is essential for understanding whether the approach is fundamentally limited or fixable.
-- Add at least one comparison with an existing foggy-detection method to contextualize the in-distribution results.
+1. **Retract or substantially revise the SOTA claim.** The Discussion and Conclusion must be brought into alignment with Table 3. At minimum, the SOTA claim should be removed and replaced with a narrow in-distribution claim with appropriate caveats.
+2. **Add at least one published baseline** from the related work (e.g., PDE) to Tables 2 and 3 — or, if those results are unavailable, frame the comparison explicitly as "ablation of dehazing module variants" rather than "outperforms SOTA."
+3. **Measure and report inference time** for each pipeline variant and compare to the single-model baselines. If the pipeline is slower, acknowledge it.
+4. **Investigate AOD-NetX's SSIM failure on RTTS** — whether it stems from domain shift (trained on Foggy Cityscapes synthetic fog, tested on real haze), over-smoothing, or interaction with the spatial attention mask. This analysis is needed to understand the method's scope.
 
-## Calibration Anchors
-
-| Paper | Avg Score | Comparison |
-|-------|-----------|-----------|
-| Reti-Diff (low-visibility image restoration with Retinex-based latent diffusion) | 7.5 | Far stronger: genuine technical novelty, thorough experiments, addresses OOD properly. This paper is well below. |
-| Box stability score for detector generalization | 7.5 | Much stronger: novel evaluation metric with principled methodology. |
-| DiffAD (diffusion-based domain adaptation for real dehazing) | 5.6 | Directly related (dehazing domain shift). Addresses OOD head-on with a real mechanism, but still rejected. This paper is weaker: DiffAD proposes a genuine solution to OOD; this paper's method makes OOD worse. |
-| LIME-Eval (low-light enhancement evaluation via detection) | 6.25 | Related (enhancement+detection). Novel evaluation framework with some weaknesses. Stronger than this paper. |
-| GABins (gated attention bins for depth estimation) | 2.5 | Similar pattern: no ablation evidence, overclaimed contribution, only tested with strong backbone. This paper is slightly stronger because it has multiple evaluation settings and transparently reports failures. |
-| OOD detection with OT (overclaimed SOTA, missing baselines) | 4.5 | Similar pattern of overclaimed SOTA without proper baselines. This paper is comparable but also has the unique problem of its own results contradicting its claims. |
-| EEG transfer refutation (method degrades rather than improves) | 2.6 | Extreme case where method actively hurts. This paper is stronger because it works in-distribution, but the OOD degradation pattern is similar. |
-
-This paper falls below the medium-band anchors (4.5-5.6) that were rejected, because those papers at least addressed their stated problems rather than making them worse. It is above the low-band anchors (1.5-2.5) because it demonstrates a working in-distribution result and transparently reports failures. The overclaiming is severe but the method is not entirely without merit for controlled, in-distribution scenarios.
+---
 
 ## Score and Decision
 
-**Originality**: Low. The coarse-to-fine pipeline is a standard engineering pattern; the neuroscience framing adds no methodological substance; the attention mechanism's contribution is marginal.
+**Calibration anchors:**
 
-**Importance of research question**: Moderate. Object detection in low visibility is practically important.
+| Paper | Avg. Human Score | Comparison |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/gENfMmUIkT.md` | **1.67** (Reject) | Pipeline-based IoT object detection; no ML novelty, no comparison to other methods. Most similar in structure: multi-stage pipeline, no published baseline comparison, unclear efficiency. The paper under review has slightly more experimental content (two datasets, ablation over pipeline variants), but shares the same fatal gaps. |
+| `/home/wg25r/review_agent/human_reviews/uYuoqHxtAW.md` | **2.5** (Withdrawn) | Bio-inspired retina mapping to CNNs; framing largely decorative, lack of novelty. Directly parallel to the bio-inspiration cosmetic issue here, though reviewers found that paper's methodology at least internally consistent — unlike this paper, which contradicts its own numbers. |
+| `/home/wg25r/review_agent/human_reviews/f4aMqhYG7z.md` | **5.6** (Reject) | Diffusion-based adaptation for real image dehazing; solid methodology, domain-gap analysis. This paper is methodologically more rigorous than the paper under review — it does not contradict its own results. The paper under review falls substantially below this level. |
+| `/home/wg25r/review_agent/human_reviews/YS5zdlSzvv.md` | **5.0** (Withdrawn) | PANet for image rehazing training pairs. Medium quality with genuine methodological contribution but limited validation. Again, this paper shows more methodological integrity than the paper under review. |
+| `/home/wg25r/review_agent/human_reviews/2dnO3LLiJ1.md` | **8.0** (Accept, Oral) | Vision Transformers Need Registers — strong theoretical grounding, clear empirical validation, correct claims. Far above the paper under review. |
 
-**Claims well supported**: No. The paper's own OOD and clear-condition data contradict its SOTA claims; no baselines are compared; no efficiency metrics are provided despite claiming efficiency.
+**Positioning:** The paper under review shares the critical failure modes of the 1.67–2.5 cluster (no published baseline, bio-inspiration as decoration, pipeline of existing models without deep ML novelty) and adds a disqualifying defect those papers lacked: a central empirical claim that is directly and unambiguously contradicted by the paper's own reported numbers in the same document. Even the IoT pipeline paper (1.67) did not claim SOTA while its own tables showed otherwise. The in-distribution foggy-detection improvement (Table 2) provides a narrow genuine contribution, placing the paper just above 1.67, but the OOD contradiction and absent published comparisons keep it firmly in the low band.
 
-**Soundness of experiments**: Weak. No baselines, no ablations isolating the core contribution, catastrophic real-world dehazing quality not analyzed, and the paper misinterprets its own Table 2 results.
+**Final Score: 2.0**
 
-**Clarity**: Fair. The neuroscience framing obscures rather than illuminates; the training protocol is ambiguous; AOD-NetX is underspecified.
-
-**Value to community**: Limited. Without baselines or ablations, and with the method actively hurting OOD/clear performance, the paper offers insufficient evidence for practical adoption.
-
-MY FINAL SCORE: <pineapple>3.0</pineapple>
+MY FINAL SCORE: <pineapple>2.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -28332,3 +28332,1479 @@ MY FINAL DECISION: <orange>Reject</orange>
 
 --- Decision ---
 Reject
+
+============================================================
+Paper: ../iclr2025/papers/DDxLsxiZR8.txt
+Timestamp: 2026-04-21T01:54:28.024077
+
+--- Token Usage ---
+  Harsh Critic: input=11110 (cached=0) output=3314 (reasoning=1597) total=14424 requests=1 duration=n/ams
+  Strength Finder: input=10242 (cached=0) output=1470 (reasoning=609) total=11712 requests=1 duration=n/ams
+  Merger: input=552327 (cached=375104) output=18447 (reasoning=11091) total=570774 requests=43 duration=758817ms speed=24.31 tokens/s
+  TOTAL: input=573679 output=23231 total=596910
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review of CAT Pruning: Cluster-Aware Token Pruning for Text-to-Image Diffusion Models
+
+## Critical Issues
+
+**1. Broken baseline comparison [Structural]**
+
+The paper's only quantitative baseline is AT-EDM, which was designed for SD-XL and uses a different copy mechanism. The authors acknowledge adapting it: "since AT-EDM is actually designed for SD-XL...in practical 30% token budget is not suitable for similarity-based copy, so we combine the token selection algorithm in AT-EDM and the cache-and-reuse mechanism as a baseline." This Frankenstein adaptation produces catastrophically bad results — AT-EDM on Pixart-Σ achieves CLIP scores of 14.66 and 11.00 on COCO2017 (Tables 2–3), compared to 31.36 for the baseline. A properly functioning method would not collapse this dramatically. The comparison is against a broken implementation, not a fair competitor. This invalidates the central claim that CAT Pruning outperforms prior token pruning work. (Tables 2, 3, Section 4.1 "Baselines")
+
+**2. Evaluation relies solely on CLIP Score [Evidential]**
+
+The paper claims "comparable generative quality" and "preserving the performance of the model" with 70% token pruning, yet evaluates only CLIP Score. CLIP Score measures text-image alignment but is largely insensitive to image quality degradation — blurry, artifact-laden, or low-detail images can score well if the semantic content matches the prompt. No FID, IS, or human evaluation is reported. This is insufficient for a method that fundamentally reduces the computation per denoising step. Without distributional quality metrics, the claim that generative quality is preserved is unsupported. (Tables 2, 3; Abstract; Section 4.2)
+
+**3. No comparison with any feature caching method [Evidential]**
+
+The related work (Section 2) discusses DeepCache, FORA, TGATE, and Block Cache — all recent methods that exploit feature redundancy in diffusion models. None are included as baselines. The paper's own introduction states the method "could synergize with existing methods that implement caching and reuse at the block and module levels," yet this claim is never tested, and the most natural baselines — methods solving the same problem of accelerating diffusion inference via feature reuse — are entirely absent. With only a broken AT-EDM adaptation as comparison, the empirical contribution does not establish where CAT Pruning stands relative to the state of the art. (Sections 2, 4.1, 4.2)
+
+## Section-by-Section Notes
+
+**Abstract**: Claims "50%-60% reduction in computational costs while preserving the performance" — "preserving" is too strong given only CLIP Score evidence. Also contains a typo ("demonstrate reveal").
+
+**Section 1 (Introduction)**: The motivation regarding intra-kernel optimization is reasonable but underspecified. The claim that prior work focuses on "bypassing certain blocks" while this work reduces "latency within each individual kernel execution" is a framing choice, not a demonstrated architectural insight — the method still operates at the level of which tokens to compute, not within kernel operations.
+
+**Section 3.2 (Proposition 1)**: The "Proposition" is misleading. It is an empirical observation supported by Pearson correlations of 0.82–0.89 (Figure 3). Correlation is not proportionality, and the appendix "proof" (referenced but not present) apparently only covers "the simplest case as for time-step." This should be stated as an empirical finding, not a mathematical proposition. The gap between the formal claim and the evidence undermines the theoretical framing.
+
+**Section 3.4 (Clustering)**: The graph pooling layer is introduced in one sentence — "we introduce 1 light-weighted Graph Pooling Layer, which is not trainable" — with zero specification of what this layer does, its architecture, or how it aggregates cluster scores. This is a core algorithmic component that is entirely undefined.
+
+**Algorithm 2**: Multiple critical details are missing: (i) the value of hyperparameter *a* in the EWMA (Eq. 2), (ii) the number of clusters *K* in KMeans, (iii) how many tokens are selected from stale tokens (line 17) versus from noise magnitude, (iv) the *topk* budget at each level. Without these, the algorithm is not reproducible.
+
+**Section 4.1**: The value *t₀ = 8* (or 9 — it is stated differently in Section 3.4 vs. Section 4.1) is used without justification or sensitivity analysis. Starting pruning early vs. late could significantly affect results.
+
+**Tables 2–3**: The AT-EDM CLIP scores on Pixart-Σ (14.66, 11.00 on COCO2017 at 28 and 50 steps) are so far below the baseline (31.36, 31.20) that the method has clearly collapsed. Presenting these numbers as a meaningful comparison is misleading — it signals the baseline is misimplemented rather than that CAT Pruning is superior.
+
+**Figure 9**: The paper itself acknowledges visible degradation at α=0.2 ("missing eye"), yet selects α=0.3 as optimal based on visual inspection. No quantitative sweep of α against FID or similar quality metrics is provided.
+
+## Strengths
+
+- The three-component design (relative noise magnitude, staleness/frequency monitoring, cluster-aware selection) is well-motivated and the ablation visualizations in Figures 4–6 effectively demonstrate why each component matters. The progression from noise-only (Figure 4) to noise+staleness (Figure 5) to noise+staleness+clustering (Figure 6) is a clear and convincing qualitative ablation.
+
+- Using positional encoding to inject spatial awareness into KMeans clustering is a simple, low-overhead, and sensible design choice that avoids the complexity of graph-based clustering.
+
+- Testing on two current architectures (Stable Diffusion 3 and Pixart-Σ) at 1024×1024 resolution with both 28 and 50 denoising steps provides reasonable coverage of practical deployment scenarios.
+
+- The wall-clock speedup measurements (1.73x–2.15x) are honestly reported alongside MACs reductions, acknowledging the gap between theoretical and practical acceleration.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Add FID evaluation on MS-COCO and PartiPrompts.** Without FID, the claim that generative quality is "preserved" with 70% token pruning is not believable. CLIP Score alone is insufficient — it does not capture distributional quality or perceptual artifacts.
+
+2. **Add comparison with at least one feature caching method (DeepCache or FORA).** These are the most natural baselines for a method that exploits feature redundancy in diffusion models. Without them, the paper does not establish its position in the literature.
+
+3. **Run AT-EDM on its native SD-XL architecture or properly adapt it.** The current comparison is against a broken baseline — either demonstrate the adaptation is correct (by showing it works reasonably on its original architecture) or compare on SD-XL.
+
+### Deeper Analysis Needed
+1. **Quantitative ablation of each component (noise, staleness, clustering) with FID.** The current ablation is visual only (Figures 4–6). Numeric ablation would establish how much each component contributes to the final result.
+
+2. **Sensitivity analysis for key hyperparameters (α, t₀, K, EWMA decay a).** The paper picks α=0.3 and t₀=8/9 without systematic justification. The reader cannot assess robustness.
+
+### Visualizations & Case Studies
+1. **Failure case analysis.** The paper only shows favorable examples. With 70% token pruning, there must be prompts where the method fails. Showing these and characterizing failure modes would strengthen credibility.
+
+### Obvious Next Steps
+1. **Demonstrate synergy with block-level caching as claimed in the introduction.** The paper explicitly states this as motivation but never tests it. Even a single experiment combining CAT Pruning with DeepCache or FORA would validate this claim.
+
+## Overall Assessment
+
+The paper proposes a reasonable three-component token pruning method with compelling qualitative ablation visualizations, but the empirical evaluation is insufficient to support its claims. The only quantitative baseline (AT-EDM) is improperly adapted and produces catastrophically collapsed results, making the comparison meaningless. The evaluation relies entirely on CLIP Score, which cannot substantiate claims of "preserved generative quality" under aggressive token pruning. No comparison with the most relevant class of methods (feature caching) is provided, despite these being discussed in related work and the paper claiming compatibility with them. Core algorithmic details (graph pooling, hyperparameters) are underspecified. These are not minor gaps — without FID, without fair baselines, and without a properly functioning competitor, the paper does not establish that CAT Pruning achieves its stated goal of preserving quality under significant computation reduction. The contribution as presented should not be accepted; at minimum, it requires FID evaluation, fair baseline comparisons, and full algorithmic specification.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Dramatically better quality preservation than the token-pruning baseline AT-EDM at comparable MACs**: On Pixart-Σ at 28 steps with nearly identical MACs (60.08T vs 62.08T), CAT Pruning achieves CLIP Score 30.02 on COCO2017 versus AT-EDM's 14.66 — a 15+ point gap — and similarly 31.06 vs 24.30 on PartiPrompts (Table 2). This gap persists at 50 steps (Table 3), demonstrating that the method's design choices are essential, not just the token budget.
+
+2. **Substantial wall-clock speedup with minimal quality loss**: On SD3 at 50 steps, the method achieves 2.15× end-to-end speedup (0.134 vs 0.062 throughput) while CLIP Score drops only from 32.92 to 32.72 on PartiPrompts (Table 3). At 28 steps, 1.82× speedup with a drop from 32.33 to 32.03 (Table 2). The quality-speedup tradeoff is strongly favorable.
+
+3. **Clear ablation evidence for each design component**: Figure 6 isolates the contribution of clustering — adding cluster awareness (column 2) restores missing windows (row 1, col 1 vs col 2) and missing heart details (row 2, col 1 vs col 2) compared to noise+balance alone. Figures 4 and 5 show that staleness-aware selection eliminates background noise artifacts visible when using noise magnitude alone.
+
+### Supporting strengths
+1. **Principled empirical justification for noise-based selection**: Figure 3 shows Pearson correlations of 0.82–0.89 between relative noise magnitudes at consecutive timesteps across multiple prompts and steps, providing concrete evidence that tokens with large noise changes at one step are likely to have large changes subsequently (supporting Proposition 1).
+
+2. **Low computational overhead from clustering**: Clustering is performed only once at step t₀+1 and reused for all subsequent steps (Algorithm 2, lines 4–5 vs 11–12; Figure 2 caption), which avoids per-step clustering cost and keeps the method's overhead negligible relative to its savings.
+
+3. **Evaluation under realistic deployment conditions**: All experiments use float16 precision on a single Nvidia A5000 GPU at 1024×1024 resolution (Section 4.1), making the reported speedups representative of practical inference scenarios rather than idealized settings.
+
+4. **Consistent results across architectures and datasets**: The method is validated on two architecturally distinct models (SD3 and Pixart-Σ) and two datasets (PartiPrompts and COCO2017), with speedup and quality trends holding across all combinations (Tables 2 and 3).
+
+### Presentation / practical strengths
+1. **Effective visual communication of method motivation and behavior**: Figures 4–5 directly compare selected token indices, predicted noise maps, and final outputs with and without staleness balancing, making the artifact problem and its solution immediately tangible. Figure 7 visualizes clustering results alongside generated images, showing that clusters align with semantic image regions.
+
+## Summary
+
+The paper introduces CAT Pruning, a token-level pruning method for text-to-image diffusion models that selects tokens for update based on relative noise magnitude, staleness-aware distributional balancing (via EWMA frequency tracking), and spatial clustering (via position-encoded KMeans). The most important evidence for its effectiveness is the comparison with AT-EDM in Tables 2 and 3: at nearly identical MACs, CAT Pruning preserves CLIP scores close to the full model baseline (e.g., 32.03 vs 32.33 for SD3-28 steps) while AT-EDM degrades severely (31.07), and on Pixart-Σ the gap is even more dramatic (31.06 vs 24.30), demonstrating that the combination of noise magnitude, staleness balancing, and spatial clustering is critical for maintaining generative quality under aggressive token pruning.
+
+--- Merged Review ---
+Now I have all the information needed to write the final consolidated review.
+
+## Summary
+
+CAT Pruning proposes a token-level pruning method for text-to-image diffusion models that selectively updates tokens based on three criteria: relative noise magnitude (identifying which tokens change most), staleness-aware distributional balancing (via EWMA frequency tracking to prevent some tokens from being starved), and cluster-aware spatial selection (via position-encoded KMeans clustering to maintain spatial coherence). The method achieves 1.73×–2.15× end-to-end speedup with 50–60% MACs reduction on Stable Diffusion 3 and Pixart-Σ at 1024×1024 resolution.
+
+## Strengths
+
+- **Well-motivated three-component design with clear qualitative ablation**: The progression from noise-only (Figure 4) to noise+staleness (Figure 5) to noise+staleness+clustering (Figure 6) convincingly demonstrates why each component matters. For example, Figure 6 shows clustering restores missing windows (row 1) and missing heart details (row 2) compared to noise+balance alone.
+
+- **Strong results on SD3 where the baseline is fair**: On Stable Diffusion 3, where the AT-EDM adaptation produces reasonable results, CAT Pruning clearly outperforms it: CLIP Score 32.03 vs 31.07 on PartiPrompts at 28 steps (Table 2), and 32.72 vs 28.48 at 50 steps (Table 3), while achieving better speedup (1.82× vs 1.40× at 28 steps).
+
+- **Honest reporting of wall-clock speedups alongside MACs**: The paper reports both theoretical (MACs) and practical (throughput/speed) metrics, acknowledging the gap between them — e.g., 1.82× speedup vs ~1.86× MACs reduction on SD3-28 steps (Table 2).
+
+- **Practical deployment conditions**: All experiments use float16 precision on a single A5000 GPU at 1024×1024 resolution (Section 4.1), making the reported speedups representative of real inference scenarios.
+
+- **Low overhead from one-time clustering**: Clustering is performed only once at step t₀+1 and reused for all subsequent steps (Algorithm 2, lines 4–5 vs 11–12; Figure 2 caption), keeping the method's overhead negligible.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Evaluation relies solely on CLIP Score, which is insufficient for claiming "preserved generative quality"**: The paper's central claim is that CAT Pruning preserves model performance while reducing computation by 50–60%. Yet the only quality metric is CLIP Score, which measures text-image alignment but is largely insensitive to perceptual quality degradation — blurry, artifact-laden, or low-detail images can score well if the semantic content matches the prompt. No FID, IS, or human evaluation is reported. Without a distributional quality metric, the claim that generative quality is "preserved" under 70% token pruning is not substantiated. (Tables 2, 3; Abstract; Section 4.2)
+
+- **AT-EDM baseline is broken on Pixart-Σ, making half the comparison meaningless**: The authors adapt AT-EDM (designed for SD-XL) by combining its token selection with a cache-and-reuse mechanism. On Pixart-Σ, this adaptation collapses catastrophically: CLIP Score 14.66 on COCO2017 at 28 steps vs baseline 31.36 (Table 2), and 11.00 at 50 steps vs baseline 31.20 (Table 3). These numbers indicate a misadapted baseline, not a meaningful competitor. On SD3, the adaptation is more reasonable (CLIP 30.59 vs baseline 32.47), so the SD3 comparison carries the paper's empirical weight. The Pixart-Σ results cannot be cited as evidence of CAT Pruning's superiority. (Tables 2, 3; Section 4.1)
+
+- **No comparison with feature caching methods despite claiming synergy**: The related work discusses DeepCache, FORA, TGATE, and Block Cache — all methods that exploit feature redundancy in diffusion models to accelerate inference. The introduction explicitly claims the method "could synergize with existing methods that implement caching and reuse at the block and module levels" (Section 3), but this is never tested. Without comparing to the most relevant class of acceleration methods, the paper does not establish where CAT Pruning stands relative to the state of the art. (Sections 2, 3, 4.1)
+
+### Minor
+
+- **Proposition 1 overstates the evidence**: The paper claims "$n_t - n_{t_0}$ is proportional to $n_{t-1} - n_{t_0}$" as a formal proposition, but provides only Pearson correlations of 0.82–0.89 (Figure 3). Correlation is not proportionality. The appendix proof (not present in this version) reportedly covers only "the simplest case as for time-step." This should be stated as an empirical finding, not a mathematical proposition. The gap between the formal claim and the evidence weakens the theoretical framing. (Section 3.2)
+
+- **Graph pooling layer is underspecified**: The paper introduces "1 light-weighted Graph Pooling Layer, which is not trainable" (Section 3.4) as a core algorithmic component but provides no specification of its architecture or how it aggregates cluster scores. Algorithm 2 calls `pool(clusters, ...)` but the reader cannot determine what this operation does. (Section 3.4, Algorithm 2)
+
+- **Algorithm 2 is intentionally incomplete**: The paper notes that intra-cluster distributional balance "is not included in Algorithm 2 just for simplicity" (Section 3.4), and key hyperparameters — the EWMA decay `a` (Eq. 2), the topk budgets at each level — are not specified. This makes the algorithm not fully reproducible from the paper alone.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- **FID evaluation on MS-COCO and PartiPrompts** would substantially strengthen the quality-preservation claim and is the single most impactful addition the authors could make.
+
+- **Comparison with at least one feature caching method** (e.g., DeepCache or FORA) on the same architectures would establish CAT Pruning's position relative to the broader acceleration literature.
+
+- **Demonstrating synergy with block-level caching** as claimed in the introduction — even a single experiment combining CAT Pruning with DeepCache or FORA would validate this stated advantage.
+
+- **Quantitative ablation** of each component (noise, staleness, clustering) with FID, not just visual comparison, would quantify each component's contribution.
+
+- **Failure case analysis**: With 70% token pruning, there must be prompts where the method degrades; showing these would strengthen credibility.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution.
+
+- **"demonstrate reveal" typo in abstract**: Formatting/parser artifact, not an author error.
+- **t₀ inconsistency between Section 3.4 and 4.1**: Actually consistent — Section 3.4 says t₀=8, Section 4.1 says "starting token pruning at step 9" which is t₀+1=9. The harsh critic misread this.
+- **Missing appendix proofs**: Per rules, appendix content is stripped by the parser; the original submission includes it.
+- **Reproducibility concerns about undisclosed hyperparameters**: Per rules, these are minor implementation details not expected in a submission.
+- **"intra-kernel optimization" framing critique**: The paper's claim about reducing "latency within each individual kernel execution" is a valid framing — by pruning tokens within each attention/MLP call, the method does reduce per-kernel work. The harsh critic's objection that it "still operates at the level of which tokens to compute" conflates the mechanism with the effect.
+- **Demand for AT-EDM evaluation on native SD-XL**: This asks the authors to run experiments on a different architecture than the one they target, which is scope creep.
+
+## Novel Insights
+
+The paper's most insightful observation is that token pruning in diffusion models requires balancing three distinct failure modes — not just identifying which tokens matter (noise magnitude), but also preventing token starvation (staleness) and maintaining spatial coherence (clustering). The qualitative ablation cleanly isolates each failure mode: noise-only selection causes background artifacts from token starvation (Figure 4), adding staleness balancing fixes the background but loses spatial detail (Figure 5), and clustering restores fine spatial structure (Figure 6). This three-way decomposition is the paper's clearest conceptual contribution and could inform future token pruning designs beyond diffusion models.
+
+## Suggestions
+
+- Add FID evaluation on both datasets — this is the most critical gap and would either validate or challenge the current CLIP-Score-only claims.
+- Run CAT Pruning + DeepCache as a combined experiment to test the synergy claim from the introduction.
+- Downgrade Proposition 1 to an "empirical observation" supported by the correlation evidence, rather than a formal proposition with an incomplete proof.
+
+## Evaluation
+
+**Originality**: The three-component design (noise + staleness + clustering) for token pruning in diffusion models is a reasonable and somewhat novel combination, though each individual component draws from known ideas (noise-based importance from PFDiff, staleness from async SGD, KMeans clustering with positional encoding). The specific application to DiT-based text-to-image models at the token level is relatively new.
+
+**Importance of research question**: Accelerating diffusion model inference is an important and active area. Token-level pruning is a less explored approach compared to feature caching, making this a relevant direction.
+
+**Whether claims are well supported**: The core claim of "preserving performance" is only supported by CLIP Score, which is insufficient for this claim. The AT-EDM baseline is broken on Pixart-Σ, and no feature caching baselines are compared. The qualitative ablations are convincing but cannot substitute for proper quantitative evaluation.
+
+**Soundness of experiments**: The experimental design has significant gaps — only one quality metric, one baseline that collapses on half the models, no comparison with the most relevant competing approach class. The qualitative ablation design is sound.
+
+**Clarity of writing**: The paper is generally clear, with good visual explanations. However, some algorithmic components (graph pooling, intra-cluster balancing) are underspecified.
+
+**Value to the research community**: The method could be useful as a complementary acceleration technique to feature caching, but the lack of proper evaluation makes it hard to assess its true value.
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| SANA | /home/wg25r/review_agent/human_reviews/N8Oj1XhtYZ.md | 8.5 | Far stronger: comprehensive system contribution, extensive evaluation, dramatic speedups. CAT Pruning is well below this. |
+| APTP | /home/wg25r/review_agent/human_reviews/3BhZCfJ73Y.md | 6.25 | Stronger: prompt-based pruning with FID/CLIP/CMCD evaluation and multiple baselines, though also criticized for missing step-skipping comparisons. CAT Pruning has weaker evaluation. |
+| PT-DiT | /home/wg25r/review_agent/human_reviews/lTrrnNdkOX.md | 6.4 | Stronger: proxy-token approach with more comprehensive evaluation across T2I/T2V/T2MV tasks. |
+| FasterCache | /home/wg25r/review_agent/human_reviews/W49UjcpGxx.md | 5.5 | Comparable: also lacked FID evaluation but got accepted as poster. CAT Pruning has better qualitative ablations but worse baseline comparison issues. |
+| Δ-DiT | /home/wg25r/review_agent/human_reviews/pDI03iK5Bf.md | 5.5 | Comparable: feature caching for DiT with marginal speedups, also rejected. CAT Pruning has clearer speedup advantage but weaker evaluation. |
+| Highlight Diffusion | /home/wg25r/review_agent/human_reviews/Jt1gGIumJo.md | 3.0 | Weaker: only one baseline, insufficient experiments, limited architecture coverage. CAT Pruning is clearly better — more sophisticated method, two architectures, qualitative ablations. |
+| Pixel-Aware | /home/wg25r/review_agent/human_reviews/W4djmqKZC6.md | 3.0 | Weaker: no comparison with DPM-Solver, poor evaluation. CAT Pruning is clearly better. |
+
+CAT Pruning sits between the low-scoring papers (3.0, insufficient baselines) and the medium-scoring ones (5.5–6.4, accepted with some evaluation gaps). It is clearly better than Highlight Diffusion and Pixel-Aware in methodological sophistication and experimental scope, but falls below APTP and PT-DiT due to the lack of FID, the broken baseline on Pixart-Σ, and absence of feature caching comparisons. It is roughly comparable to Δ-DiT and FasterCache (5.5), but those papers had their own issues leading to reject/accept respectively. Given the compound effect of three major weaknesses (no FID, broken baseline on half the models, missing relevant baselines), I place this slightly below the 5.5 borderline.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/EXsiGFkwV6.txt
+Timestamp: 2026-04-21T01:55:45.688519
+
+--- Token Usage ---
+  Harsh Critic: input=13604 (cached=0) output=5473 (reasoning=3186) total=19077 requests=1 duration=n/ams
+  Strength Finder: input=12736 (cached=0) output=1567 (reasoning=608) total=14303 requests=1 duration=n/ams
+  Merger: input=684020 (cached=477632) output=15253 (reasoning=8271) total=699273 requests=42 duration=519627ms speed=29.35 tokens/s
+  TOTAL: input=710360 output=22293 total=732653
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Realistic-Gesture: Co-Speech Gesture Video Generation Through Context-Aware Gesture Representation
+
+## Critical Issues
+
+### 1. No evaluation of semantic speech-gesture alignment — **Structural**
+
+The paper's first and most emphasized contribution is a "speech-aware gesture motion representation" that captures "implicit intentions conveyed in the audio" and enables "conditional generation of gestures that accurately reflect the speaker's intended meaning based on the speech input" (Sec. 4.1, Introduction). Yet none of the quantitative metrics — FGD, Diversity, BAS, PCM — measure whether gestures *semantically* correspond to speech content. BAS measures only rhythmic/beat alignment. The qualitative examples (pointing when saying "90 joules" in Fig. 4) are anecdotal and cherry-picked. The ablation for "w/o align" (Table 3c) shows FGD degrades from 1.303 to 8.382, but this conflates "better audio encoder initialization" with "speech-content awareness." Without a metric or controlled experiment that specifically measures whether the semantic content of speech is reflected in the generated gestures (e.g., pronoun-triggered deictic gestures, semantic gesture categories), the central claim that the method produces semantically appropriate gestures is structurally unsupported.
+
+### 2. The FGD near-zero score is unreliable and its discrepancy with PCM is unexplained — **Evidential**
+
+The reported FGD of 1.303 is suspiciously close to zero (GT = 0.0) and dramatically lower than S2G-Diffusion's 23.646. Yet PCM — the only metric measuring frame-level correspondence to ground truth — is only 0.572, meaning 43% of motion parameters are incorrect. A gesture distribution that is "nearly identical" to ground truth (FGD ≈ 0) should not have such mediocre frame-level accuracy. The paper does not discuss this discrepancy at all. The likely explanation is that the VQ-VAE codebook constrains the output to poses drawn from the training manifold, which gives a structural advantage on FGD (a distribution-level metric computed in feature space of an auto-encoder trained on the same data) without actually producing gestures that closely match ground truth trajectories. The distillation ablation (Table 3b) further illustrates this: adding distillation drops FGD from 21.473 to 1.303 — a 95% reduction — while PCM improves only from 0.412 to 0.582. Until the FGD metric's validity for this task is established and the FGD-PCM discrepancy is explained, the headline gesture quality claim cannot be trusted.
+
+### 3. Missing relevant baselines for the video generation claim — **Evidential**
+
+The paper's stated goal is "pixel-level realism" and the title promises "co-speech gesture video generation." Yet only three baselines are compared, two of which are inadequate: ANGIE (2022) is outdated, and MM-Diffusion is forced to generate fixed 34-frame segments, making it a strawman. The related work discusses Make-Your-Anchor, AnimateAnyone, Champ, and EMO — all recent methods for pose-driven or audio-driven avatar video generation — but none are compared, with the excuse that they are "slow in inference" and don't "focus on the speech-gesture pixel-level video generation." This is insufficient. Make-Your-Anchor in particular directly addresses person-specific avatar video generation with disentangled face/body control. If the claim is state-of-the-art video quality, these methods must be included regardless of efficiency differences. Without them, the video quality claim is unsupported.
+
+## Section-by-Section Notes
+
+**Abstract/Introduction:** Claims "accurately aligning gesture motions with speech signals" and "pixel-level realism" as the key advances. The former is unevaluated (see Critical Issue 1), the latter is under-baselined (see Critical Issue 3). The introduction's critique of prior work — that unsupervised keypoints "miss subtle movements" and can't "connect to speech content" — is reasonable but the paper's solution doesn't fully address the speech content connection either.
+
+**Sec. 4.1 (Speech-Aware Gesture Representation):** The contrastive learning setup is standard. The distillation mechanism (Eq. 2) is simple — just cosine similarity between the RVQ quantized output and the gesture content encoder. It's unclear why this would effectively encode "speech context" into the codebook rather than just pulling codebook embeddings toward the contrastive embedding space. The 30% temporal masking during contrastive learning is mentioned as improving temporal dynamics, but no ablation isolates this specific design choice.
+
+**Sec. 4.2 (Masked Gesture Generator):** The architecture directly applies the Muse/MAGE paradigm to gesture tokens. The claim of "bidirectional contextually relevant gesture synthesis and editing" is a property of any masked prediction model, not a novel contribution. The inference strategy (iterative remasking with lowest-confidence selection) is identical to MAGE. The 5-step inference is indeed faster than diffusion, which is a genuine practical advantage.
+
+**Sec. 4.3 (Structure-Aware Image Refinement):** The differentiable edge heatmap (Eqs. 5-7) is a reasonable contribution. However, Table 3d shows the edge heatmap improves FVD from 492 to 476 and VQA_A from 91.2 to 96.3 — the VQA improvement is meaningful but the FVD improvement is modest. The claim that this "significantly" improves quality in "large motion regions" needs stronger evidence than a ~3% FVD reduction.
+
+**Sec. 5.2 (Quantitative Evaluation):** VQA_A (96.326) and VQA_T (6.081) exceed ground truth (95.694, 5.329). The paper attributes this to the refinement module, but generated video outscoring ground truth on quality metrics is a known artifact of smoothing/post-processing and should be discussed as a limitation, not celebrated as a success.
+
+**Sec. 5.3 (User Study):** Only 20 participants. The proposed method loses to S2G-Diffusion on diversity (MOS₂: 3.05 vs 3.6), which contradicts the quantitative diversity claim (Div: 13.260 vs 10.848). This discrepancy is not discussed. The realism gap between the method and GT (MOS₁: 3.35 vs 4.7) is substantial.
+
+**Sec. 5.4 (Ablations):** The ablations are extensive but several have confounds. Table 3b's "baseline" has no motion representation at all (FGD=262.675), making subsequent improvements look dramatic by comparison. The most informative comparison is "+separate" to "+distill" (FGD 21.473→1.303), which shows distillation has an outsized effect on FGD specifically — reinforcing concerns about FGD's reliability for this method.
+
+**Sec. 5.5 (Applications):** Long sequence generation, editing, and pattern transfer are demonstrated only qualitatively (Fig. 6) with no quantitative evaluation. Given that these are highlighted in the abstract and Fig. 1, the lack of evaluation is notable.
+
+## Strengths
+
+1. The overall pipeline is well-structured and addresses a real problem: existing co-speech gesture video methods produce blurry/incorrect hand and shoulder regions, and the edge heatmap refinement directly targets this.
+2. The iterative masked prediction for gesture token generation is genuinely faster than diffusion-based alternatives (5 steps vs 50-100), which matters for real-time applications.
+3. The ablation study covers many design choices (Table 3a-f) and provides useful practical insights, such as the superiority of 2D pose keypoints over unsupervised keypoints for image warping, and the optimal mask ratio range of 0.5-1.0.
+4. The separate face/body tokenization with RVQ is a sensible design that acknowledges the different motion characteristics of facial and bodily gestures.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Add a semantic alignment evaluation.** Without it, the claim that the method generates "speech-content-aware" gestures is unsupported. A simple protocol: annotate a subset of test clips with expected gesture types (deictic, metaphoric, beat, iconic) given the speech content, and measure classification accuracy of generated gestures against these expectations.
+2. **Add at least one contemporary pose-driven video generation baseline** (e.g., Make-Your-Anchor or AnimateAnyone). Without this, the pixel-level quality claim is unvalidated against the current state of the art.
+3. **Quantitative evaluation of the claimed applications** (long sequence, editing, transfer). These are prominent in the abstract and Fig. 1 but evaluated only with a single qualitative figure.
+
+### Deeper Analysis Needed
+1. **Explain the FGD-PCM discrepancy.** FGD ≈ 0 with PCM = 0.57 is contradictory on its face. An analysis of what FGD actually captures in this setup — and whether the VQ-VAE codebook provides an artificial advantage — is essential for interpreting the results.
+2. **Analyze failure cases and limitations.** The paper presents only successful examples. Given the moderate PCM and the realism gap in the user study (3.35 vs 4.7 for GT), there are clearly significant failure modes that should be characterized.
+
+### Visualizations & Case Studies
+1. **Side-by-side comparison videos showing the same speech input with and without speech-aware representation**, specifically highlighting where semantic gestures differ (not just timing/quality), would demonstrate whether the contrastive learning + distillation actually produces semantically meaningful gestures.
+
+### Obvious Next Steps
+1. **Evaluate on a second dataset** beyond PATS. The 4-speaker, 4000-clip evaluation is narrow. Showing generalization to a different recording setup or speaker demographics would substantially strengthen the contribution.
+
+## Overall Assessment
+
+The paper proposes a reasonable pipeline for co-speech gesture video generation with several thoughtful components, but its central claims do not hold up under scrutiny. The most important claim — that the method produces speech-semantically-aware gestures — lacks any quantitative evaluation. The headline gesture quality result (FGD = 1.303) is unreliable due to its unexplained discrepancy with the mediocre PCM score (0.572) and the likely structural advantage of VQ-VAE outputs on distribution-level metrics. The video quality comparison is under-baselined, missing relevant recent methods that the paper itself discusses. The user study actually shows the method losing to S2G-Diffusion on diversity and being far from ground truth on realism. These are not fixable by adding an experiment or two — the evaluation framework itself does not support the claims being made. The paper should not be accepted in its current form.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Speech-aware gesture representation via knowledge distillation delivers dramatic gesture quality improvements**: The distillation of contrastively-aligned speech-gesture features into the RVQ codebook (Eq. 2–3) is a novel and effective mechanism. Table 3b shows that adding distillation ("+ distill") reduces FGD from 21.473 to 1.303 and increases PCM from 0.412 to 0.582. Table 3c further confirms that removing alignment pre-training ("w/o align") degrades FGD from 1.303 to 8.382, directly validating the contribution of speech-gesture alignment.
+
+2. **Masked iterative decoding enables fast, high-quality generation with editing capability**: Unlike autoregressive or diffusion baselines, the iterative mask prediction strategy requires only 5 inference steps (Table 3f) while maintaining FGD of 1.303, compared to 50–100 steps typical of diffusion models. The bidirectional nature of masked prediction also directly enables gesture editing and inpainting applications (Figure 6, middle panel), which autoregressive methods cannot support.
+
+3. **Structure-aware edge heatmap refinement improves pixel-level quality**: The differentiable edge connection mechanism (Eq. 5–7) provides learnable structural guidance. Table 3d shows that the edge heatmap variant achieves the best VQA_A (96.326) and VQA_T (6.081), even surpassing ground truth (95.694 and 5.329 respectively), while also outperforming skeleton-based conditioning (95.902 and 5.479). Figure 5 (right column) visually confirms cleaner hand rendering with refinement.
+
+### Supporting strengths
+
+1. **Comprehensive and well-structured ablation study**: Table 3 provides six distinct ablation dimensions—keypoint design (3a), gesture representation (3b), generator architecture (3c), refinement strategy (3d), mask ratio (3e), and inference steps (3f)—each with multiple configurations, making the contribution of every design choice clearly quantifiable.
+
+2. **Separate face/body tokenization captures fine-grained motions**: Using two separate RVQs for face and body motions (rather than a single joint RVQ) reduces FGD from 34.940 to 21.473 and increases PCM from 0.327 to 0.412 (Table 3b, "+ separate"), confirming that disentangled representation better captures the distinct dynamics of facial and body gestures.
+
+3. **Strong quantitative improvement over prior state-of-the-art**: Table 1 shows the method achieves FGD of 1.303 vs. 23.646 (S2G-Diffusion), Diversity of 13.260 vs. 10.848, and BAS of 0.996 vs. 0.974, representing substantial across-the-board improvements on the standard PATS benchmark.
+
+4. **User study validates perceptual quality**: Table 2 reports MOS evaluations from 20 participants on 80 videos per method across four dimensions. The method outperforms all baselines on realism (MOS₁: 3.35 vs. 3.0), synchronization (MOS₃: 3.35 vs. 3.15), and overall quality (MOS₄: 3.25 vs. 3.0 compared to S2G-Diffusion).
+
+### Presentation / practical strengths
+
+1. **Multiple downstream applications enabled by design**: The masked token representation naturally supports long-sequence generation (iterative outpainting), gesture video editing (masking specific temporal regions with new speech), and gesture pattern transfer (identity embedding swapping), all demonstrated in Figure 6—a practical advantage over prior methods that only support single-pass generation.
+
+2. **Efficient inference**: The 5-step iterative decoding (Table 3f) is significantly faster than diffusion-based alternatives, making the framework more practical for real-time or interactive applications.
+
+## Summary
+
+The paper introduces Realistic-Gesture, a framework for co-speech gesture video generation with three components: speech-aware gesture tokenization via contrastive alignment and knowledge distillation, a masked gesture generator with iterative decoding, and a structure-aware image refinement module. The single most important piece of evidence is Table 3b, where distilling contrastively-aligned features into the RVQ codebook reduces FGD from 21.473 to 1.303—a dramatic improvement that validates the core claim that speech context must be embedded into gesture representations for high-quality, speech-aligned generation.
+
+--- Merged Review ---
+Now I have all the information needed. Let me compile the final review.
+
+## Summary
+
+Realistic-Gesture proposes a framework for co-speech gesture video generation with three components: (1) speech-aware gesture tokenization via contrastive alignment and knowledge distillation into an RVQ codebook, (2) a masked gesture generator using iterative mask prediction for fast inference (5 steps), and (3) a structure-aware image refinement module using differentiable edge heatmaps. The method demonstrates substantial quantitative improvements over prior baselines on the PATS benchmark.
+
+## Strengths
+
+- **Well-structured pipeline with complementary components**: The three-module design (speech-aware tokenization → masked generation → edge heatmap refinement) cleanly addresses the identified limitations of prior work (unsupervised keypoints, speech disconnection, blurry hands/shoulders). Each component is ablated independently (Table 3a–f), showing clear contributions.
+
+- **Fast inference via iterative masked prediction**: The 5-step iterative decoding (Table 3f) is significantly faster than diffusion-based alternatives (50–100 steps), which is a genuine practical advantage for real-time applications. This is supported by the ablation showing minimal quality degradation from 5 to 20 steps (FGD 1.303→1.881).
+
+- **Comprehensive ablation study**: Table 3 provides six distinct ablation dimensions—keypoint design (3a), gesture representation (3b), generator architecture (3c), refinement strategy (3d), mask ratio (3e), and inference steps (3f)—each with multiple configurations, making every design choice clearly quantifiable.
+
+- **Strong quantitative improvements over existing baselines**: Table 1 shows improvements across all metrics: FGD 1.303 vs. 23.646 (S2G-Diffusion), Diversity 13.260 vs. 10.848, BAS 0.996 vs. 0.974, PCM 0.572 vs. 0.447. Even on the more conservative PCM metric, the method leads by a meaningful margin.
+
+- **Multiple downstream applications enabled by design**: The masked token representation naturally supports long-sequence generation, gesture editing, and pattern transfer (Figure 6), which prior methods like ANGIE and S2G-Diffusion cannot support.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **The central claim of "speech-content-aware" gestures lacks quantitative evaluation**: The paper's primary contribution is stated as a "speech-aware gesture motion representation" that enables "conditional generation of gestures that accurately reflect the speaker's intended meaning based on the speech input" (Sec. 4.1, Introduction). The method specifically claims to fuse "semantics and contextual triggers from speech (e.g., pronouns like 'this' or 'they')" into motion embeddings (Sec. 4.1). Yet none of the quantitative metrics—FGD, Diversity, BAS, PCM—measure whether gestures *semantically* correspond to speech content. BAS captures only rhythmic/beat alignment. The "w/o align" ablation (Table 3c) shows FGD degrading from 1.303 to 8.382, but this only demonstrates that the contrastive pre-training helps gesture quality—it does not isolate whether *semantic* speech content is reflected in the generated gestures versus just better audio-gesture temporal alignment. The qualitative examples (Fig. 4, pointing when saying "90 joules") are anecdotal. Without a metric or controlled experiment that specifically evaluates semantic gesture appropriateness (e.g., gesture-type classification accuracy against speech-predicted expectations), the core novelty claim remains unsupported by evidence.
+
+- **FGD improvement may be inflated by VQ-VAE structural advantage; FGD-PCM discrepancy is unexplained**: The reported FGD of 1.303 (vs. GT = 0.0) is dramatically better than S2G-Diffusion's 23.646, yet PCM—frame-level motion accuracy—is only 0.572 (43% of parameters incorrect). This discrepancy is not discussed. As the paper states, FGD and Diversity are "utilize an auto-encoder trained on PATS poses" (Sec. 5.2). Since the method's VQ-VAE codebook constrains outputs to poses drawn from the training manifold, this gives a structural advantage on FGD (a distribution-level metric computed in the feature space of an auto-encoder trained on the same data). The distillation ablation (Table 3b) reinforces this concern: adding distillation drops FGD from 21.473 to 1.303 (a 94% reduction) while PCM improves only from 0.412 to 0.582 (a 41% relative improvement). The method clearly improves on both metrics, but the magnitude of FGD improvement relative to PCM suggests that FGD disproportionately rewards the VQ-VAE's manifold constraint rather than reflecting genuine gesture quality gains. The paper should discuss this and provide analysis of what FGD captures in this setup.
+
+- **Missing contemporary baselines for the video generation claim**: The paper's title promises "co-speech gesture video generation" and claims "pixel-level realism," yet only three baselines are compared: ANGIE (2022), MM-Diffusion (forced to 34-frame segments), and S2G-Diffusion. The related work section discusses Make-Your-Anchor, AnimateAnyone, Champ, and EMO—all recent methods for pose-driven or audio-driven avatar video generation—but dismisses them as "slow in inference speed" and claiming "None of them focus on the speech-gesture pixel-level video generation" (Sec. 2). However, Make-Your-Anchor directly addresses person-specific avatar video generation with disentangled face/body control—a closely related problem. If the claim is state-of-the-art video quality, at least one of these methods should be included as a baseline, even if the comparison requires adaptation. Without them, the video quality superiority claim is under-supported.
+
+### Minor
+
+- **VQA scores exceeding ground truth are not properly discussed**: The method achieves VQA_A = 96.326 and VQA_T = 6.081, surpassing ground truth (95.694 and 5.329). The paper attributes this to "our structure-aware image enhancement design" (Sec. 5.2), but generated video outscoring ground truth on quality metrics is a well-known artifact of smoothing/post-processing that reduces noise at the cost of fine detail. This should be acknowledged as a potential limitation rather than celebrated as unambiguous success.
+
+- **Diversity metric contradicts user study**: The quantitative Diversity score (13.260) exceeds S2G-Diffusion's (10.848), but in the user study, participants rate the method lower on diversity (MOS₂: 3.05 vs. 3.6). This discrepancy is not discussed. Since perceptual diversity and feature-space diversity can diverge, an analysis of what drives this gap would strengthen the evaluation.
+
+- **Claimed applications (long sequence, editing, transfer) are only qualitatively evaluated**: These are highlighted in the abstract, Figure 1, and Section 5.5, but demonstrated only through Figure 6 with no quantitative evaluation. While qualitative demonstrations are informative, some basic metrics (e.g., temporal consistency for long sequences, editing fidelity) would strengthen these claims.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- A semantic alignment evaluation protocol: annotate a subset of test clips with expected gesture types (deictic, metaphoric, beat, iconic) given the speech content, and measure classification accuracy of generated gestures against these expectations. This would directly validate the paper's central claim.
+- Evaluation on a second dataset beyond the 4-speaker PATS subset to demonstrate generalization.
+- Quantitative evaluation of the application scenarios (long sequence generation, editing, transfer).
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+
+- **Harsh critic: "ANGIE is outdated / MM-Diffusion is a strawman"**: ANGIE is the most directly comparable method for the same task and was the prior SOTA; MM-Diffusion is included for breadth. Dismissing them as unfair baselines is incorrect because the asymmetry actually favors the baselines, not the authors' method.
+
+- **Harsh critic: "The mask prediction is identical to MAGE/Muse, not novel"**: The paper clearly positions this as inspired by MAGE/Muse (Sec. 4.2), not as a novel architecture. The contribution is the *application* to gesture tokens with the specific two-generator (base + residual) design. Claiming zero novelty for a known paradigm applied to a new domain overstates the criticism.
+
+- **Harsh critic: "The 30% temporal masking is not ablated"**: The paper describes the masking as part of the contrastive learning design and defers details to the appendix. While an isolated ablation would be nice, this is a minor presentation issue.
+
+- **Harsh critic: "Edge heatmap improvement is modest (~3% FVD)"**: The refinement module's primary contribution is improved VQA scores and visual quality in hand/shoulder regions (Fig. 5), not FVD. The VQA_A improvement (91.2→96.3) is meaningful, and FVD is not the primary target of this module.
+
+- **Harsh critic: "User study realism gap (3.35 vs 4.7 GT) is substantial"**: A gap between generated and ground-truth realism is expected and present for all methods. The relevant comparison is against other generated methods (3.35 vs. 3.0 for S2G-Diffusion), where the method leads.
+
+- **Strength finder: "VQA surpassing GT" as a strength**: This is actually a concern (moved to Minor weaknesses). Generated video outscoring GT on quality metrics typically indicates smoothing artifacts.
+
+- **Strength finder: "User study validates perceptual quality" as unqualified strength**: The user study shows mixed results—winning on realism/synchronization but losing on diversity. The strength should be qualified.
+
+## Novel Insights
+
+The FGD-PCM discrepancy reveals an important underappreciated issue in gesture generation evaluation: when using VQ-VAE-based tokenization, distribution-level metrics like FGD (computed via an auto-encoder trained on the same data) can be disproportionately favorable because the VQ-VAE codebook constrains outputs to the training manifold. This is not unique to this paper—it affects any method using discrete tokenization with FGD—but this paper's dramatic FGD improvement (21.473→1.303 via distillation) relative to the modest PCM improvement (0.412→0.582) provides the clearest illustration of this problem in the co-speech gesture literature. The community should develop evaluation protocols that are less susceptible to this artifact, such as using feature extractors trained on different data or emphasizing frame-level metrics.
+
+## Suggestions
+
+- Add a semantic alignment evaluation: even a small-scale human annotation of gesture types (deictic/metaphoric/beat/iconic) on 50–100 test clips, correlated with speech content, would substantially strengthen the central claim.
+- Discuss the FGD-PCM discrepancy explicitly, including an analysis of how the VQ-VAE codebook affects FGD computation. Consider reporting FGD using a feature extractor not trained on the same codebook.
+- Add at least one recent pose-driven video generation baseline (e.g., Make-Your-Anchor) to validate the pixel-level quality claim, even if it requires task adaptation.
+- Acknowledge that VQA scores exceeding GT may reflect smoothing artifacts rather than genuine quality improvement.
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| TANGO | /home/wg25r/review_agent/human_reviews/LbEWwJOufy.md | 8.50 | Same task (co-speech gesture video), much deeper audio-gesture alignment analysis (AuMoClip with explicit temporal+semantic evaluation), comprehensive baselines. Realistic-Gesture is notably weaker on evaluation rigor. |
+| CyberHost | /home/wg25r/review_agent/human_reviews/vaEPihQsAA.md | 7.60 | Similar domain (audio-driven talking body), comprehensive experiments including video-driven and hybrid settings. Realistic-Gesture has weaker baselines and unverified core claim. |
+| Synergizing Motion & Appearance | /home/wg25r/review_agent/human_reviews/LDtNetvNQp.md | 5.25 | Similar codebook-based approach for talking head video, moderate quality with some evaluation gaps. Realistic-Gesture is comparable in contribution level but has more serious evaluation concerns. |
+| CoCoGesture | /home/wg25r/review_agent/human_reviews/g3kK6YBSZ1.md | 4.00 | Directly on co-speech gesture generation with scaling approach but limited evaluation. Realistic-Gesture is stronger in pipeline completeness and ablation depth. |
+| VideoDiT | /home/wg25r/review_agent/human_reviews/lvgsPjRtLM.md | 2.50 | Low-quality video generation paper with unclear method and poor novelty. Realistic-Gesture is clearly above this. |
+| Blind Baselines Beat MI | /home/wg25r/review_agent/human_reviews/BXMoS69LLR.md | 4.50 | Strong empirical results but overclaimed contribution and metric concerns. Realistic-Gesture shares a similar pattern—strong numbers but unsupported central claim. |
+
+Realistic-Gesture sits between the medium-scoring anchors (4–5.25) and the high-scoring TANGO/CyberHost (7.6–8.5). It has real contributions—a well-designed pipeline, comprehensive ablations, and practical speed advantages—but its central claim about semantic speech-gesture alignment is unsupported by evaluation, the FGD metric reliability is questionable, and the baseline comparison is narrow. Compared to CoCoGesture (4.0), it is stronger in pipeline completeness and ablation depth. Compared to Synergizing Motion & Appearance (5.25), it has similar evaluation gaps but more serious issues with the FGD interpretation. I place it slightly below 5.25, as the unverified core claim is a more fundamental problem than the evaluation gaps in the Synergizing paper.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.0
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/twIPSx9qHn.txt
+Timestamp: 2026-04-21T01:56:56.407654
+
+--- Token Usage ---
+  Harsh Critic: input=12607 (cached=0) output=4797 (reasoning=2818) total=17404 requests=1 duration=n/ams
+  Strength Finder: input=11739 (cached=0) output=1458 (reasoning=754) total=13197 requests=1 duration=n/ams
+  Merger: input=522794 (cached=337536) output=14860 (reasoning=8203) total=537654 requests=37 duration=561688ms speed=26.46 tokens/s
+  TOTAL: input=547140 output=21115 total=568255
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Cross-Embodiment Dexterous Grasping with Reinforcement Learning
+
+## Critical Issues
+
+**1. Baselines are ablation variants, not independent methods [Structural]**
+The three "baseline" methods (MT-Raw-OA, MT-Raw-A, MT-Raw-O) are all variants of the authors' own pipeline, differing only in which components of CrossDex are swapped out. There is no comparison to any published cross-embodiment method. GET-Zero (Patel & Song, 2024) is the most directly related prior work—it is discussed in Related Work as limited to LEAP Hand variants, yet it could have been evaluated on the LEAP Hand in the unseen test set. The absence of any external baseline makes it impossible to determine whether CrossDex's performance stems from its specific design choices or simply from the generic idea of cross-embodiment training with any reasonable unification scheme. This is especially concerning because Table 1 shows MT-Raw-OA achieving 0.782 (vision, training hands) vs. CrossDex's 0.800—the gap is small enough that without external baselines, it is unclear whether this improvement is meaningful or within noise.
+
+**2. Real-world evaluation is essentially absent [Evidential]**
+Section 5.5 devotes two sentences to real-world experiments, providing no quantitative results, no number of trials, no success rates, and no failure analysis. The LEAP Hand tested is one of the two unseen embodiments—precisely the setting where the paper's most novel claim (zero-shot generalization) should be validated. Without any quantitative real-world evidence, the paper remains a simulation-only study. For a robotics paper whose abstract promises deployment across "diverse dexterous hands," this is a significant evidential gap.
+
+**3. The eigengrasp ablation undermines the stated contribution of eigengrasps [Methodological gap]**
+Figure 4 shows that varying the number of eigengrasps from k=3 to k=36 produces similar performance on both training and unseen hands (~0.80–0.92 training, ~0.40–0.50 unseen). CrossDex-MANO (raw 45-DOF axis angles) performs comparably on training hands (~0.85) and only modestly worse on unseen hands (~0.40 vs. best eigengrasp ~0.50, within the wide shaded variance region). This suggests the critical factor is having *any* universal action space tied to the human hand model, not the eigengrasp compression specifically. The paper's framing of eigengrasps as a key contribution is not well-supported by its own ablation. The actual performance improvement over baselines comes primarily from the unified observation space (compare MT-Raw-A at 0.210 vs. CrossDex at 0.352 on unseen vision), with eigengrasps providing a smaller marginal benefit over raw MANO angles.
+
+**4. Table 1 lacks variance information for the main results [Evidential]**
+RL training is notoriously high-variance. Table 1 reports success rates with no standard deviations or confidence intervals across seeds. Meanwhile, Table 2 does include variance for some entries, and the reported variances are substantial (e.g., 0.373 for No-Pretrain on GRAB). Without variance on Table 1, the ~2% gap between CrossDex vision (0.800) and MT-Raw-OA vision (0.782) on training hands, and even the ~15% gap on unseen vision (0.352 vs. 0.210), could be within noise. The paper's core claims about superiority over baselines cannot be evaluated without this information.
+
+## Section-by-Section Notes
+
+**Abstract:** Claims "80% success rate" prominently but buries the 35% zero-shot result on unseen hands. This framing is misleading—the more novel and important claim (zero-shot generalization) is associated with a much more modest number.
+
+**Section 3.1:** The POMDP formulation is standard but note that the unified observation space discards potentially useful proprioception. The paper doesn't analyze what information is lost by removing joint angles.
+
+**Section 4.1:** The eigengrasp action space is computed from the GRAB dataset of human grasping poses. No analysis is provided on whether these eigengrasps adequately cover the action spaces needed by all robot hands. A 4-fingered hand like LEAP may need grasps that are poorly represented in a human-grasping dataset.
+
+**Section 4.2:** The treatment of hands with fewer than 4 fingers—setting unused fingertip positions to zero—creates an ambiguity: the policy cannot distinguish between a finger at the origin and an absent finger. This could be problematic for generalization.
+
+**Section 4.3:** The retargeting network is trained to approximate optimization-based retargeting, but no accuracy metrics are provided. The optimization runs at 300 fps while the neural network presumably runs much faster, but the approximation error is never quantified.
+
+**Section 5.2:** The explanation for why MT-Raw-OA and MT-Raw-O perform poorly during distillation—that the state-based policies learn to rely on embodiment labels removed at distillation time—is a design choice the authors made for those baselines. A fairer comparison would train state-based baselines both with and without embodiment labels, to isolate the effect of the label removal from the effect of the action/observation space design.
+
+**Section 5.4:** Table 3 shows retargeting method choice doesn't matter much. This is actually interesting and somewhat undermines the claim that DexPilot retargeting is important—it seems any reasonable retargeting works.
+
+**Section 5.5:** As noted above, this section is critically thin. Two sentences with no numbers is insufficient for a robotics paper claiming real-world applicability.
+
+**Section 6:** The limitations section correctly identifies the small number of training hands and the restriction to grasping tasks. These are significant limitations that constrain the generality of the claims.
+
+## Strengths
+
+1. The problem formulation—cross-embodiment dexterous grasping—is genuinely novel and practically important. No prior work has tackled this for diverse hand morphologies.
+
+2. The design intuition from teleoperation (using human hand pose as a universal intermediate representation) is sound and well-motivated. The retargeting-based action space provides a principled way to bridge embodiments with different DoFs and finger counts.
+
+3. The zero-shot generalization results (Table 1, unseen hands) are promising, showing that the unified representation transfers meaningful grasping strategies to unseen hand types, even if the absolute success rate is moderate.
+
+4. The finetuning experiments (Table 2) convincingly demonstrate the practical value of CrossDex as a pre-trained model, with clear improvements over training from scratch and consistent advantages over other pre-training strategies.
+
+5. The ablation on embodiment-specific observations (Table 4) cleanly demonstrates that including embodiment labels hurts generalization, supporting the paper's central design philosophy.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Comparison to GET-Zero on LEAP Hand:** The most directly comparable prior work should be evaluated on the LEAP Hand (unseen in CrossDex training), even if it requires retraining. Without this, the improvement over prior cross-embodiment methods is unsubstantiated.
+2. **Real-world quantitative evaluation:** At minimum, report success rates over 20+ trials per object on the LEAP Hand setup described in Section 5.5. This is essential for grounding the zero-shot generalization claim.
+
+### Deeper Analysis Needed
+1. **Retargeting error quantification:** Report the approximation error of the neural retargeting networks vs. the optimization-based retargeting. Without this, it is unclear how faithfully the policy's intended actions are executed.
+2. **Eigengrasp coverage analysis:** Analyze whether the PCA subspace from GRAB adequately covers the reachable grasping configurations of each robot hand. This directly affects whether eigengrasps are a bottleneck for some embodiments.
+
+### Visualizations & Case Studies
+1. **Failure case analysis on unseen hands:** The 35% zero-shot success rate means 65% of attempts fail. Showing and categorizing failure modes would reveal whether failures stem from retargeting errors, action space limitations, or observation ambiguity.
+
+### Obvious Next Steps
+1. **Train state-based baselines without embodiment labels for fair distillation comparison:** This would isolate whether the performance gap comes from the observation/action unification or from the train-test label mismatch.
+
+## Overall Assessment
+
+The paper tackles a genuinely novel and important problem—cross-embodiment dexterous grasping—and proposes a reasonable approach inspired by teleoperation. However, the evaluation has structural weaknesses that undermine the core claims. The baselines are self-designed ablation variants rather than independent methods, the main results table lacks variance information, the real-world evaluation is absent, and the paper's own ablations show that eigengrasps—the stated key contribution—provide only marginal benefit over raw MANO angles. The zero-shot generalization results are the most interesting finding, but the moderate absolute success rate (35%) and the lack of real-world validation make it difficult to assess practical significance. The paper should not be accepted in its current form; at minimum, it needs external baselines, variance reporting on main results, and quantitative real-world evaluation to support its claims.
+### Strength Finder
+##Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Unified eigengrasp action space enables cross-embodiment generalization**: The key insight of using human hand eigengrasps as a universal action interface, mapped to specific robot joints via retargeting, is well-motivated by the teleoperation analogy and empirically validated. Figure 4 shows that eigengrasp actions (9-E) achieve ~0.50 success on unseen hands versus ~0.40 for raw 45-dimensional MANO axis angles, demonstrating that the compression into eigengrasps actively aids generalization beyond what the human hand pose representation alone provides.
+
+2. **Strong zero-shot transfer to unseen embodiments**: Table 1 shows CrossDex achieves 0.352 vision-based success on unseen hands, substantially outperforming the best baseline MT-Raw-A (0.210) and MT-Raw-OA (0.162). This gap is consistent across both state-based (0.391 vs 0.272) and vision-based settings, directly validating the claim that the unified action/observation spaces transfer meaningfully to new hand morphologies.
+
+3. **Effective finetuning from pre-trained policy on unseen embodiments**: Table 2 demonstrates dramatic improvements when finetuning CrossDex versus training from scratch: 0.740 vs 0.313 on GRAB multi-task vision, and 0.643 vs 0.436 on YCB multi-task vision. This shows the pre-trained policy captures genuinely transferable grasping skills, not just overfitting to training hands.
+
+4. **Embodiment-unified observation design is critical for generalization**: Table 4 provides clean ablation evidence that adding embodiment-specific observations (one-hot labels) *hurts* unseen-hand generalization (0.146 vs 0.352 vision-based) despite slightly helping training hands, validating the design choice of using only fingertip/palm positions as a shared proprioceptive representation.
+
+### Supporting strengths
+
+1. **Neural network retargeting enables scalable training**: Replacing optimization-based retargeting (300 fps) with learned networks (Section 4.3) that support batch computation in parallel IsaacGym environments is a practical contribution that makes cross-embodiment RL training feasible, given the thousands of parallel environments used.
+
+2. **Cross-embodiment co-training provides comparable or better performance than individual training**: Figure 3 shows that training across all four hands simultaneously reaches ~0.70 success rate with slightly better stability compared to ~0.60 for individual training, supporting the practical benefit of the unified representation beyond just generalization.
+
+3. **Robustness to retargeting method choice**: Table 3 shows similar performance across Position (0.500), Vector (0.435), and DexPilot (0.482) retargeting on unseen hands, indicating the framework is not brittle to this component choice.
+
+### Presentation / practical strengths
+
+1. **Principled handling of varying finger counts**: The observation space design (Section 4.2) pragmatically handles hands with different numbers of fingers by zero-padding unused finger positions, and the decision to omit the little finger for 5-fingered hands is justified by its limited grasping relevance, keeping the observation space compact.
+
+## Summary
+
+The paper proposes CrossDex, a method for learning a single dexterous grasping policy applicable across multiple robot hand embodiments by using human hand eigengrasps as a universal action space and fingertip/palm positions as a unified observation space. The most important evidence supporting this contribution is the zero-shot generalization result in Table 1, where CrossDex achieves 0.352 vision-based success on two unseen hands (LEAP Hand, Inspire Hand) compared to the best baseline's 0.210, combined with the ablation in Table 4 showing that removing embodiment-specific observations is essential for this generalization (0.352 vs 0.146 with one-hot labels).
+
+--- Merged Review ---
+Now I have all the information I need. Let me write the final review.
+
+## Summary
+
+CrossDex proposes a method for learning a single dexterous grasping policy that generalizes across multiple robot hand embodiments using RL. Inspired by teleoperation, the method uses human hand eigengrasps as a universal action space (mapped to specific robot joints via retargeting) and fingertip/palm positions as a unified observation space. Experiments in IsaacGym show 80% success on four training hands, 35% zero-shot transfer to two unseen hands, and effective finetuning from the pre-trained policy.
+
+## Strengths
+
+- **Novel and important problem formulation.** Cross-embodiment dexterous grasping for diverse hand morphologies is genuinely unexplored, and the paper is the first to tackle it. The teleoperation-inspired design of using human hand poses as a universal intermediate representation is a sound and well-motivated principle (Section 1, Section 3.2).
+
+- **Clean ablation on unified observations.** Table 4 provides compelling evidence that removing embodiment-specific observations (one-hot labels) dramatically improves unseen-hand generalization (0.352 vs. 0.146 vision-based), directly validating the core design philosophy.
+
+- **Effective finetuning from pre-trained policy.** Table 2 shows consistent and substantial improvements over training from scratch (e.g., 0.740 vs. 0.313 on GRAB multi-task vision) and over other pre-training strategies, demonstrating that CrossDex captures genuinely transferable grasping skills.
+
+- **Zero-shot generalization to unseen hands.** Table 1 shows CrossDex achieving 0.352 vision-based success on unseen hands vs. the best baseline's 0.210, demonstrating meaningful cross-embodiment transfer even without any exposure to the test hands.
+
+- **Cross-embodiment co-training benefits.** Figure 3 shows that training across all hands simultaneously achieves comparable or slightly better performance than individual training, supporting the practical value of the unified representation beyond just generalization.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **No comparison to external baselines.** The three baseline methods (MT-Raw-OA, MT-Raw-A, MT-Raw-O) are all variants of the authors' own pipeline, differing only in which components of CrossDex are included. There is no comparison to any independently published cross-embodiment method. GET-Zero (Patel & Song, 2024) is the most directly related prior work—it is discussed in Related Work but dismissed as "limited to LEAP Hand variants." However, the LEAP Hand is one of the unseen test embodiments, making a comparison feasible and informative. Without any external baseline, it is impossible to determine whether CrossDex's performance stems from its specific design choices or simply from the generic idea of cross-embodiment training with any reasonable unification scheme. The gap between CrossDex (0.800) and MT-Raw-OA (0.782) on training-hands vision is small enough that the question of whether the improvement is meaningful remains open.
+
+- **No quantitative real-world evaluation.** Section 5.5 consists of one sentence describing a setup (RealMan RM65 + LEAP Hand + RealSense D435i) and a reference to project-page videos, with no success rates, number of trials, or failure analysis. For a paper whose abstract promises deployment across "diverse dexterous hands" and whose most novel claim is zero-shot generalization, the absence of quantitative real-world evidence is a significant gap. The LEAP Hand tested is precisely the unseen-embodiment setting where the paper should be strongest, yet no numbers are provided.
+
+- **Eigengrasp contribution is overclaimed relative to the unified observation space.** Figure 4 shows that varying eigengrasps from k=1 to k=36 produces similar unseen-hand performance (~0.40–0.50), and CrossDex-MANO (raw 45-DOF axis angles) achieves ~0.40 on unseen hands vs. best eigengrasp at ~0.50, with overlapping variance regions. Meanwhile, Table 1 shows that the largest performance gap comes from the unified observation space: MT-Raw-A (unified obs + raw actions) achieves 0.210 on unseen vision vs. CrossDex's 0.352. The paper's framing centers eigengrasps as a key contribution, but the empirical evidence suggests the unified observation space is the more impactful design choice, with eigengrasps providing a modest additional benefit.
+
+### Minor
+
+- **Table 1 lacks variance information.** RL training is high-variance, and Table 2 shows substantial standard deviations (e.g., ±0.373 for No-Pretrain on GRAB). Table 1 reports no variance despite being the paper's central results table, making it difficult to assess the significance of reported differences, particularly the ~2% gap on training hands (0.800 vs. 0.782). Table 3 includes variance for ablation results, making the omission from Table 1 inconsistent.
+
+- **Abstract framing emphasizes the less novel result.** The abstract prominently claims "80% success rate" (on training hands, which is essentially a multi-task RL result) while the more novel and important claim—zero-shot generalization—is associated with a much more modest 35% success rate that is not explicitly stated. This framing could mislead readers about the paper's primary contribution.
+
+- **No analysis of eigengrasp coverage for non-human-like hands.** The eigengrasps are computed from the GRAB dataset of human grasping poses. A 4-fingered hand like LEAP or a 12-DoF hand like Inspire may require grasping strategies poorly represented in a human-grasping PCA subspace. No analysis is provided on whether the eigengrasp subspace adequately covers the reachable grasping configurations of each robot hand.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Failure case analysis on unseen hands (65% failure rate): categorizing failure modes would reveal whether they stem from retargeting errors, action space limitations, or observation ambiguity, and would guide future improvements.
+- Quantification of retargeting approximation error (neural network vs. optimization-based), which would help assess how faithfully the policy's intended actions are executed.
+- Comparison to GET-Zero on the LEAP Hand (unseen in CrossDex training), even if it requires retraining GET-Zero, which would provide a meaningful external baseline.
+
+## Removed Points
+
+*These points are flagged to be removed, treat them with caution.*
+
+- **Harsh Critic: "Zero-padding creates ambiguity for absent fingers."** The paper addresses this in Section 4.2: "For hands less than four fingers, the method can be generalized by setting the unused finger positions to zero in the observations." This is a reasonable design choice for a method that must handle varying finger counts, and the empirical results show it works. The theoretical ambiguity (finger at origin vs. absent finger) does not appear to cause practical issues given the zero-shot transfer results.
+
+- **Harsh Critic: "Fairer comparison would train state-based baselines without embodiment labels."** The paper already provides MT-Raw-A (unified observations, raw actions, no embodiment labels), which directly addresses this concern. The comparison between MT-Raw-A and CrossDex on unseen hands (0.210 vs. 0.352) isolates the effect of the eigengrasp action space from the observation unification. The distillation mismatch in MT-Raw-OA/MT-Raw-O is acknowledged and explained by the authors in Section 5.2.
+
+- **Harsh Critic: "Retargeting error not quantified."** Table 3 shows that all three retargeting methods produce similar performance, and the paper states the neural networks replace the optimization at much higher speed. The fact that performance is robust to retargeting choice (Table 3) makes the approximation error less critical.
+
+- **Harsh Critic: "Retargeting method doesn't matter, undermining DexPilot claim."** The paper does not overclaim DexPilot specifically—it uses it as one reasonable option and shows the framework is robust to this choice (Table 3). This is actually a strength (robustness), not a weakness.
+
+- **Strength Finder: "Principled handling of varying finger counts" as a strength.** Removed because this is a necessary design choice rather than a notable contribution, and the zero-padding approach has the theoretical ambiguity noted above.
+
+- **Strength Finder: "Neural network retargeting enables scalable training."** While practical, this is an engineering optimization (replacing optimization with a neural network fit) rather than a core contribution. Kept as a supporting point but not elevated to a main strength.
+
+## Novel Insights
+
+The paper reveals an interesting asymmetry in cross-embodiment learning for dexterous hands: the observation space unification (removing embodiment-specific proprioception) matters more than the action space unification (eigengrasps vs. raw joint angles). This is somewhat counterintuitive—one might expect the action space alignment to be the harder problem. The explanation is that the retargeting process implicitly handles action alignment (any hand pose maps to reasonable joint positions), while the observation space must be explicitly designed to avoid embodiment-specific shortcuts that the policy can overfit to. This insight has implications beyond dexterous grasping: in cross-embodiment learning generally, careful observation design may be more critical for generalization than action space design.
+
+## Suggestions
+
+- Add quantitative real-world evaluation: report success rates over 20+ trials per object on the LEAP Hand setup described in Section 5.5. This is the most impactful improvement possible.
+- Report standard deviations on Table 1 (main results), consistent with Table 2 and Table 3.
+- Rebalance the framing to position the unified observation space as the primary contribution, with eigengrasps as a complementary technique that provides consistent but modest improvement.
+- If possible, compare to GET-Zero on the LEAP Hand to provide an external baseline, or clearly acknowledge the absence as a limitation.
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| RDT-1B | /home/wg25r/review_agent/human_reviews/yAzN4tz7oI.md | 7.0 | Unified action space for cross-robot manipulation with real-robot experiments. CrossDex is weaker: no quantitative real-world results, smaller scale, ablation-only baselines. |
+| HEPi | /home/wg25r/review_agent/human_reviews/7BLXhmWvwF.md | 8.0 | Geometry-aware RL with unified graph representation, simulation-only but very clean methodology and strong baselines. CrossDex has a more novel problem but weaker evaluation rigor. |
+| CrossLoco | /home/wg25r/review_agent/human_reviews/UCfz492fM8.md | 6.67 | Cross-embodiment human-to-robot retargeting via RL, simulation + qualitative real-world. Very similar spirit to CrossDex but with more thorough analysis. CrossDex is slightly weaker. |
+| VTDexManip | /home/wg25r/review_agent/human_reviews/jf7C7EGw21.md | 5.5 | Dexterous manipulation RL benchmark, no quantitative real-world results. Accepted despite this gap. CrossDex is comparable in experimental depth but more novel in problem formulation. |
+| HuWo | /home/wg25r/review_agent/human_reviews/bhUIoQ61pA.md | 5.0 | Humanoid locomotion RL, simulation only, rejected. CrossDex is stronger: more novel problem, better ablations, and at least qualitative real-world demonstration. |
+| EbOhZyxIzQ | /home/wg25r/review_agent/human_reviews/EbOhZyxIzQ.md | 5.0 | Simulation-only, ablation-only baselines, rejected. CrossDex has a more significant problem contribution. |
+| Pseudo-tactile (xcHIiZr3DT) | /home/wg25r/review_agent/human_reviews/xcHIiZr3DT.md | 2.5 | Dexterous grasping in Isaac Sim, no baselines/ablations, rejected. CrossDex is far stronger on all dimensions. |
+
+CrossDex sits between the 5.0-5.5 rejected papers and the 5.5-6.67 accepted papers. Its genuinely novel problem formulation and promising zero-shot transfer results push it above pure reject territory, but the lack of quantitative real-world evaluation and external baselines prevent it from reaching the 6+ range where similar papers like CrossLoco and VTDexManip sit.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/BWuBDdXVnH.txt
+Timestamp: 2026-04-21T01:57:37.464231
+
+--- Token Usage ---
+  Harsh Critic: input=13700 (cached=0) output=5689 (reasoning=3963) total=19389 requests=1 duration=n/ams
+  Strength Finder: input=12832 (cached=0) output=1318 (reasoning=440) total=14150 requests=1 duration=n/ams
+  Merger: input=382341 (cached=248128) output=14711 (reasoning=7502) total=397052 requests=29 duration=397919ms speed=36.97 tokens/s
+  TOTAL: input=408873 output=21718 total=430591
+
+--- Merged Inputs ---
+
+### Harsh Critic
+#Review of ControlAR: Controllable Image Generation with Autoregressive Models
+
+## Critical Issues
+
+### 1. Structural: Full fine-tuning requirement fundamentally undermines the ControlNet analogy and practical utility
+
+The paper frames ControlAR as the autoregressive counterpart to ControlNet, but Table 6 reveals that full fine-tuning of the base AR model is necessary for acceptable performance (F1: 34.15 vs. 30.62 for freezing; FID: 10.64 vs. 13.67). This has a critical structural consequence: **each control type requires an entirely separate copy of the base model**. For LlamaGen-XL (775M parameters), this means ~775M parameters per control condition. ControlNet, by contrast, adds a ~361M module on top of a frozen base model, allowing one base model to serve multiple controls. The paper never acknowledges this as a limitation. Section 3.3 mentions full fine-tuning as a design choice but presents it as unambiguously beneficial rather than a trade-off that changes the nature of the contribution. The claim that ControlAR "easily expands autoregressive models with strong control capability" (Section 1, contributions) is misleading — expansion requires complete retraining and duplication of the model, which is neither easy nor efficient in deployment.
+
+### 2. Evidential: T2I comparisons do not isolate the contribution of the control mechanism from base model quality
+
+Tables 2–3 compare ControlAR (built on LlamaGen-XL) against ControlNet++ and others (built on SD1.4/SD1.5). The paper claims ControlAR "surpasses previous state-of-the-art controllable diffusion models" (Abstract), but the base generative models are fundamentally different. LlamaGen-XL may simply produce better unconditional images than SD1.5. Without reporting the base FID of LlamaGen-XL vs. SD1.5 on the same evaluation set (without controls), it is impossible to determine whether the improvements in Table 3 come from the control framework or the underlying model quality. The paper should report base-model-only FID as a reference point. This is especially important because the FID differences in Table 3 are large (e.g., 14.51 vs. 19.29 on COCOSTuff segmentation), which could be entirely explained by base model differences.
+
+### 3. Evidential: Arbitrary-resolution generation claim is under-evaluated
+
+The arbitrary-resolution generation capability is presented as a key contribution ("most importantly," Section 3.4; highlighted in the Abstract; showcased in Figure 1). However, the evaluation in Figure 6(b) only reports SSIM for four resolution ratios, with no FID evaluation at any non-square resolution. SSIM measures conditional consistency but says nothing about image quality at novel resolutions. The claim that "MR-ControlAR can ensure that the generation of images with different resolution ratios is not impaired" (Section 4.2) is unsupported without FID at these resolutions. Given that AR models trained at fixed resolution are known to degrade on out-of-distribution sequence lengths, this is precisely the evaluation needed.
+
+## Section-by-Section Notes
+
+**Abstract & Introduction:** The claim that control-to-image generation "remains largely unexplored within AR models" is somewhat overstated — ControlVAR (Li et al., 2024c) is cited in the related work but its existence partially contradicts the novelty framing. The paper should more clearly articulate what ControlAR provides beyond ControlVAR's next-scale prediction approach.
+
+**Section 3.2 (Conditional Decoding):** The formulation in Eq. 4 uses "displacement by one position" when adding control tokens to image tokens, which the paper states without justification or ablation. This design choice is central to the method — what happens without the shift? — but is never tested. Additionally, the analogy to positional encodings ("similar to positional encodings") is misleading: positional encodings are deterministic signals indicating position, while control tokens carry rich semantic content whose addition to image tokens is a fundamentally different operation.
+
+**Section 3.3 (Control Encoder):** The claim that "a ViT model, pre-trained on a large amount of data, is more adept at modeling sequences than a randomly initialized CNN network" is plausible but not strongly supported — Table 4 shows ViT-S actually performs *worse* than CNN on F1-Score for Canny (34.15 vs. 33.55) and Depth RMSE (32.41 vs. 33.36, where lower is better, so CNN is worse here — actually wait, 33.36 > 32.41, so ViT-S is better on RMSE). The differences are small and inconsistent, making the strong claim about ViT superiority overconvincing.
+
+**Section 4.2 (T2I Results):** In Table 2, ControlAR beats ControlNet++ on some metrics (COCOStuff mIoU: 37.49 vs. 34.56; Hed SSIM: 85.63 vs. 80.97) but loses on others (ADE20K mIoU: 39.95 vs. 43.64; Lineart SSIM: 79.22 vs. 83.99; Depth RMSE: 29.01 vs. 28.32). The paper's framing of "comparable or even better" is fair, but the Abstract's claim of "surpasses" is not.
+
+**Table 5 (Fusion Ablation):** The cross-attention vs. addition comparison is confounded. Cross-attention is only tested at the 1st layer, while addition is tested at multiple configurations. The paper concludes "direct addition proves more efficacious than cross-attention," but cross-attention at multiple layers was never tested. This is an unfair comparison that undermines the ablation's conclusion.
+
+**Table 1 (C2I Comparison):** ControlVAR's FID values are marked as "estimated from histograms," making the comparison unreliable. More importantly, ControlVAR does not report conditional consistency metrics, so the comparison is incomplete. The paper should acknowledge this limitation explicitly rather than presenting it as a clean win.
+
+**Section 4.2 (Arbitrary Resolution):** The description of MR-ControlAR training mentions sampling resolutions with "(H/16)×(W/16) ≤ 2304" but does not explain the 2304 limit or its relationship to memory/compute constraints. The comparison in Figure 6(a) labels ControlAR as "Decoding ×1024" and MR-ControlAR as "Decoding ×1536" but does not clarify whether ControlAR is simply the fixed-resolution model applied to a resized input, which would be an unfair comparison (resizing artifacts vs. native resolution generation).
+
+## Strengths
+
+1. The conditional decoding vs. conditional prefilling comparison (Figure 2, Section 4.3) is a clear and well-motivated ablation that demonstrates a genuine insight: prepending control tokens as context is inefficient and ineffective for AR spatial control, while per-token fusion via addition is both cheaper and more effective. This is a useful finding for the community.
+
+2. The framework is general — demonstrated to work with both Transformer-based (LlamaGen) and Mamba-based (AiM) AR backbones (Table 1), and across five control modalities (Table 2), which speaks to the robustness of the approach.
+
+3. The C2I results in Table 1 are genuinely impressive: LlamaGen-L (343M params) achieves FID 7.69 on Canny, compared to ControlVAR-d30 (2.0B params) at FID 7.85. This is a strong efficiency result that the paper undersells relative to the more contestable T2I claims.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **FID evaluation at multiple resolutions for MR-ControlAR.** Without this, the core claim that arbitrary-resolution generation does not impair quality is unsupported. Evaluate FID on a multi-resolution test set with the same reference statistics computation protocol.
+2. **Cross-attention fusion at multiple layers.** Table 5's conclusion that addition outperforms cross-attention is based on a confounded comparison. Test cross-attention at layers 1,5,9 to match the best addition configuration.
+3. **Base model FID without controls for LlamaGen-XL vs. SD1.5.** This is needed to contextualize the T2I FID improvements and determine whether they come from the control framework or the base model.
+
+### Deeper Analysis Needed
+1. **Ablation on positional displacement in conditional decoding.** The shift-by-one in Eq. 4 is a core design choice with no ablation. Does the method work without it? With different shifts? This directly bears on whether the claimed mechanism is correct.
+2. **Analysis of failure modes at non-training resolutions.** The paper claims arbitrary-resolution generation, but Figure 6(b) shows ControlAR's SSIM degrades noticeably at 2:1 aspect ratio (~80.5 vs. ~85.5 at 1:1). Understanding when and why MR-ControlAR fails would strengthen the contribution.
+
+### Visualizations & Case Studies
+1. **Side-by-side comparison of ControlAR vs. ControlNet++ on matched-prompts, matched-controls.** Figure 5 provides this but uses red boxes to highlight only ControlNet++ failures, which is cherry-picked. A systematic comparison showing both methods' failures would be more convincing.
+
+### Obvious Next Steps
+1. **Investigate LoRA or adapter-based fine-tuning with stronger hyperparameter search.** Table 6 shows LoRA performing poorly, but this may be due to rank/alpha choices rather than a fundamental limitation. Given that full fine-tuning undermines the practical value proposition, this is a critical direction.
+
+## Overall Assessment
+
+ControlAR identifies a real and timely problem — how to add spatial controls to autoregressive image generation — and proposes a reasonable solution in conditional decoding. The conditional decoding vs. prefilling ablation is the paper's strongest contribution, providing a clear and useful finding. However, the paper has significant issues that undermine its central claims. The T2I comparisons with ControlNet++ do not control for base model quality, making the claimed "surpassing" of diffusion-based methods unconvincing as an evaluation of the control framework itself. The full fine-tuning requirement, revealed only in an ablation table, fundamentally changes the practical value proposition relative to ControlNet but is never discussed as a limitation. The arbitrary-resolution generation — presented as the paper's "most important" contribution — is evaluated with only SSIM at four aspect ratios and no FID. These are not minor gaps; they concern whether the paper's headline claims are actually established by the evidence. The C2I results are strong and the framework is general, but the paper oversells the T2I results and undersells the practical costs of its design. A revision that reports base model FIDs, evaluates MR-ControlAR with FID at multiple resolutions, and honestly discusses the full fine-tuning trade-off would substantially strengthen the contribution.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Conditional decoding is significantly more effective and efficient than conditional prefilling**: Figure 2(c) shows conditional decoding achieves better FID (~25 vs. ~35) and F1-Score (~18 vs. ~28) with faster convergence, while Figure 2(d) demonstrates that prefilling increases GPU memory by 59.1% and training latency by 96.3% compared to decoding, since decoding avoids increasing sequence length.
+
+2. **Competitive or superior performance to diffusion-based SOTA methods on T2I controllable generation**: Table 2 shows ControlAR matches or exceeds ControlNet++ on conditional consistency (e.g., 85.63 vs. 80.97 SSIM on Hed, 37.49 vs. 34.56 mIoU on COCOSTuff segmentation), while Table 3 shows ControlAR achieves better FID than ControlNet++ across most tasks (e.g., 10.53 vs. 15.01 FID on Hed, 14.51 vs. 19.29 FID on COCOSTuff segmentation, 14.61 vs. 16.66 FID on Depth).
+
+3. **Arbitrary-resolution generation enabled by conditional decoding**: By varying control token length, ControlAR can generate images at non-fixed resolutions. Figure 6(b) demonstrates that MR-ControlAR maintains consistently high SSIM (~85.5) across resolution ratios from 1:1 to 2:1, while standard ControlAR degrades to ~80.5 SSIM at 2:1 ratio. Figure 1 provides qualitative evidence with generated images at diverse resolutions (1024×1024, 448×768, 768×768, 512×672).
+
+### Supporting strengths
+1. **Generality across AR architectures**: Table 1 demonstrates that ControlAR works well with both Transformer-based LlamaGen (FID 7.69 on Canny with LlamaGen-L) and Mamba-based AiM (FID 9.66 with AiM-L), confirming the framework is not tied to a specific sequence model.
+
+2. **Lightweight control encoder design**: As stated in Section 3.3, the control encoder adds only ~22M parameters and ~0.05T MACs for 512×512 resolution, making it practical. Table 4 shows that even the small ViT-S/DINOv2-S encoders (22.1M params) outperform a CNN encoder (21.8M params), and DINOv2-B (86.6M) further improves results.
+
+3. **Thorough ablation studies validating design choices**: Table 5 shows addition outperforms cross-attention for control fusion (F1 34.01 vs. 30.86), and that applying addition at layers 1,5,9 strikes the best balance between conditional consistency and FID. Table 6 confirms full fine-tuning outperforms freezing and LoRA (FID 10.64 vs. 13.67/13.20).
+
+### Presentation / practical strengths
+1. **Strong parameter efficiency compared to prior work**: Table 1 shows ControlAR with LlamaGen-L (343M total params) achieves 7.69 FID on Canny, outperforming ControlVAR with VAR-d30 (2.0B params, FID 7.85), using only 16.7% of the parameters.
+
+## Summary
+
+The paper introduces ControlAR, a framework for controllable image generation with autoregressive models that encodes spatial controls as tokens and injects them via conditional decoding (adding control tokens to image tokens) rather than prefilling them into the sequence. The single most important piece of evidence is the comparison in Figure 2 and Tables 2–3: conditional decoding simultaneously improves both quality and efficiency over prefilling (Figure 2d: 59.1% less memory, 96.3% less training time; Figure 2c: better FID and F1-Score), and ControlAR with this approach matches or surpasses the diffusion-based state-of-the-art ControlNet++ across multiple control types and metrics.
+
+--- Merged Review ---
+Now I have all the evidence I need. Let me compose the final review.
+
+---
+
+## Summary
+
+ControlAR introduces a framework for controllable image generation with autoregressive models by encoding spatial controls (edges, depth, segmentation) into tokens and fusing them with image tokens via *conditional decoding* — adding control tokens to image tokens at intermediate layers — rather than prepending them as context. This approach is shown to be both more effective and more efficient than conditional prefilling, and it naturally enables arbitrary-resolution generation since the number of decoded tokens is determined by the control token sequence length. The method is evaluated on class-to-image (C2I) and text-to-image (T2I) tasks across five control modalities.
+
+## Strengths
+
+- **Conditional decoding is a genuine and well-supported insight.** Figure 2(c) shows conditional decoding converges faster and to better FID/F1 than prefilling, while Figure 2(d) shows 59.1% less memory and 96.3% less training time. This is a clean, useful finding: per-token fusion via addition avoids the quadratic cost of prepending tokens while improving control capability. This comparison alone constitutes a meaningful contribution.
+
+- **Strong C2I results with excellent parameter efficiency.** Table 1 shows ControlAR with LlamaGen-L (343M params) achieves FID 7.69 on Canny, outperforming ControlVAR-d30 (2.0B params) at FID 7.85, using only 16.7% of the parameters. The method also works across Transformer-based (LlamaGen) and Mamba-based (AiM) backbones, demonstrating architectural generality.
+
+- **Creative use of conditional decoding for arbitrary-resolution generation.** By varying the control token sequence length, ControlAR can generate images at non-fixed resolutions without additional modules. MR-ControlAR with multi-resolution training maintains high SSIM (~85.5) across aspect ratios from 1:1 to 2:1 (Figure 6b), while standard ControlAR degrades to ~80.5 at 2:1.
+
+- **Competitive conditional consistency on T2I tasks.** Table 2 shows ControlAR beats ControlNet++ on COCOSTuff mIoU (37.49 vs. 34.56), Hed SSIM (85.63 vs. 80.97), and Canny F1 (37.08 vs. 37.04), demonstrating that the AR-based control mechanism can match or exceed diffusion-based methods on control fidelity.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **T2I FID comparisons do not isolate the control framework's contribution from base model quality.** Tables 2–3 compare ControlAR (built on LlamaGen-XL, 775M) against methods built on SD1.4/SD1.5. The paper's abstract claims ControlAR "surpasses previous state-of-the-art controllable diffusion models," but LlamaGen-XL may simply produce better unconditional images than SD1.5. Without reporting base-model-only FID for LlamaGen-XL vs. SD1.5 on the same evaluation set, it is impossible to determine whether the large FID gaps in Table 3 (e.g., 14.51 vs. 19.29 on COCOSTuff, 10.53 vs. 15.01 on Hed) come from the control framework or the underlying generative model. This matters because the paper's central claim is about the effectiveness of the *control mechanism*, not about AR models being better generative models than diffusion. The conditional consistency metrics in Table 2 are more diagnostic of control quality (and show mixed results), but the FID-based "surpassing" claim is confounded.
+
+- **Full fine-tuning requirement is an unacknowledged practical limitation that changes the value proposition relative to ControlNet.** Table 6 reveals that full fine-tuning (F1: 34.15, FID: 10.64) substantially outperforms freezing (30.62, 13.67) and LoRA (32.90, 13.20). This means each control type requires a separate full copy of the base model (~775M parameters for LlamaGen-XL). ControlNet, by contrast, adds a lightweight module (~361M) on top of a *frozen* base, allowing one base model to serve multiple controls. The paper says ControlAR "easily expands autoregressive models with strong control capability" (Section 1, contributions), but expansion requires complete retraining and model duplication. This trade-off should be explicitly acknowledged as a limitation.
+
+- **Arbitrary-resolution generation — presented as the "most importantly" contribution (Section 1) — is under-evaluated.** Figure 6(b) only reports SSIM at four resolution ratios with no FID evaluation at any non-square resolution. SSIM measures conditional consistency but says nothing about image quality at novel resolutions. Given that AR models trained at fixed resolution are known to degrade on out-of-distribution sequence lengths, FID at non-training resolutions is precisely the evaluation needed to support the claim that "MR-ControlAR can ensure that the generation of images with different resolution ratios is not impaired" (Section 4.2).
+
+### Minor
+
+- **The cross-attention vs. addition ablation in Table 5 is incomplete.** Cross-attention is only tested at the 1st layer, while addition is tested at 1st, 1+5+9, and all 12 layers. The 1st-layer comparison (30.86 vs. 34.01 F1) does support addition's superiority, but the paper's broader conclusion that "direct addition proves more efficacious than cross-attention" would be strengthened by testing cross-attention at multiple layers to rule out that multi-layer cross-attention could close the gap.
+
+- **The abstract's "surpasses" claim overstates the T2I conditional consistency results.** Table 2 shows ControlAR wins on some metrics (COCOSTuff mIoU, Hed SSIM, Canny F1) but loses on others (ADE20K mIoU: 39.95 vs. 43.64; Lineart SSIM: 79.22 vs. 83.99; Depth RMSE: 29.01 vs. 28.32). The body text's "comparable or even better" framing is more accurate than the abstract's "surpasses."
+
+- **ControlVAR's FID values in Table 1 are "estimated from histograms" (marked with *), making the C2I comparison imprecise.** While acknowledged in the caption, this limits the strength of the efficiency claim relative to ControlVAR.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- FID evaluation at multiple resolutions for MR-ControlAR to substantiate the arbitrary-resolution quality claim.
+- Base-model-only FID (without controls) for LlamaGen-XL vs. SD1.5 on the T2I evaluation sets, to contextualize the FID improvements.
+- Cross-attention fusion tested at layers 1, 5, and 9 to complete the ablation.
+- Ablation on the positional displacement in Eq. 4 — what happens without the shift?
+- Investigate whether a more thorough LoRA hyperparameter search could narrow the gap with full fine-tuning, which would significantly improve the practical value proposition.
+
+## Removed Points
+
+*These points are flagged to be removed, treat them with caution.*
+
+- **Harsh critic: "ControlAR as the autoregressive counterpart to ControlNet" framing is misleading due to full fine-tuning.** The paper does not explicitly claim to be a drop-in ControlNet replacement. It frames itself as a framework for "integrating spatial controls into autoregressive image generation models." The full fine-tuning issue is real (kept above), but the analogy itself is not misleading — the paper is solving a similar problem in a different paradigm.
+
+- **Harsh critic: The analogy to positional encodings is misleading.** The paper says conditional decoding is "similar to positional encodings" (abstract) in the sense that both add per-position signals to tokens. The analogy is about the *mechanism* (addition rather than prepending), not about the *content* of the signal. This is a reasonable analogy, not a misleading one.
+
+- **Harsh critic: ViT superiority claim over CNN is overconvincing.** Table 4 actually shows ViT-S outperforms CNN on 4 of 6 metrics (Canny F1, Depth RMSE, Depth FID, Hed SSIM), DINOv2-S outperforms on T2I metrics, and DINOv2-B is best overall. The paper's claim that "a ViT model, pre-trained on a large amount of data, is more adept at modeling sequences" is supported by the overall trend, even if individual cells are close. The paper also provides a reasonable explanation (pre-training data match). This is a minor nitpick, not a substantive weakness.
+
+- **Harsh critic: Figure 5 is cherry-picked.** Highlighting failure modes of baselines is standard practice in qualitative comparisons. The quantitative results in Tables 2–3 provide the fair comparison.
+
+- **Strength finder: "Surpassing diffusion-based SOTA on T2I FID" is listed as a strength.** This is confounded by base model differences (verified above as a Major weakness), so this strength is moved here. The conditional consistency competitiveness is kept as a strength.
+
+- **Harsh critic: Novelty claim that "control-to-image generation remains largely unexplored within AR models" is overstated given ControlVAR.** The paper does cite ControlVAR and differentiates it: "ControlVAR employs next-scale prediction to jointly model control and image, but is still different from next-token prediction in autoregressive generation." This is a legitimate distinction — next-scale prediction (VAR-style) is architecturally different from next-token prediction (LlamaGen-style). The novelty framing is reasonable.
+
+## Novel Insights
+
+The conditional decoding vs. conditional prefilling comparison reveals a generalizable principle: for autoregressive models, injecting spatial control signals via per-token addition at intermediate layers is both more effective and more efficient than prepending them as context. This insight arises because prepending increases sequence length (and thus quadratic attention cost) while providing only indirect, global conditioning; per-token addition preserves sequence length and provides direct, spatially-aligned conditioning. This principle likely extends beyond image generation to any autoregressive task requiring spatial or structured conditioning.
+
+## Suggestions
+
+- Report base-model FID without controls for both LlamaGen-XL and SD1.5 on the T2I evaluation sets, which would either validate the "surpassing" claim or appropriately contextualize it.
+- Evaluate MR-ControlAR with FID at non-square resolutions to substantiate the headline arbitrary-resolution contribution.
+- Add an explicit discussion of the full fine-tuning trade-off and its practical implications for deployment (one model per control type vs. ControlNet's shared base).
+- Soften the abstract's "surpasses" to "is competitive with or surpasses" to accurately reflect the mixed conditional consistency results.
+
+## Evaluation
+
+**Originality:** The conditional decoding mechanism is a genuine and non-obvious insight. The application to arbitrary-resolution generation is creative. However, the overall framework (encode controls → inject into model) follows the ControlNet paradigm, so novelty is moderate. **6/10**
+
+**Importance of research question:** Controllable generation for AR image models is timely and important given the rapid progress of AR models. **7/10**
+
+**Whether claims are well supported:** The core conditional decoding vs. prefilling claim is well supported. The T2I "surpassing" claim is confounded. The arbitrary-resolution claim is under-evaluated. **5/10**
+
+**Soundness of experiments:** Good ablations on the control mechanism itself, but the main comparison (T2I) has a confound, and the headline feature (arbitrary resolution) lacks FID evaluation. **5/10**
+
+**Clarity:** The paper is generally well-written with clear figures and explanations. The distinction between conditional prefilling and decoding is clearly presented. **7/10**
+
+**Value to community:** The conditional decoding insight and its application to arbitrary-resolution generation provide useful tools for the growing AR image generation community. **6/10**
+
+## Calibration
+
+Anchors compared against:
+
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| CCA (AR visual generation) | kGvXIlIVLM | 7.0 | Stronger theoretical grounding, cleaner experiments. ControlAR is below this due to confounded T2I comparisons and under-evaluated arbitrary-resolution. |
+| Relay Diffusion (multi-resolution) | qTlcbLSm4p | 7.0 | Novel finding + SOTA on well-controlled comparisons. ControlAR is below due to confounds in main evaluation. |
+| NOVA (AR video generation) | JE9tCwe3lp | 6.5 | Similar level of contribution in a different domain. ControlAR has similar methodological insight but weaker evaluation rigor. |
+| Build-A-Scene (spatial control for diffusion) | gg6dPtdC1C | 5.75 | Borderline accept with interesting but limited scope. ControlAR has broader evaluation but with confounds. |
+| Prodigy (overclaimed parameter-free learner) | WpQbM1kBuy | 4.25 | Overclaimed with unfair comparisons. ControlAR has a more genuine core contribution (conditional decoding), so above this. |
+| EfficientQAT (full fine-tuning undermines efficiency) | 6Mdvq0bPyG | 3.0 | Full fine-tuning contradicts efficiency claims. ControlAR's case is less severe — efficiency isn't its main claim, and the full fine-tuning is about effectiveness. |
+| H-QLoRA (claims efficiency, actually slower) | B4S1GAMBLG | 2.0 | Core efficiency claim directly contradicted. ControlAR doesn't make deployment efficiency claims, so well above this. |
+
+ControlAR sits above the overclaiming/reject papers (~4-5) because the conditional decoding insight is genuine and the C2I results are strong and unconfounded. It sits below the borderline-accept and accept papers (~6-7) because its main T2I evaluation is confounded and its headline feature (arbitrary resolution) lacks FID evaluation. The paper makes real contributions but oversells its T2I results and under-evaluates its most novel feature.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/DCandSZ2F1.txt
+Timestamp: 2026-04-21T01:57:52.490873
+
+--- Token Usage ---
+  Harsh Critic: input=15930 (cached=1216) output=5533 (reasoning=3798) total=21463 requests=1 duration=n/ams
+  Strength Finder: input=15062 (cached=64) output=1636 (reasoning=800) total=16698 requests=1 duration=n/ams
+  Merger: input=741902 (cached=463808) output=15729 (reasoning=9117) total=757631 requests=40 duration=827426ms speed=19.01 tokens/s
+  TOTAL: input=772894 output=22898 total=795792
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Fast Feedforward 3D Gaussian Splatting Compression
+
+## Critical Issues
+
+### 1. Structural: The headline claim of "surpassing most SOTA per-scene optimization-based methods" is not supported by the evidence presented
+
+The abstract states FCGS "surpass[es] most SOTA per-scene optimization-based methods," and the introduction echoes this ("even surpassing most of the optimization-based methods"). However, this claim rests primarily on performance on the DL3DV-GS test set—100 scenes drawn from the same distribution as the 6670 training scenes. On the out-of-distribution datasets (MipNeRF360, Tanks & Temples), Figure 4 shows FCGS is competitive but does not clearly surpass the optimization-based baselines. The paper never disambiguates in-distribution vs. out-of-distribution results when making this claim, and no per-dataset numerical breakdown is provided in the main text to let the reader verify it. A claim this strong, repeated in the abstract and conclusion, needs either clear per-dataset evidence or honest qualification.
+
+### 2. Evidential: Fidelity is evaluated with only PSNR in the main text
+
+For a compression paper, the claim of "maintaining fidelity" requires more than a single pixel-level metric. SSIM and LPIPS are relegated to the appendix. Since the method introduces MLP-based autoencoder distortions on color attributes and quantization on geometry attributes, perceptual metrics are essential: PSNR can be insensitive to structured artifacts that SSIM/LPIPS would catch, and vice versa. Without these metrics in the main evaluation, the fidelity claim is under-supported.
+
+### 3. Evidential: Zero-shot generalization to feed-forward 3DGS requires disabling the autoencoder path, undermining the method's generality
+
+Section 4.2 states that when compressing 3DGS from feed-forward models (LGM), "we set mask *m* to all 0s for color attributes." This means the entire learned autoencoder compression pathway (the MEM module, the m=1 context models) is bypassed, reducing FCGS to simple quantization. The resulting compression ratio drops to 5× (LGM) vs. 20× (optimization-based 3DGS). This suggests the learned model does not generalize across 3DGS distributions—a significant limitation for a method billed as "generalizable optimization-free compression." The paper acknowledges this only in a footnote-style remark ("Please refer to Appendix Section B for limitation analysis") rather than confronting it as a core limitation.
+
+## Section-by-Section Notes
+
+**Abstract & Introduction**: The "20× compression while maintaining fidelity" claim is presented without the nuance that this holds on the in-distribution test set. The framing of the paper as the "first" optimization-free pipeline for 3DGS compression is fair and well-motivated, but the comparative claims against optimization-based methods are overstated.
+
+**Section 3.2 (MEM)**: The mask m is predicted from geometry attributes f^geo alone (Eq. 3). The paper argues geometry is more sensitive to deviation, which justifies not passing geometry through the autoencoder, but it does not explain why color attributes themselves should not inform the mask decision. If certain color attributes (e.g., high-SH coefficients) are particularly sensitive, f^col would be the natural signal. This design choice is unexamined.
+
+**Section 3.2 (MEM)**: The quantization step q is "a trainable decimal parameter" for the m=0 path. The paper does not discuss the range of learned values or whether this model effectively learns a per-attribute quantization step size. Without this analysis, it is unclear whether the m=0 path is doing anything more sophisticated than fixed scalar quantization.
+
+**Section 3.3 (Inter-Gaussian Context)**: Equation 4 computes a weighted average feature for grid voxels. If no ẑ falls within a voxel's interpolation range, f_i^v is undefined (0/0). The paper does not address this edge case, which is likely to occur in sparse regions or for high-resolution grids.
+
+**Section 3.3 (Inter-Gaussian Context)**: The sequential batch decoding (N^s batches) introduces serial dependencies that affect decoding speed. The paper claims "seconds" for encoding but does not report decoding time separately. For the method's claimed practical utility, decoding latency matters equally.
+
+**Section 3.4 (Training)**: The three-stage training procedure (pre-train autoencoder → train context models → end-to-end) is necessitated by optimization instability ("the model is prone to collapsing into a local minimum where all m values are zero"). This suggests a fundamental difficulty with the joint optimization that is patched rather than resolved. The paper does not discuss whether this limits the quality of the final solution.
+
+**Section 4.1 (Implementation)**: The training dataset construction (60 GPU days to generate 6770 3DGS scenes) is a substantial hidden cost. While the paper is correct that inference-time compression is fast, the total cost of the pipeline (dataset generation + model training) should be acknowledged when comparing to per-scene optimization methods.
+
+**Section 4.1**: "In inference, we maintain a same random seed in encoding and decoding to guarantee consistency." This is concerning—the batch splitting for inter-Gaussian context uses "uniform random sampling" (Section 4.1). If the compression output depends on a random seed, this is a non-trivial design limitation that could affect reproducibility and interoperability.
+
+**Section 4.2**: The comparison with optimization-based methods is acknowledged as "inherently unfair to FCGS," but the paper then proceeds to make strong comparative claims anyway. This inconsistency between honest acknowledgment and ambitious claiming weakens the presentation.
+
+**Section 4.5**: Encoding time of "about 1 second to encode 100K Gaussians" on a single GPU is reported, but decoding time is not. For a compression method, decoding speed is at least as important as encoding speed for most use cases.
+
+**Figure 1**: The comparison table (18s vs. 227s, 29.2 vs. 28.9 dB PSNR, 21.1 vs. 24.6 MB) uses the DL3DV-GS dataset—the in-distribution test set. This is a favorable showcase for the teaser figure.
+
+## Strengths
+
+1. **Novel and well-motivated problem formulation**: The identification that all existing 3DGS compression methods require per-scene optimization, and the proposal of a feedforward alternative, is a genuine and practical contribution. The speed-fidelity tradeoff discussion (Section 1, last paragraph) honestly frames the different use cases.
+
+2. **Creative inter-Gaussian context model**: Creating grids from previously decoded Gaussians (Eq. 4-5) to provide structured context for unstructured data is an elegant solution to a real problem—the lack of natural ordering in 3DGS. The multi-resolution 2D+3D grid design is well-reasoned.
+
+3. **The MEM design insight**: The observation that geometry attributes are highly sensitive to MLP-induced deviations (and should therefore bypass the autoencoder) while color attributes have varying tolerance is well-argued and supported by the ablation (Figure 7 left, where all m=1 causes "drastic" fidelity drop).
+
+4. **Compatibility with pruning methods**: Section 4.4 demonstrates that FCGS composes well with existing pruning techniques (Mini-Splatting, Trimming), achieving 100× compression. This is a practical strength that extends the method's utility.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Report decoding time explicitly**, broken down by component (hyperprior, inter-Gaussian context, intra-Gaussian context, synthesis). Without this, the "fast" claim is one-sided and the practical utility is unclear.
+2. **Provide SSIM and LPIPS results in the main text**. A compression paper that claims "maintaining fidelity" with only PSNR in the main evaluation is not meeting the standard of evidence for that claim.
+3. **Evaluate generalization more systematically**: Train on DL3DV-GS and test on MipNeRF360/Tanks & Temples with per-dataset numerical tables (not just scatter plots), including variance across scenes. This would let the reader assess the "surpassing most optimization-based methods" claim for each dataset independently.
+
+### Deeper Analysis Needed
+1. **Analyze the learned mask m**: What fraction of Gaussians take m=1 vs. m=0? Does this correlate with any observable property (spatial location, opacity, SH magnitude)? This would reveal whether MEM is learning something meaningful or just a fixed ratio.
+2. **Investigate the failure mode on feed-forward 3DGS**: Why must m be set to all 0s? Is it a distribution shift in geometry attributes that makes the mask predictor fail, or a fundamental mismatch in the autoencoder? Understanding this would strengthen or qualify the generality claim.
+
+### Visualizations & Case Studies
+1. **Show the mask m spatially**: Visualize which Gaussians take m=1 vs. m=0 in a rendered scene. This would reveal whether the model learns semantically meaningful assignments (e.g., high-frequency regions use direct quantization) or something less interpretable.
+
+### Obvious Next Steps
+1. **Add a per-dataset results table** with PSNR, SSIM, LPIPS, size, and encoding/decoding time for each dataset, so the reader can evaluate the "surpassing" claim without parsing scatter plots.
+
+## Overall Assessment
+
+FCGS identifies a genuine and important gap—no existing 3DGS compression method works without per-scene optimization—and proposes a credible feedforward approach. The inter-Gaussian context model and the MEM module are thoughtful contributions. However, the paper's central claims are overstated relative to the evidence: "surpassing most optimization-based methods" is not clearly supported on out-of-distribution datasets, fidelity is evaluated with only PSNR in the main text, and the method's generalization to non-optimization-based 3DGS requires disabling its primary compression mechanism. These are not minor presentation issues—they concern whether the headline results hold under the conditions the paper claims they do. The contribution is real but the claims need honest qualification. In its current form, the paper should not be accepted without either (a) substantially qualifying the comparative claims or (b) providing stronger per-dataset evidence with full metrics.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **First optimization-free 3DGS compression pipeline**: FCGS is the first method to compress 3DGS in a single feed-forward pass without per-scene finetuning, addressing a clear limitation of all prior methods. As shown in Figure 1, this reduces compression time from 227s (LightGaussian) to 18s on DL3DV-GS, transforming a minutes-long optimization process into seconds.
+
+2. **Competitive RD performance despite no per-scene optimization**: Despite the inherent disadvantage of lacking scene-specific adaptation, FCGS surpasses most optimization-based methods. On DL3DV-GS (Figure 4), FCGS achieves 29.2 dB PSNR at 21.1 MB compared to LightGaussian's 28.9 dB at 24.6 MB. On MipNeRF360, FCGS achieves 27.6 dB matching or exceeding several per-scene methods, with compression ratios exceeding 20×.
+
+3. **Multi-path Entropy Module (MEM) effectively balances size and fidelity**: The observation that geometry attributes are more sensitive to deviations (since they determine rasterization dependencies) motivates bypassing the autoencoder for geometry while adaptively routing color attributes. The ablation in Figure 7 (left) validates this: setting all m=1 (all through autoencoder) causes drastic fidelity drops even without quantization, while all m=0 (direct quantization) significantly increases bit consumption. MEM learns the optimal mask rate without an additional hyperparameter by integrating m directly into the bit consumption term (Eq. 8).
+
+4. **Context models exploit structural redundancies in unorganized Gaussians**: The inter-Gaussian context model (Eq. 4–5) creates multi-resolution 3D and 2D grids from already-decoded Gaussians to provide spatial context via interpolation, and the intra-Gaussian context model (Eq. 6) splits latents into chunks to exploit within-Gaussian redundancies. The ablation in Figure 7 (right) shows removing both context models increases bit consumption by ~1.5× under similar fidelity, confirming their effectiveness.
+
+### Supporting strengths
+
+1. **Generalization to feed-forward 3DGS models**: Figure 6 demonstrates that FCGS, trained only on optimization-based 3DGS, generalizes zero-shot to compress 3DGS from feed-forward models (MVSPat and LGM), achieving 15× and 5× compression ratios respectively. This broadens applicability beyond the training domain.
+
+2. **Compatibility with pruning methods for compounded gains**: Figure 8 shows FCGS can be stacked with pruning approaches (Mini-Splatting, Trimming) on Deep Blending, achieving up to 100× compression over vanilla 3DGS while FCGS-compressed size is only 40% of MSC at the same fidelity. This demonstrates practical composability.
+
+3. **GMM-based probability estimation**: The Gaussian Mixture Model (Eq. 7) combines distributions from hyperprior, inter-Gaussian, and intra-Gaussian context models with learned mixing weights, enabling more accurate probability estimation than any single component alone.
+
+4. **Preserves rendering speed**: Since FCGS does not alter the number or structure of Gaussians, rendering speed remains consistent—average FPS of 102 vs. 91 before and after compression on MipNeRF360 (Section 4.5).
+
+### Presentation / practical strengths
+
+1. **Clear principled organization**: The paper organizes its technical contributions under value-based (MEM) and structure-based (context models) principles, providing a coherent framework that also connects to prior work categorization.
+
+## Summary
+
+The paper introduces FCGS, the first optimization-free, feed-forward compression pipeline for 3D Gaussian Splatting that eliminates the need for per-scene finetuning. The key evidence supporting this contribution is the combination of the Multi-path Entropy Module (which adaptively routes geometry attributes through direct quantization and color attributes through either direct quantization or an autoencoder, validated by ablation in Figure 7 left) and the inter-/intra-Gaussian context models (which exploit structural redundancies among unorganized Gaussians via grid-based interpolation and chunk-wise prediction, validated by ablation in Figure 7 right showing ~1.5× bit reduction). Together these achieve over 20× compression while matching or exceeding most per-scene optimization-based methods, with compression time reduced from minutes to seconds (18s vs. 227s for LightGaussian on DL3DV-GS).
+
+--- Merged Review ---
+Now I have all the information I need to write the final review. Let me compile it.
+
+## Summary
+
+FCGS proposes the first optimization-free, feed-forward compression pipeline for 3D Gaussian Splatting (3DGS), eliminating the need for per-scene finetuning required by all prior compression methods. The core technical contributions are a Multi-path Entropy Module (MEM) that adaptively routes color attributes through either an autoencoder or direct quantization (while always directly quantizing geometry attributes), and inter/intra-Gaussian context models that construct multi-resolution grids from already-decoded Gaussians to provide structured context for entropy coding of unorganized 3DGS data. The method achieves over 20× compression in seconds rather than minutes.
+
+## Strengths
+
+- **First-of-its-kind problem formulation**: FCGS is the first optimization-free compression pipeline for 3DGS, addressing a clear and practical gap—all existing methods require per-scene finetuning. The speed advantage is dramatic: 18s vs. 227s for LightGaussian on DL3DV-GS (Figure 1). This genuinely opens a new application scenario for time-sensitive 3DGS compression.
+
+- **Well-motivated MEM design with empirical validation**: The insight that geometry attributes are highly sensitive to MLP-induced deviations (because they determine rasterization dependencies) and should bypass the autoencoder is well-argued and empirically validated. The ablation in Figure 7 (left) shows that setting all m=1 causes a "drastic" fidelity drop even without quantization, while all m=0 significantly increases bit consumption. MEM's integration of the mask directly into the bit consumption term (Eq. 8) to avoid an additional hyperparameter is elegant.
+
+- **Effective inter-Gaussian context model for unstructured data**: Creating multi-resolution 3D and 2D grids from already-decoded Gaussians (Eq. 4–5) to provide spatial context for unstructured 3DGS is a creative solution to a real problem. The ablation in Figure 7 (right) shows removing both context models increases bit consumption by ~1.5× under similar fidelity, confirming their effectiveness.
+
+- **Compatibility with pruning methods**: Figure 8 demonstrates that FCGS composes well with existing pruning techniques (Mini-Splatting, Trimming), achieving 100× compression over vanilla 3DGS, with FCGS-compressed size only 40% of MSC at the same fidelity. This extends practical utility.
+
+- **Preserves rendering speed**: Since FCGS does not alter the number or structure of Gaussians, rendering speed remains consistent (Section 4.5: 102 vs. 91 FPS before/after compression on MipNeRF360).
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **The "surpassing most SOTA per-scene optimization-based methods" claim is overstated for out-of-distribution datasets** — The abstract states FCGS "surpass[es] most SOTA per-scene optimization-based methods," and this is echoed in the introduction and conclusion. However, this claim is strongest on the DL3DV-GS test set (100 scenes drawn from the same distribution as the 6670 training scenes). On MipNeRF360 and Tanks & Temples (out-of-distribution), the Figure 4 data shows FCGS is competitive but does not clearly surpass optimization-based methods across the full rate-distortion curve. On MipNeRF360, FCGS's highest-PSNR point (27.6 dB) is the best but at 50 MB—the same size as LightGaussian (27.2 dB). On Tanks & Temples, FCGS matches LightGaussian at 23.6 dB/30 MB. The paper never provides a per-dataset numerical breakdown in the main text to let the reader verify the "surpassing most" claim for each dataset independently. The claim needs either qualification or clearer per-dataset evidence. This matters because it directly affects how the paper's core contribution is interpreted.
+
+- **The autoencoder-based compression pathway does not generalize to feed-forward 3DGS, undermining the "generalizable" framing** — Section 4.2 states that when compressing 3DGS from feed-forward models (LGM), "we set mask m to all 0s for color attributes." This bypasses the entire learned autoencoder compression pathway (MEM's m=1 path), reducing FCGS to simple quantization. The compression ratio drops from 20× (optimization-based 3DGS) to 5× (LGM). This reveals that the learned model does not generalize across 3DGS distributions—a significant limitation for a method billed as "generalizable optimization-free compression." The paper acknowledges this only briefly ("Please refer to Appendix Section B for limitation analysis") rather than confronting it as a core limitation of the generality claim. This matters because the paper frames generalizability as a key advantage, yet the primary compression mechanism only works well on one distribution.
+
+### Minor
+
+- **Only PSNR is reported in the main text for fidelity evaluation** — Line 226 acknowledges "we present PSNR metric to evaluate fidelity due to page constraints" and defers SSIM and LPIPS to the appendix. For a compression paper claiming to "maintain fidelity," having perceptual metrics only in the appendix is below the standard of evidence, since PSNR can miss structured artifacts that SSIM/LPIPS would catch. The paper does use SSIM in its training loss (Eq. 8), so the omission from the main evaluation is a presentation gap rather than a methodological one.
+
+- **Decoding time is not reported in the main text** — Section 4.5 reports encoding time (~1 second per 100K Gaussians) but does not report decoding time separately. The inter-Gaussian context model introduces sequential batch dependencies (N^s batches decoded sequentially), which could make decoding slower than encoding. For practical utility, decoding latency matters equally. The paper references "Appendix Section H" for detailed coding time analysis, but this key information should be in the main text.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Per-dataset results tables (PSNR, SSIM, LPIPS, size, encoding/decoding time) in the main text would let readers evaluate the "surpassing" claim without parsing scatter plots.
+- Analysis of the learned mask m: what fraction of Gaussians take m=1 vs. m=0, and does this correlate with observable properties (spatial location, opacity, SH magnitude)? This would reveal whether MEM learns something semantically meaningful.
+- Investigation into why the autoencoder must be disabled for feed-forward 3DGS—understanding the failure mode (distribution shift in geometry? mask predictor failure?) would strengthen or qualify the generality claim.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+
+- **Harsh critic: "mask m predicted from geometry alone, not color"**: This is a design choice, not a weakness. The paper provides a clear justification—geometry determines rasterization dependencies, making it a natural signal for predicting sensitivity. Whether color could additionally inform the mask is a nice-to-have improvement, not a flaw in the current design.
+
+- **Harsh critic: "trainable decimal parameter q for quantization step"**: This is a minor implementation detail. Whether the m=0 path learns per-attribute quantization steps or a fixed scalar is an analysis question, not a methodological flaw.
+
+- **Harsh critic: "empty voxel edge case in Eq. 4"**: If no ẑ falls within a voxel's interpolation range, this is a standard implementation edge case (default to zero feature). Not a substantive methodological concern.
+
+- **Harsh critic: "60 GPU days training cost"**: This is a one-time training cost for a feed-forward model. Comparing it to per-scene optimization costs is misleading—the whole point is that the training cost is amortized across all future inferences. Standard for learned compression.
+
+- **Harsh critic: "random seed for batch splitting"**: Maintaining a consistent random seed for encoding/decoding consistency is a standard design choice in learned compression. This is not a reproducibility concern.
+
+- **Harsh critic: "three-stage training indicates fundamental difficulty"**: The paper transparently acknowledges the issue and explains the practical solution. The three-stage approach is a common training strategy (curriculum learning), not evidence of a fundamentally flawed method.
+
+- **Harsh critic: "Figure 1 uses in-distribution DL3DV-GS dataset"**: Teaser figures naturally showcase the strongest results. This is a standard presentation choice, not a weakness.
+
+- **Harsh critic: "comparison with optimization-based methods is unfair to FCGS but paper makes strong claims anyway"**: The paper acknowledges the asymmetry ("inherently unfair to FCGS") and this asymmetry actually favors the baselines (which get per-scene optimization). Per the hard rules, criticizing unfair comparison where the asymmetry favors the baseline should be removed.
+
+- **Strength finder: "GMM-based probability estimation" as a separate strength**: This is a standard component of learned image compression (Ballé et al., 2018) and not a novel contribution of this paper. Moved to removed.
+
+- **Strength finder: "Generalization to feed-forward 3DGS models" as a supporting strength**: This conflicts with the verified Major weakness that the autoencoder must be disabled for feed-forward 3DGS, reducing the method to simple quantization. Calling this "generalization" while the core mechanism is bypassed is misleading.
+
+## Novel Insights
+
+The paper reveals a fundamental tension in learned 3DGS compression between the desire for generalizability and the distribution-specific nature of learned compression models. MEM's design—bypassing the autoencoder for geometry because rasterization amplifies deviations—is an insightful observation that extends beyond 3DGS compression to any feed-forward processing of scene representations with differentiable rendering pipelines. The fact that the autoencoder must be entirely disabled for feed-forward-generated 3DGS (different distribution) suggests that the "generalizable" compression paradigm may require distribution-specific adaptation of the autoencoder pathway, even if the context models and quantization can transfer.
+
+## Suggestions
+
+- Add per-dataset numerical tables in the main text with PSNR, SSIM, LPIPS, size, and encoding/decoding time for each dataset, enabling transparent evaluation of the "surpassing" claim.
+- Qualify the "surpassing most SOTA" claim to specify that this holds most clearly on the DL3DV-GS test set (in-distribution), while FCGS is competitive but does not clearly surpass on MipNeRF360 and Tanks & Temples.
+- Report decoding time in the main text, especially since the sequential batch decoding of the inter-Gaussian context model may introduce latency.
+- Discuss the autoencoder generalization failure more prominently—understanding and addressing why m must be set to all 0s for feed-forward 3DGS would strengthen the "generalizable" framing.
+
+## Score and Decision
+
+**Calibration anchors examined:**
+
+- PbheqxnO1e (Lightweight Predictive 3DGS, avg 7.0, Accept Poster): Similar 3DGS compression achieving 20× reduction, but with clearer per-dataset evaluation and mobile device demonstration. FCGS has comparable compression ratio and more novel technical components, but weaker evaluation rigor.
+- 9NfHbWKqMF (SplatFormer, avg 7.5, Accept Spotlight): Feed-forward transformer for 3DGS with no per-scene optimization, similar paradigm. SplatFormer has clearer OOD evaluation and stronger generalization claims.
+- WhgB5sispV (4DGS, avg 6.67, Accept Poster): Extension of 3DGS paradigm to dynamic scenes with concerns about novelty but good results. FCGS has a clearer "first-of-its-kind" contribution.
+- 56vHbnk35S (GraphGS, avg 6.0, Accept Poster): Novel graph-guided 3DGS reconstruction pipeline. Similar level of novelty but less overclaiming.
+- P2Fjm0nIit (NeRF Compression via Transform Coding, avg 4.33, Reject): Neural compression for NeRF with limited improvement over baselines. FCGS is clearly stronger with genuine novelty.
+- BJ4WgPgFqJ (PQ-VAE, avg 2.33, Withdrawn/Reject): Overclaimed novelty in compression, essentially residual VQ. FCGS is far above this level with real technical contributions.
+- hrXt6Fdl2P (FV-NeRV, avg 2.6, Withdrawn/Reject): Overclaimed neural compression with no SOTA comparison. FCGS is clearly stronger with proper baselines.
+
+FCGS is above the medium-scoring anchors (GraphGS at 6.0, NeRF Compression at 4.33) due to its genuine novelty as the first optimization-free 3DGS compression pipeline and strong in-distribution results. However, it falls below the high-scoring anchors (SplatFormer at 7.5, Lightweight Predictive 3DGS at 7.0) due to the overstated "surpassing" claim and the autoencoder generalization failure. The overclaiming is significant but does not invalidate the core contribution—the method genuinely works well for its primary use case (compressing optimization-based 3DGS) and the speed advantage is transformative.
+
+**Originality**: High — first optimization-free 3DGS compression pipeline with novel MEM and context model designs.
+**Importance**: High — addresses a clear practical limitation of all existing 3DGS compression methods.
+**Claims support**: Moderate — core claims are directionally correct but overstated for OOD scenarios.
+**Experimental soundness**: Moderate — strong in-distribution results, limited OOD evaluation, only PSNR in main text.
+**Clarity**: Good — well-organized with clear principled framework.
+**Community value**: High — opens a new research direction with practical impact.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.5
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/XGFfFKqy3Y.txt
+Timestamp: 2026-04-21T02:10:46.523242
+
+--- Token Usage ---
+  Harsh Critic: input=20745 (cached=0) output=6022 (reasoning=4047) total=26767 requests=1 duration=n/ams
+  Strength Finder: input=19877 (cached=0) output=1954 (reasoning=955) total=21831 requests=1 duration=n/ams
+  Merger: input=555349 (cached=425632) output=15428 (reasoning=9315) total=570777 requests=29 duration=846814ms speed=18.22 tokens/s
+  TOTAL: input=595971 output=23404 total=619375
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Step-wise Triple-Consistent Diffusion Sampling for Inverse Problems
+
+## Critical Issues
+
+### 1. Structural: Central claims are directly contradicted by phase retrieval results
+
+The abstract states SITCOM achieves "competitive or superior results in terms of standard image similarity metrics while requiring a reduced run-time across all considered tasks." Table 1 shows that on phase retrieval, SITCOM is **2.15 dB worse** than DAPS on FFHQ (28.52 vs. 30.67) and **1.51 dB worse** on ImageNet, while also being **2.5× slower** (3.30 min vs. 1.34 min on FFHQ; 3.49 min vs. 2.24 min on ImageNet). This is a task the paper explicitly evaluates and includes in its "eight tasks" claim. The conclusion repeats the false claim of "requiring significantly less run-time than leading baselines." This is not a minor caveat—it is a direct falsification of the paper's headline claim, and neither the results section nor the conclusion acknowledges it.
+
+### 2. Structural: Setting λ=0 violates the paper's own C3 condition for most tasks
+
+The three-condition framework (C1: measurement consistency, C2: backward consistency, C3: forward consistency) is the paper's core theoretical contribution. C3 requires that ṽ_t remains close to x_t (Section 3.3, and Equation (11) where the λ‖x_t − v'_t‖² term enforces this). Yet Section 4 states λ=0 for all tasks except phase retrieval. With λ=0, the optimization in (S₁) has no term keeping ṽ_t near x_t; after K=30 unconstrained gradient steps on the measurement-consistency term alone, v_t can drift arbitrarily far from x_t, directly violating C3. The paper's own framework thus does not support its empirical results, raising the question of whether C3 is actually important—and if not, the three-condition framework loses its explanatory power.
+
+### 3. Evidential: Incomplete baselines for 3 of 8 tasks make quality/speed claims unsupported
+
+For Motion Deblurring and High Dynamic Range, the **only** baseline is DPS—known to be among the weakest methods (it ranks last in nearly every other task in Table 1). For Phase Retrieval, DDNM and DCDP are absent. Beating only DPS does not establish "state-of-the-art or highly competitive" results. DCDP, which is the fastest baseline and competitive on quality for linear tasks, is missing from Motion Deblurring despite being a linear task. DAPS, the quality SOTA, is missing from Motion Deblurring and HDR. Without these comparisons, we cannot assess SITCOM's standing for roughly 37% of the evaluated tasks.
+
+## Section-by-Section Notes
+
+**Abstract:** Claims "competitive or superior results" and "reduced run-time across all considered tasks." Both are falsified by phase retrieval results (see Critical Issue 1).
+
+**Section 3.1 / Figure 2:** The box-inpainting demonstration of Issue (I1) is convincing—measurement consistency alone does introduce artifacts, and backward consistency appears to reduce them. This is the paper's clearest empirical motivation.
+
+**Section 3.2:** The analogy to Deep Image Prior is drawn but not analyzed. DIP's implicit bias is known to be architecture-dependent and can fail catastrophically on certain images. The paper does not discuss failure modes of network regularization or when C_t might be a poor constraint. The claim that f(v_t; t, ε_θ) "tends to align with the clean image manifold, even if x_t does not correspond to a training image" (Section 3.2) is stated without evidence beyond the visual in Figure 2.
+
+**Section 3.4 / Algorithm 1:** The stopping criterion ‖A(f(v'_t)) − y‖² < δ² is sensible for noisy settings, but δ is described as "slightly larger than σ_y√m" without any systematic procedure for choosing it. Since δ directly controls the measurement-consistency/overfitting tradeoff, its sensitivity matters.
+
+**Section 3.5:** The claim that SITCOM requires "significantly fewer reverse steps" due to N=20 is misleading without reporting NFEs. Each of the N=20 steps involves up to K=30 gradient steps, each requiring a forward + backward pass through the U-Net. The actual computational cost per sampling step is ~60 U-Net passes (30 forward + 30 backward), compared to ~1 U-Net pass per step in standard samplers. The wall-clock time comparison is the only efficiency metric reported, making it impossible to separate algorithmic efficiency from implementation optimizations.
+
+**Section 3.6:** The distinction from DMPlug is that DMPlug optimizes over the input to the full diffusion chain (z_T → z_0), while SITCOM optimizes over the input at each step. This is a genuine procedural difference, but the paper doesn't analyze why step-wise optimization should be better or worse than full-chain optimization, nor does it compare against DMPlug empirically.
+
+**Section 4 / Table 1:** The "58 out of 64 best results" claim is inflated by (a) counting metrics on tasks with only one weak baseline, and (b) the LPIPS column appearing to incorrectly bold SITCOM values in cases where DAPS achieves lower (better) LPIPS (e.g., Super Resolution FFHQ: DAPS 0.135 < SITCOM 0.142). The paper does not report NFEs, making the efficiency comparison opaque. The standard deviation on Random In-Painting FFHQ PSNR is ±1.02 for SITCOM, which is anomalously large compared to other entries, suggesting instability that is not discussed.
+
+**Section 5 (Conclusion):** Repeats the falsified claim of reduced runtime "across all tasks."
+
+## Strengths
+
+- The identification of backward consistency (C2) as a missing condition in prior work is a genuine and useful conceptual insight. The key observation—that optimizing over the *input* of the denoiser rather than the *output* keeps reconstructions in the range of the network—is clearly articulated and well-motivated by the Figure 2 visualization.
+- The framework cleanly explains *why* prior methods like DPS accumulate errors: they violate C2 (no backward consistency) and C3 (no resampling/forward consistency).
+- The empirical results on linear tasks (super resolution, inpainting, deblurring) are strong, with consistent PSNR improvements over DAPS and DCDP while matching or improving on runtime.
+- The stopping criterion for handling measurement noise is a practical and well-motivated design choice.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Report NFEs alongside wall-clock time.** Without this, the claim of algorithmic efficiency is unverifiable—wall-clock time conflates implementation quality with algorithmic design.
+2. **Add DAPS and DCDP baselines for Motion Deblurring and HDR.** Without these, the comparison for 2 of 8 tasks is only against the weakest baseline, and the "SOTA" claim is unsupported for those tasks.
+3. **Compare directly against DMPlug.** Both methods optimize over network inputs; the empirical comparison would clarify whether step-wise optimization (SITCOM) or full-chain optimization (DMPlug) is more effective.
+
+### Deeper Analysis Needed
+1. **Analyze why λ=0 works despite violating C3.** If λ=0 produces the best results, either C3 is not important or the initialization alone provides sufficient regularization. This directly undermines the three-condition framework. An ablation varying λ with analysis of ‖ṽ_t − x_t‖ would clarify this.
+2. **Analyze the high variance in certain tasks.** Random In-Painting FFHQ shows PSNR ±1.02—nearly an order of magnitude higher variance than other entries. This instability should be investigated and reported.
+
+### Visualizations & Case Studies
+1. **Show failure cases.** Phase retrieval is the clear failure mode. Visualizing what goes wrong (e.g., does the optimization in S₁ fail to converge? Does v_t drift too far?) would reveal whether the issue is fundamental or fixable.
+
+### Obvious Next Steps
+1. **Add a per-task NFE comparison table.** This is standard in the diffusion sampling literature and its absence is conspicuous.
+
+## Overall Assessment
+
+SITCOM introduces a genuinely useful idea—optimizing over the input of the denoiser to enforce backward consistency—and demonstrates strong results on linear inverse problems. However, the paper's central claims are overstated in ways that the evidence does not support. Phase retrieval results directly contradict the abstract's claims of superior quality and reduced runtime across all tasks, and this contradiction is never acknowledged. The three-condition theoretical framework is undermined by the fact that λ=0 (the default setting) nullifies one of the three conditions. The baseline comparisons are incomplete for 3 of 8 tasks, inflating the "58 out of 64" statistic. These are not minor gaps; they affect whether the paper's core claims about the framework and its generality hold. The contribution on linear tasks is real, but the paper as submitted overclaims on both generality and theoretical coherence. It should not be accepted in its current form.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Novel optimization over the DM network input rather than its output, enabling backward consistency**: Unlike prior methods (DPS, DAPS, ReSample) that optimize over the estimated clean image (network output), SITCOM optimizes over the noisy input v_t to the DM at each step (Equation S₁/Equation 12). This enforces that the measurement-consistent reconstruction x̂'₀ remains in the range of the Tweedie-network denoiser f (Definition 1), which prior methods cannot guarantee. Section 3.6 explicitly contrasts this: "The optimization variable in these works is the estimated image at time t (the output of the DM network), whereas in SITCOM, it is the noisy image at time t (the input of the network)."
+
+2. **Strong empirical improvements across a broad set of tasks**: Table 1 shows SITCOM achieves the best result in 58/64 metric-dataset-task combinations across 8 tasks (5 linear + 3 nonlinear) and 2 datasets. Notable PSNR gains over the next-best method include +1.44 dB on FFHQ Super Resolution (30.68 vs. DAPS's 29.24), +1.03 dB on FFHQ Random In-Painting (32.05 vs. 31.02), +1.03 dB on FFHQ Gaussian Deblurring (30.25 vs. 29.22), and +1.25 dB on ImageNet Random In-Painting (29.69 vs. 28.44).
+
+3. **Consistent runtime reductions while matching or improving quality**: Across all tasks in Table 1, SITCOM requires less runtime than DPS, DAPS, and DDNM. For example, on FFHQ Box In-Painting, SITCOM runs in 0.35 min vs. DAPS's 1.35 min (3.9× faster) with better PSNR (24.68 vs. 24.17). On FFHQ Non-Uniform Deblurring, SITCOM achieves 30.17 PSNR in 0.52 min vs. DAPS's 28.23 PSNR in 1.42 min. The efficiency stems from using only N=20 diffusion steps with K=30 gradient steps per iteration.
+
+### Supporting strengths
+1. **Principled unification of three consistency conditions explains limitations of prior work**: Section 3.3 formalizes C1 (measurement), C2 (backward), and C3 (forward) consistency. The analysis in Section 3.6 clearly maps which conditions each prior method satisfies: DPS enforces C1 approximately but not C2 or C3; ReSample/DAPS enforce C1 and C3 but not C2. This framework explains why prior methods either require many steps (to compensate for violating C2) or accumulate errors (from violating C3).
+
+2. **Direct visual evidence for the benefit of backward consistency**: Figure 2 shows a box-inpainting experiment where columns 6–8 (measurement consistency only, Equation 5) exhibit severe artifacts in the masked region, while columns 9–11 (measurement + backward consistency, Equation 11) produce natural-looking reconstructions. This directly validates the central claim that backward consistency resolves Issue I1.
+
+3. **Noise-aware early stopping prevents overfitting to measurement noise**: Algorithm 1 (lines 5–6) introduces a stopping criterion ‖A(x̂'₀) − y‖² < δ² with δ > σ_y√m, providing a principled mechanism to handle noisy measurements without strict data fidelity. This addresses a practical limitation of methods that enforce exact measurement consistency.
+
+4. **Minimal task-specific hyperparameter tuning**: As stated in Section 4, SITCOM uses N=20, K=30, γ=0.01, and λ=0 (except λ=1 for phase retrieval) across all tasks and both datasets. This contrasts favorably with DCDP, which "requires tuning the number of forward diffusion steps for purification for each sampling step" (Section 2).
+
+### Presentation / practical strengths
+1. **Algorithm 1 is clearly presented and self-contained**, making the method straightforward to implement. The three steps (S₁–S₃) map directly to the three consistency conditions, and the conceptual diagram in Figure 3 (right) provides an intuitive geometric interpretation of how C₁–C₃ constrain the solution space.
+
+## Summary
+
+The paper proposes SITCOM, a diffusion-based solver for inverse problems that enforces three step-wise consistency conditions—measurement consistency (C1), backward consistency (C2), and forward consistency (C3)—by optimizing over the input of the pre-trained DM network at each sampling step rather than its output. The single most important piece of evidence is Table 1, where SITCOM achieves the best result in 58/64 metric combinations across 8 tasks and 2 datasets while consistently reducing runtime (e.g., 3.9× faster than DAPS on FFHQ Box In-Painting with better PSNR), demonstrating that the backward consistency condition enables both quality improvements and fewer sampling steps.
+
+--- Merged Review ---
+Now I have a thorough understanding of the paper and calibration anchors. Let me compile my final review.
+
+## Summary
+
+SITCOM proposes a diffusion-based solver for inverse problems that enforces three step-wise consistency conditions—measurement consistency (C1), backward consistency (C2, by optimizing over the DM network input rather than its output), and forward consistency (C3, via resampling)—at each reverse sampling step. The method uses only N=20 diffusion steps with K=30 gradient optimization steps per step, demonstrating strong results on linear tasks while reducing wall-clock time compared to most baselines.
+
+## Strengths
+
+- **Novel backward consistency concept (C2) is a genuine and useful insight.** The key observation—that optimizing over the *input* v_t of the denoiser rather than the *output* x̂_0 ensures the reconstruction remains in the range of the network (Definition 1, Section 3.2)—is clearly articulated and well-motivated. Figure 2 provides direct visual evidence that measurement consistency alone (Equation 5) introduces artifacts while adding backward consistency (Equation 11/12) resolves them.
+
+- **Strong empirical results on linear tasks.** Table 1 shows consistent PSNR improvements on super resolution (+1.44 dB FFHQ over DAPS), random inpainting (+1.03 dB FFHQ, +1.25 dB ImageNet), and Gaussian deblurring (+1.03 dB FFHQ). These are substantial margins in this domain.
+
+- **Consistent runtime improvements on linear tasks.** SITCOM achieves 2-3× speedup over DAPS on linear tasks (e.g., 0.45 vs 1.24 min on Super Resolution FFHQ; 0.35 vs 1.35 min on Box In-Painting FFHQ), while also improving quality.
+
+- **Principled noise-aware early stopping.** Algorithm 1 (lines 5–6) introduces a stopping criterion ‖A(x̂'₀) − y‖² < δ² with δ > σ_y√m, providing a practical mechanism to prevent noise overfitting—a genuine concern in inverse problems with measurement noise.
+
+- **Minimal task-specific hyperparameter tuning.** The same N=20, K=30, γ=0.01, λ=0 are used across all tasks and datasets (Section 4), contrasting favorably with DCDP which requires per-task tuning.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Central claims in the abstract and conclusion are directly contradicted by phase retrieval results, and this is not adequately acknowledged.** The abstract states SITCOM achieves "competitive or superior results in terms of standard image similarity metrics while requiring a reduced run-time across all considered tasks." On FFHQ phase retrieval, SITCOM scores 28.52 PSNR vs. DAPS's 30.67 (2.15 dB worse) and takes 3.30 min vs. 1.34 min (2.5× slower). On ImageNet phase retrieval, SITCOM scores 24.25 vs. DAPS's 25.76 (1.51 dB worse) and takes 3.49 min vs. 2.24 min. The Section 4 text acknowledges ImageNet phase retrieval underperformance (0.31 dB) but does not mention the much larger FFHQ gap. The conclusion repeats "requiring significantly less run-time than leading baselines" without qualification. This is not a minor caveat—it is a direct falsification of the paper's headline claim for a task the paper explicitly evaluates. The paper should either qualify its claims honestly or remove phase retrieval from its scope.
+
+- **Setting λ=0 for all tasks except phase retrieval undermines the three-condition framework's explanatory power.** C3 (Section 3.3) requires that "ṽ_t remains close to x_t," and Equation (12) enforces this via λ‖x_t − v'_t‖². With λ=0, this term vanishes, and the only mechanism keeping ṽ_t near x_t is initialization at v_i^(0) = x_i (Algorithm 1, line 2). While the initialization provides implicit proximity, after K=30 unconstrained gradient steps on the measurement-consistency term alone, v_t can drift substantially from x_t. The paper does not provide any analysis or empirical measurement of ‖ṽ_t − x_t‖ under λ=0 to verify that C3 is approximately satisfied. This raises a fundamental question: if λ=0 works best for 7/8 tasks, is C3 actually important, or is the three-condition framework post-hoc justification rather than a genuine design principle?
+
+- **Incomplete baselines for 3 of 8 tasks undermine quality/speed claims for those tasks.** Motion Deblurring and HDR have only DPS as a baseline—which ranks last in nearly every other task in Table 1. DCDP (the fastest linear-task baseline) and DAPS (the quality SOTA) are absent from Motion Deblurring despite it being a linear task. Phase Retrieval lacks DDNM and DCDP comparisons. Beating only DPS on these tasks does not establish "state-of-the-art or highly competitive" results, and the "58 out of 64 best results" statistic is inflated by counting metrics on tasks with only one weak baseline.
+
+### Minor
+
+- **The "58 out of 64" claim may be inflated by apparent LPIPS bolding errors in Table 1.** For Super Resolution FFHQ, DAPS achieves LPIPS of 0.135 (lower is better) while SITCOM achieves 0.142, yet both appear bolded in the table. Similarly, for Non-Uniform Deblurring FFHQ, DPS achieves LPIPS 0.112 while SITCOM achieves 0.145. If these reflect the original table formatting, the "best" count is overstated. (This may be a parser artifact and should be verified against the original submission.)
+
+- **High variance in Random In-Painting FFHQ suggests instability.** SITCOM's PSNR standard deviation is ±1.02, nearly an order of magnitude higher than other entries in the table (most are < 0.3). This instability is not discussed or investigated.
+
+- **NFEs are not reported alongside wall-clock time.** While Section 3.5 mentions "at most NK" NFEs, the actual count with early stopping is not reported. This makes it difficult to separate algorithmic efficiency from implementation quality. This is a minor concern since runtime is the more practical metric, but it is standard in the diffusion sampling literature.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Direct comparison with DMPlug, which also optimizes over diffusion network inputs but via full-chain optimization rather than step-wise. The procedural difference is noted (Section 3.6) but not empirically validated.
+- Analysis of ‖ṽ_t − x_t‖ under λ=0 to verify approximate satisfaction of C3, or an ablation varying λ across tasks to clarify when C3 regularization matters.
+- Failure case visualization for phase retrieval to diagnose whether the issue is fundamental (nonlinear operator) or fixable (hyperparameter tuning).
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+
+- **Harsh critic: "The paper does not discuss failure modes of network regularization or when C_t might be a poor constraint."** This is a general concern without specific evidence that C_t fails in practice. The paper demonstrates backward consistency works well across 7/8 tasks; requesting analysis of when it might fail is scope creep beyond the paper's stated contributions.
+
+- **Harsh critic: "The claim that f(v_t; t, ε_θ) tends to align with the clean image manifold... is stated without evidence beyond Figure 2."** Figure 2 provides direct visual evidence at multiple timesteps. This is standard empirical motivation in the field; demanding additional evidence is a generic one-size-fits-all criticism.
+
+- **Harsh critic: "δ is described as slightly larger than σ_y√m without any systematic procedure for choosing it."** This is a minor hyperparameter sensitivity concern. The paper provides a clear rule-of-thumb (δ > σ_y√m), and the ablation in Appendix F.3 (referenced in Section 4) addresses this.
+
+- **Harsh critic: "The wall-clock time comparison is the only efficiency metric reported, making it impossible to separate algorithmic efficiency from implementation optimizations."** This is moved to minor above but the characterization as making the efficiency claim "opaque" is overstated. Runtime is the most practical efficiency metric, and the NFE concern is minor.
+
+- **Harsh critic: "The distinction from DMPlug... the paper doesn't analyze why step-wise optimization should be better or worse than full-chain optimization."** This is a nice-to-have but not a core flaw. The paper scopes itself to step-wise optimization and shows it works.
+
+- **Strength finder: "Consistent runtime reductions while matching or improving quality... across all tasks in Table 1."** This strength is partially contradicted by the verified weakness on phase retrieval (both worse quality and worse runtime). Removed to avoid conflict.
+
+- **Strength finder: "SITCOM achieves the best result in 58/64 metric-dataset-task combinations."** This is likely inflated by LPIPS bolding errors and tasks with only one weak baseline. Moved to removed to avoid conflict with verified weakness.
+
+## Novel Insights
+
+The most insightful observation from reviewing this paper is the tension between its conceptual contribution (the three-condition framework) and its empirical practice (λ=0 nullifying C3). This reveals a common pattern in optimization-based diffusion samplers: the theoretical framework that motivates the method may not be the mechanism that actually drives its success. In SITCOM's case, backward consistency (C2) is the genuinely important innovation, while forward consistency (C3) appears to be largely unnecessary in practice for linear tasks. The paper would be stronger if it honestly acknowledged this, rather than claiming all three conditions are essential.
+
+## Suggestions
+
+- Qualify the abstract and conclusion claims: replace "across all considered tasks" with "across most considered tasks" and explicitly note phase retrieval as a limitation where DAPS achieves better quality-speed tradeoffs.
+- Add DAPS and DCDP baselines for Motion Deblurring and HDR (at minimum DAPS, which is the quality SOTA); this would either strengthen the claims or reveal important scope limitations.
+- Report ‖ṽ_t − x_t‖ under λ=0 for at least one task to verify C3 is approximately satisfied, or add an ablation varying λ with analysis of how it affects both quality and C3 satisfaction.
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| ReSample (j8hdRqOUhN) | /home/wg25r/review_agent/human_reviews/j8hdRqOUhN.md | 7.5 | Similar domain (diffusion optimization for inverse problems), but ReSample has honest claims and solid theory-practice alignment. SITCOM is weaker due to overclaiming and framework-practice mismatch. |
+| FIG (fs2Z2z3GRx) | /home/wg25r/review_agent/human_reviews/fs2Z2z3GRx.md | 6.0 | Similar profile (novel guidance for diffusion sampling, strong on some tasks). FIG was honest about its linear-only scope. SITCOM has stronger empirical results but dishonestly claims "all tasks." |
+| Overclaimed diffusion ISR (46mbA3vu25) | /home/wg25r/review_agent/human_reviews/46mbA3vu25.md | 5.75 | Similar overclaiming pattern. SITCOM is stronger because its core contribution (backward consistency) is more novel and better supported. |
+| SHRED (ZnmofqLWMQ) | /home/wg25r/review_agent/human_reviews/ZnmofqLWMQ.md | 3.5 | Also optimizes over diffusion input noise, but rejected for unclear motivation and insufficient experiments. SITCOM is clearly superior with better motivation and extensive evaluation. |
+| DPS-CM (V2x5ZTHMae) | /home/wg25r/review_agent/human_reviews/V2x5ZTHMae.md | 4.0 | Technically flawed approach for similar problems. SITCOM is clearly superior. |
+| Missing SR baselines (fx8AJDQRVB) | /home/wg25r/review_agent/human_reviews/fx8AJDQRVB.md | 4.25 | Rejected for missing baselines and limited novelty. SITCOM has similar baseline issues but stronger novelty and broader evaluation. |
+
+SITCOM sits above the clearly weak papers (3.5–4.25) and the overclaiming rejects (5.0–5.75), but below the honestly scoped accepted papers (6.0–7.5). The backward consistency idea is genuinely novel and well-supported on linear tasks, but the overclaiming about "all tasks" and the λ=0/C3 mismatch are significant issues that prevent acceptance in current form. A score of 5.5 reflects real contributions undermined by dishonest claims.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/6jxUsDAdAu.txt
+Timestamp: 2026-04-21T02:11:52.289106
+
+--- Token Usage ---
+  Harsh Critic: input=14278 (cached=0) output=8526 (reasoning=5795) total=22804 requests=1 duration=n/ams
+  Strength Finder: input=13410 (cached=0) output=1471 (reasoning=528) total=14881 requests=1 duration=n/ams
+  Merger: input=435144 (cached=220288) output=15867 (reasoning=9930) total=451011 requests=30 duration=751547ms speed=21.11 tokens/s
+  TOTAL: input=462832 output=25864 total=488696
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Benign Overfitting in Out-of-Distribution Generalization of Linear Models
+
+## Critical Issues
+
+### 1. No matching lower bound for the general covariate shift upper bound (Evidential)
+**Theorem 2** provides an upper bound on excess risk for ridge regression under general covariate shift, identifying key quantities $\mathcal{T}$, $\mathcal{U}$, $\mathcal{V}$, and the spectral norm ratio $\|\Sigma_{T,-k}\|/\|\Sigma_{S,-k}\|$. The paper claims these quantities "govern the performance" of OOD generalization, but without a matching general lower bound, this claim is only partially established. The only lower bound (Theorem 4) is for a specific instance ($\Sigma_T = I_d$ with a particular $\Sigma_S$) and does not validate whether the individual terms $\text{tr}[\mathcal{T}]/k$, $\text{tr}[\mathcal{U}]/\text{tr}[\mathcal{V}]$, or $\|\mathcal{T}\|$ are individually necessary. The "sharpness" argument rests entirely on recovery of two special cases (in-distribution and under-parameterized), but tightness in special cases does not establish tightness in general. For a theory paper whose central contribution is an instance-dependent bound, this is a significant gap.
+
+### 2. The multiplicative bias bound structure may obscure the true dependence on covariate shift (Structural)
+The bias bound in Theorem 2 takes the form $B \leq c \cdot B_{\text{ID}} \cdot (\|\mathcal{T}\| + \frac{n}{r_k} \frac{\|\Sigma_{T,-k}\|}{\|\Sigma_{S,-k}\|})$. This multiplicative structure applies a *single* OOD scaling factor to the entire in-distribution bias $B_{\text{ID}}$, which comprises both major-direction bias $\|\beta_k^*\|_{\Sigma_{S,k}^{-1}}^2 (\tilde{\lambda}/n)^2$ and minor-direction bias $\|\beta_{-k}^*\|_{\Sigma_{S,-k}}^2$. These two components respond differently to covariate shift: the major-direction bias should scale with $\mathcal{T}$, while the minor-direction bias should scale with the target minor covariance. The multiplicative form forces the *same* scaling onto both, which can be loose when, e.g., major-direction bias is large but the major-direction shift is mild, while the minor-direction shift is severe. An additive decomposition would more precisely characterize how covariate shift affects each component. This is not an error—the bound is valid—but it may give a misleading picture of which quantities actually drive the excess risk in specific instances.
+
+### 3. PCR vs. ridge comparison operates under asymmetric assumptions (Methodological gap)
+The paper's headline comparison—ridge regression achieves $\Omega(1/\sqrt{n})$ while PCR achieves $\mathcal{O}(1/n)$—holds only when $\beta_{-k}^* = 0$ (Theorem 5). This is a strong assumption that effectively assumes away the very regime where ridge regression's behavior in minor directions matters most. When $\beta_{-k}^* \neq 0$, PCR deliberately discards signal in the minor directions, which could make it *worse* than ridge regression. The paper references Lemma 31 in the appendix for the general case, but the main narrative (Section 4, Abstract, Introduction) presents the PCR advantage without this important caveat. The reader is left with the impression that PCR dominates ridge regression under large minor-direction shift, when the reality is more nuanced: each method has regimes where it excels, and the comparison depends critically on where the signal lies.
+
+## Section-by-Section Notes
+
+**Abstract and Introduction.** The claim that "we provide non-asymptotic guarantees proving that benign overfitting occurs in standard ridge regression, even under the OOD regime" is accurate for Case 1 but somewhat misleading as stated—it requires specific structural conditions on the target covariance, not just any OOD setting. The abstract's framing of "certain structural conditions" is appropriately hedged, but the introduction is less careful.
+
+**Section 2.3.** The definitions of $\mathcal{U} = \Sigma_{S,-k}\Sigma_{T,-k}$ and $\mathcal{V} = \Sigma_{S,-k}^2$ are somewhat unusual in that $\mathcal{U}$ is not symmetric. Only $\text{tr}[\mathcal{U}]$ and $\text{tr}[\mathcal{V}]$ appear in the bounds, so this is mathematically sound, but it would help to give more intuition for why trace of this particular product is the right quantity, beyond the algebraic derivation.
+
+**Section 3.2, Theorem 2.** The sample complexity requirement $n > cN$ where $N = \text{Poly}(k + \ln(1/\delta), \lambda_1\lambda_k^{-1}, 1 + \tilde{\lambda}\lambda_k^{-1})$ creates a tension with the benign overfitting story. The most interesting case for benign overfitting involves a sharp spectral decay (large eigenvalue ratios), but precisely in this regime the polynomial dependence on $\lambda_1/\lambda_k$ and $\tilde{\lambda}/\lambda_k$ makes the sample complexity very large. Remark 2 mentions the dependence ranges from $\Omega(k)$ to $\Omega(k^3)$, but does not discuss how the eigenvalue ratio dependence interacts with the stated rates. For the $\mathcal{O}(1/n)$ rate claim to be non-vacuous, we need the polynomial sample complexity to be $o(n)$, which constrains the eigenvalue ratios.
+
+**Section 3.2, discussion point 2.** The statement "the overall magnitude of $\Sigma_{T,-k}$ is crucial for benign overfitting" is one of the paper's key insights. The argument that the spectral structure of $\Sigma_{T,-k}$ doesn't matter because the training subspace is nearly orthogonal to any test point is intuitive and appealing. However, this argument implicitly assumes that the minor directions of the target are not aligned with the span of the training data. If some minor directions of $\Sigma_T$ happen to align with the training data span, the argument breaks down—but the bound still holds because it's stated in terms of norms. This subtlety could be made clearer.
+
+**Section 4.1, Theorem 4.** The lower bound is for $\lambda > 0$ and shows $\Omega(1/\sqrt{n})$ for *all* $\lambda$. This is a strong result—no regularization can save ridge regression in this instance. However, the instance is specific: $\Sigma_T = I_d$ with a $\Sigma_S$ that has $\sqrt{n}$ minor eigenvalues of size $1/\sqrt{n}$. It would strengthen the paper to discuss whether this construction is representative of a broader class of problematic covariate shifts, or whether it's a corner case.
+
+**Section 4.2.** The PCR algorithm uses sample splitting (first $n$ samples for PCA, second $n$ for regression), effectively requiring $2n$ total samples compared to ridge's $n$. The rates are the same, so this doesn't affect the $\mathcal{O}(1/n)$ vs $\Omega(1/\sqrt{n})$ comparison, but it does mean PCR needs twice the data. This should be noted as a cost of the approach.
+
+**Section 5.** The conclusion appropriately identifies the lack of a general lower bound as a key open problem. The mention of extending to non-linear models is natural but vague.
+
+## Strengths
+
+1. **First vanishing non-asymptotic bound for over-parameterized ridge regression under general covariate shift.** Prior work either considered restrictive target covariance structures (simultaneously diagonal, translation-only) or obtained non-vanishing bounds. This paper handles arbitrary $\Sigma_T$ with only a finite second-moment assumption, which is a genuine advance.
+
+2. **The insight that only the overall magnitude (not spectral structure) of the target's minor covariance matters for benign overfitting.** This is a non-obvious and useful finding. The intuition—that the training subspace is nearly orthogonal to any test point when source minor directions have high effective rank—is clearly articulated and technically validated.
+
+3. **Clean recovery of prior results.** The bound recovers Tsigler & Bartlett (2023) when $\Sigma_S = \Sigma_T$ and Ge et al. (2024) when minor components vanish. This provides valuable continuity with the literature and sanity-checks the derivation.
+
+4. **The ridge vs. PCR comparison, while restricted, provides a clean separation of regimes.** Showing that no choice of $\lambda$ can save ridge regression (Theorem 4) while PCR achieves $\mathcal{O}(1/n)$ in the same instance is a concrete and illuminating result.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Empirical validation on non-Gaussian data or real data with synthetic covariate shift.** The appendix mentions simulations on multivariate Gaussian data, but the theory assumes only sub-Gaussian covariates. Demonstrating that the identified key quantities ($\text{tr}[\mathcal{T}]/k$, $\text{tr}[\mathcal{U}]/\text{tr}[\mathcal{V}]$) predict OOD performance on at least semi-realistic data would substantially increase the impact.
+
+2. **Experiments illustrating the transition between Case 1 and Case 2.** The paper presents two regimes (benign overfitting vs. large shift) but no experiment showing how excess risk degrades as $\|\Sigma_{T,-k}\|$ increases relative to $\|\Sigma_{S,-k}\|$. This would validate whether the identified quantities actually govern the transition.
+
+### Deeper Analysis Needed
+1. **A general lower bound (even partial) for Theorem 2.** Without it, the claim that $\text{tr}[\mathcal{T}]/k$, $\text{tr}[\mathcal{U}]/\text{tr}[\mathcal{V}]$, and $\|\mathcal{T}\|$ are the "right" quantities is only supported by special-case recovery. Even a lower bound showing that one of these quantities is necessary (e.g., a $\text{tr}[\mathcal{T}]/n$ variance lower bound) would significantly strengthen the contribution.
+
+2. **Analysis of PCR when $\beta_{-k}^* \neq 0$ in the main text.** The paper's headline PCR result assumes no signal in minor directions, but Lemma 31 (appendix) apparently handles the general case. Moving this analysis to the main body—or at least stating the rate—would make the ridge vs. PCR comparison more honest and complete.
+
+### Visualizations & Case Studies
+1. **A phase diagram or heatmap showing excess risk as a function of $\text{tr}[\mathcal{U}]/\text{tr}[\mathcal{V}]$ and $\|\mathcal{T}\|$.** This would make the abstract conditions concrete and help practitioners assess whether their OOD setting falls in the benign regime.
+
+### Obvious Next Steps
+1. **Remove or soften the claim that the bound is "sharp."** The bound is valid and recovers sharp prior results in special cases, but without a matching lower bound for general covariate shift, calling it "sharp" overstates what is established. "Instance-dependent" or "non-asymptotic" would be more accurate.
+
+## Overall Assessment
+
+This paper makes a genuine and significant contribution to the theory of benign overfitting by providing the first vanishing non-asymptotic excess risk bound for over-parameterized ridge regression under general covariate shift. The key insight—that only the overall magnitude, not the spectral structure, of the target's minor covariance matters—is non-obvious and well-supported. The recovery of prior in-distribution and under-parameterized results provides strong sanity checks. However, the paper has two notable limitations: (1) the absence of a matching general lower bound means the identified key quantities are not validated as necessary, only as sufficient, weakening the "governs the performance" claim; and (2) the multiplicative bias bound structure and the $\beta_{-k}^* = 0$ restriction on the PCR comparison make the ridge-vs-PCR narrative cleaner than the underlying reality. These are not fatal flaws for a theory paper taking an initial step into a new regime, but they should be more transparently acknowledged. The paper should be accepted with revisions—primarily softening the "sharp" claim, including the $\beta_{-k}^* \neq 0$ PCR analysis in the main text, and discussing the sample complexity tension with eigenvalue ratios.
+### Strength Finder
+##Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **First vanishing non-asymptotic excess risk bound for over-parameterized ridge regression under general covariate shift:** Theorem 2 provides an upper bound on the excess risk that vanishes as n→∞, applicable to any target distribution with finite second moments. This improves over prior work that either obtained non-vanishing bounds (Tripuraneni et al., 2021a; Hao et al., 2024) or restricted to simultaneously diagonalizable source/target covariances (Mallinar et al., 2024) or additive noise shifts (Kausik et al., 2024).
+
+2. **Sharpness: bound recovers two known results as special cases:** When Σ_S = Σ_T, the multiplicative factors in Theorem 2 simplify (since T = I_k, tr[U]/tr[V] = 1, etc.), recovering Tsigler & Bartlett (2023)'s in-distribution bound (Theorem 1). When the minor components vanish (Σ_{S,-k} = Σ_{T,-k} = 0), the variance bound reduces to tr[T]/n and the bias vanishes as λ→0, recovering Ge et al. (2024)'s under-parameterized OOD guarantee. This is explicitly demonstrated in the discussion following Theorem 2.
+
+3. **Concrete separation between ridge regression and PCR under large minor-direction shift:** Theorem 4 proves a lower bound of Ω(1/√n) for ridge regression when Σ_T = I_d (large shift in minor directions), while Theorem 5 combined with Lemma 6 shows PCR achieves O(1/n) in the same instance (since Δ = O(1/√n) and the bias term becomes O(1/n)). This separation is instantiated on the same Σ_S construction (Corollary 3/Theorem 4), making the comparison direct and sharp.
+
+### Supporting strengths
+
+1. **Asymmetric insight about source vs. target minor directions:** The paper identifies a surprising asymmetry: benign overfitting requires the *source* minor directions to have high effective rank (to provide implicit regularization), but for the *target*, only the overall magnitude of minor components matters—no spectral structure condition is needed (Section 3.2, point 2). This is reflected in the variance bound of Theorem 2, where the target contribution enters only through tr[U]/tr[V] (an aggregate quantity) rather than eigenvalue-by-eigenvalue matching as in Mallinar et al. (2024).
+
+2. **Over-parameterization improves robustness to shift in minor directions:** The bias bound in Theorem 2 scales with n·r_k^{-1}·‖Σ_{T,-k}‖/‖Σ_{S,-k}‖, meaning the condition on the target minor components relaxes as r_k grows (i.e., as the source minor directions become more high-dimensional). This is noted in the discussion following Theorem 2 and provides a concrete benefit of over-parameterization for OOD robustness.
+
+3. **PCR does not require high effective rank in minor directions:** Unlike ridge regression, PCR's guarantee (Theorem 5) depends on the eigenvalue gap λ_k − λ_{k+1} and the effective rank r of the *entire* covariance (Lemma 6), not on the effective rank of the minor directions alone. This is highlighted in Section 4.2 and provides a clear understanding of when each algorithm is preferable.
+
+### Presentation / practical strengths
+
+1. **Clean decomposition of covariate shift effects into major and minor direction contributions:** The quantities T, U, V defined in Equation (1) provide an interpretable factorization of how covariate shift affects excess risk, with T capturing shift in major directions and U/V capturing shift in minor directions. This makes Theorem 2's multiplicative form (relative to the in-distribution bound B_ID) easy to parse and compare with prior work.
+
+## Summary
+
+This paper provides the first vanishing non-asymptotic excess risk bound for over-parameterized ridge regression under general covariate shift, showing that benign overfitting extends to the OOD setting when the target covariance's overall magnitude in the minor directions is controlled. The single most important piece of evidence is Theorem 2, which gives an instance-dependent upper bound expressed through interpretable quantities (T, U, V) and provably recovers both the in-distribution guarantee of Tsigler & Bartlett (2023) and the under-parameterized OOD guarantee of Ge et al. (2024) as special cases, while also motivating the complementary result that PCR achieves a fast O(1/n) rate in settings where ridge regression provably suffers an Ω(1/√n) lower bound (Theorem 4).
+
+--- Merged Review ---
+Now I have all the information needed for a comprehensive review. Let me compile it.
+
+## Summary
+
+This paper provides the first vanishing, non-asymptotic excess risk bound for over-parameterized ridge regression under general covariate shift, where the target covariance matrix can be arbitrary (requiring only finite second moments). The key insight is that benign overfitting extends to the OOD setting when the overall magnitude—rather than the spectral structure—of the target's minor-direction covariance is controlled. The bound recovers two known sharp results as special cases (Tsigler & Bartlett 2023 for in-distribution and Ge et al. 2024 for under-parameterized OOD). The paper also shows that when the minor-direction shift is large, ridge regression provably suffers an Ω(1/√n) lower bound, while Principal Component Regression (PCR) achieves O(1/n) in the same instance.
+
+## Strengths
+
+- **First vanishing non-asymptotic bound for over-parameterized ridge regression under general covariate shift.** Prior work either restricted to simultaneously diagonalizable source/target covariances (Mallinar et al., 2024), additive noise shifts (Kausik et al., 2024), or obtained non-vanishing bounds (Tripuraneni et al., 2021a; Hao et al., 2024). Theorem 2 handles arbitrary target covariance with only a finite second-moment assumption—this is a genuine advance.
+
+- **Recovery of two known sharp results as special cases.** When Σ_S = Σ_T, Theorem 2 reduces to Tsigler & Bartlett (2023)'s in-distribution bound (Theorem 1); when minor components vanish, it recovers Ge et al. (2024)'s under-parameterized OOD guarantee. This provides strong sanity checks and continuity with the literature (Section 3.2, discussion points 1–2).
+
+- **Non-obvious insight: only the overall magnitude of the target's minor covariance matters for benign overfitting.** The variance bound in Theorem 2 depends on tr[U]/tr[V] (an aggregate quantity) rather than eigenvalue-by-eigenvalue matching, and the bias scales with n·r_k^{-1}·‖Σ_{T,-k}‖/‖Σ_{S,-k}‖. This means over-parameterization (larger r_k) improves robustness against covariate shift in the minor directions (Section 3.2, discussion point 2).
+
+- **Concrete ridge vs. PCR separation on the same instance.** Theorem 4 provides a lower bound of Ω(1/√n) for ridge regression when Σ_T = I_d, and combining Theorem 5 with Lemma 6 shows PCR achieves O(1/n) on the same Σ_S construction (Corollary 3's instance), making the comparison direct and informative.
+
+- **PCR does not require high effective rank in minor directions.** Unlike ridge regression, PCR's guarantee depends on the eigenvalue gap λ_k − λ_{k+1} and the effective rank of the entire covariance (Lemma 6), not the effective rank of minor directions alone—providing clear understanding of when each algorithm is preferable (Section 4.2).
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **No matching general lower bound for Theorem 2 undermines the "sharp" and "governs the performance" claims.** The paper calls the bound "sharp" (abstract, introduction, Section 3.2) and claims the identified quantities "govern the performance of OOD generalization" (abstract). However, the only lower bound (Theorem 4) is for a specific instance (Σ_T = I_d with a particular Σ_S) and does not validate whether tr[T]/k, tr[U]/tr[V], or ‖T‖ are individually necessary. The "sharpness" argument rests entirely on recovery of two special cases, but tightness in special cases does not establish tightness in general. The paper itself acknowledges this as an open problem (Section 5), but the framing in the abstract and introduction overstates what is established. "Instance-dependent" or "non-asymptotic" would be more accurate than "sharp" without a matching general lower bound.
+
+- **The PCR vs. ridge narrative in the main text obscures the β_{-k}^* = 0 restriction.** Theorem 5 requires β_{-k}^* = 0, a strong assumption that effectively assumes away the regime where ridge regression's behavior in minor directions matters most. While Remark 5 mentions that Lemma 31 (appendix) handles β_{-k}^* ≠ 0, the abstract states "PCR is guaranteed to achieve the fast rate O(1/n)" without this caveat, and the introduction says "provided that the true signal primarily lies in the major directions"—vaguer than the actual "= 0" assumption. When β_{-k}^* ≠ 0, PCR deliberately discards signal in minor directions, potentially making it worse than ridge regression. The comparison is more nuanced than the main narrative suggests; stating the β_{-k}^* ≠ 0 rate explicitly in the main text would make the ridge-vs-PCR analysis more honest and complete.
+
+### Minor
+
+- **The multiplicative bias bound structure may be loose for specific instances.** The bias bound B/c ≤ B_ID · (‖T‖ + n/(r_k)·‖Σ_{T,-k}‖/‖Σ_{S,-k}‖) applies the same OOD scaling factor to both the major-direction bias (‖β_k^*‖²_{Σ_{S,k}^{-1}}(λ̃/n)²) and minor-direction bias (‖β_{-k}^*‖²_{Σ_{S,-k}}). These components respond differently to covariate shift, so the multiplicative form can be loose when, e.g., major-direction bias is large but the major-direction shift is mild while the minor-direction shift is severe. This doesn't affect the bound's validity but may give a misleading picture of which quantities drive excess risk in specific instances.
+
+- **Sample complexity interaction with eigenvalue ratios is under-discussed.** Theorem 2 requires n > cN where N = Poly(λ_1λ_k^{-1}, 1 + λ̃λ_k^{-1}). Remark 2 notes the dependence ranges from Ω(k) to Ω(k^3), but doesn't discuss how the eigenvalue ratio dependence interacts with the claimed O(1/n) rate—for the rate to be non-vacuous, the polynomial sample complexity must be o(n), which constrains the eigenvalue ratios.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Empirical validation on non-Gaussian data or semi-realistic data with synthetic covariate shift, demonstrating that the identified quantities (tr[T]/k, tr[U]/tr[V]) predict OOD performance.
+- A phase diagram or visualization showing how excess risk degrades as ‖Σ_{T,-k}‖/‖Σ_{S,-k}‖ increases, making the transition between Case 1 and Case 2 concrete.
+- More intuition for why tr[Σ_{S,-k}·Σ_{T,-k}] (the trace of this particular non-symmetric product) is the right quantity, beyond the algebraic derivation.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution.
+
+- **PCR sample splitting (2n vs n samples):** The harsh critic noted that PCR uses 2n samples (sample splitting for PCA) while ridge uses n. This is technically true (Step 1 says "we assume a sample size of 2n") but doesn't affect the rate comparison since Ω(1/√n) vs O(1/n) is a qualitative gap that persists regardless of constant-factor sample differences. Trivial concern.
+
+- **Missing experiments / simulations:** The harsh critic requested empirical validation on non-Gaussian or real data. The paper does include simulation experiments on multivariate Gaussian data (Appendix A). For a theory paper at ICLR, Gaussian simulations are a reasonable standard; more experiments would strengthen the paper but are not a core flaw. Moved to Nice-to-Have.
+
+- **Theorem 4's instance being a "corner case":** The harsh critic suggested discussing whether the specific construction (Σ_T = I_d with √n minor eigenvalues of size 1/√n) is representative. However, the paper explicitly frames this as an example of "large shift in minor directions" (Section 4.1) and uses it to illustrate a general principle. The construction serves its purpose—showing that no λ can save ridge regression in this regime.
+
+- **Minor directions of target aligning with training data span:** The harsh critic raised a subtlety about whether the argument that "the training subspace is nearly orthogonal to any test point" breaks down if some minor directions of Σ_T align with the training span. The bound still holds because it's stated in terms of norms, so this is a point about intuition rather than correctness. The paper's claim is valid.
+
+- **"Not yet released" or reproducibility concerns:** Not applicable here—no such concerns were raised.
+
+- **Formatting/style nitpicks:** None to remove.
+
+## Novel Insights
+
+The paper reveals a surprising asymmetry in how benign overfitting interacts with covariate shift: while the *source* distribution must have high effective rank in minor directions (to provide implicit regularization), the *target* distribution requires only that the overall magnitude of minor components be controlled—no spectral structure condition is needed. This asymmetry arises because the high effective rank of source minor directions ensures the training subspace is nearly orthogonal to any test point, making the target's internal spectral structure irrelevant. This insight reframes the OOD generalization question for over-parameterized models: the key concern is not how the target's eigenvalues are distributed, but whether the target places significant mass outside the low-dimensional source manifold.
+
+## Suggestions
+
+- Replace "sharp" with "instance-dependent" or "non-asymptotic" in the abstract and introduction, or explicitly qualify: "sharp in the sense that it recovers known sharp results as special cases."
+- Move the β_{-k}^* ≠ 0 PCR analysis from the appendix (Lemma 31) to the main text, or at minimum state the resulting rate explicitly in Section 4.2 so readers can assess the ridge-vs-PCR tradeoff in full generality.
+- Add a brief discussion in Remark 2 about when the O(1/n) rate claim becomes non-vacuous given the polynomial sample complexity in eigenvalue ratios.
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Avg Score | Decision | Comparison |
+|-------|-----------|----------|------------|
+| xGvPKAiOhq (Over-parameterization slows GD) | 8.0 | Accept (spotlight) | Has both upper AND lower bounds, plus a surprising phenomenon (asymmetry helps). More complete than this paper. |
+| GTUoTJXPBf (Noisy Interpolation ReLU) | 8.0 | Accept (spotlight) | Rigorous overfitting analysis with both directions of bounds. More complete characterization. |
+| 3SJE1WLB4M (Spectral algorithms generalization) | 8.0 | Accept (spotlight) | Asymptotically exact risk characterization. More precise than this paper's bounds. |
+| NkmJotfL42 (Fantastic Generalization Measures) | 7.0 | Accept (poster) | Impossibility results (inherently tight). Similar novelty level but tighter results. |
+| 1xzqz73hvL (Knowledge Distillation) | 7.0 | Accept (spotlight) | Precise risk for ridgeless regression with distribution shift. Asymptotically exact vs. this paper's non-asymptotic bounds. |
+| u3dHl287oB (Task Similarity & Overparameterization) | 5.67 | Accept (poster) | Exact analytical expressions for forgetting under distribution shift. Similar scope but narrower contribution. |
+| Gc2qkiYUkh (Features are Fate) | 5.20 | Reject | Transfer learning in high-dim regression. Weaker than this paper—more restrictive assumptions, less complete analysis. |
+| oKglS1cFdb (Feature Accompaniment) | 5.67 | Reject | OOD generalization theory for neural networks. Identifies a failure mode but results are less complete. |
+| 3zw9NhLhBM (Weight Decay Low-Rank Bias) | 2.20 | Reject | Fundamentally flawed methodology. Far below this paper. |
+| lFzUHGebeb (Online Linear Regression) | 2.00 | Reject | Upper bounds that don't improve over prior work. Far below this paper. |
+
+This paper is clearly stronger than the medium-scoring OOD theory papers (5.2–5.7) because it provides a genuinely novel result (first vanishing bound for general covariate shift), clean special-case recovery, and a concrete algorithm separation. It is weaker than the 8.0 anchors because those provide complete characterizations (matching upper/lower bounds or asymptotically exact results). The 7.0 anchors are closer comparators: this paper matches their novelty but falls short on completeness (no general lower bound, "sharp" overclaim). I place this paper slightly above the medium anchors and somewhat below the 7.0 anchors, at 6.5.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.5
+
+--- Decision ---
+Accept

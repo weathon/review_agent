@@ -1,93 +1,113 @@
-Now I have all the information I need. Let me write the final review.
+Now let me do the calibration searches to anchor my score.Now I have enough information to write the comprehensive meta-review. Let me synthesize everything.
+
+---
 
 ## Summary
+REM (Refer Everything Model) is a framework for open-vocabulary referring video segmentation that adapts Internet-scale video diffusion models by keeping the original architecture intact and supervising segmentation masks in the VAE latent space via a frozen VAE decoder. The paper also introduces Ref-VPS, a new benchmark for dynamic process segmentation (e.g., smoke, waves, glass shattering) that extends referring video segmentation beyond object tracking. The core insight — that preserving the generative model's learned representation is key to out-of-domain generalization — is tested empirically against several baselines including VDIT, which shares the same diffusion backbone.
 
-REM (Refer Everything Model) repurposes video diffusion models for referring video segmentation by minimally modifying the architecture: instead of predicting noise, the UNet is supervised to predict mask latents in the frozen VAE's latent space (t=0, single forward pass). The key insight is that preserving the pre-trained VAE decoder—rather than replacing it with a task-specific mask decoder—retains the generalization capabilities of Internet-scale pre-training. The paper also introduces Ref-VPS, a new 111-video benchmark for segmenting dynamic processes (e.g., smoke, waves, shattering glass). REM achieves competitive in-domain performance on Ref-DAVIS/Ref-YTB with far less supervised data than UNINEXT, and substantially outperforms baselines on out-of-domain evaluations (BURST, VSPW, Ref-VPS).
+---
 
 ## Strengths
 
-- **Core insight is clear, simple, and well-supported**: The idea of supervising mask prediction in the VAE latent space rather than adding a task-specific decoder is elegantly minimal. Table 4 shows that replacing the frozen VAE decoder with a CNN decoder drops Ref-VPS from 37.80 to 25.09 (a 34% relative drop), directly validating the claim that preserving pre-trained representations is key for out-of-domain generalization. The comparison with VDIT (which uses the same diffusion backbone but a task-specific decoder, scoring only 35.27 on Ref-VPS) further reinforces this.
+- **Frozen VAE decoder ablation directly validates the core design choice (Table 4):** Replacing the frozen VAE decoder with a CNN or MLP causes Ref-VPS performance to drop from 37.80 to 25.09 and 31.75 respectively, while Ref-YTB drops more modestly (64.57 → 60.47 / 59.35). This experiment cleanly isolates the representation preservation benefit and is the single strongest piece of evidence for the paper's central claim.
 
-- **Ref-VPS fills a genuine evaluation gap**: Existing RVOS benchmarks are entirely object-centric and cannot assess generalization to dynamic, non-object concepts. The 111-video benchmark with 38 concepts and dense 24fps annotation enables evaluation of phenomena like smoke, light, and shattering that no prior benchmark covers.
+- **Strong out-of-domain generalization on independent third-party benchmarks (Table 2):** On BURST — an established open-world tracking benchmark — REM achieves 40.4 J vs. VDIT's 30.9 and UNINEXT's 30.2, a +9.5 J improvement over the same-backbone competitor. On VSPW "Stuff" categories, REM achieves 15.2 vs. 12.7 for VDIT. These are zero-shot, independent evaluations that corroborate the Ref-VPS findings with no circularity concern.
 
-- **Substantial and consistent out-of-domain improvements**: REM outperforms all baselines across three distinct out-of-domain evaluations—Ref-VPS (48.96 vs. 35.27 VDIT), BURST (40.4 vs. 30.9 VDIT), and VSPW "stuff" categories (15.2 vs. 12.7 VDIT). The consistency across different benchmark types strengthens the generalization claim beyond any single evaluation.
+- **Competitive in-domain performance with far less supervision (Table 1):** REM achieves 72.6 J&F on Ref-DAVIS, matching UNINEXT (72.5), which uses 10+ datasets with bounding box and mask supervision. This shows the method does not sacrifice standard benchmark performance for generalization.
 
-- **Competitive in-domain performance with far less supervision**: REM achieves 72.6 J&F on Ref-DAVIS and 68.4 on Ref-YTB, competitive with UNINEXT (72.5 and 70.1) despite training on only Ref-COCO + Ref-YTB versus UNINEXT's 10+ datasets with box and mask supervision (Table 1). This demonstrates the practical value of leveraging pre-trained representations.
+- **Video diffusion pre-training superiority is demonstrated (Table 4, rows 1-4):** The ablation shows that SD 2.1 (image diffusion) achieves only 28.36 J on Ref-VPS versus ModelScope T2V's 37.80, and that VideoCrafter-2 quality fine-tuning yields further gains. This provides evidence that video-temporal modeling in generative pre-training, not just scale, drives the benefit.
 
-- **Compelling qualitative evidence**: Figure 4 clearly illustrates the object-centric bias of baselines (e.g., UNINEXT segmenting the lizard instead of the shedding skin, VDIT segmenting the dominant region) versus REM's ability to segment the described process precisely.
+- **Problem framing is genuinely novel and well-motivated:** The paper correctly diagnoses that the field's narrow focus on RVOS is a data artifact (tracking annotations) rather than a principled scope restriction, and provides a concrete framework and benchmark to expand that scope.
 
-- **Ablation reveals video pre-training is essential**: Table 4 shows Stable Diffusion 2.1 (frame-level) achieves only 28.36 on Ref-VPS versus 37.80 for ModelScope T2V, demonstrating that temporal video pre-training is critical for this task.
+---
 
 ## Weaknesses
 
 ### Fatal
-None.
+*None.*
 
 ### Major
 
-- **Core ablation (Table 4) is underpowered**: The ablation supporting the paper's central insight—that preserving the frozen VAE is key—is run on only 12,000 training samples ("for efficiency we fine-tune all the models on a subset," Section 5.3). While the trends are clear and consistent, the key claim of the paper deserves validation at full scale. Additionally, the CNN decoder is "adopted from Zhao et al. (2023)" and the MLP from SegFormer—there is no evidence these alternative decoders were given comparable capacity or tuning to the frozen VAE decoder, raising the question of whether the 37.80→25.09 drop reflects the value of the frozen VAE specifically or merely an under-capacity/under-tuned replacement. The paper would be significantly strengthened by a full-scale ablation with at least one properly sized decoder baseline.
+- **Primary headline results rest on a self-constructed benchmark (Ref-VPS), with no independent curation safeguards.** The 28% improvement over VDIT and 46% over UNINEXT on Ref-VPS are the paper's most prominently stated differentiating results. Ref-VPS was designed, video-selected (via ChatGPT queries about "dynamic processes" — precisely the motivating frame for REM), and annotated by the same team. There is no pre-registration, third-party curation, or mechanism to prevent conceptual alignment between benchmark design and method capabilities. The BURST and VSPW results on third-party benchmarks provide important independent corroboration, but the abstract and introduction lead with Ref-VPS numbers. The degree to which the Ref-VPS results reflect genuine generalization vs. benchmark-method co-design cannot be assessed without independent replication.
 
-- **Evaluation protocol for BURST and VSPW is unclear in the main text**: BURST and VSPW are not referring segmentation benchmarks—they do not provide referring expressions. The paper reports results on both (Table 2) but does not explain how text expressions are constructed for these datasets in the main text, deferring to "Section C.1 in the Appendix." Since the comparison involves methods designed for referring expressions (UNINEXT, MUTR), the prompt construction protocol could materially affect baseline performance. This information should be in the main text to make the results interpretable without consulting supplementary material.
+- **The central "preserve representation" claim is not fully tested in the ablation.** The paper's stated key insight is that "preserving as much of the generative model's original representation as possible is key." Yet the UNet backbone is fully fine-tuned (flame icon, Figure 3) in every ablation row; only the decoder is varied. The paper explicitly mentions LoRA as a promising future direction (Section 6), but without comparing frozen UNet, LoRA, and full fine-tuning, it is impossible to attribute the observed generalization specifically to "representation preservation" versus other factors (training data volume, temporal architecture, VAE inductive bias). The paper tests one axis of its hypothesis (frozen vs. task-specific decoder) but leaves the backbone fine-tuning question entirely open.
 
 ### Minor
 
-- **The Ref-VPS benchmark is small (111 videos, 38 concepts) and self-collected**: While the performance gaps are large enough to be convincing even at this scale (48.96 vs. 35.27), the benchmark is collected by the method's own creators and uses SAM2-assisted annotation, which could systematically favor methods whose outputs resemble SAM2-style masks. The paper would benefit from acknowledging this limitation more explicitly and reporting variance/confidence intervals.
+- **VDIT comparison lacks implementation details.** VDIT (Zhu et al., 2024) is the primary differential competitor and is cited extensively. The paper does not clarify whether VDIT was retrained from scratch under matched hyperparameters and compute budget, or whether its published checkpoint was evaluated. Given that the performance gap is the crux of the paper's argument, this ambiguity matters. A statement confirming matched training conditions (or justifying the use of the published checkpoint) would strengthen the comparison.
 
-- **Claim of "outperforming the state of the art on all metrics on Ref-DAVIS" is imprecise**: REM achieves 72.6 J&F vs. UNINEXT's 72.5—a marginal difference—and UNINEXT actually outperforms REM on the F metric (76.8 vs. 75.29, Table 1). The more accurate characterization, which the paper uses elsewhere, is that REM is "competitive with UNINEXT" despite far less supervision.
+- **The t=0 (minimum noise) design choice is never ablated.** Setting t=0 during training is presented as a deliberate and principled decision (Section 3.3), but no comparison to other timestep values is provided. Whether the gains are specific to t=0 or broad across low-t values is unknown. Additionally, at t=0 the model is operating on nearly clean latents, raising the question of whether the "diffusion" framing provides any meaningful inductive bias at this operating point. The paper does not engage with this interpretation.
 
-- **No computational cost or inference time analysis**: REM requires a full UNet forward pass per referring expression per video segment. Video diffusion UNets are extremely large models. The absence of any discussion of inference time, memory footprint, or FLOPs comparison with baselines (UNINEXT, MUTR) is a practical limitation that readers need to understand the tradeoffs.
-
-- **The t=0 design choice deserves more discussion**: The model always uses t=0, meaning it never performs iterative denoising—the value of the diffusion model is entirely in the pre-trained weight initialization and frozen VAE decoder. The paper frames the contribution around "diffusion models," but the actual mechanism is closer to fine-tuning a pre-trained UNet + frozen VAE. The paper is not misleading about this (Section 3.3 explicitly explains t=0), but the framing could be more upfront about the fact that the generative/denoising mechanism itself is not being leveraged.
+- **Annotation quality for SAM2-assisted labels on non-object concepts.** The benchmark uses SAM2 — an object-centric model — as the primary annotation tool for concepts like smoke, fog, and light reflections, which fall squarely outside SAM2's design domain. Manual refinement and Ignore labels partially address this, but no inter-annotator agreement or quantification of SAM2 failure rate across concept types is provided. Given that these categories are exactly where REM claims to excel, systematic annotation gaps could inflate the advantage of all methods.
 
 ### Trivial
-None.
+
+- **The percentage improvement reporting is internally consistent but potentially misleading to readers.** The paper computes improvements as (best−baseline)/best, yielding "28%" (REM vs. VDIT) and "46%" (REM vs. UNINEXT). These are valid but non-standard; the more conventional relative improvement formula gives ~39% and ~87% respectively. A brief clarification of the normalization convention in the paper would prevent confusion.
+
+---
 
 ## Nice-to-Haves
 
-- A properly tuned, capacity-matched decoder baseline in the ablation would make the core claim much more convincing.
-- Failure mode analysis beyond the brief mention in Section 6—categorized failure cases would help readers understand remaining limitations.
-- Reporting variance or confidence intervals on the 111-video Ref-VPS benchmark.
+- Ablation over noise timestep t (e.g., t=0, t=10, t=50) would directly test the t=0 design claim and clarify whether the model operates as a discriminative feature extractor at minimal noise.
+- A LoRA vs. full fine-tuning vs. frozen UNet experiment would be the most direct test of the "preserve representation" principle and is already identified by the authors as a promising direction.
+- Per-concept breakdown on Ref-VPS across the 38 concept categories would reveal whether generalization is broad or concentrated in a subset of dynamic concepts.
+- Releasing Ref-VPS independently ahead of or alongside the method would allow the community to run third-party evaluations and reduce circularity concerns over time.
+
+---
 
 ## Removed Points
+*These points are flagged to be removed; treat them with caution.*
 
-*These points are flagged to be removed, treat them with caution.*
+- **Harsh Critic: "86% relative improvement" math claiming the paper's headline numbers are inconsistent.** The paper consistently uses (gap/winner) normalization for all percentage claims. This is an unusual but internally consistent convention; it is not cherry-picking. The harsh critic's "86%" uses a different denominator. REMOVED as factually incorrect.
 
-- **"The paper does not leverage iterative denoising"**: While technically true (t=0, single forward pass), the paper explicitly states this design choice and explains the rationale. The contribution IS about preserving pre-trained representations, not about leveraging denoising steps. This is a framing observation, not a weakness—the paper is transparent about it.
+- **Harsh Critic: TikTok API policy reproducibility concern.** This is a speculative reproducibility concern about platform policy changes, not a verifiable paper flaw. REMOVED per rules on speculative reproducibility concerns.
 
-- **"The Ref-DAVIS 72.6 vs 72.5 difference is within noise"**: This is already captured above as an imprecision in the claim. The more important point is that the paper's text elsewhere correctly frames this as "competitive," and the margin is indeed tiny. Downgraded from "harsh" framing to minor imprecision.
+- **Harsh Critic: Binary mask → 3-channel → VAE encoding domain mismatch.** The concern is conceptually noted but the empirical ablation (Table 4) shows the frozen VAE decoder substantially outperforms task-specific alternatives. The paper does not claim the VAE embedding is distortion-free; it demonstrates empirically that it is beneficial. Removing it catastrophically hurts generalization. This is a *nice-to-have* analysis question, not a falsified claim. MOVED to nice-to-haves.
 
-- **"SAM2-assisted annotation could systematically favor SAM2-like masks"**: While this is a potential concern, SAM2 is used as an annotation tool, not as a model component of REM. The masks are manually refined and ambiguous regions are labeled as Ignore. This is a speculative concern without concrete evidence.
+- **Harsh Critic: UNINEXT "only second" on Ref-YTB framing.** The critic argues the paper undersells UNINEXT's advantage (70.1 vs 68.4 J&F) given UNINEXT's massive extra supervision. The paper acknowledges UNINEXT uses 10+ datasets. The framing "competitive" is accurate and explicitly hedged. REMOVED as strawman.
 
-- **"TikTok videos introduce demographic/content biases"**: This is scope creep—any web-scale data collection has biases. The paper discusses its filtering criteria explicitly. The benchmark is specifically for dynamic processes, and TikTok is a reasonable source for short-form dynamic content.
+- **Strength Finder: "Same-backbone comparison with VDIT isolates the contribution."** This is partially true, but the VDIT comparison lacks matched implementation controls (Major weakness above). This strength directly conflicts with a verified Major weakness, so it is removed per the hard rule. REMOVED.
 
-- **"The Stable Diffusion vs. video diffusion comparison in Table 4 confounds architecture with pre-training data"**: This is a valid observation but is inherent to the comparison being made (image vs. video diffusion models). The paper does not overclaim causality here—it simply shows that video-level pre-training leads to better results.
-
-- **"Missing inference time/FLOPs comparison"**: Kept this as a minor weakness above, but weakened from the harsh critic's "severe practical limitation" framing. The paper is about demonstrating a concept; computational cost is important context but not a fatal flaw.
+---
 
 ## Novel Insights
 
-The paper reveals an interesting asymmetry: preserving the frozen VAE decoder has a dramatically larger effect on out-of-domain generalization (Ref-VPS: 37.80→25.09, a 34% drop) than on in-domain performance (Ref-YTB: 64.57→60.47, only a 6% drop). This suggests that the VAE decoder does not merely decode mask latents—it acts as a regularizer that prevents the fine-tuned representation from collapsing to the narrow distribution of the training data. This decoupling of in-domain and out-of-domain sensitivity to architectural choices is a finding that could inform future work on transfer learning from generative models more broadly.
+The most genuinely novel observation — both from the paper and the reviews — is that the frozen VAE decoder, a component typically viewed as a compression artifact for mask representation, is the decisive component for out-of-domain generalization. The ablation shows that replacing it with architecturally more natural discriminative decoders (CNN, MLP) near-halves performance on dynamic concepts while only modestly affecting standard RVOS performance. This points to a broader principle: that in transfer learning from generative models, the output pathway (not just the latent feature extractor) encodes critical representational structure. If the result on Ref-VPS holds under independent evaluation, this would be a valuable insight for future work on diffusion model repurposing beyond segmentation.
+
+---
 
 ## Suggestions
 
-- Run the Table 4 ablation at full training scale, or at minimum add one decoder baseline with parameter count comparable to the VAE decoder and appropriate learning rate tuning, to convincingly establish that the frozen VAE specifically matters (not just decoder capacity).
-- Include the BURST/VSPW evaluation protocol details (prompt construction) in the main text, not just the appendix.
-- Add a single-row table or footnote comparing inference time and GPU memory for REM vs. UNINEXT/VDIT to help readers assess the practical tradeoff of using a large diffusion backbone.
+1. **Run an independent benchmark evaluation before publication.** Release Ref-VPS to three independent groups and include their zero-shot results from at least one publicly available RVOS model not involved in paper development. This is the single most impactful step to address the circularity concern.
+2. **Add a LoRA vs. frozen UNet vs. full fine-tuning ablation.** Even a reduced-data version (12k subset, as in the current ablation) would directly test the central "preserve representation" principle.
+3. **Ablate over t.** Report performance at t=0, t=10, t=50, t=100 to confirm that t=0 is principled and that the model's behavior is qualitatively different from a purely discriminative encoder.
+4. **Clarify VDIT comparison.** Add a sentence stating whether VDIT results are from the published checkpoint or a reimplementation, and whether training budgets were matched.
+5. **Report inter-annotator agreement on Ref-VPS.** Even a subset-level kappa or IoU between the two annotators would quantify annotation reliability for non-object concepts.
+
+---
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors consulted:**
 
-| Paper | Score | Comparison |
-|-------|-------|-----------|
-| SAM 2 (Ha6RTeWMd0) | 9.0 | Far stronger: massive data engine, comprehensive evaluation, foundational model. REM is not at this level. |
-| ADDP/Aligning Generative Denoising (rMOhA1JNPo) | 6.5 | Similar: repurposes diffusion for perception, strong experiments but concerns about baselines and overclaims. REM is comparable—slightly stronger on out-of-domain gains and new benchmark, slightly weaker on ablation rigor and benchmark scale. |
-| DiffDIS (vh1e2WJfZp) | 6.0 | Similar: diffusion for segmentation, limited evaluation scope. REM is comparable or slightly stronger due to new benchmark and multi-dataset out-of-domain evaluation. |
-| Open-world semantic segmentation (tCYdsuQgZZ) | 5.67 | Weaker than REM: overclaimed generalization with limited evidence. REM has larger and more consistent out-of-domain gains. |
-| Century (1KLBvrYz3V) | 7.5 | Stronger: new dataset with method, but also flagged for small scale. REM's benchmark is smaller (111 vs 1500) but fills a more unique gap. |
-| Harry Potter atypical videos (3ZdGSTxKuy) | 2.0 | Far weaker: overclaimed contribution with tiny dataset and minimal method. REM is clearly far above this. |
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| TokenFlow (video editing w/ diffusion) | `/home/wg25r/review_agent/human_reviews/lKK50q2MtV.md` | 7.0 (Accept, Poster) | Similar diffusion-for-video repurposing; clean evaluation on established benchmarks; no self-constructed benchmark concern. |
+| DiffMatch (diffusion for dense matching) | `/home/wg25r/review_agent/human_reviews/Zsfiqpft6K.md` | 8.0 (Accept, Oral) | Stronger evaluation rigor, no circular benchmark concern; represents the high anchor. |
+| Diffusion Few-shot Dense Tasks | `/home/wg25r/review_agent/human_reviews/az5WtGe48n.md` | 5.2 (Reject) | Conceptually similar (reusing diffusion for dense prediction); rejected for inconsistent reviewer scores; weaker experiments. |
+| Test-time Contrastive Open-vocab Seg | `/home/wg25r/review_agent/human_reviews/tCYdsuQgZZ.md` | 5.67 (Reject) | Open-vocab segmentation with novel framing; rejected for insufficient depth; less empirically compelling. |
+| RVOS Multi-expression paper | `/home/wg25r/review_agent/human_reviews/eaXMEb6fa4.md` | 3.0 (Withdrawn) | Low anchor: RVOS paper with weak contribution and unfair comparisons; clearly weaker than REM. |
 
-The paper makes a real and clearly demonstrated contribution: a simple architectural insight (frozen VAE decoder) with substantial empirical support across multiple out-of-domain benchmarks and a new benchmark filling a genuine gap. The main weaknesses—ablation on a subset, unclear BURST/VSPW protocol, and small benchmark scale—are real but do not invalidate the core claims given the consistency and magnitude of the improvements. Relative to ADDP (6.5) and DiffDIS (6.0), REM falls in the same range with comparable strengths and weaknesses.
+**Positioning:** REM is clearly above the medium anchors (5.2–5.67): it has more comprehensive experiments, stronger novel framing, and independent third-party benchmark results. It is below the high anchors (7.0–8.0) primarily because of the self-constructed benchmark concern and the incomplete ablation of the central mechanism claim. The closest comparable is TokenFlow (7.0 Accept), which had no circularity concerns but also lacked some ablations. REM's benchmark circularity is a real drag — but the independent BURST and VSPW results provide meaningful corroboration. I position REM at **6.0**: above the acceptance threshold, with the understanding that the self-constructed benchmark concern and missing LoRA ablation are addressable in revision but not fully resolvable in a rebuttal.
+
+**Originality:** Moderate-to-good. The frozen VAE decoder insight is elegant and original; the benchmark is genuinely new.  
+**Importance:** High. Extending RVS beyond object tracking with a concrete method and benchmark is a real contribution.  
+**Claims vs. support:** Partially adequate. Independent benchmark results are solid; Ref-VPS results are concerning due to circularity.  
+**Soundness:** Mostly sound. Ablation tests one axis of the central hypothesis well.  
+**Clarity:** Good. The paper is well-written and the method is easy to follow.  
+**Value to community:** Meaningful. The benchmark, if independently validated, would serve the field well.
+
+**Final Score: 6.0 — Marginal Accept**
 
 MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>
