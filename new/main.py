@@ -145,9 +145,6 @@ else:
     _harsh_sdk_system_prompt = None
 neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
 
-_NO_CAL = "--no_cal" in __import__("sys").argv
-
-
 def _load_merger_instructions():
     """Load merger.md with PAPER_ACCESS placeholder filled in (file-based access)."""
     with open("prompts/merger.md", "r") as f:
@@ -178,11 +175,8 @@ else:
 
 # ── Scorer agent (calibration + scoring) ─────────────────────────────
 if SCORER_MODEL.startswith("claude_sdk:"):
-    scorer_agent = None
     _SCORER_SDK_MODEL = SCORER_MODEL[len("claude_sdk:"):]
 else:
-    from scorer import build_scorer_agent
-    scorer_agent = build_scorer_agent(resolve_model, SCORER_MODEL, SUBAGENT_MODEL, _NO_CAL)
     _SCORER_SDK_MODEL = None
 
 
@@ -287,7 +281,8 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         sdk_usages["Scorer"] = scorer_sdk_usage
         agent_usages["Scorer"] = None
     else:
-        from scorer import run_scorer_openai
+        from scorer import build_scorer_agent, run_scorer_openai
+        scorer_agent = build_scorer_agent(resolve_model, SCORER_MODEL, SUBAGENT_MODEL, no_cal)
         scorer_text, scorer_usage = await run_scorer_openai(
             scorer_agent, merged_review, HUMAN_REVIEW_DIR, run_agent_with_retry
         )
