@@ -4,7 +4,7 @@ export MERGER_MODEL="ollama:glm-5.1:cloud"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="results/bench_scores_kimi.csv"
 export MERGE_LOG="results/pipeline_whole_kimi.log"
-export CONCURRENCY=10
+export CONCURRENCY=5
 # rm bench_scores_qwen.log
 ollama serve & 
 git commit -am "run.sh: $(date)"
