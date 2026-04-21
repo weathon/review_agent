@@ -1,18 +1,20 @@
-Now I have all the information I need. Let me write the final consolidated review.
+Now I have enough information to write a thorough review. Let me synthesize everything.
 
 ## Summary
 
-SLUG (Single Layer Unlearning Gradient) proposes a machine unlearning method that identifies and updates a single model layer using a one-time gradient computation to remove targeted concepts (identities, artistic styles, objects) while preserving utility on unrelated tasks. The method introduces two metrics—layer importance and gradient alignment—to select Pareto-optimal layers, then performs a linear update along the forget gradient direction with a binary-searched step size λ*. It is demonstrated across CLIP, Stable Diffusion, and VLMs.
+SLUG proposes a machine unlearning method that identifies a single Pareto-optimal layer (via importance and gradient alignment metrics) and updates it along a one-time gradient direction with a binary-search step size. Applied to CLIP, Stable Diffusion, and LLaVA-based VLMs, it achieves complete forgetting (FA@1=0%) on target identities while retaining 59.96% ImageNet accuracy—far better than GA (35.88%) or SalUn (55.45%) at comparable forgetting—and demonstrates orders-of-magnitude efficiency gains on the UnlearnCanvas benchmark (39s, 0.04GB storage).
 
 ## Strengths
 
-- **Strong efficiency–effectiveness trade-off**: Table 1 shows SLUG achieves 0% forget accuracy (both FA@1 and FA@5) while retaining 59.96% ImageNet and 58.32% CelebA accuracy—the only method achieving complete unlearning without substantial utility collapse. Table 2 confirms dramatic efficiency gains on UnlearnCanvas (39s compute time, 0.04GB storage vs. next-best 62s and 1.7GB).
+- **Strong simultaneous forgetting and retention on CLIP**: Table 1 shows SLUG achieves FA@1=0% (complete forgetting) while maintaining TA_IN@1=59.96% and TA_CA@1=58.32%, a combination no other baseline achieves at either learning rate. This is the paper's central empirical claim and it is well-supported.
 
-- **Principled layer identification**: Equations 7–8 define importance (forget gradient norm / parameter norm) and alignment (cosine similarity between forget and retain gradients) with Pareto front visualization in Figure 2. This provides a structured, interpretable criterion rather than ad-hoc selection, and the observed patterns (late vision layers, early language layers) offer genuine mechanistic insight (Section 4.2, lines 382–395).
+- **Dramatic efficiency improvements**: Table 2 on UnlearnCanvas demonstrates 39s compute time and 0.04GB storage—orders of magnitude better than all competitors (next best compute 62s, next best storage 1.7GB). This is a clear and practical advantage.
 
-- **Broad applicability**: Demonstrated on CLIP ViT-B-32 through EVA01-g-14 (Table 1), Stable Diffusion with UnlearnCanvas (Table 2, Figure 4), and LLaVA VLMs (Figure 5), covering concrete concepts (celebrity identities) and abstract concepts (artistic styles, objects). This is a wider evaluation scope than most prior unlearning work.
+- **Principled layer selection via complementary metrics**: Equations 7–8 introduce layer importance and gradient alignment, and the Pareto-optimal selection framework (Section 3.1, Figure 2a,d) provides interpretable, architecture-adaptive layer identification. The finding that late vision layers and early language layers are consistently selected (Figures 7, 12) adds mechanistic insight beyond the unlearning task.
 
-- **Linearized unlearning insight**: Figure 2(b,e) vs. (c,f) effectively shows that single-gradient updates along the identified layer direction achieve comparable or better results than iterative methods, which require careful early stopping to avoid over-unlearning.
+- **Simple method with minimal tuning**: The method requires computing a single gradient and selecting one layer—one binary search over λ. This is substantially simpler than iterative methods requiring learning rate, number of epochs, and saliency mask thresholds.
+
+- **Cosine similarity visualizations (Figure 3)** effectively communicate the selective erasure, making the method's effect immediately legible.
 
 ## Weaknesses
 
@@ -21,76 +23,61 @@ None.
 
 ### Major
 
-- **Overclaimed "state-of-the-art" framing**: The abstract states SLUG exhibits "state-of-the-art efficiency with effective unlearning and retention on the comprehensive benchmark UnlearnCanvas," conflating efficiency and effectiveness. On UnlearnCanvas (Table 2), SLUG does not lead on any effectiveness metric: Style UA is 86.29% vs. ESD's 98.58%, Object UA is 75.43% vs. ESD's 92.15%, Style IRA is 84.59% vs. PMN's 86.77%, Object CRA is 77.50% vs. PMN's 90.63%. SLUG's genuine advantage is efficiency (39s, 0.04GB storage). The abstract should claim "competitive effectiveness with superior efficiency" rather than implying SOTA across the board. This matters because the paper's framing shapes how readers evaluate the contribution.
+- **VLM effectiveness claimed in abstract but supported only by a single qualitative example**: The abstract states SLUG enables "selective removal of multiple concepts from...Vision-Language Models," and Section 4.4 provides only Figure 5 showing one identity (Elon Musk) on LLaVA with qualitative question-answering results, no quantitative metrics, no baselines, and no retain-set benchmark evaluation. For a paper listing "Vision-Language Models" as a demonstrated domain in the abstract, this is an overclaim. The VLM contribution should be clearly scoped as preliminary/qualitative, or validated with quantitative metrics and baselines.
 
-- **VLM evaluation is purely qualitative with a concerning failure mode**: Section 4.4 provides only Figure 5 as evidence for VLM unlearning. The unlearned model misidentifies Elon Musk as "Michael Jackson"—the paper claims "the specific identity information has been successfully removed," but what is shown is misidentification rather than true forgetting. From a privacy standpoint, the model still outputs a specific real person's name, just the wrong one. No quantitative metrics (accuracy on a broader identity set, retention on other tasks) are provided for VLMs, making it impossible to assess whether the approach generalizes beyond a single anecdotal case.
+- **UnlearnCanvas results show SLUG trades unlearning quality for efficiency, which is underacknowledged**: On Table 2, SLUG achieves 86.29% style UA and 75.43% object UA, substantially below ESD (98.58%, 92.15%), UCE (98.40%, 94.31%), and SalUn (86.26%, 95.29%). The abstract's "state-of-the-art efficiency with effective unlearning" phrasing obscures this trade-off. The efficiency advantage is real and significant, but the "effective unlearning" claim is misleading when UA is 10+ percentage points below the best methods. The paper should be explicit about the unlearning–efficiency Pareto frontier.
 
-- **Complexity analysis omits binary search cost**: Table 1 reports SLUG's complexity as O(N_r + N_f) for the gradient computation, but Section 3.2 describes a binary search for λ* that requires multiple forward passes on the forget and retain sets to evaluate the unlearning criterion at each candidate step size. While forward passes are cheaper than gradient computations, the number of binary search iterations and total forward-pass cost is never quantified. This makes the efficiency comparison in Table 1 incomplete—SLUG's true cost is O(N_r + N_f) for the gradient plus O(k_binary · (N_r + N_f)) for evaluation passes. The paper should report typical k_binary values and include this in the cost analysis.
+- **Binary search for λ lacks validation-set protocol specification**: Section 3.2 states λ is selected "when the evaluation metric indicates satisfactory unlearning without harming performance on the retain set," but does not specify whether the binary search uses separate validation data or the same test benchmarks (CelebA, ImageNet) on which final results are reported. If λ is tuned on the same test sets, the reported numbers conflate validation and evaluation. The authors should clarify whether a held-out validation set is used for λ selection (which is not mentioned anywhere in the paper), and if not, should add this protocol.
 
 ### Minor
 
-- **Notation error in core equations**: Equation 1's forget term uses D_ε (retain set) and N_ε in both the subscript and summation range, where it should use the forget set D_τ/D_f and N_f. This same D_ε subscript error propagates to Equations 7, 8, and 9, where forget gradients are written as L_forget(θ, D_ε). While the text correctly describes computing forget gradients on the forget set, the repeated notation error in four core equations undermines confidence and could confuse readers implementing the method.
+- **SSD given only one configuration in Table 1**: While other baselines (FT, GA, GAFT, SalUn) get two learning-rate variants, SSD appears with only one row. Since SSD also has O(N_r + N_f) complexity and is the closest methodologically (single-pass, saliency-based), this makes the retention comparison (59.96% vs 51.84%) potentially unfair. The authors should justify the single SSD configuration or provide a second.
 
-- **Pareto front layer selection criterion is underspecified**: Section 3.1 and Figure 2 show the Pareto front of layers optimizing importance vs. alignment, but the specific rule for choosing among Pareto-optimal layers (e.g., the final layer to update) is never stated. Given that the entire method hinges on layer selection, this is a reproducibility-relevant gap.
+- **"Nullspace" framing in Section 3.1 is informal**: The paper states it achieves unlearning "within the 'nullspace' of the retain set" but no formal argument connects the gradient-alignment heuristic (cosine similarity ≈ 0) to an actual nullspace property. This is a minor presentational overclaim; the method works empirically despite this gap.
 
-- **Baseline comparison asymmetry**: SLUG's binary search for λ is effectively automated hyperparameter tuning, while baselines (GA, GAFT, SalUn) are evaluated at only two fixed learning rates (10⁻⁶ and 10⁻⁷). While SLUG does show genuine advantages even at baselines' best LRs (e.g., GA at 10⁻⁷ gets FA@5=4.91% and CelebA=53.86% vs. SLUG's 0% and 58.32%), a fairer comparison would give baselines a comparable tuning budget or report SLUG's sensitivity to the binary search stopping criterion.
+- **No adversarial robustness evaluation**: The paper acknowledges this limitation in Section 5. For an unlearning/privacy paper, a single-layer, single-gradient-step perturbation could be reversible. This is a genuine gap but the authors acknowledge it and it is not within the stated scope.
+
+- **"Hyperparameter-free" statement in Section 2 is slightly misleading**: The motivation claims the method addresses methods that "require careful hyperparameter tuning" and motivates developing a "hyperparameter-free, interpretable method." While SLUG reduces complexity (no learning rate, iterations, or mask thresholds), λ is still selected via binary search. The method is closer to "minimal-hyperparameter" than "hyperparameter-free."
 
 ### Trivial
-
-- SSD is reported at only one learning rate in Table 1 while other baselines get two, though this slightly favors the baseline rather than SLUG.
+None.
 
 ## Nice-to-Haves
 
-- **Adversarial robustness evaluation**: A single gradient step on one layer is a minimal intervention; testing whether forgotten information can be recovered through adversarial prompts, jailbreaks, or minimal fine-tuning would substantially strengthen the practical privacy claims. The paper acknowledges this in Limitations but does not attempt any evaluation.
-
-- **Ablation on layer selection**: Testing whether (a) a random layer, (b) the highest-importance layer without alignment filtering, or (c) the lowest-alignment layer without importance filtering also works would establish whether the Pareto selection is critical or whether any single layer suffices.
-
-- **Failure case analysis**: Object UA is 75.43% on UnlearnCanvas—understanding what the 25% of unresistant objects look like would be more informative than aggregate numbers.
-
-- **Membership inference or model inversion verification**: Low zero-shot accuracy on the forget set does not guarantee information is truly removed rather than just suppressed at the output level.
+- Quantitative VLM evaluation with forget accuracy, retain accuracy, and standard VLM benchmarks (VQAv2, TextVQA) before/after unlearning, with baselines.
+- Comparison to retraining from scratch on D_r as a gold-standard baseline for Table 1.
+- Ablation on how many concepts can be sequentially unlearned with compounding error analysis.
+- Adversarial robustness testing (e.g., whether gradient-based attacks or prompted re-learning can recover forgotten concepts).
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution.
 
-- **Harsh critic's claim that "Table 1 comparison is meaningless"**: Overstated. While the baseline comparison has asymmetries (noted as Minor above), the actual numbers show SLUG has genuine advantages even at baselines' best LRs. The comparison is imperfect but not "meaningless."
+- **Harsh Critic's claim that binary search for λ on evaluation metrics undermines ALL quantitative results as "structural"**: This is overstated. λ is a single scalar hyperparameter tuned by binary search—this is analogous to hyperparameter search via validation, which is standard practice. The real concern (missing validation-set protocol) is kept as a Major weakness, but the claim that it invalidates all results is not warranted.
 
-- **Harsh critic's claim about "deliberately unflattering portrait of baselines"**: This attributes intent without evidence. The paper reports both learning rates for baselines and the advantages hold even at the more favorable LR.
+- **Harsh Critic's claim that CLIP baseline comparison is "structurally unfair" because FA@1=0% methods might be destructively forgetting**: This misses the point. SLUG achieves the same FA@1=0% *while retaining* 59.96% ImageNet accuracy, which is the whole contribution. Methods that achieve 0% through destruction are different, and the comparison fairly shows SLUG's advantage. The SSD single-configuration concern is kept as minor.
 
-- **Harsh critic's claim that Figure 2 caption overreads ("iterative methods offer no advantage")**: The caption's language is somewhat strong but the figure does support the claim that iterative methods require careful early stopping while single-gradient achieves similar results without that sensitivity. This is more of a phrasing issue than a substantive error.
+- **Harsh Critic's claim that the "knowledge is more localized than previously thought" conclusion is an "overstatement"**: The paper's claim is appropriately qualified—"suggesting that knowledge in neural networks may be more localized than previously thought"—which is a reasonable empirical observation from their results, not a definitive claim.
 
-- **Harsh critic's concern about forget set size (1,000–6,000 pairs)**: This is standard for unlearning methods and not a unique weakness of SLUG. The baselines use the same data.
+- **Harsh Critic's concerns about missing wall-clock times and ignoring binary search cost in complexity claims**: The paper reports actual time (39s) on UnlearnCanvas (Table 2), which includes any binary search overhead. The O(N_f + N_r) theoretical complexity refers to gradient computation; the binary search adds negligible forward passes. This criticism is not well-grounded.
 
-- **Strength finder's claim about "reproducibility via code repository"**: Generic strength; all submissions at ICLR can claim this. Removed per filtering rules.
+- **Strength Finder's claim about "cross-architecture generalization without method modification"**: This is partially valid but overclaimed—VLM results are qualitative only and SD results only modify the text encoder, not the full architecture.
 
-- **Harsh critic's claim about no variance for Table 1 baselines**: The baselines' results come from the authors' own implementation, and SLUG also reports only single runs in Table 1. Variance reporting would be nice but is not standard in this area.
+- **Strength Finder's claim about reproducibility with code and pre-computed gradients**: While mentioned, this is standard and not a substantive strength of the scientific contribution.
 
 ## Novel Insights
 
-The paper reveals an interesting asymmetry in knowledge localization: late attention layers in vision transformers and early attention layers in language models are consistently selected for unlearning. This is consistent with the intuition that vision transformers aggregate spatial information progressively (making later layers more identity-specific) while language models establish syntactic/semantic foundations early (making early layers more influential for conceptual content). This observation, if validated across more architectures, could have implications beyond unlearning—for example, in understanding which layers to target for efficient model editing or fine-tuning more broadly.
-
-## Suggestions
-
-- Retitle the abstract claim to "competitive effectiveness with state-of-the-art efficiency" to accurately reflect the UnlearnCanvas results.
-- Report the typical number of binary search iterations and include the total forward-pass cost in the complexity analysis.
-- Add at least basic quantitative VLM evaluation (e.g., accuracy across a set of N identities before/after unlearning, retention on a VQA benchmark) rather than relying solely on Figure 5.
-- Specify the exact selection rule for choosing among Pareto-optimal layers.
-- Fix the D_ε notation in the forget loss terms (Eqs 1, 7, 8, 9) to use D_f or D_τ.
+The paper's most interesting finding is not just that single-layer updates work, but the specific pattern of layer selection: late attention layers in vision models and early attention layers in language models are identified as most relevant. This suggests a decomposition of concept knowledge in CLIP-style models where visual representations are processed bottom-up (late layers specialize), while linguistic representations require early syntactic/semantic scaffolding. This dual pattern could inform not just unlearning but broader mechanistic understanding of multimodal models.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration Anchors:**
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| SalUn (Spotlight) | /home/wg25r/review_agent/human_reviews/gn0mIhQGNM.md | 7.50 | Similar domain (saliency-based unlearning for classification + generation). SalUn is more polished and better evaluated but SLUG has a more efficient and interpretable approach. SLUG is clearly below this. |
-| Task Vector Theory (Oral) | /home/wg25r/review_agent/human_reviews/vRvVVb0NAz.md | 7.50 | Theoretical grounding for task arithmetic including unlearning. Much stronger theoretical contribution. SLUG is below this. |
-| G-effect (Poster) | /home/wg25r/review_agent/human_reviews/huo8MqVH6t.md | 6.0 | Gradient analysis of unlearning methods. Novel analytical contribution with some limitations. SLUG is roughly comparable—novel method with real but imperfect evaluation. |
-| SUN (Withdrawn/Reject) | /home/wg25r/review_agent/human_reviews/p7mgNvOD9Q.md | 4.0 | Training-free unlearning via subspace projection—very similar concept (single operation, no iterative training). SLUG has much broader evaluation (UnlearnCanvas, SD, VLMs) and stronger results. Clearly above this. |
-| EraseDiff (Withdrawn/Reject) | /home/wg25r/review_agent/human_reviews/4CR5Uc9EYf.md | 4.0 | Unlearning for diffusion models with first-order methods. Weaker evaluation and less convincing results. SLUG is clearly above this. |
-| MASIMU (Withdrawn/Reject) | /home/wg25r/review_agent/human_reviews/BJfIDS5LsS.md | 2.50 | Overclaimed results, missing key baselines. SLUG is far above this. |
+- **High (avg > 7):** SalUn (7.5, Spotlight) — similar domain but more thorough evaluation, quantitative results on all claimed domains; PdAP (8.0, Oral) — strong empirical results with minor overclaiming concerns
+- **Medium (4–6):** LoKU (6.0, Poster) — solid unlearning method, good experiments, some overclaiming; SISS (5.75, Poster) — diffusion unlearning with theoretical guarantees but limited scope
+- **Low (< 3):** UGradSL (3.0, Reject) — fundamentally flawed evaluation metrics; LVLM-CL (2.5, Withdrawn) — qualitative-only VLM evaluation with weak experiments
 
-SLUG sits between the rejected training-free unlearning papers (SUN at 4.0) and the accepted saliency-based work (SalUn at 7.5). Its core idea is genuinely novel and the evaluation breadth is strong, but the overclaiming in the abstract, incomplete complexity analysis, and qualitative-only VLM results are real drawbacks. Compared to the G-effect paper (6.0, Accept Poster), which also had a novel analytical framing with some limitations, SLUG is roughly comparable in overall quality. SLUG has stronger practical results but weaker theoretical grounding and more overclaiming.
+SLUG is stronger than LoKU (better empirical results, more domains, cleaner method) and SISS (much better efficiency results, broader evaluation). But it has a meaningful overclaiming issue (VLM domain, "effective" unlearning framing) that SalUn doesn't have. It falls between the medium and high anchors — genuinely novel and useful contributions, but with substantive weaknesses in evaluation completeness and framing.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

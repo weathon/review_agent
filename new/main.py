@@ -5,6 +5,7 @@ import json
 import random
 import re
 import logging
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -144,7 +145,7 @@ else:
     _harsh_sdk_system_prompt = None
 neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
 
-_NO_CAL = "--no_cal" in __import__("sys").argv
+_NO_CAL = "--no_cal" in sys.argv
 
 CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
@@ -365,7 +366,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
     with open(log_path, "a") as log_f:
         log_f.write(f"\n{'='*60}\n")
         log_f.write(f"Paper: {paper_path}\n")
-        log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
+        log_f.write(f"Timestamp: {time.strftime('%Y-%m-%dT%H:%M:%S')}\n")
         log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
         if sdk_lines:
             log_f.write(f"\n--- Claude SDK Usage ---\n" + "\n".join(sdk_lines) + "\n")
@@ -541,8 +542,6 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
 
 # ── Single paper ─────────────────────────────────────────────────────
 
-import datetime
-
 def predict_acceptance_rate(csv_path: str, score: float, window: float = 0.5):
     if not os.path.exists(csv_path):
         print(f"  Acceptance CSV not found: {csv_path}")
@@ -645,7 +644,7 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
                 total_cost += su["total_cost_usd"]
         print(f"  TOTAL Claude SDK cost (USD): ${total_cost:.4f}")
     os.makedirs(os.path.join(Path(__file__).parent, "reviews"), exist_ok=True)
-    with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
+    with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{time.strftime('%Y_%m_%d_%H_%M_%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
         f.write(result["merged_review"])
         f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "")
