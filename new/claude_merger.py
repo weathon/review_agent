@@ -5,6 +5,8 @@ Used when MERGER_MODEL starts with 'claude_sdk:'.
 from __future__ import annotations
 
 import os
+import random
+import time
 import numpy as np
 import pickle
 from pathlib import Path
@@ -66,6 +68,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
         {"abs_path": str, "start_line": int, "end_line": int},
     )
     async def _read_file(args: dict) -> dict:
+        time.sleep(random.uniform(0.5, 1.5))  # Simulate latency
         abs_path = args["abs_path"]
         start_line = args.get("start_line", 1) or 1
         end_line = args.get("end_line", 0) or 0
@@ -114,6 +117,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
         {"query": str, "n": int, "mode": str, "low_score": float, "high_score": float},
     )
     async def _search_file(args: dict) -> dict:
+        time.sleep(random.uniform(0.5, 1.5))  # Simulate latency
         query = args["query"]
         n = args.get("n", 5)
         mode = args.get("mode", "vector")
@@ -171,7 +175,6 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                     content = fh.read()
                 results.append(f"{fpath}\navg_score: {avg:.2f}  sim: {rel:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
             text = "\n---\n".join(results) if results else "No relevant files found."
-
         return {"content": [{"type": "text", "text": text}]}
 
     tools = [_read_file, _grep_file]
@@ -282,6 +285,8 @@ async def _run_claude_sdk_query(
         "usage": None,
         "rate_limit": None,
     }
+    time.sleep(random.uniform(20, 40))  # Simulate latency
+
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(full_prompt)
         async for message in sdk_client.receive_response():

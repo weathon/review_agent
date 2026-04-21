@@ -373,10 +373,10 @@ def analyze_and_plot(path):
     accept_label = (gt_dec == "accept").astype(int).values
 
     # Accept-rate per 1-point score bin
-    # pred side:  one (pred_score, paper_accept) point per paper
-    # human side: one (individual_reviewer_score, paper_accept) point per (paper, reviewer)
-    # (comparing pred — a single score — to individual reviewer scores, not to gt_avg which
-    # defines gt_binary by construction and would produce a tautological step function.)
+    # This is a calibration-style summary at the paper level:
+    # one (score, paper_accept) point per paper on both the pred side and the human side.
+    # Human uses gt_avg here because the goal is to compare how smooth/close the acceptance
+    # rate curves are, not to compare single-reviewer discrimination performance.
     unit_bin_edges = np.arange(0, 11)  # [0,1), [1,2), ..., [9,10]
     unit_bin_labels = [f"[{int(unit_bin_edges[i])},{int(unit_bin_edges[i+1])})" for i in range(len(unit_bin_edges) - 1)]
     unit_bin_labels[-1] = unit_bin_labels[-1].replace(")", "]")
@@ -393,17 +393,8 @@ def analyze_and_plot(path):
             out.append((n, rate))
         return out
 
-    human_scores_flat = []
-    human_labels_flat = []
-    for i, (_, row) in enumerate(df.iterrows()):
-        label = accept_label[i]
-        for c in gt_score_cols:
-            if pd.notna(row[c]):
-                human_scores_flat.append(float(row[c]))
-                human_labels_flat.append(label)
-
     accept_rate_pred = accept_rate_by_bin(pred, accept_label)
-    accept_rate_human = accept_rate_by_bin(human_scores_flat, human_labels_flat)
+    accept_rate_human = accept_rate_by_bin(gt_avg, accept_label)
     valid_dec_mask = ~pred_dec.isin(["n/a", ""])
     dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
     dec_eval_mask = valid_dec_mask & pred_dec.isin(["accept", "reject"]) & gt_dec.isin(["accept", "reject"])
@@ -515,7 +506,7 @@ def analyze_and_plot(path):
         if bin_counts[i] > 0:
             print(f"    [{label}]: n={bin_counts[i]:>3}, MAE={bin_maes_raw[i]:.4f}, Rounded MAE={bin_maes_rounded[i]:.4f}")
     print(f"  {'─'*45}")
-    print(f"  Accept rate per 1-point score bin (pred vs individual human reviewer):")
+    print(f"  Accept rate per 1-point score bin (pred vs human avg score):")
     print(f"    {'bin':<8} {'pred n':>7} {'pred rate':>12}     {'human n':>8} {'human rate':>12}")
     for i, label in enumerate(unit_bin_labels):
         pn, pr = accept_rate_pred[i]
