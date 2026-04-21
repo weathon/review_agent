@@ -268,6 +268,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
     print("  Phase 2: Merger ...")
     if _MERGER_SDK_MODEL is not None:
+        start_time = time.monotonic()
         from claude_merger import run_merger_claude_sdk
         merger_prompt = (
             f"Here is the paper being reviewed (extracted from PDF — formatting "
@@ -281,13 +282,16 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         )
         paper_dir = str(Path(paper_path_abs).parent)
         merged_review, merger_sdk_usage = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        end_time = time.monotonic()
         sdk_usages["Merger"] = merger_sdk_usage
         agent_usages["Merger"] = None  # SDK usage tracked separately below
+
     else:
         # OpenAI Agent SDK merger: grant read/grep access to the paper's dir and
         # point the merger at the paper via path (not inline).
         from tools import allow_path
         allow_path(str(Path(paper_path_abs).parent))
+        start_time = time.monotonic()
         merger_prompt = (
             f"Here is the paper being reviewed (extracted from PDF — formatting "
             f"artifacts are parser issues, not paper problems).\n\n"
@@ -299,7 +303,11 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"picky — cross-check everything against the actual paper before including it."
         )
         merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
+        end_time = time.monotonic()
+        merger_usage.duration_ms = int((end_time - start_time) * 1000)
         agent_usages["Merger"] = merger_usage
+
+
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
@@ -315,7 +323,11 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
                 f"  {agent_name}: input={usage.input_tokens} (cached={cached}) "
                 f"output={usage.output_tokens} (reasoning={reasoning}) "
                 f"total={usage.total_tokens} requests={usage.requests}"
+                f" duration={getattr(usage, 'duration_ms', 'n/a')}ms"
             )
+            if hasattr(usage, "duration_ms"):
+                token_lines[-1] += f" speed={getattr(usage, 'output_tokens', 0) / (getattr(usage, 'duration_ms', 1) / 1000):.2f} tokens/s"
+
             total_input += usage.input_tokens
             total_output += usage.output_tokens
             total_tokens += usage.total_tokens
