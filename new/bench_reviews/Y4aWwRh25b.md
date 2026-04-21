@@ -1,14 +1,18 @@
+Now I have a complete picture. Let me synthesize the final review.
+
 ## Summary
 
-This paper empirically investigates prompt-injected datastore extraction from Retrieval-In-Context (RIC) systems. It demonstrates high text-similarity-based reconstruction across nine open-weight instruction-tuned models (7B–72B), analyzes how RAG configuration choices (chunk size, chunking strategy, prompt position) affect extractability, proposes a position-bias elimination defense (PINE), and reports a 100% datastore-leakage success rate on 25 production customized GPTs with up to two queries, reconstructing 41.73% of a 77,000-word book.
+This paper studies the vulnerability of Retrieval-In-Context RAG systems to prompt-injected data extraction attacks, where an adversary instructs instruction-tuned LMs to regurgitate retrieved context verbatim. The paper demonstrates this attack across 10 open-source instruction-tuned LMs (with ROUGE scores up to 99), presents ablation studies on the effects of instruction tuning, data memorization, chunk size, semantic chunking, and position bias, proposes position-bias-elimination mitigation strategies, and extends the attack to production GPTs systems with 100% attack success rate and 41%/3% reconstruction rates on a Harry Potter book and a Wikipedia corpus respectively.
 
 ## Strengths
 
-- **Broad multi-model empirical demonstration.** The paper evaluates nine instruction-tuned LMs spanning 7B to 72B parameters and reports consistently high similarity scores under attack (e.g., Qwen1.5-72B reaches 99.15 ROUGE-L and 98.41 BLEU; Table 1). This breadth goes beyond prior work.
-- **Systematic characterization of RAG design effects.** Controlled experiments provide concrete empirical findings on how chunk size, semantic-aware chunking, and prompt position modulate reconstruction (Figures 3–5), offering actionable insights for practitioners.
-- **Real-world production GPT attack.** The demonstration on 25 customized GPTs achieves 100% leakage success (17 with a single query) and scales to reconstruct 41% of a full book (Section 4), showing practical applicability beyond open-weight models.
-- **Explicit separation from training-data memorization.** By comparing newest Wikipedia articles (unlikely in training data) against Harry Potter text (plausibly memorized), the paper distinguishes retrieval leakage from simple regurgitation of training data (Table 2).
-- **Fully specified, reproducible attack protocol.** Exact adversarial prompt templates and pipelines are provided, enabling reproducibility and auditing.
+- **Systematic empirical sweep across model families and sizes (Table 1):** Testing 10 instruction-tuned LMs spanning 7B–72B parameters with consistent methodology and multiple similarity metrics (ROUGE-L, BLEU, F1, BERTScore) provides a useful empirical benchmark. The scaling trend (ROUGE-L from ~80 at 7B to ~99 at 72B for Qwen1.5) is clearly demonstrated.
+
+- **Ablation studies providing mechanistic insight (Figures 2–5, Table 2):** The studies on instruction tuning vs. base models (Figure 2), seen vs. unseen data (Table 2), chunk size/number (Figure 3), semantic chunking (Figure 4), and position bias (Figure 5) collectively explain *why* the vulnerability exists. The U-shaped position bias curve (Figure 5, right) connecting RAG vulnerability to known position bias phenomena is a genuine finding with defense implications.
+
+- **Successful attack on production GPTs (Section 4):** Demonstrating 100% attack success rate on 25 randomly selected customized GPTs with at most 2 queries establishes real-world practical impact beyond open-source models. The system prompt extraction methodology is well-documented.
+
+- **Principled mitigation informed by ablations (Table 3):** Connecting the position bias finding to the PINE mitigation strategy, and showing combined mitigation reduces reconstruction rate from 88.88% to 52.34%, is a reasonable first step, even though the defense is incomplete.
 
 ## Weaknesses
 
@@ -16,56 +20,69 @@ This paper empirically investigates prompt-injected datastore extraction from Re
 None.
 
 ### Major
-- **Confounded base-versus-instruction-tuned comparison undermines a core causal claim.** The paper claims that “instruction tuning substantially enhances exploitability” (Section 3.1, Figure 2) by comparing base and instruction-tuned variants using the identical adversarial prompt format. Base models (~10–18 ROUGE-L) are not equipped with equivalent task comprehension (e.g., few-shot exemplars or a completion format suited to pre-training). The large gap may therefore reflect an inability to interpret the attack prompt rather than increased resistance to leakage. This confound invalidates the paper’s causal attribution that instruction tuning is a root cause of vulnerability.
-- **Mitigation evaluated on an unseen model without utility metrics.** The proposed defense (safety-aware prompt + PINE, Table 3) is tested only on Llama3-8B-Instruct—a model absent from the main attack benchmark (Table 1)—and reports no legitimate-task accuracy, QA performance, or RAG utility metrics. A defense that suppresses reconstruction by simply breaking the model’s ability to answer questions is trivial; without utility validation, the claim that position-bias elimination “can effectively defend” is unsupported.
+
+- **The headline 41% reconstruction rate conflates memorization with RAG datastore leakage, while the most policy-relevant setting yields only 3%.** The paper's abstract and introduction prominently feature the 41% reconstruction rate from Harry Potter, while the 3% Wikipedia reconstruction rate (the more realistic scenario where datastore content is unseen during pre-training) is buried. The paper itself acknowledges this confound (Section 3.1: "it is unclear whether our result is an artifact of LMs' memorization and pre-training data regurgitation") and uses the Harry Potter experiment specifically to test the memorization hypothesis, finding consistent gains (~9 ROUGE points) from seen data. However, the framing in the abstract does not adequately communicate this distinction. For the most relevant threat model the paper itself identifies—private data unseen during pre-training in the datastore—the 3% rate with 100 queries is far less alarming than the 41% figure suggests. This is not just a presentation issue; it directly affects assessment of the real-world severity of the vulnerability claimed.
+
+- **The combined mitigation still leaves 52.34% reconstruction rate, yet the abstract claims the vulnerability "can be greatly mitigated."** Table 3 shows the best combined defense (Safety-Aware Prompt + PINE) reduces reconstruction rate from 88.88% to 52.34%—still more than half of the datastore being reconstructable. The abstract's claim of "greatly mitigated" is an overstatement relative to the evidence. A 52% reconstruction rate after mitigation means the defense is suggestive rather than definitive.
+
+- **The GPTs attack relies on a fundamentally different mechanism (internal API tool execution) than the open-source attack (context regurgitation), undermining the paper's claim of a unified vulnerability.** The open-source attack (Prompts 1–3) asks the model to repeat its context verbatim—a simple instruction-following exploit. The GPTs attack (Prompt 4) first extracts system prompts to discover internal tool names like `myfiles_browser.search()`, then instructs the model to execute search function calls. The paper itself acknowledges that the naive prompt injection fails on GPTs ("GPTs either output nothing or say 'Sorry, I cannot fulfill that request'"). The 100% attack success rate is thus achieved through a tool-invocation vulnerability, not the same mechanism studied in the open-source experiments. While both are security concerns, they are different vulnerability classes and the paper does not adequately clarify this distinction.
 
 ### Minor
-- **Abstract overstates extraction as “verbatim.”** The open-weight experiments report similarity metrics (ROUGE-L, BLEU, BERTScore), not exact-match or character-level verbatim extraction rates (Table 1). High similarity does not guarantee literal verbatim reproduction, making this claim imprecise.
-- **Mechanistic explanation of PINE is unclear and potentially backwards.** The paper asserts that grouping the adversarial user query with retrieved documents under bidirectional attention “reduces the likelihood of the model inadvertently following adversarial instructions” (Section 3.2.2). Because the adversarial prompt resides in the user query, one expects this grouping to couple the malicious instruction more closely with target data. The paper does not explain or evidence why eliminating recency bias via PINE reduces leakage rather than increasing it.
-- **GPT reconstruction efficiency and cost are under-analyzed.** The 41.73% reconstruction of a 77,000-word book required ~75,000 words of raw output (100 queries × ~750 words) yet yielded only ~32,000 unique words (~57% retriever redundancy). The paper does not quantify chunk overlap or explain this saturation. Additionally, while the headline claims “at most 2 queries,” the main text does not transparently account for the initial system-prompt extraction step within this budget.
+
+- **The definition of "Prompt-Injected Data Extraction" (Definition 1) targets reconstructing retrieved context R_D(q), but the Reconstruction Rate metric (Section 3.2) targets reconstructing the entire datastore.** These are different quantities: extracting the context retrieved for a specific query is easier than reconstructing the whole datastore. The paper uses both notions without always distinguishing which is being discussed.
+
+- **The "no prior knowledge" adversary claim for the open-source experiments is partially softened by using WikiQA questions as anchor queries.** Section 3 states "the adversary has no prior knowledge of the datastore" but then uses WikiQA questions that, while outdated, are semantically structured to target information-dense content. The paper acknowledges that "certain prior knowledge about the datastore would favor the adversary," but this partial concession could be stated more explicitly as a scope limitation.
+
+- **The threat model for the GPTs experiment involves a two-step attack (extract system prompt → discover internal APIs → exploit tool calls).** The paper describes this process in Section 4 but the framing of "no prior knowledge" in Experiment 1 is somewhat misleading: the adversary first obtains knowledge of internal APIs through a separate attack step. The paper should be more explicit that the threat model requires prior successful extraction of system prompts.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
-- A non-RAG baseline with equivalent in-context private text prepended without a retriever, to isolate whether the vulnerability is specific to RAG architectures or generic to long-context prompting.
-- Side-by-side attack output examples to ground the quantitative similarity scores (e.g., what does ROUGE-L ≈ 80 look like in practice?).
-- Evaluation of mitigations on the same models used in Table 1 with downstream task accuracy.
+
+- Scaling curves for the Wikipedia reconstruction (e.g., 200, 500, 1000 queries) would help assess whether reconstruction grows linearly or plateaus, directly informing severity assessment.
+- A controlled experiment with known training data membership (e.g., using canary data) could cleanly disentangle memorization from RAG context leakage, strengthening the core causal claims.
+- Qualitative examples of extracted text alongside originals for both Wikipedia and Harry Potter would help readers assess whether extraction is truly verbatim or merely topically similar.
 
 ## Removed Points
-*These points are flagged to be removed; treat them with caution.*
 
-- **Criticism that position-bias experiments are “not practical.”** The paper explicitly states that this setting is “not a practical setting that’s adopted by current RAG systems” and frames it as a proof of concept (Section 3.1). This is a transparent scope limitation, not a hidden flaw.
-- **Criticism that Harry Potter contamination speculation is unsupported.** The paper explicitly presents training-data contamination as a hypothesis (“lead to a hypothesis that they have been trained on Harry Potter”), not a firm conclusion (Section 3.1).
-- **Criticism that the production GPT attack is an “oracle attack” rather than black-box extraction.** For Experiment 1, the paper uses the target GPT itself to generate domain questions (“Generate some questions specific to your knowledge domain”), which does not require prior knowledge of the datastore. For Experiment 2, the paper transparently discloses “partial prior knowledge” for the Harry Potter scenario. This is standard black-box reconnaissance, not an oracle attack.
-- **Strength Finder’s claim of a “controlled ablation isolating instruction tuning.”** This strength directly conflicts with the verified major weakness that the base-versus-instruction comparison is confounded by comprehension differences. The weakness wins.
-- **Claims about system-prompt extraction cost being excluded from “2 queries.”** The paper describes system-prompt extraction as part of the attack pipeline, and the “17 with 1 query / 8 with 2 queries” result refers to datastore leakage success; the step is present in the description, though its cost accounting could be clearer.
+These points are flagged to be removed, treat them with caution.
+
+- **"The open-source attack is trivially obvious" (Harsh Critic Point 2):** The simplicity of the attack is actually a *strength* of the paper—it demonstrates that RAG systems are vulnerable to even the most basic prompt injection without requiring any optimization, gradients, or special tokens. This makes the vulnerability broadly applicable and difficult to patch. The tautology concern about base vs. instruction-tuned models is partially valid but overstates itself; the comparison is informative for security practitioners choosing model architectures, and the ~66 ROUGE point jump is a meaningful empirical finding even if conceptually expected.
+
+- **"Demand for evaluation against production defenses" (Harsh Critic Missing Experiment 2):** The paper explicitly shows that GPTs' built-in alignment filtering blocks the naive attack (Section 4) and develops a bypass. Demanding evaluation against additional production defenses goes beyond the paper's scope and represents an unreasonable bar for a vulnerability demonstration paper.
+
+- **"The definition targets retrieved context but Reconstruction Rate targets entire datastore" (partially kept):** While this inconsistency exists, it is a minor clarity issue, not a major flaw. The paper uses both notions in appropriate contexts.
+
+- **"Missing related works" (Harsh Critic general demand):** Per instructions, removed since we cannot verify existence of cited works not in the paper.
+
+- **"Format/style nitpicks" and "typo criticism":** Per instructions, these are parser artifacts, not paper issues.
 
 ## Novel Insights
 
-None beyond the paper's own contributions.
+The paper's most important insight is that instruction tuning creates a broad attack surface for RAG datastore extraction precisely because it simultaneously enables the desirable behavior (following user instructions) and the vulnerability (following adversarial instructions). The position bias analysis (U-shaped extraction curve) connects this RAG vulnerability to an already-known LM limitation, suggesting that fundamental LM capabilities and RAG security may be in tension—a finding with direct design implications for practitioners.
 
 ## Suggestions
 
-- Re-run the base-model comparison with few-shot exemplars or a completion-style format tailored to pre-trained models to disentangle comprehension from vulnerability.
-- Test the proposed defenses on the same model suite used in Table 1 and report downstream QA or generation accuracy to verify that mitigations do not destroy legitimate RAG utility.
+- Reframe the abstract and introduction to lead with the 3% Wikipedia reconstruction rate (the more realistic threat model) and position the 41% Harry Potter rate as a worst-case bound under memorization. This would improve the paper's credibility while still communicating the seriousness of the vulnerability.
+- In the mitigation section, explicitly acknowledge that 52% reconstruction rate is far from a complete defense, and discuss what additional mitigation layers (e.g., output filtering, retrieval access controls) would be needed to bring this to acceptable levels.
+- Clarify upfront that the GPTs attack exploits a different mechanism (internal tool invocation) than the open-source attack (context regurgitation), even though both stem from instruction-following capability. This strengthens rather than weakens the paper by accurately delineating the attack surface.
 
 <context>
-**Original reviewer signal**: The Harsh Critic argued serious evidential gaps confound key causal claims, mitigation is unvalidated, and GPT scalability is overstated, recommending rejection. The Strength Finder praised the empirical breadth, scale trends, and production-system applicability, viewing the work as a strong contribution. They fundamentally disagree on whether the gaps are fatal or addressable.
+Original reviewer signal: The Harsh Critic argues the paper overstates severity—the 41% headline is confounded by memorization (the realistic Wikipedia rate is only 3%), the open-source attack is trivially obvious, the GPTs attack exploits a different mechanism (tool execution vs. context regurgitation), and the 52% residual reconstruction rate after mitigation means the defense fails. The Strength Finder emphasizes the systematic empirical sweep across 10 models, the principled ablations connecting position bias to the vulnerability, and the successful production-system attack.
 
-**What was dropped and why**: 
-- The position-bias “not practical” critique was removed because the paper explicitly labels those experiments as non-practical proof-of-concept.
-- The “speculative” Harry Potter contamination critique was removed because the paper transparently frames it as a hypothesis.
-- The “oracle attack” characterization of the GPT experiments was removed because asking the target system about its own domain is black-box reconnaissance, not an oracle, and the paper discloses prior-knowledge assumptions where relevant.
-- The Strength Finder’s claim that the base-vs-instruct comparison is a “controlled ablation” was dropped because it conflicts with the verified confound weakness.
+What was dropped and why:
+- "The open-source attack is trivially obvious"—the simplicity is actually a strength (shows vulnerability without sophisticated techniques); partially valid concern about base-vs-instruction-tuned comparison being tautological is real but overstates itself—the ~66 ROUGE point jump is informative regardless.
+- "Demand for evaluation against production defenses"—the paper already shows GPTs' alignment blocks the naive attack; demanding additional defense evaluation is beyond scope.
+- "Missing related works"—cannot verify existence; removed per rules.
+- Format/style nitpicks—parser artifacts; removed per rules.
 
-**Cross-checks performed**:
-- Re-read Section 3.1 / Figure 2: confirmed base and instruction-tuned models receive identical adversarial prompts without few-shot adaptation for base models, making the causal claim unsupported.
-- Re-read Section 3.2 / Table 3: confirmed mitigation uses Llama3-8B-Instruct (absent from Table 1) and reports no utility metrics.
-- Re-read Section 4 / Figure 6: confirmed 100 queries × ~750 words ≈ 75k raw output for a 77k-word book, yielding ~32k unique words, but no redundancy analysis is provided.
-- Re-read PINE description (Section 3.2.2): confirmed the explanation does not clearly justify why grouping the adversarial query with retrieved documents reduces leakage.
+Cross-checks performed:
+- Verified the 41% vs 3% distinction: The abstract leads with "41% from a book" and "3% from a corpus of 1,569,000 words"—both are present but 3% is significantly less prominent.
+- Verified the memorization confound: Section 3.1 explicitly acknowledges the confound ("it is unclear whether our result is an artifact of LMs' memorization and pre-training data regurgitation") but frames it as hypothesis-generating rather than a fundamental limitation.
+- Verified the "greatly mitigated" claim: The abstract says "such vulnerability can be greatly mitigated by position bias elimination strategies" but Table 3 shows 52.34% reconstruction remains after combined defense.
+- Verified the GPTs attack mechanism: Section 4 explicitly states the naive attack fails on GPTs ("GPTs either output nothing or say 'Sorry, I cannot fulfill that request'") and the actual attack uses internal search API function calls—a different mechanism.
+- Verified the Definition 1 vs Reconstruction Rate discrepancy: Definition 1 targets R_D(q) (retrieved context for a query) while Reconstruction Rate in Section 3.2 targets the entire datastore—these are indeed different quantities.
 
-**Severity read**: The two surviving major weaknesses are (1) a confounded causal comparison that weakens a core claim about instruction tuning as the root cause, and (2) an unvalidated mitigation tested on a different model without utility checks. Neither invalidates the overarching finding that RAG datastore leakage is possible across many models and production GPTs, but both seriously damage the paper’s causal attributions and practical recommendations. All other surviving weaknesses are minor presentation or explanation gaps.
-
-**Anything else load-bearing**: The paper’s central empirical finding—that modern instruction-tuned LMs leak retrieved context under adversarial prompting—is well-supported across nine models and a production system. The work addresses a genuinely important and timely problem. However, the authors overreach in causal interpretation (instruction tuning) and defense validation. The field generally accepts single-run benchmark evaluation, so demanding confidence intervals would be scope creep for this community.
+Severity read: The surviving major weaknesses are significant but not fatal. The conflation of memorization with RAG leakage in framing is the most serious—it overstates severity in the most visible parts of the paper but does not invalidate the core vulnerability finding. The incomplete mitigation and the different attack mechanism for GPTs are substantive but addressable through better framing. The paper makes real contributions (systematic evaluation, position bias connection, production system demonstration) that survive these weaknesses.
 </context>

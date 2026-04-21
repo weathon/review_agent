@@ -1,13 +1,22 @@
+Now I have a thorough understanding of the paper and can verify the reviewer claims. Let me synthesize the final review.
+
 ## Summary
 
-The paper proposes Learning Embedding Linear Projections (LELP), a knowledge distillation method for few-class and binary classification. LELP extracts pseudo-subclasses from a frozen teacher's final-layer embeddings via per-class PCA (augmented with null-space projection and random rotation), then trains the student to predict these pseudo-subclasses using a single KL-divergence loss. The method aims to match the efficacy of Subclass Distillation without the costly requirement of retraining the teacher, and evaluates on both synthetic (binarized CIFAR) and real-world NLP benchmarks.
+The paper introduces Learning Embedding Linear Projections (LELP), a knowledge distillation method for binary and few-class problems that extracts pseudo-subclass structure from a frozen teacher's embeddings via PCA-based linear projections, then trains the student on these expanded classes using a single unified cross-entropy loss. LELP's key practical advantage over Subclass Distillation is that it requires no teacher retraining. Experiments across vision (binarized CIFAR) and NLP (Amazon Reviews, Sentiment140, GLUE, LMRD) benchmarks demonstrate LELP outperforms baselines including Vanilla KD, Embedding Distillation, FitNet, VID, Relational KD, CRD, and DKD, and matches or exceeds Subclass Distillation.
 
 ## Strengths
 
-- **Practical advantage over Subclass Distillation.** The paper correctly identifies that Subclass Distillation requires iterative teacher retraining with varying hyperparameters, which is computationally prohibitive for large models (Section 2). LELP eliminates this bottleneck while remaining competitive, a genuine contribution for deployment scenarios.
-- **Strong NLP benchmark results.** Table 2 shows that LELP frequently outperforms Vanilla KD and other embedding-matching baselines on few-class language tasks (e.g., Amazon Reviews 5-class: 78.06% vs. Vanilla KD 75.13%; Sentiment-60 Bin: 87.60% vs. Vanilla KD 85.95%). Notably, the ALBERT-Base student sometimes exceeds the much larger ALBERT-XXL teacher.
-- **Systematic comparison of clustering strategies.** Table 1 and Figure 3 convincingly demonstrate that LELP's linear projection approach outperforms agglomerative clustering, K-means, and t-SNE+K-means on binarized CIFAR tasks, establishing that pseudo-subclass quality is highly dependent on the extraction method.
-- **Implementation simplicity.** LELP requires only a single classification loss and a modest expansion of the student's final output layer, avoiding the multi-term loss balancing required by methods like FitNet and Embedding Distillation.
+- **LELP genuinely does not require teacher retraining**, which is a significant practical advantage over Subclass Distillation, especially for large teacher models. The paper argues this explicitly as a core desideratum (Section 3, "No Retraining the Teacher Model") and notes that SD's hyperparameter optimization "becomes excessively computationally intensive and impractical when dealing with large teacher models" (Section 2). This is the clearest and most impactful contribution.
+
+- **Strong empirical results across multiple settings**: In Table 1, LELP outperforms all practical clustering methods (K-means, Agglomerative, t-SNE+K-means) across all 6 vision settings. In Table 2, LELP achieves the highest performance in 7 of 8 NLP settings, with particularly large margins on Amazon Reviews 5-class (+1.78 over SD, +2.93 over next non-SD baseline) and Sentiment140 (+1.67 over SD).
+
+- **Comprehensive baseline comparison**: The paper compares against 9 distillation methods (Vanilla KD, Embedding Distillation, FitNet, VID, Relational KD, CRD, DKD, and Subclass Distillation) across both vision and NLP, same-architecture and cross-architecture settings, providing a thorough empirical picture.
+
+- **Oracle Clustering upper bound validates the design principle**: Table 1 shows Oracle Clustering substantially outperforms all practical methods (e.g., 86.42% vs. LELP's 79.91% on CIFAR-100bin), confirming that pseudo-subclass information carries significant signal and motivating future improvements.
+
+- **Simple, unified training objective**: LELP converts embedding information into pseudo-subclass probabilities and trains with a single cross-entropy loss (Section 3.3, Eq. 4), avoiding the need to balance multiple loss terms as in Embedding Distillation.
+
+- **Cross-architecture applicability demonstrated**: Table 2 includes same-family/same-dimension (ALBERT-Large→ALBERT-Base), same-family/different-dimension (ALBERT-XXL→ALBERT-Base), and cross-architecture (ALBERT-XXL→MLP+sentence-T5) settings, validating one of the stated desiderata.
 
 ## Weaknesses
 
@@ -16,66 +25,66 @@ None.
 
 ### Major
 
-- **Critical numerical inconsistencies and missing cross-architecture results.** Figure 1 and the abstract highlight specific results on Amazon Reviews (~78.5%, +1.85% over best baseline) and Sentiment140 (~82.5%, +0.88%). These values do not match Table 2, which reports 78.06% for Amazon 5-class and 87.60% for "Sentiment-60 Bin" (a subset whose relationship to Sentiment140 is unexplained), with summary rows claiming inexplicable margins of +0.05. Furthermore, Section 4.1 describes cross-architecture distillation to a lightweight MLP over a frozen Sentence-T5 encoder as a key versatility test, yet these results are entirely absent from Table 2 and the main text. Because the paper's headline claims and architecture-flexibility assertions cannot be verified from the material provided, the empirical foundation is seriously undermined.
+- **Confounded comparison with Subclass Distillation due to different teacher models**: The paper acknowledges that "the accuracy of the teacher model in Subclass Distillation usually differs from the one used for LELP (and the other baselines). Therefore, comparing them directly might not be entirely fair" (Section 4.1). Despite this, the abstract, introduction, and conclusion still claim LELP is "consistently competitive with, and typically superior to" SD. Since SD retrains the teacher (e.g., Amazon Reviews 5-class: SD teacher = 78.45 vs. vanilla teacher = 77.58), the student's performance gain may partly come from the retrained teacher's better representations rather than the distillation method itself. The paper partially mitigates this by reporting "best baseline excluding Subclass Distillation" separately, but the overarching "typically superior" framing is stronger than the evidence supports for a confounded comparison. The fairer claim—already partially made—is that LELP matches or exceeds SD *without* the computational cost of teacher retraining, which is a genuinely strong claim on its own.
 
-- **Confounded comparison with Subclass Distillation.** In every setting in Table 2, the "Subclass Distillation Teacher" achieves different accuracy than the standard "Teacher" (e.g., 78.02/78.45 vs. 77.58 on Amazon 5-class). The authors themselves note that this makes direct comparison "not entirely fair" (Section 4.1, Baselines paragraph). Yet the paper repeatedly claims LELP surpasses Subclass Distillation in absolute accuracy. While avoiding teacher retraining is a clear practical win, the claim of empirical superiority is confounded by teacher-quality differences that the authors do not control for or disentangle.
+- **All experiments use α=0, removing ground-truth supervision**: The paper sets α=0 in all experiments (Section 4.1), meaning the student is trained purely on distillation loss. While the paper argues this "focus[es] solely on the effect of the distillation loss" and notes the semi-supervised setting naturally lacks labels, nearly all practical KD deployments combine distillation with ground-truth supervision. The relative ranking of methods could change when α>0, since additional label signal may reduce the marginal benefit of pseudo-subclass information. Without any α>0 experiments, the practical relevance of LELP's demonstrated improvements remains unclear for the most common use case. This is a significant gap given the paper's claims about practical superiority.
 
 ### Minor
 
-- **Core design choices lack main-text ablations.** The paper introduces null-space projection and random rotation as critical steps (Section 3.1) but defers all ablations to Appendix C. Without even a condensed main-text ablation, the reader cannot assess how much of LELP's gain derives from its pseudo-subclass formulation versus these heuristic preprocessing steps.
-- **Student-teacher reversal is presented but not analyzed.** The student outperforms the 20× larger teacher on Amazon Reviews (Table 2). This is unusual and could signal important phenomena (e.g., beneficial regularization), but the paper offers no analysis or discussion.
-- **Headline CIFAR experiments are synthetic proof-of-concept.** Binarizing CIFAR-10/100 guarantees subclass structure (the original fine-grained labels). The paper correctly positions these as motivation, but they do not establish that LELP discovers meaningful pseudo-subclass structure in real-world few-class tasks where such structure is unknown or absent. The NLP experiments partially address this, but the synthetic setting still dominates the methodological development.
+- **Hyperparameter sensitivity for S and β is addressed only in appendix**: LELP introduces two key hyperparameters—the number of pseudo-subclasses per class (S) and the subclass temperature (β)—that directly control the granularity and softness of the pseudo-subclass decomposition. The main text references ablations in Appendix C but provides no sensitivity analysis in the body. For a method whose core contribution depends on these choices, visibility of robustness in the main text would strengthen confidence.
+
+- **Marginal gains on smaller NLP datasets**: On the three ALBERT-Large→ALBERT-Base settings in Table 2, LELP's gains over the best non-SD baseline are small (0.05–0.24 points), while substantial gains (0.73–4.98 over non-SD baselines) concentrate on the larger ALBERT-XXL→ALBERT-Base settings. The paper does not discuss this scaling pattern, which could illuminate when and why LELP is most beneficial.
+
+- **Theoretical justification for null-space projection and random rotation is limited**: These steps are motivated by intuition ("we have found that it often helps," Section 3.1) with ablations deferred to Appendix C. The neural collapse connection is asserted but not formally established—neural collapse explains convergence to class means, but LELP relies on residual structure after collapse, and why PCA on these residuals preserves useful subclass information is not shown rigorously. This is acceptable for an empirical paper but leaves the theoretical foundations incomplete.
+
+- **Subclass splitting becomes noisy near decision boundaries**: Equation 5 conditions pseudo-subclass probabilities on the teacher's class probability. For examples where the teacher is uncertain (near decision boundaries), the class probability is small, making the subclass structure noisy precisely where teacher knowledge is most valuable. The paper does not address this potential limitation.
 
 ### Trivial
-
-- Table 2 contains ambiguous duplicate column labels (e.g., two "Am. Reviews Bin" and two "Am. Reviews" columns with differing results) without clear headers distinguishing them, making the table hard to parse.
+None.
 
 ## Nice-to-Haves
 
-- Include the MLP-over-Sentence-T5 cross-architecture results in the main text, as they are a key claim in the abstract.
-- Move a condensed version of the Appendix C ablations into the main paper.
-- Statistical significance tests or additional seeds for the NLP experiments to strengthen confidence in the reported margins.
-- Brief discussion or analysis of why the student exceeds the teacher on Amazon Reviews.
+- Experiments with α>0 under standard KD training conditions, even for a subset of datasets, to verify LELP's advantages persist in the most common practical setting.
+- Analysis of why LELP's benefit scales with dataset size (e.g., correlation with embedding dimension, amount of training data, or teacher capacity).
+- Sensitivity analysis for S and β in the main text for 2-3 representative datasets.
+- Quantitative analysis (beyond t-SNE visualization) of what semantic structure the PCA pseudo-subclasses capture.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution.
-- **Dismissal of DKD without citation/proof:** The paper states DKD is functionally identical to Vanilla KD in binary classification and demonstrates this empirically (identical values in Table 2). A formal proof would be nice but is not required in an empirical systems paper.
-- **Setting α = 0 disadvantages baselines:** The paper explicitly justifies this choice as necessary to isolate the distillation loss and relevant to the semi-supervised setting (Section 4.1). This is a deliberate and fair experimental design.
-- **Request for random-projection baseline:** The paper already compares PCA vs. Random Projections in Appendix C ablations.
-- **Lack of qualitative inspection of projections:** While interesting, nearest-neighbor analysis of projected embeddings is beyond the scope of the core empirical validation.
-- **Statistical tests with only 3 trials:** Three seeded runs are standard practice for large-scale NLP experiments; overlapping standard deviations are noted but do not invalidate the core findings.
-- **Request to evaluate on standard few-class vision benchmarks without synthetic subclass structure:** The paper explicitly scopes its contribution to few-class and binary settings and includes real-world NLP experiments (Section 4.3.2).
-- **Claims about DKD, CRD, and vision-specific methods:** The paper's dismissal of vision-specific augmentation-dependent methods for NLP is well-reasoned and supported.
+These points are flagged to be removed, treat them with caution:
+
+- **Harsh Critic's "student outperforming teacher is not surprising" claim**: The reviewer argues the paper's claim that the student surpasses the teacher is "presented as more surprising than it is." The paper states this as an observation without presenting it as paradoxical. This is a subjective framing nitpick, not a substantive weakness.
+
+- **"Missing related works" suggestions**: Per the meta-reviewer rules, these cannot be verified and are removed.
+
+- **Demand for "same teacher" comparison with SD**: The reviewer suggests running SD with the original (non-retrained) teacher. This is impractical—SD *requires* teacher retraining by design, as its method forces the teacher to divide classes into pseudo-subclasses. Using the non-retrained teacher would not be SD at all. The paper already provides the "best excluding SD" comparison to address the confound.
+
+- **Criticism of Oracle Clustering inconsistent margins across architectures**: The reviewer flags that LELP's improvement over K-means varies by architecture (6.02 vs. 2.88 on CIFAR-100bin). This is not a weakness—methods performing differently across architectures is expected and normal, not an inconsistency.
+
+- **Claim that SST-2 contradicts "typically superior"**: The Harsh Critic notes SD (92.85) beats LELP (92.81) on one dataset. However, this difference is within error bars (92.81 ± 0.36 vs. 92.85 ± 0.15), and "typically superior" explicitly allows occasional exceptions. This is not a meaningful contradiction.
+
+- **Formatting/presentation nitpicks**: Claims about overclaiming in the abstract about student>teacher are framing disagreements, not substantive errors.
 
 ## Novel Insights
 
-The paper's most compelling insight is practical rather than theoretical: by combining per-class PCA with null-space projection and random rotation, LELP converts the expensive subclass-discovery problem into a lightweight, closed-form preprocessing step that requires no teacher retraining. This reframes the debate from "how do we retrain the teacher to discover subclasses?" to "how do we read out existing structure from the frozen teacher?" The Oracle Clustering experiments (Section 4.2) provide a useful upper-bound motivation, suggesting that even idealized pseudo-subclass knowledge can substantially outperform vanilla distillation—and that linear projections are an unexpectedly effective proxy for this ideal.
+The paper makes a valuable distinction that the KD community should note: information in teacher embeddings that is *orthogonal* to the teacher's class weights (identified via null-space projection) is precisely the information not captured in logits and thus most valuable for distillation. This insight—that PCA on null-space-projected embeddings extracts "residual" structure complementary to the teacher's output probabilities—gives LELP a principled motivation beyond empirical performance. The comparison between LELP and the much more expensive Subclass Distillation establishes that this residual structure can be extracted cheaply and effectively, raising the question of whether more sophisticated (nonlinear) extraction from the null space could further close the gap with Oracle Clustering.
 
 ## Suggestions
 
-1. **Reconcile or clearly separate the results in Figure 1 and Table 2.** If Figure 1 shows the MLP-over-T5 student, label it explicitly; if it shows a different Sentiment140 subset, explain the discrepancy. Ensure that numerical claims in the abstract match the data in the main table.
-2. **Control for the Subclass Distillation teacher difference.** Either report a version of Subclass Distillation that uses the same frozen teacher (even if suboptimal for that method), or reframe the claim to emphasize practical parity without retraining rather than absolute superiority.
-3. **Include at least one main-text ablation** showing the contribution of null-space projection and random rotation, so readers can judge whether gains come from the pseudo-subclass formulation or the preprocessing heuristics.
+- Temper the "typically superior to SD" claim to something like "typically matches or exceeds SD without requiring costly teacher retraining"—which is actually a stronger and more defensible claim given the practical advantage.
+- Include even a small set of α>0 experiments (e.g., on 2-3 datasets with α∈{0.3, 0.5, 0.7}) to demonstrate robustness under standard training conditions.
+- Add a brief sensitivity analysis for S and β in the main text (even 2-3 curves on representative datasets) to show LELP is not overly sensitive to these hyperparameters.
+
+---
 
 <context>
-- **Original reviewer signal:** The Harsh Critic argued the paper is structurally flawed due to confounded comparisons, missing/inconsistent headline results, and absent cross-architecture data, recommending rejection. The Strength Finder viewed the paper as a solid contribution with strong NLP results and practical advantages over Subclass Distillation.
+**Original reviewer signal**: The Harsh Critic viewed the paper as having solid ideas but claims that outpace evidence, centered on the confounded SD comparison, α=0 setup, and under-reported hyperparameter sensitivity. The Strength Finder highlighted LELP's strong empirical results across all settings, practical advantage of no teacher retraining, and superior clustering method choice.
 
-- **What was dropped and why:** 
-  - DKD/CRD dismissal criticism: removed because the paper provides empirical demonstration and brief justification.
-  - "α = 0 disadvantages baselines": removed because the paper explicitly and reasonably justifies this choice.
-  - "Random rotation makes PCA meaningless" and related methodological nitpicks: weakened to minor/nice-to-have because the paper cites Appendix C ablations.
-  - Strength Finder claim #5 (cross-architecture results in Table 2): dropped because the claim is factually wrong—Table 2 contains no cross-architecture results. The raw text says "Our results are shown in Table 2" but the MLP-over-T5 results are missing from the table and main text entirely.
-  - Various formatting, grammar, and appendix-deferred proof complaints: removed as parser artifacts or standard practice.
+**What was dropped and why**: (1) The "student>teacher is not surprising" framing critique — subjective nitpick, not a substantive error. (2) Demand for same-teacher SD comparison — impossible since SD requires teacher retraining by design. (3) SST-2 contradiction of "typically superior" — difference within error bars, and "typically" allows exceptions. (4) Inconsistent margin criticism across architectures — expected variance, not a flaw. (5) Missing related works suggestions — unverifiable. (6) Formatting/presentation nitpicks.
 
-- **Cross-checks performed:** 
-  - Verified Table 2 teacher values differ between "Teacher" and "Subclass Distillation Teacher" across all columns (e.g., 90.19 vs 90.05, 77.58 vs 78.02/78.45), confirming the confound.
-  - Checked that Figure 1 reports ~78.5% for Amazon and ~82.5% for Sentiment140, while Table 2 reports 78.06% for Amazon 5-class and 87.60% for "Sentiment-60 Bin"—the Sentiment values are severely inconsistent.
-  - Checked Table 2's summary row ("Avg. gain over the best baseline"): the reported +0.05 values do not match any arithmetic difference with the best baseline in the table above them, and directly contradict the abstract's claim of +1.85%/+0.88%.
-  - Confirmed Section 4.1 describes MLP-over-Sentence-T5 experiments but Table 2 only lists ALBERT-Base students, and no other main-text table/figure contains these results.
-  - Verified that Appendix C ablations are referenced in Section 3.1 for null-space projection and random rotation.
+**Cross-checks performed**: Verified that the paper explicitly acknowledges the different-teacher confound on line 158 ("comparing them directly might not be entirely fair") and provides a separate "best excluding SD" metric. Verified α=0 is stated with justification (isolating distillation effect, semi-supervised relevance) on line 152. Verified SSD teacher accuracy differs from vanilla teacher in Table 2 (e.g., 78.45 vs 77.58 on Amazon Reviews 5-class). Checked that one QGLUEval column (likely SST-2) shows SD=92.85 vs LELP=92.81, but within error bars. Confirmed ablations are deferred to Appendix C (line 114). Verified LELP beats all non-SD baselines substantially on large datasets but marginally on small ones (Table 2, columns 1-3 vs 4-8).
 
-- **Severity read:** The surviving weaknesses are serious but not fatal. The numerical inconsistencies between the abstract/figure and Table 2 constitute a major evidential gap that threatens the paper's core empirical claims. The confounded Subclass Distillation comparison is mitigated by the paper's own admission of unfairness, but its repeated superiority claims are still overreached. These are major issues that require reconciliation in a rebuttal, but the underlying method is sound and the problem is well-motivated.
+**Severity read**: The two major weaknesses (confounded SD comparison and α=0-only experiments) are significant but not fatal. The confounded comparison is partially acknowledged by the authors, and LELP's advantage of no retraining is genuine regardless. The α=0 concern is real but the paper provides a defensible rationale and the semi-supervised setting is a legitimate application. No single weakness threatens the core contribution of a practical, retraining-free distillation method for few-class problems, but together they mean the "typically superior" framing is stronger than fully supported.
 
-- **Anything else load-bearing:** The paper explicitly scopes itself to few-class settings and honestly notes LELP is not designed for many-class problems (Section 5), which is appropriate. Three-trial evaluation with standard deviations is standard for large-language-model distillation experiments in NLP. The parser has introduced some table-formatting artifacts, but the raw table values are readable enough to confirm the numerical discrepancies.
+**Anything else load-bearing**: The paper explicitly scopes itself to few-class/binary problems and acknowledges LELP doesn't scale to many-class settings (Section 5). The α=0 choice enables a cleaner controlled comparison but limits direct practical applicability claims. The semi-supervised setting (Appendix F) is a natural fit for α=0 but is not in the main text. Gains are strongly dataset-size dependent, which the paper doesn't discuss.
 </context>

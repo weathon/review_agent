@@ -1,7 +1,7 @@
 conda activate neg
 export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
 export HARSH_MODEL="ollama:glm-5.1:cloud"
-export MERGER_MODEL="ollama:glm-5.1:cloud"
+export MERGER_MODEL="glm-5.1"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="results/bench_scores_glm_splited.csv"
 export MERGE_LOG="results/pipeline_whole_glm_splited.log"

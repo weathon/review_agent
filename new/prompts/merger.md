@@ -149,14 +149,15 @@ Do NOT assign a numeric score and do NOT output any accept/reject decision. A do
 
 ## Context for Scorer
 
-After the review above, append a single block that the Scorer will read. This is the Scorer's only window into what the reviewers originally said and what you dropped and why — make it genuinely useful for calibration, not a summary of the review itself.
+After the review above, append a single block that the Scorer will read. This is the Scorer's only window into what the reviewers originally said, what the paper is about, and what you dropped and why. Make it genuinely useful as background context, not as hidden scoring guidance.
 
 Wrap the whole block in `<context>...</context>` tags. Inside, include (concisely — aim for under ~400 words total):
 
+- **Paper summary**: 2-4 sentences on what the paper is trying to do, the core method, and the main empirical/theoretical evidence presented in the paper. Keep this descriptive, not evaluative.
 - **Original reviewer signal**: one-line summaries of the Harsh Critic's and Strength Finder's overall takes, and any direct disagreement between them.
 - **What was dropped and why**: the most load-bearing removals from the raw reviews (e.g. a seemingly-major weakness that you verified against the paper and found to be a misread). The Scorer needs this to understand why the final weakness list may look shorter or milder than the raw critic would suggest.
 - **Cross-checks performed**: any spots where you went back to the paper to verify or refute a claim, and what you found.
-- **Severity read**: one or two sentences on whether the surviving weaknesses are fatal/major vs. minor/trivial, and whether any single weakness threatens the paper's core claim. This is a judgement to pass to the Scorer, not a score.
-- **Anything else load-bearing**: e.g. scope constraints the paper explicitly declared, unusual evaluation norms in the paper's subfield, signs of genuine novelty or signs the work is borderline — whatever you think would change the Scorer's calibration if it knew.
+- **Review construction notes**: any concise notes that explain why the final review looks the way it does, such as scope constraints the paper explicitly declared, assumptions you treated as in-scope, or reviewer claims that collapsed into a single merged point.
+- **Anything else needed to interpret the review**: only factual or process notes that help the Scorer understand the review. Do not include any recommendation about how strong, weak, borderline, fatal, major, minor, accept-worthy, or reject-worthy the paper is.
 
-Do not put numeric scores, decisions, or pineapple/orange tags anywhere — those are the Scorer's job.
+Do not put numeric scores, decisions, severity judgements, accept/reject language, or pineapple/orange tags anywhere in `<context>` — those are the Scorer's job.

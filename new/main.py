@@ -617,6 +617,8 @@ async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: st
 
     result = await run_pipeline(paper_path, no_cal=no_cal)
     print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
+    if result.get("scorer_text"):
+        print(f"\n{'=' * 72}\nSCORER OUTPUT\n{'=' * 72}\n{result['scorer_text']}")
     score = result["scorer_output"]
     accept_info = None
     if score != -1:
