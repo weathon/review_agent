@@ -1,0 +1,1255 @@
+
+============================================================
+Paper: papers/paper.md
+Timestamp: 2026-04-20T15:51:15.548510
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13253 (cached=0) output=1312 (reasoning=0) total=14565 requests=1
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13253 output=1312 total=14565
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: af144fe0-5204-4035-9665-f4fbacfb84fb
+    Cost (USD): 0.1617795
+    Turns: 5
+    Duration: total=90584ms api=90539ms
+    Tokens: input=9 output=4492 cache_read=38850 cache_creation=22058
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 2fd1bf80-b4b4-4f56-a676-6a8d405e73d9
+    Cost (USD): 0.3329129
+    Turns: 9
+    Duration: total=160803ms api=177997ms
+    Tokens: input=11 output=6462 cache_read=109361 cache_creation=33724
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4947
+
+--- Merged Inputs ---
+
+### Harsh Critic
+Now I have a thorough understanding of the paper. Let me compose the review.
+
+---
+
+# Review: "Jersey Number Recognition with Vision-Language Models and Collage-Based Aggregation"
+
+---
+
+## Critical Issues
+
+**1. No comparison to the baseline system on the main task (Structural)**
+
+The paper's sole headline result is improving from 49.7% (zero-shot Qwen) to 76.41% (LoRA-tuned Qwen) on the 1,840-sample SoccerNet test set. However, the baseline from Koshkina & Elder [1] — which the paper repeatedly names as the direct point of comparison throughout the introduction, related work, and methodology — is **never evaluated on the same test set**. The reader cannot determine whether 76.41% is above or below the system the authors claim to outperform. This is not a missing ablation; it is the missing comparison that would establish whether the contribution is real. Without it, the result is uninterpretable. An accuracy improvement over one's own zero-shot configuration is not a meaningful benchmark.
+
+**2. Runtime comparison deliberately excludes the dominant costs (Structural)**
+
+Section V.D presents Table I as evidence that the proposed system is "faster in practice." The comparison shows 9.05 s (PARSeq, 635 crops) vs. 1.19 s (Qwen, 5 collages) on a single tracklet's OCR stage. But the paper's own text notes: "OWLv2 itself was not timed," and elsewhere reports that Real-ESRGAN preprocessing took **20 hours for the full dataset**. The collage approach shifts computation upstream to Real-ESRGAN and OWLv2, which are the dominant costs, then measures only the downstream OCR stage. Presenting this as a demonstration that "the proposed recognition architecture is faster in practice" (Section V.D) is incorrect — it compares the cheapest stage of the proposed system against the full recognition workload of the baseline.
+
+**3. Legibility classifier evaluation cannot support the conclusion drawn from it (Structural)**
+
+Section III.A concludes that CNN-based legibility classifiers are inadequate because ResNet34, EfficientNetV2, and MobileNet all produce average scores below 0.5 on five tracklets. However, this observation has no ground truth: the paper never establishes what fraction of frames in those tracklets are actually legible. If most frames are genuinely illegible, below-0.5 average scores reflect correct behavior, not classifier failure. The inference that these models are broken — and that this motivates replacing the entire legibility module — is unsupported. Scores below a threshold do not constitute evidence of poor performance without frame-level labels.
+
+**4. Unexplained training/validation loss inversion (Methodological gap)**
+
+Figure 12 shows validation loss (≈0.22) consistently and substantially lower than training loss (≈0.29–0.325) from the very first measured step throughout training. In standard supervised learning, this is reversed. The paper provides no explanation. This pattern is consistent with validation set overlap with training data, a much easier validation distribution, or a logging artifact. Given that the paper's main quantitative claim rests on fine-tuning performance, this anomaly must be resolved before the result can be trusted.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract / Introduction.** The abstract states the system "reduces the number of recognition calls compared with crop-based OCR, resulting in faster recognition-stage inference." This is technically true but deeply misleading: it omits that upstream preprocessing (Real-ESRGAN: 20h) is far more expensive than what is saved. The introduction frames the paper as a contribution to sports analytics but never states a concrete research question or hypothesis that is evaluated.
+
+**Section III.A (CNN legibility comparison).** The comparison covers only five tracklets — a dataset slice so small that any difference is well within stochastic variation. More importantly, EfficientNetV2 and MobileNet are tested using weights **not fine-tuned for this task** (only ResNet34 has domain-specific weights from [1]), yet the comparison treats the three as comparable. The reasoning is circular: ResNet34 is kept as the backbone "due to its domain-specific fine-tuning," while the other two models were never given fine-tuned weights. The comparison should have fine-tuned all three or acknowledged the confound.
+
+**Section III.A (Swin-T pipeline comparison).** The decision not to adopt Swin-T is based on a full-pipeline evaluation on two tracklets (24.28% of the evaluation slice), yielding a 0.34% performance difference. With n=2 tracklets, no statistical inference is possible; a single correct/incorrect prediction swings the result by ~50 percentage points. This result cannot support the conclusion drawn. More fundamentally, Swin-T demonstrated much better image-level legibility (F1 ≈ 0.9 vs. ≈ 0.55 for ResNet34 on 6,827 crops), and this improvement was abandoned based on a two-tracklet anecdote.
+
+**Section III.A (ConvNeXt legibility).** The 100% recall at the tracklet level is trivially achievable — it simply means the model predicted at least one frame as legible in every tracklet known to be legible. This is not surprising and does not validate the classifier. The weak supervision setup (all frames in a legible tracklet labeled legible) is acknowledged but not corrected for in the evaluation.
+
+**Section IV.A (Collage construction).** The paper states the collage uses "up to 25 crops" but never specifies the selection policy when a tracklet exceeds 25 frames. Section V.B.4 acknowledges this can cause information loss but provides no solution or analysis. This is a reproducibility gap that also directly affects accuracy on long tracklets.
+
+**Section IV.A (LoRA fine-tuning).** LoRA hyperparameters — rank, alpha, target modules — are not reported. Training/validation split sizes are not stated. The learning rate is absent. With 1,840 total samples and unknown split sizes, these omissions make replication impossible.
+
+**Section V.C.** The paper reports 76.41% on a "1,840 sample set" without specifying whether this is the held-out test set or includes validation examples, whether the split is the standard SoccerNet test split, or how many samples were seen during training. These details are essential for the number to be meaningful.
+
+**Section VI.A (Data Cleaning / Label Errors).** The paper uses the presence of label errors to explain away prediction failures (Section IV.D.4, Section VI.A). This is legitimate as a limitation. However, the quantification is anecdotal — one or two examples are shown. No estimate of error rate in the test set is provided. If label noise is large enough to significantly inflate the evaluation error (as the paper implies), this should be quantified.
+
+---
+
+## Strengths
+
+- The collage-as-input formulation is a clean simplification of multi-frame aggregation: passing a grid of crops to a VLM in a single forward pass avoids aggregation heuristics and handcrafted confidence thresholds. The motivation is well-articulated.
+- The error taxonomy in Section IV.D is specific and honest: single-vs-double-digit confusion, OWLv2 false negatives, Real-ESRGAN hallucination artifacts, and ground-truth label noise are each discussed with concrete examples.
+- The confusion matrix (Figure 13) correctly identifies the dominant failure mode (single/double-digit confusion around ambiguous crops) and the text engages with it seriously rather than dismissing it.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Evaluate the baseline pipeline [1] on the same 1,840-sample test set.** Without this, the paper's main claim — that the proposed system represents an improvement — cannot be assessed. This is the single most important missing experiment.
+
+2. **Ablation of collage vs. per-frame Qwen with majority voting.** The collage is presented as a contribution, but it conflates two things: (a) multi-frame input and (b) the specific grid representation. A fair ablation would compare grid collage against feeding individual crops and aggregating Qwen's per-crop outputs. Without this, the collage benefit is indistinguishable from simply using Qwen at all.
+
+3. **Full end-to-end runtime comparison**, including Real-ESRGAN and OWLv2, against the baseline pipeline. The current runtime table measures only OCR and explicitly excludes the expensive stages of the proposed system.
+
+### Deeper Analysis Needed
+
+1. **Explain the validation loss < training loss anomaly.** If the split is clean, the pattern in Figure 12 needs a mechanistic explanation. If there is data leakage, the reported 76.41% may be inflated.
+
+2. **Quantify SoccerNet label noise impact.** The paper invokes label errors to explain poor predictions but provides no estimate of what fraction of the test set is mislabeled. Without this, the claimed "true performance" is speculative.
+
+### Visualizations & Case Studies
+
+1. **Show representative collages before and after fine-tuning** for cases where zero-shot Qwen fails and LoRA-tuned Qwen succeeds. This would reveal whether fine-tuning improves genuine OCR ability or mainly improves output formatting compliance.
+
+### Obvious Next Steps
+
+1. **Report LoRA configuration and training split.** Rank, alpha, target modules, learning rate, and train/validation/test sizes are all absent. This is a table, not a research direction — it should already be in the paper.
+
+---
+
+## Overall Assessment
+
+The paper's central quantitative claim — that LoRA fine-tuning improves jersey number recognition from 49.7% to 76.41% — is presented in isolation, without any comparison to the baseline pipeline that the paper sets up as its point of reference from the first paragraph. The baseline from Koshkina & Elder [1] is never evaluated on the same test data, so the paper cannot establish whether its proposed system is better, worse, or comparable to existing work. This is not a matter of missing supporting experiments; it is the absence of the comparison the paper claims to make. Compounding this, the runtime advantage claim is methodologically inverted — it times only the cheapest stage of the proposed system while ignoring the stages (Real-ESRGAN: 20h, OWLv2: unquantified) that constitute its actual cost. The unexplained training/validation loss inversion in Figure 12 raises additional questions about the reliability of the fine-tuning result. The individual components are reasonable, the error analysis is honest, and the collage formulation is a sensible engineering choice, but the paper as submitted does not establish that the system achieves what it claims. It should not be accepted in its current form.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Substantial accuracy improvement from LoRA fine-tuning**: Zero-shot Qwen-VL achieves only 49.7% accuracy on the 1,840-sample test set, but after two epochs of LoRA fine-tuning this rises to 76.41%, demonstrating that the VLM can be effectively adapted to the jersey number recognition task (Section V.C.1, Figure 12).
+
+2. **Collage-based aggregation reduces recognition-stage inference time**: Table I shows the proposed collage-based Qwen path processes a full tracklet in 1.19 seconds (5 collage inputs) versus 9.05 seconds for the baseline PARSeq path (635 individual crops), confirming that fewer recognition calls yield practical speedups even though each individual call is slower (238 ms/collage vs. 14.24 ms/crop).
+
+3. **Pipeline consolidation replacing multiple stages with open-vocabulary detection**: Figure 8 and Section IV.A.2 show that OWLv2 replaces both the separate legibility classifier and pose-based torso localizer, collapsing detection and implicit legibility filtering into a single step that also produces tighter crops around the actual number region (Section V.A.4).
+
+### Supporting strengths
+
+1. **Systematic comparison of legibility backbones with honest negative result**: The paper evaluates five architectures (ResNet34, EfficientNetV2, MobileNet, Swin-T, ConvNeXt) and transparently reports that Swin-T's superior per-image legibility metrics (Section III.A.2, Figures 6–7) did not translate into full-pipeline improvement—Swin-T performed 0.34% worse than the baseline ResNet34 on a two-tracklet evaluation, providing a useful negative finding for the community.
+
+2. **Comprehensive error analysis grounded in specific failure modes**: Section IV.D identifies five concrete failure categories—single/double-digit confusion, OWLv2 missed detections, Real-ESRGAN hallucinated textures, ground-truth label errors, and over-aggressive legibility filtering—each illustrated with examples (e.g., Figure 14 showing GT label "1" for a tracklet clearly showing number 38).
+
+3. **Real-ESRGAN preprocessing with visual evidence**: Figures 9 and 10 provide side-by-side comparisons of original versus 4× upscaled images at both the single-frame and collage levels, directly showing that digit boundaries become substantially more legible after super-resolution.
+
+### Presentation / practical strengths
+
+1. **Identification of dataset labeling errors**: Figure 14 and Section VI.A document that SoccerNet contains mislabeled tracklets (e.g., GT=1 where the visible number is 38), noting that these errors deflate reported accuracy below the model's true capability—a practical finding for anyone benchmarking on this dataset.
+
+## Summary
+
+The paper proposes a tracklet-level jersey number recognition pipeline that replaces the baseline's multi-stage crop-by-crop approach (legibility classifier + pose estimation + PARSeq) with a streamlined design using Real-ESRGAN preprocessing, OWLv2 open-vocabulary detection, collage-based temporal aggregation, and a LoRA-fine-tuned Qwen vision-language model. The most important piece of evidence supporting this contribution is the accuracy improvement from 49.7% (zero-shot) to 76.41% (after LoRA fine-tuning) combined with Table I's demonstration that the collage formulation reduces total recognition-stage inference time from 9.05 seconds to 1.19 seconds per tracklet by collapsing 635 individual PARSeq calls into just 5 Qwen collage inferences.
+
+--- Merged Review ---
+Now let me do calibration searches to anchor the score properly.Now I have sufficient calibration data. Let me compose the final review.
+
+---
+
+## Summary
+
+This paper presents a tracklet-level jersey number recognition pipeline for soccer broadcast footage. The system chains Real-ESRGAN super-resolution, OWLv2 open-vocabulary number detection, collage-based temporal aggregation, and a LoRA-fine-tuned Qwen vision-language model to predict jersey numbers from player tracklets. LoRA fine-tuning improves accuracy from 49.7% (zero-shot) to 76.41%, and the collage formulation reduces OCR-stage inference calls from 635 to 5 per tracklet. The paper also compares several legibility classifier backbones as supporting analysis.
+
+---
+
+## Strengths
+
+- **Accuracy improvement from LoRA fine-tuning is the paper's central quantitative finding** (Section V.C.1): zero-shot Qwen achieves 49.7% while two epochs of LoRA fine-tuning raise accuracy to 76.41% on the 1,840-sample set, a 26.7 percentage-point gain. This delta is large enough to be meaningful.
+
+- **Collage-based aggregation as a pipeline simplification**: the multi-frame collage input is a clean engineering insight that eliminates per-frame confidence aggregation heuristics, offloading temporal reasoning to the VLM in a single forward pass. The motivation is clearly articulated (Section IV.A.3).
+
+- **Comprehensive error taxonomy in Section IV.D**: five concrete failure categories are identified—single/double-digit confusion, OWLv2 missed detections, Real-ESRGAN texture hallucination, ground-truth label errors, and aggressive legibility filtering—each supported by specific examples. The confusion matrix (Figure 13) correctly identifies single/double-digit confusion as the dominant error mode, and the text engages with this honestly.
+
+- **Real-ESRGAN preprocessing with visual evidence**: Figures 9 and 10 provide before/after comparisons at both individual-crop and collage levels, showing substantively sharper digit boundaries after 4× upscaling.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **No comparison to the Koshkina & Elder [1] baseline on the same test set.** This is the most serious problem. The paper repeatedly positions Koshkina & Elder [1] as the direct point of comparison (introduction, related work, methodology), yet never runs their system on the 1,840-sample SoccerNet test set. A 76.41% accuracy figure in isolation — compared only to the authors' own zero-shot configuration — does not establish that the proposed system represents an improvement over existing work. The paper cannot claim to "outperform" the baseline without this direct comparison. This is not a missing ablation; it is the core missing experiment.
+
+- **Unexplained training/validation loss inversion in Figure 12.** The loss table (Figure 12 caption) shows validation loss (~0.22) consistently and substantially below training loss (~0.325–0.285) from the first measured step throughout all 250 training steps. In standard supervised learning this pattern is reversed; it is consistent with validation data overlapping with training data, a systematically easier validation distribution, or a logging artifact. The paper provides no explanation. Because 76.41% is the paper's headline result and it derives from this fine-tuning run, this anomaly must be explained before the result can be fully trusted.
+
+### Minor
+
+- **Runtime comparison scopes out the dominant costs.** Section V.D presents Table I as evidence that "the proposed recognition architecture is faster in practice," but the table covers only the OCR stage. The paper's own text explicitly notes that OWLv2 was not timed and that Real-ESRGAN preprocessing took 20 hours for the full dataset. The conclusion drawn ("the proposed recognition architecture is faster in practice") is not supported by the timed data, which captures only the cheapest stage of the proposed system. The claim should be scoped to "recognition-stage inference only" — a narrower and accurate version of the claim the paper actually makes.
+
+- **CNN legibility classifier evaluation lacks ground truth to support its conclusion.** Section III.A concludes that ResNet34, EfficientNetV2, and MobileNet are inadequate because all produce average scores below 0.5 on five tracklets. But the paper never establishes what fraction of frames in those tracklets are actually legible. If most frames are genuinely illegible, sub-0.5 scores reflect correct behavior. The inference that these models are deficient — and that this motivates architectural replacement — is not supported without frame-level labels. Additionally, EfficientNetV2 and MobileNet are evaluated with weights not fine-tuned for this domain, while ResNet34 has domain-specific weights from [1], making the comparison inherently confounded.
+
+- **Swin-T decision based on two tracklets.** The decision to reject Swin-T (Section III.A) is based on a 0.34% performance difference on a two-tracklet evaluation. The paper acknowledges computational constraints, and this is a reasonable practical limitation, but the conclusion that Swin-T "did not warrant replacing the baseline" cannot be drawn from n=2 tracklets — a single correct/incorrect prediction can swing the metric by ~50 percentage points. The image-level evidence (Swin-T F1 ~0.9 vs. ResNet34 F1 ~0.55 on 6,827 crops) arguably warranted a larger pipeline test.
+
+- **Collage selection policy for long tracklets is unspecified.** Section IV.A.3 states the collage uses "up to 25 crops" but never specifies how the 25 are sampled when a tracklet has more frames. Section V.B.4 acknowledges information loss but provides no solution. This directly affects recognition on long tracklets and is a reproducibility gap.
+
+- **Test set identity is ambiguous.** Section V.C.1 reports accuracy on a "1,840 sample set" without clarifying whether this is the standard SoccerNet held-out test split and what fraction was used in training. This makes the number harder to interpret.
+
+### Trivial
+None beyond what is already covered above.
+
+---
+
+## Nice-to-Haves
+
+- Ablation comparing collage-based Qwen against per-frame Qwen with majority voting would isolate the benefit of the grid representation from the benefit of using Qwen at all.
+- Quantifying the fraction of mislabeled samples in the test set would strengthen the argument in Section VI.A that label noise deflates reported accuracy.
+- Representative collages before and after fine-tuning, for failure-to-success cases, would clarify whether LoRA improves genuine OCR ability or mainly output-format compliance.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Missing LoRA hyperparameters (rank, alpha, target modules, learning rate)**: Removed per the hard rule against reproducibility nitpicks about hyperparameters not practical to include.
+- **Missing train/validation split sizes**: Partially removed as a reproducibility nitpick; kept only the test-set ambiguity as a minor concern about result interpretability.
+- **ConvNeXt 100% tracklet-level recall is "trivially achievable"**: Removed as a strawman — the paper explicitly notes it uses weak supervision and discusses the precision/recall tradeoff; the limitation is already acknowledged.
+- **Strength Finder's generic strength about "pipeline consolidation replacing multiple stages with open-vocabulary detection"** (without a figure citation for the speedup claim): Kept only the scoped, evidence-backed version.
+
+---
+
+## Novel Insights
+
+The collage-as-single-VLM-input formulation is a simple but underexplored trick: instead of aggregating frame-level predictions with hand-tuned confidence weights, placing a grid of crops into a VLM's context window allows the model to do implicit temporal voting. Whether this beats naive per-frame majority voting is not tested, but the idea that spatial tiling can substitute for temporal aggregation is worth isolating in future work. The error analysis also surfaces a practical dataset-quality issue: SoccerNet's tracklet-level weak supervision propagates incorrect labels at the frame level, which may inflate error rates across all methods benchmarked on this dataset.
+
+---
+
+## Suggestions
+
+1. **Run the Koshkina & Elder [1] baseline on the same 1,840-sample test split** and report results side by side. This is essential to establish whether the proposed system is competitive.
+2. **Explain the validation-below-training loss pattern** in Figure 12: audit the data split for overlap and report train/validation sizes.
+3. **Scope the runtime claim correctly**: retitle Table I to "OCR-stage inference comparison" and note that full-pipeline comparison including Real-ESRGAN and OWLv2 is future work.
+4. **Provide frame-level legibility labels for the five tracklets** used in Section III.A, so the CNN comparison is grounded in ground truth.
+5. **Specify the collage sampling policy** (e.g., uniform stride, top-confidence crop selection) for long tracklets.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper path | Avg human score | Comparison |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/HC26cxtI96.md` | 1.0 (Reject) | Engineering report applying existing RL methods without novelty — comparable in category but this paper has more experiments |
+| `/home/wg25r/review_agent/human_reviews/RFJGFrMvYj.md` | 1.5 (Reject) | Straightforward application of existing techniques without novelty — more comparable, but that paper apparently had no empirical gain |
+| `/home/wg25r/review_agent/human_reviews/vW6rsXAGrz.md` | 4.0 (Reject) | Real system, lacks convincing baselines and comparisons; more directly analogous to this paper's missing-baseline flaw |
+| `/home/wg25r/review_agent/human_reviews/iSLDihAfYi.md` | 4.8 (Reject) | Empirical improvements without ablation or adequate baselines — close analog |
+| `/home/wg25r/review_agent/human_reviews/x3lE88YkUl.md` | 5.2 (Reject) | Strong empirical result but lacks comparison to recent methods — most similar to this paper's situation |
+| `/home/wg25r/review_agent/human_reviews/x1yOHtFfDh.md` | 5.5 (Accept/Poster) | Sports VLM benchmark — stronger contribution with clear baselines |
+| `/home/wg25r/review_agent/human_reviews/ZV7CLf0RHK.md` | 7.5 (Spotlight) | Parameter-efficient fine-tuning with comprehensive baselines and benchmarking — clearly above this paper |
+
+**Reasoning**: This paper sits between the 1-1.5 range (which is reserved for papers with no real experiments or incoherent contributions) and the 4-5 range (real system, missing comparisons). The paper has genuine experiments, a working pipeline, and honest error analysis. However, its core contribution — improvement over the state of the art — cannot be verified because the baseline was never evaluated on the same test set. Additionally, the unexplained training/validation loss inversion introduces doubt about the reliability of the headline accuracy figure. The runtime advantage claim is also scoped incorrectly in a way that inflates the impression of speedup. 
+
+The cluster of papers at 4.0–5.2 (vW6rsXAGrz, iSLDihAfYi, x3lE88YkUl) have similar patterns (missing comparisons, limited ablations) but arguably stronger novelty claims. This paper is a clear pipeline engineering project applying existing components, without a novel algorithm. The missing baseline comparison is more severe here than in those papers because the paper explicitly sets up Koshkina & Elder [1] as its direct foil throughout. I position this slightly below the 4–5 cluster: **3.5**.
+
+**Originality**: Low — combines existing components (Real-ESRGAN, OWLv2, Qwen, LoRA) in a straightforward pipeline.  
+**Importance of research question**: Moderate — jersey number recognition has practical use in sports analytics.  
+**Support for claims**: Weak — the central improvement claim lacks a comparison to the system it is supposed to outperform.  
+**Soundness of experiments**: Questionable — loss curve anomaly unexplained, runtime claim scoped incorrectly, legibility comparison confounded.  
+**Clarity**: Acceptable — the paper is readable and the error analysis is well-structured.  
+**Value to community**: Limited in current form — the 76.41% result is interesting but uncontextualized.
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+3.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../paper.md
+Timestamp: 2026-04-20T16:14:26.400583
+
+--- Token Usage ---
+  Harsh Critic: input=16193 (cached=0) output=7423 (reasoning=0) total=23616 requests=1
+  Strength Finder: input=15328 (cached=0) output=2165 (reasoning=0) total=17493 requests=1
+  Merger: input=238182 (cached=0) output=11178 (reasoning=0) total=249360 requests=29
+  TOTAL: input=269703 output=20766 total=290469
+
+--- Merged Inputs ---
+
+### Harsh Critic
+## Critical Issues
+
+**1. Structural: Conflation of reconstruction resistance with identity anonymity**  
+The paper's central claim—that frequency-domain PPFR systems fail to provide "identity-level privacy"—rests on a fundamental mischaracterization of these systems' security goals. PPFR methods (PartialFace, MinusFace, FracFace) are explicitly designed to prevent *reconstruction* of the original biometric image (visual privacy) while *preserving* the ability to verify/identify individuals (utility). By demonstrating that identity information can be extracted from templates that preserve recognition utility, the paper reveals an inherent trade-off, not a security vulnerability. The paper conflates irreversibility with unlinkability—concepts that PPFR standards (e.g., ISO/IEC 24745) carefully distinguish. While the paper correctly notes that pixel-level metrics (PSNR/SSIM) are insufficient, it fails to acknowledge that "identity leakage" in the sense of successful 1:N identification is a *designed feature* of PPFR systems, not a bug (Sections 1, 2, 5, Abstract). This invalidates the framing that these systems have a "privacy gap."
+
+**2. Structural: Circularity in regeneration attack evaluation**  
+The regeneration attack (Sections 3, 4.2, 5.3) succeeds by construction through a closed pipeline: the student model is trained to predict ArcFace embeddings from templates, and Arc2Face is explicitly trained to invert ArcFace embeddings to faces. This creates a tautological success condition—any template preserving identity-correlated information (necessary for PPFR utility) will generate a valid face when fed into a generator designed for that embedding space. The attack does not demonstrate a specific vulnerability in the PPFR transformation, but rather exploits the compatibility between modern face embeddings and conditional generative models. Without validating that the attack succeeds when the student and generator use *different* embedding spaces (e.g., FaceNet for distillation, Arc2Face for generation), the results measure the interoperability of standard FR embeddings, not a failure of privacy protection.
+
+**3. Evidential: Unvalidated claim of model independence**  
+The paper asserts that FaceLinkGen is "independent of the specific face recognition model employed by the PPFR server" (Section 3). However, all experiments use ArcFace/Antelopev2 for both the distillation teacher and the verification step. The paper provides no evidence that templates optimized for a distinct embedding space (e.g., a proprietary commercial model with different feature extraction) remain vulnerable to extraction into the ArcFace domain. Given that embedding spaces can differ significantly (e.g., angular vs. cosine metrics, different dimensionalities), this claim requires empirical validation that is absent.
+
+**4. Methodological gap: Ambiguity in "linkage" threat model**  
+The paper treats "linkage attack" (Section 4.1) as a monolithic threat, but conflates distinct scenarios with different privacy implications: (a) face-to-template linkage (enrolling a known face into the system), which is the intended function of PPFR; (b) template-to-template linkage across different systems (cross-database unlinkability), which is a genuine privacy violation that cancelable biometrics should prevent. Table 4 shows cross-method linkage (e.g., FracFace-to-MinusFace), which is a valid and important result, but the paper's overarching critique blends this with face-to-template linkage, conflating enrollment with unauthorized tracking.
+
+## Section-by-Section Notes
+
+**Section 1 (Introduction):** The critique of pixel-level metrics is valid and well-supported by Table 1 and the CanFG example. However, the introduction misrepresents prior work by suggesting that PPFR systems claim to prevent identity inference entirely—most aim to prevent image reconstruction while enabling recognition. The distinction between "de-identification" (anonymization) and "privacy-preserving recognition" (confidential computation) is blurred.
+
+**Section 2 (Threat Model):** Correctly identifies the service provider as the adversary and critiques the model-secrecy assumption of CanFG. However, the threat model does not adequately justify why successful 1:N matching constitutes an "attack" rather than normal system operation, given that the service provider presumably enrolled the user initially.
+
+**Section 3 (Methods):** The distillation approach is clearly described, but the claim that the attack is "independent of the specific face recognition model" used by the server requires justification. The method assumes that the PPFR template preserves information alignable to the attacker's chosen embedding space (ArcFace), which may not hold if the server uses a fundamentally different architecture.
+
+**Section 5.1 (Minimal-Resource Attack):** The demonstration that the attack works with only 256 images (Section 5.1) and under constrained assumptions (Section 6) is compelling evidence that the vulnerability is structural to frequency-domain methods.
+
+**Section 6 (Constrained Assumptions):** This is the strongest section empirically. The use of a generic high-pass filter to attack multiple systems without oracle access is a genuine contribution, showing that these methods share common vulnerabilities in their frequency-domain representations.
+
+**Section 8 (Transfer to De-Identification):** Testing on TIP-IM conflates distinct threat models. TIP-IM is an adversarial dodging method designed to prevent FR systems from recognizing a face, while PPFR methods aim to enable recognition without exposing raw data. Showing that TIP-IM can be inverted by a student model trained on TPDNE data is unsurprising—adversarial perturbations often fail to transfer to unknown models—and does not constitute a meaningful evaluation of TIP-IM's security claims.
+
+**Section 9 (Soft Biometrics):** The soft-biometric inference results (Table 9) follow logically from successful regeneration and are a valid concern, though they are a consequence of successful identity extraction rather than an independent vulnerability.
+
+## Strengths
+
+- **Pixel vs. identity metric distinction:** The typology in Section 1 and Table 1 clearly demonstrates that PSNR/SSIM can be high for identity-mismatched images and low for identity-matched images, making a concrete case for identity-centric evaluation in PPFR research.
+- **Cross-system linkage:** Table 4 provides empirical evidence that frequency-domain PPFR methods fail to provide unlinkability across different protection schemes (cross-method template linkage), which is a genuine privacy violation for cancelable biometrics.
+- **Constrained attack:** Section 6 demonstrates that the vulnerability is not merely an artifact of oracle access or overfitting to specific transformations, but stems from shared high-frequency characteristics in frequency-domain PPFR.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Cross-embedding-space validation:** Test whether a student trained on FaceNet embeddings (instead of ArcFace) can attack templates optimized for ArcFace-based PPFR, or vice versa. This would validate the claim that the attack is model-independent and reveal whether the vulnerability is specific to embedding space alignment.
+2. **Utility-privacy trade-off curve:** Report the verification accuracy of the PPFR systems on their intended FR model alongside attack success rates. Without this, it is impossible to determine if the attack succeeds when utility is high, or only when the system is configured for maximum privacy (low utility).
+3. **Cryptographic baseline:** Evaluate FaceLinkGen against a cryptographic PPFR method (e.g., homomorphic encryption-based recognition) to establish whether the attack distinguishes between computational and information-theoretic privacy.
+
+### Deeper Analysis Needed
+1. **Fundamental limits of transformation-based PPFR:** Formal analysis of whether *any* PPFR system that achieves non-trivial utility (e.g., >90% verification accuracy) must necessarily retain extractable identity features susceptible to this attack. This would clarify whether the issue is the specific methods or the paradigm itself.
+2. **Feature-space visualization:** t-SNE or UMAP visualizations of the template space before and after student distillation would illustrate how the attack aligns the protected template space with standard face embedding manifolds.
+
+### Visualizations & Case Studies
+1. **Failure cases:** Show examples where the regeneration attack fails (even if rare). Analyzing whether these correspond to specific demographics, poses, or lighting conditions would reveal if the attack has systematic biases.
+2. **Cross-method linkage heatmap:** Visualize the linkage matrix (FracFace→MinusFace, MinusFace→PartialFace, etc.) to show whether certain method pairs are more vulnerable to cross-linkage than others.
+
+### Obvious Next Steps
+1. **Evaluation on non-frequency methods:** Expand the evaluation of non-frequency PPFR methods beyond CanFG (Section 8) to determine if the vulnerability is specific to frequency-domain designs or applies to all transformation-based approaches.
+2. **Defense mechanisms:** Propose and evaluate specific countermeasures (e.g., differential privacy during template generation, key-dependent transformations) rather than only identifying vulnerabilities.
+
+## Overall Assessment
+
+This paper makes empirically strong observations about the inadequacy of pixel-level metrics for evaluating PPFR and demonstrates practical cross-system linkage attacks. However, it is undermined by a fundamental conceptual confusion: it treats the necessary preservation of identity information for recognition utility as a "privacy leakage" vulnerability. The regeneration attack succeeds by constructing a closed pipeline (ArcFace→Arc2Face) that guarantees success for any template preserving identity features, making it a measure of utility rather than a specific security flaw. While the constrained attack (Section 6) and cross-linkage results (Table 4) are valuable contributions showing that frequency-domain methods fail to provide unlinkability, the paper's central framing—that PPFR systems fail to protect "identity-level privacy"—misrepresents their security guarantees. 
+
+The paper should not be accepted in its current form. It requires major revision to distinguish between reconstruction resistance (preventing image recovery) and unlinkability (preventing cross-database identity linkage), to validate claims of model independence, and to acknowledge that the attack exploits the inherent utility-privacy trade-off in biometric recognition. If revised to focus specifically on the unlinkability failures and soft-biometric leakage with proper threat model distinctions, the empirical contributions would be valuable to the community.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Identification of the disconnect between pixel-level and identity-level privacy metrics**: The paper empirically demonstrates that high pixel-wise similarity does not correlate with identity consistency, and vice versa. Table 1 shows a CanFG-generated face achieves high pixel similarity to the original (SSIM 0.841, PSNR 26.81) but near-zero identity similarity (FS 0.008), while two different images of the same person have low pixel similarity but high identity similarity. This directly challenges the fundamental assumption underlying existing PPFR evaluations that resistance to pixel reconstruction implies identity privacy.
+
+2. **Simple, low-cost, and highly effective attack methodology**: The distillation-based approach (Section 3, Equation 2) uses standard cosine similarity loss to train a student network aligning protected templates to identity embeddings, achieving over 98.5% 1-to-1 matching accuracy and 96-100% regeneration success (Table 2). The paper emphasizes the simplicity is intentional to prove the vulnerability resides in the representation itself. Section 5.1 demonstrates extreme efficiency: the attack succeeds with only 256 training images and 50 seconds of training time on consumer hardware, costing under $2 per target method.
+
+3. **Validation under constrained attacker assumptions**: Section 6 and Table 7 show the attack succeeds even when the adversary has no knowledge of the protection mechanism's architecture or parameters and only 30 paired samples for validation. By using a generic high-pass filter as a proxy task, the authors achieve over 92% matching accuracy and 94% regeneration success@5 across all three target systems (FracFace, PartialFace, MinusFace), demonstrating that frequency-domain PPFR systems leak identity information even against weak, realistic attackers.
+
+4. **Direct refutation of defensive claims using identity-centric evaluation**: Table 6 contrasts FracFace's claimed protection rates (based on frequency channel disruption) against actual identity leakage. While FracFace reports 1.000 protection under its pixel-centric metric, FaceLinkGen achieves 0.015 protection (0.008 with 5 trials) under identity-centric evaluation. This empirically establishes that high channel disruption rates fail to prevent identity extraction, exposing a critical gap in how PPFR systems are evaluated.
+
+### Supporting strengths
+
+1. **Extension to adversarial de-identification systems**: Section 8 and Table 8 demonstrate the attack generalizes beyond frequency-domain PPFR to adversarial de-identification methods like TIP-IM. While TIP-IM provides perfect protection against the standard ArcFace model (0.000 linkage accuracy for same-image queries), the distillation pipeline recovers identity with 0.997 accuracy, revealing that adversarial perturbations suppress identity in one embedding space while leaving it recoverable via alignment to another space.
+
+2. **Comprehensive soft-biometric privacy analysis**: Section 9 and Table 9 show protected templates leak sensitive attributes (race, gender, age) at rates comparable to original images (e.g., 92.5% gender accuracy on FracFace vs. 94.9% on original images), contradicting FracFace authors' claims of successful obfuscation. This reveals that utility-preserving transformations inadvertently preserve soft-biometric information accessible to attackers.
+
+3. **Rigorous threat model clarification**: Section 2 provides a principled argument that the primary adversary in PPFR is the service provider with oracle access, not external eavesdroppers, and that assuming secrecy of the conversion model is unrealistic against this adversary. This reconceptualization grounds the evaluation in realistic security assumptions rather than artificial constraints.
+
+### Presentation / practical strengths
+
+1. **Independent validation via commercial APIs**: The regeneration attack evaluation uses Face++ (described as having "financial-grade security standards") and Amazon Rekognition (Section 5.3, Table 5) rather than relying solely on open-source models, providing vendor-independent validation of identity leakage and avoiding circularity where the same model family is used for both attack and verification.
+
+2. **Clear differentiation from prior attack paradigms**: The paper explicitly contrasts FaceLinkGen with reconstruction-based attacks (e.g., U-Net/StyleGAN attacks in FracFace that fail to generate identity-consistent faces) and with training-set model inversion attacks, clarifying that the vulnerability lies in the template generation process rather than embedding invertibility (Introduction, Section 3).
+
+## Summary
+
+This paper challenges the prevailing evaluation paradigm for privacy-preserving face recognition by demonstrating that pixel-level reconstruction metrics (PSNR, SSIM) inadequately capture identity-level privacy. The authors present FaceLinkGen, a distillation-based attack that extracts identity information from frequency-domain protected templates without pixel reconstruction, achieving over 98.5% matching accuracy and 96% regeneration success on three recent PPFR systems (PartialFace, MinusFace, FracFace). The most compelling evidence is Table 6, which directly contrasts FracFace's claimed 100% protection rate (based on channel disruption) with FaceLinkGen's measured 0.015 protection rate under identity-centric evaluation, empirically establishing that preventing pixel reconstruction does not prevent identity leakage.
+
+--- Merged Review ---
+Now I have a complete picture of the paper and calibration anchors. Let me synthesize the final review.
+
+## Summary
+
+This paper challenges the prevailing evaluation paradigm for frequency-domain Privacy-Preserving Face Recognition (PPFR) systems by demonstrating that pixel-level reconstruction metrics (PSNR, SSIM) inadequately capture identity-level privacy leakage. The authors present FaceLinkGen, a distillation-based attack that extracts identity information directly from protected templates without pixel reconstruction, achieving over 98.5% 1-to-1 matching accuracy and 96-100% regeneration success on three recent PPFR systems (PartialFace, MinusFace, FracFace). The paper provides empirical evidence that preventing pixel reconstruction does not prevent identity extraction, and demonstrates cross-system template unlinkability failures alongside soft-biometric attribute leakage.
+
+## Strengths
+
+- **Clear demonstration of evaluation gap**: The paper empirically establishes that pixel-level metrics can be misleading for privacy evaluation. Table 1 shows CanFG achieves high pixel similarity (SSIM 0.841) to the original image but near-zero identity similarity (FS 0.008), while two different images of the same person have low pixel similarity but high identity similarity. This motivates a fundamental shift in how PPFR privacy is measured.
+
+- **Simple yet effective attack methodology**: The distillation approach (Section 3) uses standard cosine similarity loss to train a student network aligning protected templates to identity embeddings. The extreme efficiency demonstrated in Section 5.1—achieving 98.7% linkage accuracy with only 256 training images and 50 seconds of training—is compelling evidence that the vulnerability is structural to the representations rather than an artifact of complex attack optimization.
+
+- **Cross-system unlinkability evaluation**: Table 4 provides empirical evidence that frequency-domain PPFR methods fail to provide unlinkability across different protection schemes (e.g., FracFace-to-MinusFace linkage achieving 75.37% accuracy). This is a genuine privacy violation for cancelable biometrics that the paper correctly identifies.
+
+- **Validation under constrained assumptions**: Section 6 demonstrates that the vulnerability extends beyond oracle-access scenarios. Using only 30 paired samples for validation and a generic high-pass filter as a proxy task, the attack achieves over 92% matching accuracy and 94% regeneration success across all three target systems, showing the vulnerability is not merely an artifact of perfect attacker knowledge.
+
+- **Independent verification via commercial APIs**: The regeneration attack is validated using Face++ (described as having "financial-grade security standards") and Amazon Rekognition (Section 5.3, Table 5), avoiding circularity concerns from using the same model family for both attack and verification.
+
+- **Direct refutation of defensive claims**: Table 6 contrasts FracFace's claimed protection rates (based on frequency channel disruption) against actual identity leakage measured by FaceLinkGen. While FracFace reports 1.000 protection under its metric, FaceLinkGen achieves 0.015 protection (0.008 with 5 trials), empirically establishing that channel disruption does not prevent identity extraction.
+
+## Weaknesses
+
+### Major
+
+- **"Model independence" claim lacks validation**: Section 3 states the attack is "independent of the specific face recognition model employed by the PPFR server," but all experiments use ArcFace/Antelopev2 for both the distillation teacher and verification. The paper provides no evidence that templates optimized for a distinct embedding space (e.g., FaceNet, a proprietary commercial model) remain vulnerable to extraction into the ArcFace domain. Given that embedding spaces can differ significantly (angular vs. cosine metrics, different dimensionalities), this claim requires empirical validation to substantiate its generality.
+
+- **TIP-IM extension conflates distinct threat models**: Section 8 tests FaceLinkGen on TIP-IM, an adversarial dodging method designed to prevent FR systems from recognizing a face. The claim that this "does not constitute a meaningful evaluation of TIP-IM's security claims" has merit—TIP-IM aims to prevent recognition, not to protect templates. The paper acknowledges these are "complementary" goals (Section 8), but the framing as a "transfer" attack implies the vulnerability extends to de-identification methods, which needs clearer distinction from the core PPFR contribution.
+
+### Minor
+
+- **Missing utility-privacy trade-off analysis**: The paper does not report the verification accuracy of the PPFR systems on their intended FR model alongside attack success rates. Without this, readers cannot assess whether the attack succeeds when utility is high, or only when systems are configured for maximum privacy (potentially at the cost of utility). This would clarify whether the vulnerability is fundamental to any useful PPFR system or only to specific configurations.
+
+- **Limited evaluation of non-frequency methods**: While Section 8 tests CanFG and TIP-IM, these evaluations are brief compared to the main frequency-domain analysis. A more systematic comparison would clarify whether the vulnerability is specific to frequency-domain designs or applies broadly to transformation-based PPFR.
+
+### Trivial
+
+- None
+
+## Nice-to-Have
+
+- Cross-embedding-space validation (e.g., student trained on FaceNet attacking ArcFace-optimized templates) to substantiate model independence claims
+- Utility-privacy trade-off curves showing attack success at different operating points
+- Visualization of feature space alignment via t-SNE or UMAP to illustrate how distillation aligns protected templates with standard face embedding manifolds
+
+## Removed Points
+
+These points are flagged to be removed, as they are based on reviewer misreadings or scope creep:
+
+- **"Conflation of reconstruction resistance with identity anonymity"**: The Harsh Critic claims the paper misunderstands PPFR security goals. This is incorrect—the paper explicitly acknowledges PPFR systems aim to prevent reconstruction while preserving recognition (Section 1, lines 13-17). The paper's contribution is showing that *evaluating* privacy solely via reconstruction resistance is insufficient, not that PPFR systems claim anonymity they don't deliver. The framing of a "privacy gap" refers to the evaluation gap, not a claimed security guarantee.
+
+- **"Circularity in regeneration attack evaluation"**: The claim that the attack succeeds "by construction" misunderstands the validation methodology. The attack is validated via independent commercial APIs (Face++, Amazon Rekognition) that have no relation to the ArcFace teacher used for distillation. The closed pipeline criticism would only apply if verification used ArcFace directly; it does not.
+
+- **"Ambiguity in 'linkage' threat model"**: The paper explicitly distinguishes face-to-template linkage (intended function) from template-to-template linkage (genuine privacy violation) in Section 4.1: "The first case is referred to as face-to-template linkage, while the second is template-to-template linkage. ISO/IEC 24745 explicitly requires resistance against template-to-template search, but does not address face-to-template search."
+
+- **"Section 8 transfer to de-identification" critique as invalidating TIP-IM security**: The paper acknowledges TIP-IM has different goals and frames this as showing the "structural limitation of adversarial de-identification as a privacy mechanism" when identity can be recovered via alignment to a different embedding space. While this extension is less central than the main PPFR contribution, it is not technically incorrect.
+
+## Novel Insights
+
+The paper's core insight—that pixel reconstruction and identity leakage should be treated as distinct evaluation dimensions—has significant implications for the PPFR research community. The observation that high PSNR/SSIM can indicate successful reconstruction of an identity-mismatched image (the CanFG example) while low pixel similarity can accompany successful identity matching suggests the field has been optimizing the wrong objective. This reframing, supported by empirical results across three systems and validation via commercial APIs, represents a genuine methodological contribution that could shift how PPFR systems are evaluated. The demonstration that frequency-domain PPFR systems share common high-frequency characteristics enabling a generic proxy attack (Section 6) is particularly insightful, suggesting structural vulnerabilities in an entire class of approaches.
+
+## Suggestions
+
+- Conduct an ablation study validating cross-embedding-space attack success (e.g., FaceNet teacher attacking ArcFace-optimized templates) to substantiate or refine the model independence claim, or temper the claim to acknowledge the ArcFace-specific nature of the current demonstration
+- Include utility metrics for the target PPFR systems to demonstrate attack effectiveness at operating points where recognition utility is preserved
+- Clarify the distinction between the core PPFR contribution and the TIP-IM extension in Section 8, potentially reframing the latter as a "pilot exploration" rather than a systematic evaluation
+
+## Score and Decision
+
+**Calibration Anchors Used:**
+- `/home/wg25r/review_agent/human_reviews/rpH9FcCEV6.md`: Score 7.50 (Accept poster) - Membership inference attack on diffusion models with extensive empirical validation across 3 image and 3 audio datasets. Comparable empirical rigor but broader scope.
+- `/home/wg25r/review_agent/human_reviews/48CXLrx7K3.md`: Score 5.33 (Reject) - Face reconstruction from low-dimensional feature vectors with methodological concerns about evaluation. This paper has stronger empirical validation and clearer contribution.
+- `/home/wg25r/review_agent/human_reviews/anG2Y15mwc.md`: Score 6.75 (Reject) - Diffusion-based face privacy protection. Similar topic area but this paper has more systematic evaluation across multiple PPFR systems and commercial API validation.
+- `/home/wg25r/review_agent/human_reviews/razAcpFapu.md`: Score 3.00 (Withdrawn) - KAN-based face embedding attacks with methodological and novelty concerns. This paper is significantly stronger with clearer contribution and empirical validation.
+- `/home/wg25r/review_agent/human_reviews/8iTpB4RNvP.md`: Score 7.33 (Accept spotlight) - Backdoor attacks on face forgery detection with comprehensive benchmark. Comparable empirical rigor and contribution significance.
+
+**Comparison:** This paper sits between the rejected anG2Y15mwc (6.75) and the accepted rpH9FcCEV6 (7.50) and 8iTpB4RNvP (7.33). It has stronger empirical validation than anG2Y15mwc (three PPFR systems, cross-dataset evaluation, commercial API validation) and comparable methodological rigor. The core contribution—the inadequacy of pixel-level metrics for PPFR evaluation—is well-supported and significant for the field. The unvalidated model independence claim and the slightly rushed TIP-IM extension are the primary weaknesses preventing a higher score.
+
+**Score:** 7.0
+
+**Decision:** Accept (poster)
+
+MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: papers/paper.md
+Timestamp: 2026-04-20T16:24:23.033791
+
+--- Token Usage ---
+  Harsh Critic: input=14007 (cached=0) output=6018 (reasoning=0) total=20025 requests=1
+  Strength Finder: input=13142 (cached=0) output=2415 (reasoning=0) total=15557 requests=1
+  Merger: input=724249 (cached=0) output=13745 (reasoning=0) total=737994 requests=52
+  TOTAL: input=751398 output=22178 total=773576
+
+--- Merged Inputs ---
+
+### Harsh Critic
+**Critical Issues**
+
+1.  **Structural: Missing Baseline Accuracy Comparison**
+    The paper’s central claim is that the proposed VLM-based pipeline improves jersey number recognition, yet it never reports the accuracy of the baseline method (Koshkina & Elder [1]) on the same test set used to generate the headline result (76.41%). Without knowing whether the baseline achieves 30%, 60%, or 90% on this data, the 76.41% figure is uninterpretable and the claim of improvement is unsupported. The abstract and introduction emphasize accuracy gains, but only runtime is compared against the baseline (Section V.D), rendering the core contribution evidentially vacant.
+
+2.  **Structural: Undefined and Inconsistent Evaluation Protocol**
+    The paper evaluates on different, underspecified subsets across sections: 5 tracklets (Section III.A), 20 tracklets (Section III.A, Swin-T comparison), 2 tracklets (Section III.A, full pipeline test), “1,840 sample set” of unknown origin (Section V.C), and 1 tracklet (Section V.D). There is no statement of whether these are from the standard SoccerNet train/validation/test splits, how tracklets were sampled, or what the class distribution is. The main result (76.41%) lacks basic dataset statistics (e.g., number of tracklets, number of unique identities, train/test boundary), making the results unverifiable and irreproducible.
+
+3.  **Structural: Statistically Invalid Conclusions**
+    The decision to reject Swin-T in favor of ResNet34 for the legibility stage is based on a full-pipeline evaluation of only **two tracklets** (Section III.A: “full pipeline comparison was executed on only two tracklets”). Similarly, the runtime comparison (Table I) uses a single tracklet. Conclusions drawn from n=2 or n=1 are statistically meaningless and demonstrate a misunderstanding of experimental rigor.
+
+4.  **Evidential: Absence of Component Ablation**
+    The pipeline combines four major changes simultaneously: Real-ESRGAN upscaling, OWLv2 detection, collage aggregation, and Qwen VLM recognition. The paper provides no ablation studies to isolate the contribution of the collage mechanism (e.g., Qwen on single best crop vs. collage) or the impact of Real-ESRGAN on final accuracy (with/without SR). Consequently, it is impossible to determine whether the 76.41% result stems from the novel collage formulation or simply from replacing PARSeq with a large pre-trained VLM.
+
+**Section-by-Section Notes**
+
+- **Introduction:** Claims that results show LoRA improves accuracy “from 49.7%... to 76.41%” and that the approach is “faster,” but these claims rely on the flawed experimental setups noted above (missing baseline, single-tracklet timing).
+- **Section III.A (Legibility Comparisons):** The comparison of CNN backbones uses only 5 tracklets, which is insufficient for robust conclusions. The critical error is concluding Swin-T is worse based on 2 tracklets. The prose acknowledges computational constraints, but this does not justify presenting statistically invalid conclusions.
+- **Section IV.C (Implementation):** Mentions processing the “whole dataset” (20h) but does not specify which dataset or split. Inconsistent hardware environments (A6000 vs. Google Colab) are noted but not justified or controlled for in timing results.
+- **Section V.C (Performance):** The “1,840 sample set” is undefined. The confusion matrix (Figure 13) shows 40 classes without explanation (SoccerNet jersey numbers are typically 0-99; if restricted to 1-40 or similar, this must be stated). No confidence intervals or statistical tests are provided for the accuracy numbers.
+- **Section V.D (Runtime):** Compares PARSeq (635 crops) vs. Qwen (5 collages) on a single tracklet. Excludes OWLv2 and Real-ESRGAN preprocessing time from the proposed method’s tally while (presumably) including baseline localization time, making the comparison misleading. “Mean time” calculations are presented without variance or confidence intervals.
+
+**Strengths**
+
+- **Novel Aggregation Strategy:** The collage-based input format for tracklet-level VLM reasoning is a creative approach to temporal aggregation that avoids hand-crafted confidence thresholds.
+- **Comprehensive Legibility Backbone Evaluation:** Despite computational constraints, the paper systematically evaluates multiple architectures (ResNet34, EfficientNetV2, MobileNet, ConvNeXt, Swin-T) for the legibility task, providing useful design insights for the community.
+- **Insightful Error Analysis:** The identification of single-digit/double-digit confusion as the primary failure mode (Section V.C, Figure 13) demonstrates an understanding of the domain’s specific challenges.
+
+**Missing Parts and Places to Improve**
+
+**Missing Experiments**
+1.  **Baseline Accuracy Evaluation:** Run the Koshkina & Elder [1] pipeline on the exact same test set used for the 76.41% result and report per-tracklet accuracy. Without this, the paper’s central comparison is invalid.
+2.  **Component Ablation:** Evaluate Qwen performance (a) on single crops vs. collages, (b) with and without Real-ESRGAN upscaling, (c) with OWLv2 vs. baseline pose+legibility, to isolate the contribution of the collage mechanism specifically.
+3.  **Standard Split Evaluation:** Report results on the official SoccerNet jersey number recognition test set (or clearly define the subset used if compute-limited) rather than arbitrary tracklet samples.
+
+**Deeper Analysis Needed**
+1.  **Error Attribution:** Quantify how often errors stem from OWLv2 detection failures vs. Qwen recognition failures. Currently, OWLv2 is treated as an oracle; its recall/precision on jersey numbers is unreported.
+2.  **Computational Cost Analysis:** Provide end-to-end wall-clock time including super-resolution, detection, and recognition for both pipelines, with variance across multiple tracklets.
+
+**Visualizations & Case Studies**
+1.  **Failure Case Visualizations:** Show specific collages where the model failed (e.g., the “28 predicted as 8” case mentioned in error analysis) to validate the claimed failure modes.
+2.  **Baseline vs. Proposed Comparison:** Qualitative examples showing where the baseline fails and the proposed method succeeds (and vice versa) to demonstrate the practical value of the collage approach.
+
+**Obvious Next Steps**
+1.  **Statistical Rigor:** Re-run the Swin-T vs. ResNet34 pipeline comparison on at least 100+ tracklets, or remove the claim that Swin-T is inferior.
+2.  **Prompt Specification:** Report the exact prompt and LoRA configuration (rank, target modules) used for Qwen, as these are critical hyperparameters for VLM performance.
+
+**Overall Assessment**
+
+This paper introduces an interesting architectural concept—aggregating tracklet frames into a collage for VLM inference—but the experimental evaluation is insufficient to support its claims. The **absence of a baseline accuracy comparison is a fatal flaw**; without knowing whether the proposed method outperforms the prior state-of-the-art, the contribution cannot be assessed. Compounding this are statistically invalid conclusions drawn from sample sizes of one or two tracklets, an undefined evaluation protocol that prevents reproducibility, and a lack of ablation studies to isolate the value of the collage mechanism. The paper demonstrates promising engineering instincts and a solid grasp of relevant literature, but it requires a complete overhaul of the experimental section—specifically rigorous baseline comparison, standardized evaluation splits, and component ablations—before it can be considered for acceptance. **I recommend rejection in its current form.**
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Novel collage-based aggregation formulation for tracklet-level recognition**: The paper proposes aggregating multiple frames into a collage (up to 25 crops) processed by a single vision-language model call, replacing traditional per-frame OCR with confidence-weighted aggregation. This is substantiated by Figure 8 (pipeline diagram showing the "Collage Builder" step), Figure 11 (visualization of the 5×5 collage grid), and Table I (demonstrating reduction from 635 individual crop recognitions to 5 collage recognitions).
+
+2. **Large accuracy gains from parameter-efficient fine-tuning**: The paper demonstrates that LoRA fine-tuning improves jersey number recognition accuracy from 49.7% (zero-shot) to 76.41% on a 1,840-sample test set. Evidence: Abstract and Section V-C-1 ("Following two epochs of LoRA fine tuning the model achieved 76.41% accuracy"), supported by Figure 12 showing training/validation loss convergence over 264 steps.
+
+3. **Inference efficiency through reduced recognition calls**: Despite Qwen being slower per-call than PARSeq, the collage approach reduces total recognition time from 9.05s to 1.19s on SoccerNet test tracklet 263 by processing only 5 collages versus 635 individual crops. Evidence: Table I in Section V-D showing total time comparison (9.05s vs 1.19s) and mean time per input type.
+
+### Supporting strengths
+
+1. **Comprehensive empirical evaluation of legibility backbones**: The paper provides detailed comparison of five architectures (ResNet34, EfficientNetV2, MobileNet, ConvNeXt, Swin-T) with specific quantitative metrics per tracklet. Evidence: Figures 1-4 showing per-tracklet legibility scores, Figures 6-7 comparing ResNet34 versus Swin-T on 6,827 images reporting accuracy, precision, recall, and F1, and Section III-A analyzing the precision-recall trade-offs.
+
+2. **Integration of open-vocabulary detection for direct localization**: The pipeline uses OWLv2 to directly localize jersey numbers, collapsing the baseline's separate pose estimation and legibility filtering stages into a single step while producing tighter crops. Evidence: Section IV-A-2 ("OWLv2 works to essentially combine these steps"), Figure 8 showing OWLv2 replacing the pose estimation stage, and explicit contrast with baseline [1] in Section II.
+
+3. **Systematic error analysis identifying concrete failure modes**: The paper rigorously categorizes failure modes including single/double digit confusion, OWLv2 detection failures, Real-ESRGAN artifacts, and ground truth label errors. Evidence: Section IV-D with dedicated subsections for each error type and Figure 14 providing a concrete visualization of dataset mislabeling (GT: 1 vs Pred: 8 on jersey 38).
+
+4. **Super-resolution preprocessing for low-resolution inputs**: The paper demonstrates that Real-ESRGAN 4× upscaling significantly improves digit clarity before detection, with cached results avoiding repeated computation. Evidence: Figure 9 (showing blurry "10" becoming legible) and Figure 10 (comparing original versus upscaled collages), referenced in Section IV-A-1.
+
+### Presentation / practical strengths (optional)
+
+1. **Clear pipeline visualization**: Figure 8 provides a comprehensive end-to-end flowchart showing the five-component architecture (Real-ESRGAN → OWLv2 → Collage Builder → Qwen3-VL), making the system design immediately interpretable.
+
+## Summary
+
+This paper presents a tracklet-based jersey number recognition system that shifts from traditional per-frame OCR to a vision-language model operating on collages of aggregated crops. The core contribution lies in the collage-based formulation combined with parameter-efficient fine-tuning, which improves accuracy from 49.7% to 76.41% while simultaneously reducing recognition-stage inference time by aggregating multiple frames into a single VLM call (Table I). The work is distinguished from prior approaches by replacing pose-based localization with open-vocabulary detection (OWLv2) and scene-text recognition (PARSeq) with a general-purpose VLM (Qwen3-VL) processing multiple crops simultaneously.
+
+--- Merged Review ---
+Based on my thorough reading of the paper and calibration against similar works, I can now provide my final review.
+
+## Summary
+
+This paper presents a tracklet-based jersey number recognition system that combines Real-ESRGAN super-resolution, OWLv2 open-vocabulary detection, collage-based temporal aggregation, and Qwen3-VL vision-language model inference with LoRA fine-tuning. The core contribution is a collage-based formulation where multiple frames are aggregated into a grid (up to 25 crops) and processed by a single VLM call, replacing traditional per-frame OCR with confidence-weighted aggregation. The paper reports accuracy improvements from 49.7% (zero-shot) to 76.41% after LoRA fine-tuning on an undefined 1,840 sample set, and demonstrates reduced recognition-stage inference time through fewer total model calls.
+
+## Strengths
+
+- **Novel collage-based aggregation strategy**: The paper proposes an innovative approach to temporal aggregation that offloads frame-level confidence thresholding to the VLM through visual collage construction (Section IV-A-3, Figures 8, 11). This is substantiated by Table I showing reduction from 635 individual crop recognitions to 5 collage recognitions.
+
+- **Comprehensive legibility backbone evaluation**: Despite computational constraints, the paper systematically evaluates five architectures (ResNet34, EfficientNetV2, MobileNet, ConvNeXt, Swin-T) with quantitative metrics including accuracy, precision, recall, and F1 across 6,827 images (Section III-A, Figures 1-7).
+
+- **Insightful error analysis**: The paper rigorously categorizes failure modes including single/double-digit confusion, OWLv2 detection failures, Real-ESRGAN artifacts, and ground truth label errors, with concrete examples like Figure 14 showing dataset mislabeling (Section IV-D).
+
+## Weaknesses
+
+### Fatal
+
+- **Core contribution is evidentially unsupported**: The paper claims "LoRA fine-tuning improves accuracy from 49.7% in the zero-shot setting to 76.41%" and that the approach is "faster" (Abstract), but these claims are made without comparing the proposed method's accuracy against the baseline method [1] on the **same test set**. Without knowing whether the baseline achieves 30%, 60%, or 90% on the 1,840-sample evaluation set, the 76.41% figure is uninterpretable. Table I compares runtime (9.05s vs 1.19s) but not accuracy. This means the central claim—that the proposed approach "improves" jersey number recognition—lacks empirical foundation.
+
+### Major
+
+- **Undefined and inconsistent evaluation protocol**: The "1,840 sample set" used for the headline 76.41% result is never defined: its origin within the SoccerNet train/validation/test splits is unspecified, the sampling methodology is unstated, and the class distribution is unknown (Section V-C-1, line 351). The paper evaluates on different arbitrary subsets across sections: 5 tracklets (Section III.A), 20 tracklets (Swin-T comparison), 2 tracklets (full pipeline test), and 1 tracklet (runtime timing in Section V.D). The confusion matrix in Figure 13 shows 40 classes without explanation—SoccerNet jersey numbers are typically 0-99, so this restriction must be justified. These omissions make the results unverifiable and irreproducible.
+
+- **Statistically invalid experimental conclusions**: The decision to reject Swin-T in favor of ResNet34 for the legibility stage was based on a full-pipeline evaluation of only **two tracklets** (Section III.A, line 215-218: "Due to computational constraints, the full pipeline comparison was executed on only two tracklets...the Swin-T version performed 0.34% worse than the baseline"). Conclusions drawn from n=2 are statistically meaningless. Similarly, the runtime comparison (Table I) uses a single tracklet ("SoccerNet test tracklet 263"), rendering the timing claims unreliable.
+
+- **Absence of component ablation**: The pipeline introduces four major changes simultaneously (Real-ESRGAN, OWLv2, collage aggregation, VLM recognition), yet the paper provides no ablations to isolate the contribution of the collage mechanism specifically. It is impossible to determine whether the 76.41% result stems from the novel collage formulation or simply from replacing PARSeq with a large pre-trained VLM (Qwen3-VL). The paper acknowledges this limitation implicitly in Section V.D where it admits the timing excludes OWLv2 and Real-ESRGAN preprocessing, but there is no ablation to quantify their impact on accuracy.
+
+### Minor
+
+- **Incomplete computational analysis**: Section V.D compares recognition-stage timing but explicitly excludes OWLv2 detection and Real-ESRGAN upscaling from the proposed method's tally. The paper claims "the proposed recognition architecture is faster in practice" but this conclusion is based on an incomplete measurement (line 392-394: "The measured runtime comparison only considers the OCR inference stage rather than the entire localization-and-recognition pipeline because OWLv2 itself was not timed").
+
+- **Ambiguous hardware environments**: The paper uses inconsistent hardware (A6000 GPU for preprocessing, Google Colab G4 for training and testing) without controlling for or reporting variance across environments (Section IV-C).
+
+### Trivial
+
+- None worth noting beyond parser artifacts in the extracted text.
+
+## Nice-to-Haves
+
+- Complete end-to-end timing including all pipeline stages
+- Ablation study comparing single-best-crop VLM inference vs. collage-based inference
+- Quantification of OWLv2 recall/precision on jersey number detection
+- Standardized evaluation on official SoccerNet test split with confidence intervals
+- Qualitative failure case visualizations showing specific misclassified collages
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+- **"Not yet released" or availability concerns about models**: The paper cites Real-ESRGAN, OWLv2, Qwen3-VL, and PARSeq—all are established, released models as of the current date. These exist.
+- **"Unfair comparison" with baseline**: The asymmetry in timing (excluding OWLv2/Real-ESRGAN) favors the baseline, not the proposed method, so this is not a critique of overclaiming.
+- **Missing related works**: Per guidelines, I do not add missing citations without external verification.
+
+## Novel Insights
+
+None beyond the paper's own contributions. The collage-based temporal aggregation for tracklet-level VLM reasoning is a genuinely novel formulation that shifts jersey recognition from frame-wise OCR toward sequence-level visual reasoning. However, the experimental validation fails to substantiate whether this architectural choice delivers real benefits over simpler alternatives.
+
+## Suggestions
+
+1. **Priority 1**: Run the baseline Koshkina & Elder [1] pipeline on the exact same 1,840-sample test set and report per-tracklet accuracy for direct comparison. Without this, the paper's central claim cannot be assessed.
+2. **Priority 2**: Conduct ablations evaluating Qwen performance on (a) single best crops vs. collages, and (b) with/without Real-ESRGAN upscaling, to isolate the collage mechanism's specific contribution.
+3. **Priority 3**: Re-run the Swin-T vs. ResNet34 comparison on at least 100+ tracklets, or remove the claim that Swin-T is inferior from the paper.
+
+## Score and Decision
+
+**Calibration**: I retrieved and reviewed papers with similar characteristics:
+- `/home/wg25r/review_agent/human_reviews/qU1GtrDDst.md` (Score: 1.80): Missing SOTA comparisons, weak experimental results—similar to this paper's missing baseline accuracy.
+- `/home/wg25r/review_agent/human_reviews/l5ouuojPGe.md` (Score: 3.00): Experimental design flaws, insufficient sample sizes—similar to n=2/n=1 statistical issues here.
+- `/home/wg25r/review_agent/human_reviews/x1yOHtFfDh.md` (Score: 5.50): Sports understanding benchmark with some evaluation gaps but reasonable comparisons.
+
+This paper under review has a **fatal flaw** (missing baseline accuracy comparison) that invalidates its core claim of improvement. The evaluation protocol is undefined, sample sizes are statistically invalid, and there are no ablations to isolate the claimed contribution. While the collage concept is interesting, the experimental evidence is insufficient to support any conclusions. The paper is comparable to the 1.80 and 3.00 scored papers above in terms of methodological validity, though the core idea has more merit than those works.
+
+MY FINAL SCORE: <pineapple>2.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+2.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../paper.md
+Timestamp: 2026-04-20T16:29:48.745184
+
+--- Token Usage ---
+  Harsh Critic: input=16193 (cached=0) output=5312 (reasoning=0) total=21505 requests=1
+  Strength Finder: input=15328 (cached=0) output=2647 (reasoning=0) total=17975 requests=1
+  Merger: input=284783 (cached=0) output=8488 (reasoning=0) total=293271 requests=29
+  TOTAL: input=316304 output=16447 total=332751
+
+--- Merged Inputs ---
+
+### Harsh Critic
+## Critical Issues
+
+**1. Evidential: Limited Generalization Beyond Frequency-Domain Methods**
+The central claim that identity leakage is inadequately captured by pixel-level metrics is strongly supported for the three frequency-domain PPFR systems tested (PartialFace, MinusFace, FracFace). However, the paper's broader implications—that this gap extends to non-frequency methods like CanFG and adversarial de-identification methods like TIP-IM—rest on preliminary evaluations (Tables 7-8, Section 7-8) with minimal experimental detail. For CanFG, only a single table with cosine similarity and linkage accuracy is provided without dataset details or statistical variance. For TIP-IM, the evaluation comprises a brief note on a 2,082-image subset. These extensions are labeled "pilot evaluations" in the introduction, but the abstract and conclusions suggest broader applicability. Without comparable depth of analysis for these alternative paradigms, the claim that the critique generalizes "beyond the frequency-domain PPFR family" is underdeveloped. This does not invalidate the core contribution regarding frequency-domain methods, but it limits the scope of the paper's concluding recommendations.
+
+**2. Methodological: Potential Closed-Loop Between ArcFace and Arc2Face in Regeneration Evaluation**
+The regeneration attack relies on Arc2Face to synthesize faces from extracted embeddings. Arc2Face is specifically trained to generate identity-consistent faces from ArcFace embeddings—the same model used as the teacher in the distillation pipeline. This creates a potential closed-loop where the generator is optimized to interpret the exact embedding space the student produces, potentially inflating regeneration success rates relative to what would be achievable with a generator trained on different embedding spaces (e.g., FaceNet or proprietary commercial embeddings). While the authors mitigate this by cross-verifying with Face++ and Amazon APIs (Table 5) and reporting direct embedding similarity (Section 7), the high regeneration rates (>96% Success@5) reported in Table 2 should be interpreted as an upper bound achievable when the embedding space is known to the attacker. A more robust evaluation would explicitly test with a generator trained on a different embedding architecture (e.g., using FaceNet embeddings with a compatible generator) to demonstrate that the extracted information is not just ArcFace-specific but represents generalizable identity features.
+
+**3. Methodological: Ambiguity in "Constrained Attack" Generalization**
+Section 6 proposes a "universal proxy" attack using Gaussian high-pass filtering, claiming that the three frequency-domain methods share a common characteristic of preserving high-frequency information. While the empirical results (Table 7) show high success rates (>92%), the theoretical justification for why this specific proxy generalizes across all three methods—and would generalize to future frequency-domain methods—is underdeveloped. The observation that "they all preserve high-frequency information while obfuscating low-frequency information" is descriptive rather than explanatory of why identity information specifically resides in these preserved high-frequency components. Without a more rigorous analysis of the information-theoretic properties of these transformations (e.g., mutual information analysis between template components and identity), the constrained attack risks appearing as an empirical hack that works for the tested methods but lacks predictive power for the design of future defenses.
+
+## Section-by-Section Notes
+
+**Abstract/Introduction**: The abstract clearly frames the conceptual contribution: pixel-level reconstruction resistance ≠ identity privacy. The motivation in Section 1 is well-argued, particularly the distinction between "visual similarity" and "identity consistency" illustrated in Figure 2 and Table 1. However, the claim that existing evaluations "misled" simulated attack design could be construed as overly strong—prior work was optimizing for the stated defense metrics (pixel reconstruction), not deliberately ignoring identity leakage.
+
+**Section 2 (Threat Model)**: The threat model is well-justified and follows the original PPFR motivation of protecting against the service provider. The critique of external-attacker framing (e.g., Zhang et al.) is accurate. The point regarding CanFG placing security in model secrecy is correct and important.
+
+**Section 3 (Methods)**: The distillation formulation is clear. Equation (2) formally defines the training objective. The insight that recovering nuisance factors is unnecessary—"we sample a new $\epsilon'$ via $g_{diff}$, bypassing the ill-posed reconstruction problem"—is the key methodological innovation. However, the paper should clarify whether the regenerated faces (Figure 1) are diverse (different poses/lighting) or deterministic, as this affects the severity of the privacy breach.
+
+**Section 5 (Experiments)**: The minimal-resource attack (Section 5.1) with 256 images achieving 98.7% linkage is a strong result that demonstrates the severity of the vulnerability. However, the paper does not report variance across multiple training runs with different subsets of the 256 images, which would strengthen the claim that the attack is robustly low-resource.
+
+**Section 6 (Constrained Attack)**: As noted in Critical Issues, the high-pass filter proxy needs stronger theoretical grounding. The footnote regarding MinusFace requiring an additional filter step during inference is important but buried.
+
+**Section 9 (Soft Identity Leakage)**: The evaluation of soft biometrics (age, gender, race) is a valuable extension. Table 9 shows near-original accuracy for FracFace and PartialFace, which is a significant privacy concern. However, the comparison to "Original Image" baselines does not clarify whether these are the reconstructed/generated faces or the actual original faces (the table suggests the former, which would be a powerful result).
+
+**Section 10 (Future Directions)**: The discussion of cryptographic hardening is appropriate, though the claim that "de-ID or reversible face encryption methods cannot be used for PPFR tasks" is overly absolute—there are approaches like homomorphic encryption that allow computation on encrypted templates without revealing the original pixels, though they are computationally expensive.
+
+## Strengths
+
+- **Conceptual Clarity**: The paper identifies and articulates a fundamental disconnect in the PPFR literature: the conflation of pixel-level reconstruction difficulty with identity-level privacy. The distinction between "preventing reconstruction" and "preventing identity leakage" is clearly illustrated with concrete examples (Figure 2, Table 1).
+
+- **Empirical Rigor in Main Experiments**: The evaluation against three recent methods (ICCV 2023, CVPR 2024, NeurIPS 2025) using cross-dataset validation (no ID overlap) and independent commercial APIs (Face++, Amazon) provides strong external validation. The minimal-resource attack (50 seconds, 256 images) effectively demonstrates that the vulnerability is not due to computational brute force but inherent representation weakness.
+
+- **Threat Model Fidelity**: The paper correctly identifies and adheres to the original PPFR threat model (malicious service provider with oracle access) rather than the weaker external-attacker model adopted by some recent work. This grounds the attack in realistic privacy concerns.
+
+- **Simplicity as Virtue**: The intentional use of a standard distillation pipeline (rather than complex adversarial optimization) makes the vulnerability more damning—if standard methods suffice, the representation itself is the problem.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Ablation with Different Teacher/Generator Pairs**: Replace ArcFace+Arc2Face with FaceNet+FaceNet-compatible generator (or similar) to verify that the extracted embeddings contain generalizable identity information, not just ArcFace-specific features. This is necessary to support the claim that the attack is independent of the specific FR model employed by the server.
+
+2. **Formal Information-Theoretic Analysis**: Quantify the mutual information between the protected template and identity labels versus the mutual information between the template and original pixel values. This would provide theoretical grounding for why pixel-metrics fail while identity extraction succeeds.
+
+3. **Defense Evaluation**: Test against at least one existing defense designed to prevent model inversion or embedding inversion (e.g., defensive distillation, adversarial training) to establish a lower bound on attack success. Currently, the paper only attacks undefended baselines.
+
+### Deeper Analysis Needed
+1. **Diversity of Regenerated Faces**: Analyze the diversity of faces generated by Arc2Face from the same extracted embedding. If the attacker can generate multiple realistic photos of the victim from different angles, this represents a more severe privacy breach than reconstructing a single specific image. Quantify this diversity using standard metrics (e.g., LPIPS between generated samples).
+
+2. **Theoretical Characterization of Frequency-Domain Vulnerability**: Explain why specifically high-frequency preservation enables identity extraction. Is it because facial identity is encoded in texture/edge patterns (high frequency) rather than global structure (low frequency)? A short analysis linking facial recognition model inductive biases to frequency-domain properties would strengthen the justification for the constrained attack.
+
+### Visualizations & Case Studies
+1. **Failure Cases**: Include visual examples where the attack fails (the ~2-4% of cases in Table 2). Analyzing what types of faces/identities are resistant to the attack could reveal defensive strategies (e.g., do certain demographic groups or image qualities resist extraction?).
+
+2. **Comparative Reconstruction**: Show side-by-side the U-Net/StyleGAN reconstruction attempts (blurry failures) versus FaceLinkGen regenerations from the same template. This would visually demonstrate the gap between reconstruction-centric and identity-centric attacks more forcefully than Figure 1 alone.
+
+### Obvious Next Steps
+1. **Formal Privacy Bounds**: Derive formal bounds on the privacy leakage (e.g., using differential privacy frameworks) to quantify how much information the template leaks about identity versus the original image. This would elevate the paper from an empirical attack to a theoretical contribution.
+
+2. **Evaluation on Cryptographic Baselines**: Include CryptoFace or similar cryptographic PPFR methods as a baseline that *should* resist this attack (ideally showing failure), to validate that the evaluation metric (identity-level verification) can distinguish between secure and insecure systems.
+
+## Overall Assessment
+
+This paper makes a compelling and empirically well-supported case that the prevailing evaluation paradigm for frequency-domain PPFR systems—relying on pixel-level reconstruction metrics—fundamentally misunderstands the privacy threat. The FaceLinkGen attack is technically simple (standard distillation) yet devastatingly effective (>98% success), which is exactly the kind of result that should alarm the PPFR community. The cross-validation with commercial APIs (Face++, Amazon) and the minimal-resource attack variant convincingly demonstrate that the vulnerability is inherent to the representation, not an artifact of attack sophistication.
+
+The core contribution—demonstrating that identity information persists in protected templates in an easily extractable form even when pixel reconstruction fails—is both valid and important. While the extensions to non-frequency methods (CanFG, TIP-IM) are preliminary and the reliance on ArcFace-specific generators introduces a minor methodological caveat, these do not undermine the central claims regarding the three primary frequency-domain PPFR systems evaluated.
+
+The paper should be accepted. It successfully identifies a blind spot in the literature (conflating pixel privacy with identity privacy) and provides sufficient evidence to warrant a shift in how PPFR systems are evaluated—specifically, the adoption of identity-centric metrics alongside existing pixel-level measures. The implications are clear: current frequency-domain PPFR methods do not provide the level of identity privacy implied by their high PSNR/SSIM resistance scores, and the field must reconsider its defensive posture toward service provider adversaries.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Concrete evidence that pixel-level metrics inadequately measure identity privacy**: The paper demonstrates that PSNR/SSIM are poor proxies for identity protection using a controlled comparison in Table 1. A CanFG-generated face achieves high pixel similarity with the original (SSIM 0.841, PSNR 26.81) but near-zero identity similarity (FS 0.008), while two different photos of the same person have low pixel similarity (SSIM 0.235) but high identity similarity (FS 0.586). This empirically validates the central claim that pixel-distortion metrics and identity correlation are misaligned.
+
+2. **Demonstration of severe vulnerability in state-of-the-art frequency-domain PPFR**: FaceLinkGen achieves over 98.5% linkage accuracy and above 96% regeneration success (at FAR 1×10⁻⁵) across three recent methods—PartialFace (ICCV 2023), MinusFace (CVPR 2024), and FracFace (NeurIPS 2025)—as shown in Tables 2 and 4. Notably, Table 6 shows that while FracFace claims 100% protection under its frequency-channel disruption metric, FaceLinkGen achieves 99.2% regeneration success, revealing that high channel protection does not prevent identity extraction.
+
+3. **Extreme efficiency of the attack indicating fundamental representation flaws**: The distillation attack trains in under two hours on a single consumer GPU at a cost of approximately $0.80–$1.60 (Section 5.1). Even with only 256 training images, the attack achieves 98.7% linkage accuracy and 90.5% regeneration success. This minimal resource requirement proves the vulnerability resides in the template representation itself rather than requiring sophisticated adversarial optimization.
+
+4. **Robustness to constrained attacker assumptions**: Section 6 demonstrates that the attack generalizes to settings where the adversary has no oracle access to the conversion process and only 30 paired samples for validation. Using a generic Gaussian high-pass filter as a universal proxy, the attack still achieves over 92% matching accuracy and 94% regeneration success@5 across all three target systems (Table 7), indicating that frequency-domain protections structurally preserve extractable identity information.
+
+### Supporting strengths
+
+1. **Validation against commercial-grade verification systems**: Rather than relying solely on research models, the evaluation uses commercial Face++ (Section 5.3, Table 2) and Amazon Rekognition APIs (Table 5) to verify identity consistency. The attack maintains >94% pass rates on Face++ and comparable results on Amazon even at strict thresholds (FAR 1×10⁻⁵), confirming practical vulnerability against industry "financial-grade" security standards.
+
+2. **Generalization beyond frequency-domain PPFR**: The framework successfully transfers to adversarial de-identification (TIP-IM) and non-frequency PPFR (CanFG), as shown in Table 8 and Section 8. For TIP-IM, while the original ArcFace model shows near-zero similarity to protected images (0.081), the student model extracts embeddings with 0.648 similarity, enabling 99.7% linkage accuracy. This demonstrates that the identity-leakage vulnerability extends beyond the specific frequency-domain methods evaluated.
+
+3. **Quantification of soft-biometric privacy leakage**: Section 9 shows that protected templates leak sensitive attributes (race, gender, age) at rates nearly identical to original images (Table 9: race accuracy 0.673 vs. 0.700 for originals; gender 0.925 vs. 0.949), violating privacy frameworks like the Canadian Privacy Act that explicitly protect these characteristics.
+
+### Presentation / practical strengths
+
+1. **Clear threat model articulation**: Section 2 rigorously justifies focusing on the service provider as the adversary with oracle access, contrasting with prior work that assumes unrealistic knowledge constraints (e.g., Mi et al. requiring knowledge of architecture) or shifts trust to third parties. This alignment with the original PPFR motivation strengthens the practical relevance of the attacks.
+
+## Summary
+
+This paper challenges the prevailing evaluation paradigm for privacy-preserving face recognition by demonstrating that resistance to pixel-level reconstruction does not equate to protection against identity leakage. The central contribution is FaceLinkGen, a simple distillation-based attack that extracts identity embeddings from protected templates and regenerates faces without pixel-level reconstruction. The single most important piece of evidence supporting this contribution is the empirical result in Table 2 showing over 98.5% linkage accuracy and above 96% regeneration success (verified by commercial Face++ API) against three recent frequency-domain PPFR systems—achieved with under two hours of training on a single GPU, proving that current protections fail to prevent identity-level privacy breaches despite high pixel-distortion metrics.
+
+--- Merged Review ---
+## Summary
+
+FaceLinkGen demonstrates a critical gap in the evaluation of privacy-preserving face recognition (PPFR) systems: current methods measure privacy via pixel-level reconstruction resistance (PSNR/SSIM), yet identity information can be extracted despite the original image remaining "unreconstructable." The paper introduces a simple distillation-based attack that extracts identity embeddings directly from frequency-domain protected templates without pixel-level recovery, achieving over 98.5% linkage accuracy and 96% regeneration success across three recent PPFR systems (PartialFace, MinusFace, FracFace). The work is validated through cross-dataset evaluation, commercial API verification (Face++, Amazon), and minimal-resource attacks (256 images, 50 seconds training).
+
+## Strengths
+
+- **Conceptual contribution clearly established**: Table 1 provides compelling empirical evidence that pixel-level metrics mismeasure identity privacy—CanFG-generated faces achieve high pixel similarity with originals (SSIM 0.841, PSNR 26.81) but near-zero identity similarity (FS 0.008), while two photos of the same person have low pixel similarity (SSIM 0.235) but high identity similarity (FS 0.586). This validates the paper's core claim that reconstruction resistance ≠ identity privacy.
+
+- **Severe empirical vulnerability demonstrated**: The distillation attack achieves >98.5% linkage accuracy and >96% regeneration success@5 on all three frequency-domain PPFR systems (Section 5, Table 2). Most strikingly, Table 6 shows FracFace claims 100% protection under its frequency-channel disruption metric, yet FaceLinkGen achieves 99.2% regeneration success—demonstrating that channel protection does not prevent identity extraction.
+
+- **Extensive validation**: The evaluation uses: (1) no dataset overlap between attack training (CASIA-WebFace) and target systems (PartialFace/FracFace are training-free; MinusFace trained on MS1Mv2); (2) cross-dataset testing on LFW; (3) independent commercial verification via Face++ and Amazon APIs (Tables 2, 5); (4) similarity distribution analysis independent of Arc2Face (Section 7).
+
+- **Minimal-resource attack proves vulnerability is fundamental**: With only 256 training images and 50 seconds training, the attack achieves 98.7% linkage accuracy and 90.5% regeneration success (Section 5.1), demonstrating the vulnerability resides in the representation rather than attack sophistication.
+
+- **Soft-biometric leakage quantified**: Section 9 shows protected templates leak race, gender, and age at rates approaching original-image accuracy (Table 9: race accuracy 0.673 vs. 0.700 for originals; gender 0.925 vs. 0.949), violating privacy frameworks like Canada's Privacy Act.
+
+## Weaknesses
+
+### Fatal
+None. The paper's core claims are supported by substantial empirical evidence.
+
+### Major
+None. All identified limitations are explicitly acknowledged or addressed by the authors.
+
+### Minor
+
+- **ArcFace-Arc2Face loop**: The use of ArcFace embeddings with Arc2Face generator creates a favorable alignment (both operate in the same embedding space). While the paper addresses this concern in Section 5.3 and Section 7 by cross-validating with Face++/Amazon APIs and reporting direct embedding similarity, the high (>96%) regeneration rates should be interpreted as potentially inflated relative to settings where the PPFR system uses an incompatible embedding space. However, this does not undermine the core finding—identity information is clearly extractable.
+
+- **Constrained attack theoretical grounding**: Section 6's high-pass filter proxy achieves >92% success but relies on an empirical observation ("they all preserve high-frequency information") rather than rigorous information-theoretic analysis (e.g., mutual information between template components and identity). The paper acknowledges this is specific to frequency-domain methods (line 219), but a stronger theoretical characterization would strengthen the justification.
+
+### Trivial
+None.
+
+## Nice-to-Have
+
+- **Variance across training subsets**: The minimal-resource attack (256 images) would benefit from reporting variance across multiple random subsets to strengthen claims about robustness.
+- **Diversity analysis of regenerated faces**: Quantifying the diversity of Arc2Face outputs from the same embedding (e.g., LPIPS between samples) would clarify whether attackers can generate multiple views of the victim.
+
+## Removed Points
+
+These points are flagged to be removed, treated with caution:
+
+- **Criticism that prior work "misled" simulated attack design**: The paper's framing is that the evaluation paradigm misdirected attack design, but this can be viewed as an emergent property of the field rather than deliberate obfuscation. The paper's claims are appropriately scoped.
+
+- **Demand for different teacher/generator pairs**: The paper explicitly states (line 87) that "Other embedding models like FaceNet can also be used as long as there is a compatible generative model." The choice of ArcFace is justified by its widespread adoption and Arc2Face compatibility, and cross-validation with commercial APIs mitigates concerns about model-specific artifacts.
+
+- **Criticism about CanFG/TIP-IM evaluation depth**: The paper explicitly labels these as "pilot evaluations" (line 34) and the abstract/conclusions appropriately scope claims to "suggest similar vulnerabilities may extend beyond the frequency-domain PPFR family." The preliminary nature is disclosed.
+
+## Novel Insights
+
+The paper exposes a fundamental misalignment between two privacy notions in PPFR: reconstruction privacy (attacker cannot recover original pixels) versus identity privacy (attacker cannot determine or regenerate the person's identity). The striking empirical result that 3-second-per-identity distillation extracts identity embeddings when sophisticated reconstruction attacks fail (Figure 3) suggests the field's evaluation paradigm has systematically underestimated vulnerability to service-provider adversaries. This insight transcends PPFR to any privacy-preserving system where utility requires machine-readable identity while humans perceive privacy in pixel space.
+
+## Suggestions
+
+- Clarify that regeneration success rates represent an upper bound contingent on embedding-space alignment, especially for practitioner audiences.
+- Add a figure comparing embedding similarity distributions between (1) same-person different-image pairs, (2) protected template-original image pairs, and (3) different-identity pairs to visualize the information leakage directly.
+
+## Score and Decision
+
+**Calibration anchors:**
+- `/home/wg25r/review_agent/human_reviews/48CXLrx7K3.md` (avg score 5.33, Reject): Face reconstruction from low-dimensional features with similar methodology; FaceLinkGen exceeds this in scope, validation breadth, and empirical rigor.
+- `/home/wg25r/review_agent/human_reviews/agHddsQhsL.md` (avg score 7.50, Spotlight): Targeted attacks for diffusion protection with strong empirical evaluation and novel insight; FaceLinkGen has comparable empirical rigor and conceptual novelty.
+- `/home/wg25r/review_agent/human_reviews/XH3OiIhtvf.md` (avg score 2.00, Reject): Federated learning face recognition with weak methodology; FaceLinkGen is substantially stronger.
+
+**Comparison:** FaceLinkGen demonstrates comparable empirical rigor to the 7.5-scored anchor, with stronger cross-validation (commercial APIs, minimal-resource attack) and a more fundamental conceptual contribution (exposing a systematic evaluation flaw in an entire subfield). The paper's weaknesses are minor and acknowledged. The core finding—that pixel-level metrics inadequately measure identity privacy—is robustly supported and practically significant.
+
+MY FINAL SCORE: <pineapple>7.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.5
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ./papers/paper.md
+Timestamp: 2026-04-20T16:53:23.209925
+
+--- Token Usage ---
+  Harsh Critic: input=14121 (cached=0) output=3789 (reasoning=0) total=17910 requests=1
+  Strength Finder: input=13253 (cached=0) output=1746 (reasoning=0) total=14999 requests=1
+  Merger: input=479906 (cached=0) output=11533 (reasoning=0) total=491439 requests=32
+  TOTAL: input=507280 output=17068 total=524348
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Jersey Number Recognition with Vision-Language Models and Collage-Based Aggregation
+
+## Critical Issues
+
+### 1. **Structural — No baseline accuracy comparison.**
+The paper's central claim is that VLM-based collage aggregation is an effective approach for jersey number recognition, yet it never compares its accuracy (76.41%) against the baseline pipeline from [1] (Koshkina & Elder, CVPRW 2024). Every time the baseline is mentioned, the comparison is either about runtime (Table I) or about legibility classifiers (Section III)—never about end-to-end accuracy. Without knowing what the baseline achieves on the same test set, the reader cannot assess whether the proposed system represents an improvement, a regression, or a lateral move. This is not a missing experiment; it is a missing *result*, and it invalidates the paper's ability to support its core claim. Section V never reports it; the abstract's "improves accuracy from 49.7% to 76.41%" compares zero-shot to fine-tuned—*within* the proposed system—not to any competing method.
+
+### 2. **Structural — No ablation of the collage mechanism, which is the paper's primary novelty.**
+The collage-based temporal aggregation is the most distinctive design choice, but no experiment isolates its contribution. Would majority voting over per-frame Qwen predictions achieve comparable accuracy? Would feeding only the single highest-confidence crop to Qwen work just as well? Would feeding all 25 crops individually and taking a vote be better or worse? Without comparing against simpler aggregation strategies, the paper cannot establish that the collage formulation *itself* is what enables good performance, rather than the VLM fine-tuning or the OWLv2 cropping doing all the work. This absence affects claims throughout Sections I, IV, and VII.
+
+### 3. **Evidential — Misleading runtime comparison that excludes half the proposed pipeline.**
+Table I (Section V-D) compares Qwen inference on 5 collages vs. PARSeq inference on 635 crops and concludes the proposed system is "faster in practice." But the timing excludes OWLv2 detection, which replaces both the legibility classifier *and* pose estimation in the baseline. A fair comparison would time the full pipeline on both sides, or at minimum acknowledge that OWLv2 processing 635 frames at 0.1–0.5s each (Section V-A) would add 63–317 seconds, dwarfing the 7.86s savings shown. The baseline's legibility filtering would also reduce the 635 crops before they reach PARSeq. The current comparison systematically favors the proposed system by timing only the stage where it wins.
+
+### 4. **Evidential — Evaluation protocol is underspecified and unreliable.**
+The single accuracy figure (76.41%) is reported on a "1,840 sample set" (Section V-C) without specifying whether these are tracklets, individual frames, or collages—nor how the train/validation/test splits were constructed. LoRA hyperparameters (rank, alpha, target modules) are not reported. No variance or confidence intervals are provided. The paper itself acknowledges (Section VI-A) that the ground truth contains incorrect labels (e.g., jersey "1" for a player visibly wearing "38"-ish), yet makes no attempt to quantify this noise's impact. The accuracy could be substantially higher or lower with cleaned labels; the reader cannot tell.
+
+## Section-by-Section Notes
+
+**Abstract & Introduction (Sections I–II):** The framing is reasonable but overclaims. The abstract states results "suggest that vision-language models with tracklet-level aggregation are a useful approach," but without a baseline comparison, this suggestion lacks evidence. The related work is adequate but reads more like a catalog of architectures than a motivated comparison.
+
+**Legibility Model Comparisons (Section III):** This section occupies roughly a third of the paper but evaluates components *not used in the final system*. The ResNet34/EfficientNet/MobileNet comparison (Figures 1–4) and the Swin-T comparison (Figures 5–7) are thorough, but the conclusion that Swin-T was abandoned because it was "0.34% worse on two tracklets" (Section III-A-2) makes the extensive evaluation feel disproportionate to its impact. The ConvNeXt results appear briefly with image-level metrics but no pipeline-level result at all.
+
+**System Design (Section IV):** The pipeline is described at a high level but with insufficient detail for reproducibility. The collage construction algorithm is not formalized—how are the 25 crops selected from a tracklet that may have hundreds? What happens when OWLv2 produces fewer than 25 detections? What happens when it produces zero? The model is referred to as "Qwen OCR model," "Qwen3-VL," and "Qwen-3.5" in different places—are these the same model? LoRA hyperparameters are absent.
+
+**Error Analysis (Section IV-D):** This section describes failure modes well, particularly the single-digit/double-digit confusion and OWLv2 detection failures. However, it does not quantify these error rates, which would be informative.
+
+**Results (Section V):** The "Strengths" and "Limitations" subsections belong in a Discussion section, not Results. The only quantitative results are: zero-shot 49.7%, fine-tuned 76.41%, a training loss curve, and a confusion matrix. No per-category accuracy, no comparison to any prior method, no ablations. Figure 13 is too small to read meaningfully.
+
+**Future Work (Section VI):** The data cleaning discussion (Section VI-A) should not be future work; if the authors know the labels are wrong, they should quantify the impact. Synthetic data generation (Section VI-D) and reinforcement learning (Section VI-B) are speculative.
+
+## Strengths
+
+1. **The problem formulation—treating jersey number recognition as reasoning over multiple noisy observations rather than single-frame OCR—is genuinely interesting** and the collage mechanism is a natural way to leverage VLM capabilities. This conceptual shift from per-frame recognition to tracklet-level aggregation is the paper's strongest contribution, even if the evidence for its superiority over simpler aggregation is missing.
+
+2. **The error analysis in Section IV-D is honest and informative.** The discussion of single-digit/double-digit confusion, OWLv2 detection failures, and Real-ESRGAN hallucination artifacts demonstrates genuine engagement with failure modes.
+
+3. **The Real-ESRGAN preprocessing step is well-motivated** and the visual comparison in Figures 9–10 effectively demonstrates that upscaling meaningfully improves digit legibility.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **End-to-end accuracy comparison with the baseline [1] on the same test set.** Without this, the paper cannot establish that its approach is an improvement over existing methods. This is the single most important missing experiment.
+2. **Ablation of collage vs. simpler aggregation strategies** (per-frame prediction + majority vote, best-single-frame selection, top-k voting). Without this, the collage's contribution is unattributed.
+3. **Ablation of Real-ESRGAN and OWLv2.** Does the pipeline work without upscaling? Without OWLv2 (using pose-based crops instead)? These are claimed contributions but unvalidated.
+
+### Deeper Analysis Needed
+1. **Quantification of ground truth label noise.** The paper acknowledges mislabels but doesn't estimate their prevalence or impact. Even a manual check of 100 random samples would bound the damage.
+2. **Per-jersey-number accuracy breakdown.** The confusion matrix (Figure 13) is too small to read. A table of accuracy by number of digits, by visibility level, or by tracklet length would reveal where the system succeeds and fails.
+
+### Visualizations & Case Studies
+1. **Qualitative collage examples showing correct vs. incorrect predictions side by side**, with annotations indicating which crops OWLv2 selected and what the model attended to. This would help the reader understand failure modes and verify collage quality.
+
+### Obvious Next Steps
+1. **Report the full pipeline runtime including OWLv2**, or withdraw the "faster inference" claim. The current comparison is incomplete and misleading without OWLv2 timing.
+
+## Overall Assessment
+
+This paper proposes an interesting reformulation of jersey number recognition as VLM-based reasoning over a collage of tracklet crops, but it fails to establish that this approach is *better* than existing methods. The most critical gap is the absence of an end-to-end accuracy comparison against the baseline [1], which makes the core claim unverifiable. The runtime advantage claim is undermined by excluding OWLv2 timing from the comparison, and the collage mechanism—the paper's primary novelty—lacks any ablation against simpler aggregation strategies. Additionally, significant paper real estate is devoted to legibility classifier comparisons (Swin-T, ConvNeXt) that were ultimately abandoned, while the components that *are* in the final system receive comparatively thin evaluation. The paper needs a proper baseline accuracy comparison, at least one ablation showing that the collage adds value over majority voting, and a fair full-pipeline runtime comparison before its claims can be assessed. In its current form, the evidence does not support the paper's conclusions.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Substantial accuracy improvement from LoRA fine-tuning of the VLM**: The paper reports that LoRA fine-tuning of Qwen3-VL improved tracklet-level jersey number recognition accuracy from 49.7% (zero-shot) to 76.41% on a 1,840-sample test set (Section V.C). This 26.7 percentage point gain directly demonstrates that adapting a vision-language model to the collage-based recognition task is effective, going well beyond what the zero-shot model could achieve.
+
+2. **Collage-based aggregation significantly reduces recognition-stage inference time**: Table I provides a controlled runtime comparison on the same tracklet (SoccerNet test tracklet 263), showing the collage-based Qwen path processes 5 collages in 1.19s total versus PARSeq processing 635 individual crops in 9.05s total. This directly validates the claim that consolidating multiple crops into fewer collage inputs reduces the number of recognition calls and speeds up tracklet-level inference.
+
+3. **Demonstrated visual improvement from super-resolution pre-processing**: Figures 9 and 10 provide side-by-side visual evidence that Real-ESRGAN 4× upscaling substantially improves digit boundary clarity in both individual crops and collage grids. The blurry "10" in the original resolution (Figure 9a) becomes clearly legible after upscaling (Figure 9b), supporting the design choice of including this pre-processing step for low-resolution broadcast inputs.
+
+### Supporting strengths
+
+1. **Thorough ablation of legibility classification backbones with transparent negative results**: The paper compares five architectures (ResNet34, EfficientNetV2, MobileNet, ConvNeXt, Swin-T) for the legibility filtering stage with detailed metrics (Figures 1–7, including accuracy, precision, recall, F1, and false-positive/false-negative rate breakdowns). Notably, Section III.A.2 reports that Swin-T improved image-level legibility metrics over ResNet34 (Figure 6) but performed 0.34% worse in a full-pipeline evaluation, providing honest and useful design insight that better isolated legibility does not always translate to better end-to-end recognition.
+
+2. **Pipeline consolidation via open-vocabulary detection replacing two separate modules**: OWLv2 replaces both the legibility classifier and pose-based torso localizer with a single open-vocabulary detection step (Figure 8, Section IV.A.2), where detection failure implicitly serves as a legibility signal. This simplification reduces inter-model communication errors, as noted in Section V.A.2.
+
+3. **Removal of the two-digit character set constraint**: Unlike PARSeq, which constrains output to exactly two digits from a fixed character set, the Qwen-based recognition operates without this constraint (Section V.A.5), enabling recognition of multi-digit or unusual number formats and removing a source of single/double-digit confusion errors.
+
+4. **Detailed error analysis with identifiable failure patterns**: Section IV.D catalogs specific failure modes including single/double-digit confusion, OWLv2 detection failures on occluded frames, Real-ESRGAN hallucinated textures, and ground-truth label errors. The confusion matrix in Figure 13 confirms that the dominant error pattern is confusing single- and double-digit numbers (e.g., 4 ↔ 44), providing concrete insight into where the system fails.
+
+### Presentation / practical strengths
+
+1. **Honest reporting of limitations and negative results**: The paper transparently reports that Swin-T was not adopted despite better standalone legibility metrics (Section III.A.2), acknowledges dataset labeling errors with a specific example (Figure 14), and discusses computational overhead and the 25-crop information loss cap (Section V.B), which lends credibility to the evaluation.
+
+## Summary
+
+The paper presents a jersey number recognition pipeline that replaces a multi-stage baseline (legibility classifier → pose estimator → PARSeq OCR per crop) with a streamlined design using Real-ESRGAN super-resolution, OWLv2 open-vocabulary detection, and a Qwen3-VL vision-language model operating on collage-aggregated tracklet inputs. The single most important piece of evidence supporting this contribution is the improvement from 49.7% zero-shot accuracy to 76.41% after LoRA fine-tuning, combined with the Table I runtime comparison showing that the collage-based recognition processes a tracklet in 1.19s (5 collages) versus 9.05s for PARSeq (635 crops), demonstrating both effectiveness and practical efficiency gains at the recognition stage.
+
+--- Merged Review ---
+Now I have a thorough understanding of the paper. Let me verify the key claims from the harsh critic:
+
+1. **No baseline accuracy comparison**: Confirmed. The paper never reports the end-to-end accuracy of the baseline [1] (Koshkina & Elder, CVPRW 2024) on the same test set. The abstract's "49.7% to 76.41%" is within-system (zero-shot vs. fine-tuned), not a comparison with the baseline.
+
+2. **No ablation of collage mechanism**: Confirmed. No experiment compares the collage approach against simpler alternatives like per-frame predictions + majority voting.
+
+3. **Misleading runtime comparison**: Partially true. Table I compares only the recognition stage (Qwen vs. PARSeq). The paper does acknowledge this in Section V-D: "The measured runtime comparison only considers the OCR inference stage rather than the entire localization-and-recognition pipeline because OWLv2 itself was not timed." However, the paper still concludes "the proposed recognition architecture is faster in practice" — this conclusion is misleading given the excluded components.
+
+4. **Evaluation protocol underspecified**: Confirmed. The 1,840-sample set is not clearly specified as tracklets/frames/collages. LoRA hyperparameters (rank, alpha, target modules) are not reported. No variance/confidence intervals.
+
+Let me now compile the final review.
+
+## Summary
+
+This paper proposes a tracklet-based jersey number recognition pipeline for soccer broadcast footage that replaces a multi-stage baseline (legibility classifier → pose estimator → PARSeq OCR) with a streamlined architecture using Real-ESRGAN super-resolution, OWLv2 open-vocabulary detection, and collage-based temporal aggregation fed to a LoRA-fine-tuned Qwen3-VL vision-language model. LoRA fine-tuning improves accuracy from 49.7% (zero-shot) to 76.41% on 1,840 samples, and the collage formulation reduces the number of recognition calls compared to per-crop OCR.
+
+## Strengths
+
+- **Novel and well-motivated problem formulation**: Treating jersey number recognition as reasoning over multiple noisy observations (collage of tracklet crops) rather than single-frame OCR is a genuinely interesting conceptual shift (Sections I, IV). This leverages VLM capabilities for aggregation under uncertainty in a way that per-frame pipelines cannot.
+
+- **Substantial accuracy improvement from LoRA fine-tuning**: The 26.7 percentage point gain from 49.7% to 76.41% (Section V-C) on the 1,840-sample test set directly demonstrates that adapting the VLM to the task is effective.
+
+- **Honest and informative error analysis**: Section IV-D catalogs specific failure modes (single/double-digit confusion, OWLv2 detection failures, Real-ESRGAN hallucinated textures, ground-truth label errors). The confusion matrix (Figure 13) confirms the dominant error pattern (e.g., 4↔44). This transparent reporting lends credibility.
+
+- **Effective visual evidence for super-resolution preprocessing**: Figures 9–10 provide side-by-side comparisons showing that Real-ESRGAN 4× upscaling meaningfully improves digit legibility in both individual crops and collage grids, supporting this design choice.
+
+- **Thorough and transparent evaluation of abandoned legibility backbones**: The comparison of five architectures (ResNet34, EfficientNetV2, MobileNet, Swin-T, ConvNeXt) with detailed metrics (Figures 1–7) provides honest design insight, including the finding that better isolated legibility (Swin-T) did not translate to better end-to-end recognition (Section III-A-2).
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **No end-to-end accuracy comparison with the baseline [1] on the same test set.** The paper's central claim is that the VLM-based collage approach is a useful alternative to the baseline pipeline (Koshkina & Elder, CVPRW 2024), yet it never reports the baseline's accuracy on the same evaluation set. The abstract's "49.7% to 76.41%" compares zero-shot to fine-tuned within the proposed system — it is not a comparison against any competing method. Without knowing what the baseline achieves end-to-end, the reader cannot determine whether the proposed system represents an improvement, a regression, or a lateral move. This is the single most critical gap, as the paper's stated contribution is offering an alternative to the baseline pipeline.
+
+- **No ablation isolating the collage mechanism's contribution.** The collage-based temporal aggregation is the paper's most distinctive design choice, but no experiment tests whether simpler alternatives would achieve comparable results. For instance, would per-frame Qwen predictions with majority voting work as well? Would feeding only the single highest-confidence crop work nearly as well? Without at least one ablation against a simpler aggregation strategy, the paper cannot establish that the collage formulation itself is what drives performance, as opposed to the VLM fine-tuning or better crop quality from OWLv2 doing most of the work. This affects claims throughout Sections I, IV, and VII.
+
+- **Misleading runtime "faster in practice" claim.** Table I compares only the recognition stage (Qwen on 5 collages vs. PARSeq on 635 crops), and the paper acknowledges it excludes OWLv2 timing. Yet the conclusion still states "the proposed recognition architecture is faster in practice" (Section V-D). This is misleading: OWLv2 processes 635 frames at 0.1–0.5s each (per Section V-A), adding 63–317 seconds — far exceeding the 7.86s recognition-stage savings. The claim should either be withdrawn or properly scoped (e.g., "the recognition stage is faster") rather than presented as a pipeline-level advantage.
+
+### Minor
+
+- **Evaluation protocol is underspecified.** The 1,840-sample test set is not clearly defined: are these tracklets, individual frames, or collages? Train/validation/test split construction is not described. LoRA hyperparameters (rank, alpha, target modules) are not reported. No variance or confidence intervals are provided for the accuracy figure. These gaps make it harder to contextualize the reported 76.41%.
+
+- **Disproportionate space on abandoned components.** Approximately a third of the paper (Section III) is devoted to comparing legibility classifier backbones (ResNet34, EfficientNetV2, MobileNet, Swin-T, ConvNeXt), none of which are used in the final system. Meanwhile, the components actually in the pipeline (OWLv2, collage construction, Qwen fine-tuning) receive comparatively thin evaluation. This structural imbalance weakens the paper's focus.
+
+- **Ground truth noise acknowledged but not quantified.** Section VI-A and Figure 14 identify incorrect labels in the SoccerNet dataset, which the authors recognize inflate the error rate. Even a manual check of a small random sample (e.g., 100 tracklets) to estimate the prevalence of mislabels would help bound the impact on reported accuracy.
+
+- **Inconsistent model naming.** The VLM is referred to as "Qwen OCR model" (Section IV-A-4), "Qwen3-VL" (Section IV intro, Figure 8), and "Qwen-3.5" (Section IV-A-3). These may be the same model, but the inconsistency creates confusion about which specific model and version is used.
+
+### Trivial
+- The Results section (V) interleaves "Strengths" and "Limitations" subsections that would be more naturally placed in a Discussion section.
+
+## Nice-to-Haves
+
+- Per-jersey-number accuracy breakdown (by digit count, visibility level, or tracklet length) to reveal where the system succeeds and fails beyond what the confusion matrix shows.
+- Ablations of Real-ESRGAN and OWLv2: does the pipeline work without upscaling? Without OWLv2 (using pose-based crops instead)?
+- Qualitative collage examples showing correct vs. incorrect predictions side by side.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+
+- **"No variance or confidence intervals for large-scale benchmarks"** (harsh critic #4 partial): For a single accuracy number on a fixed test set in this type of systems paper, confidence intervals are a nice-to-have, not a standard requirement. Moved to Nice-to-Haves/Minor as appropriate.
+
+- **"The model is referred to as different names — are these the same model?"** (harsh critic): This is a legitimate observation but better classified as a Minor inconsistency rather than a reproducibility concern. Kept as Minor.
+
+- **"Figure 13 is too small to read meaningfully"** (harsh critic): This is a formatting/presentation nitpick that falls under trivial presentation issues. Removed from main weaknesses.
+
+- **"Missing related works"** (harsh critic): Per instructions, I do not flag missing related works as I cannot verify their existence.
+
+- **"LoRA hyperparameters not reported — reproducibility concern"** (harsh critic): Kept as Minor (evaluation protocol underspecification) but removed as a standalone reproducibility complaint per instructions.
+
+- **"Data cleaning should not be future work"** (harsh critic): The authors clearly acknowledge the issue and discuss it in Section VI-A. Moving it to future work is a structural choice, not a failure to address the problem. Kept as Minor suggestion only.
+
+- **Strength Finder's "Pipeline consolidation via OWLv2 replacing two modules"**: This is a legitimate design observation but overclaimed as a strength — the paper itself notes OWLv2 was not trained for this data and can silently misclassify legibility (Section V-B-3, V-B-5). The consolidation benefit is partially offset by these new failure modes. Moved to Removed Points.
+
+## Novel Insights
+
+The paper's most interesting conceptual contribution — treating jersey number recognition as reasoning under uncertainty over multiple noisy observations rather than single-frame OCR — is genuinely novel for this domain. However, the paper's own evidence subtly cuts against this framing: the dominant failure mode (single/double-digit confusion from partial crops in the collage) is arguably *compounded* by the collage approach (Section IV-D-1: "If most of the crops in the grid show a partial number, the model is biased towards the partial reading"). This suggests the aggregation mechanism may sometimes amplify rather than mitigate the noise it was designed to handle, which is a nuance the paper does not fully engage with despite honestly describing the symptom.
+
+## Suggestions
+
+- Report the baseline [1] accuracy on the same SoccerNet test split, or at minimum cite the baseline's published accuracy on its own test set and discuss comparability.
+- Add at least one ablation comparing collage-based aggregation against a simpler alternative (e.g., per-frame Qwen prediction + majority voting) to establish the collage's specific contribution.
+- Withdraw or properly scope the "faster in practice" claim in Section V-D to "faster recognition-stage inference," since the full-pipeline runtime including OWLv2 was not measured.
+- Specify the 1,840-sample test set composition (tracklets vs. collages), the train/val/test splits, and the LoRA hyperparameters.
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper Path | Avg Score | Comparison |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/4Hf5pbk74h.md` (NN boundary improvement) | 2.33 | Weak experiments on low-accuracy models, missing baselines, no ablation, overclaimed gains. Much weaker than this paper — this paper has a clearer pipeline design and honest error analysis. |
+| `/home/wg25r/review_agent/human_reviews/TUUjIWntkU.md` (medical image clustering) | 2.50 | Very limited quantitative evaluation, missing baselines, unclear details, overclaimed superiority. Weaker than this paper. |
+| `/home/wg25r/review_agent/human_reviews/V5lBNcD65H.md` (MTEEG multi-task EEG) | 4.75 | LoRA-based PEFT for multi-task EEG with moderate experiments and limited novelty. Similar pattern of applying PEFT to a new domain but with more baselines than this paper. |
+| `/home/wg25r/review_agent/human_reviews/RofgmKmk5n.md` (TPP-LLM) | 5.50 | LLM + LoRA applied to temporal point processes; novel domain application with reasonable baselines but missing some comparisons. Slightly stronger than this paper due to better baseline comparison. |
+| `/home/wg25r/review_agent/human_reviews/DjzvJCRsVf.md` (CLIPSelf) | 7.00 | Strong empirical results with SOTA on multiple benchmarks, clear methodological contribution, but missing some baseline comparisons. Much stronger than this paper. |
+
+This paper sits between the low-scoring papers (2.3–3.0) that have fundamentally weak experiments and overclaimed results, and the medium-scoring papers (4.75–5.50) that apply PEFT/LoRA to new domains with moderate but incomplete evaluation. The paper shares the same core deficiency as the low-scoring anchors (missing baseline comparison, no ablation of the core novelty), but has genuine strengths the low-scoring papers lack (honest error analysis, interesting problem formulation, real accuracy improvement from fine-tuning). Compared to TPP-LLM (5.50), this paper is weaker because TPP-LLM at least compared against domain-specific baselines. The key deficiencies — no baseline accuracy comparison and no ablation of the collage mechanism — are serious enough that the paper's core claim (that the VLM+collage approach is useful) remains unsupported by evidence relative to alternatives.
+
+Score: 3.5
+
+Decision: Reject
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+3.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../paper.md
+Timestamp: 2026-04-20T17:20:24.494875
+
+--- Token Usage ---
+  Harsh Critic: input=17050 (cached=0) output=6436 (reasoning=0) total=23486 requests=1
+  Strength Finder: input=16182 (cached=0) output=1761 (reasoning=0) total=17943 requests=1
+  Merger: input=724040 (cached=0) output=13785 (reasoning=0) total=737825 requests=43
+  TOTAL: input=757272 output=21982 total=779254
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: FaceLinkGen — Rethinking Identity Leakage in Privacy-Preserving Face Recognition
+
+## Critical Issues
+
+### 1. Uncalibrated regeneration success rates — no baseline for Arc2Face quality from original embeddings [Evidential]
+
+**Section 5.3, Table 2.** The headline regeneration success rates (90–100%) depend on *two* factors: (a) how well the student model recovers identity information from protected templates, and (b) how well Arc2Face generates identity-consistent faces from ArcFace embeddings generally. The paper never reports the regeneration success rate of Arc2Face when given *original* (non-distilled) ArcFace embeddings. If that baseline is 99.5%, then student-extracted embeddings at 90% pass rate reflect meaningful information loss; if it is 93%, then the near-identical performance means the student is essentially a perfect inverter, which supports the paper's argument more strongly—but we cannot tell which. Without this calibration, the regeneration numbers are uninterpretable as measures of identity leakage magnitude. The linkage attack (Table 4: 72–86% closed-set recall vs. 88% original) tells a more modest story about information preservation, and the gap between linkage and regeneration success is never reconciled.
+
+### 2. Face++ as an evaluation metric for AI-generated faces is unvalidated, and conflicting evidence is dismissed [Evidential]
+
+**Sections 5.3, 6, Tables 2, 5, 7.** The paper's primary regeneration metric is Face++ verification. However, Table 7 reveals a striking discrepancy: under the constrained attack, Face++ regeneration Success@5 is 94–96%, while the Amazon API reports only 44–57%. The paper attributes this to Amazon being "more strict or sensitive to AI-generated images" (Section 6) without further investigation. This explanation, if correct, actually *undermines* the use of Face++ for evaluating identity leakage through AI-generated faces: if Face++ is systematically permissive toward AI-generated faces (perhaps because generative models produce identity features more sharply or cleanly than real photos), then the headline 96%+ success rates could be inflated. The paper's only cross-verification with Amazon (Table 5) is for *verification accuracy* (where both APIs agree), not for *regeneration pass rate*, leaving the critical metric unvalidated. The paper should have evaluated main-experiment regeneration with both APIs, or at minimum acknowledged this as a serious limitation.
+
+### 3. The paper's framing as "revealing vulnerabilities" understates the inherent tension in PPFR's design goal [Structural]
+
+**Abstract, Sections 1, 3, 11.** The paper positions FaceLinkGen as exposing vulnerabilities in specific systems. But the mechanism it reveals is largely inherent to *any* PPFR system that preserves recognition utility: if the template must support identity matching, identity-discriminative information is preserved and extractable. The paper acknowledges this in passing ("as long as $I$ persists in $T$, an attacker can recover $I'$") but consistently frames results as demonstrating failures of *particular methods* rather than a fundamental design tension. The more accurate—and arguably more important—claim is that *transformation-based PPFR without cryptographic guarantees cannot provide identity privacy while maintaining recognition utility*, and that prior work's pixel-level metrics obscured this fact. The current framing invites a response of "fix the methods" when the deeper lesson is "rethink the paradigm." This doesn't invalidate the paper but misweights its contribution toward a narrower security-audit reading.
+
+## Section-by-Section Notes
+
+**Abstract:** Claims ">98.5% matching accuracy and above 96% regeneration success" but these numbers conflate different evaluation settings and metrics. The matching accuracy (Table 3: 0.92–0.99) is 1-to-1 verification; the regeneration success is Face++ Pass@1e-5. These are different tasks, and the abstract's wording suggests a single coherent attack metric.
+
+**Section 1 (Introduction):** The argument that pixel-level similarity ≠ identity similarity is well-made; Table 1 and Figure 2 are effective. However, the paper overstates novelty relative to FracFace [6], which "also reports identity similarity and employ StyleGAN for non-pixel-level reconstruction" — the paper should more precisely differentiate its contribution from FracFace's own identity-level evaluation (beyond the distillation pipeline difference).
+
+**Section 2 (Threat Model):** The threat model discussion is one of the paper's strongest sections. The argument about how prior work relaxed the insider adversary model is well-reasoned. The point about local model reverse-engineering is important.
+
+**Section 3 (Methods):** The method is a standard knowledge distillation pipeline with an off-the-shelf generative model. The paper is honest about this simplicity being the point. However, the mathematical formulation in Equation 3 is garbled in the PDF (likely a parser issue), making the regeneration step hard to follow. The claim that "our attack method is independent of the specific face recognition model employed by the PPFR server" is true but somewhat misleading — it depends on the protected template retaining identity features aligned with *some* accessible embedding space, which is practically true for all systems using standard FR backbones.
+
+**Section 5 (Experiments):** The training dataset (CASIA-WebFace subset, 10K IDs, 90K images) is reasonable. The use of TPDNE as a synthetic test set that avoids overlap with Arc2Face's training data is a good design choice. However, the paper should report whether any of the *identities* in the training set appear in the test sets (LFW has known overlap potential with CASIA-WebFace). No variance or confidence intervals are reported for any metric.
+
+**Section 5.1 (Minimal-Resource Attack):** The results with 800 and 256 training images are important and strengthen the paper's argument. However, the 256-image experiment's 90.5% regeneration success is not contextualized — is regeneration evaluated on the same small training identities or the full test set?
+
+**Section 5.2 (Linkage):** Table 4 (closed-set 1-to-N recall of 72–86%) is actually the most informative result for understanding how much identity information survives the transformation. The gap between this and original-to-original (88%) is notable but the paper doesn't discuss whether the ~20% relative degradation is "enough" to matter for practical privacy or whether it represents a serious information leak.
+
+**Section 6 (Constrained Attack):** The high-pass filter proxy is clever and practically important. But the paper doesn't explain how the kernel sizes and strengths were chosen, or how sensitive results are to these hyperparameters. The claim that "the attacker does not need to know any details about the system" is true for the *method*, but the attacker does need to identify the visual "high-pass characteristic" — would this generalize to a method that didn't have this characteristic?
+
+**Section 8 (De-identification):** The TIP-IM evaluation (Table 8) uses only 2,082 images from 408 identities — too small to support strong claims. The CanFG evaluation is under the same oracle-access model (which CanFG's authors concede is a vulnerability). The extension to de-identification systems is presented as significant but the evidence is preliminary.
+
+**Section 9 (Soft Biometrics):** An interesting addition, but the training on FairFace for one epoch is not well justified, and the comparison between MinusFace's lower accuracy and FracFace/PartialFace's near-original accuracy is noted but not analyzed.
+
+**Section 10 (Future Directions):** The suggestion about cryptographic approaches and key-based hardening aligns with the paper's thesis. The "inverted de-identification" idea (remove identity, preserve human perception) is intriguing but speculative.
+
+## Strengths
+
+1. **The core conceptual argument is important and correct.** The paper clearly demonstrates the disconnect between pixel-level reconstruction metrics and identity-level privacy. Table 1 and Figure 2 make this disconnect visually and quantitatively clear.
+
+2. **The threat model analysis (Section 2) is thorough and well-argued.** The paper correctly identifies how prior PPFR work drifted toward weaker adversary assumptions and systematically brings the evaluation back to the intended insider adversary.
+
+3. **The constrained attack (Section 6) significantly strengthens practical impact.** Showing that a generic high-pass filter suffices eliminates the strongest objection ("but the attacker needs oracle access") and demonstrates that the vulnerability is in the representation's properties, not in system-specific knowledge.
+
+4. **The minimal-resource experiments (Section 5.1) effectively counter complexity-based objections.** 50 seconds of training with 800 images achieving 97% success makes a compelling argument.
+
+5. **Multi-API cross-verification attempted (Table 5).** While I flagged the incomplete cross-verification for regeneration, the effort to validate with both Face++ and Amazon is methodologically sound in principle.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Arc2Face baseline regeneration from original ArcFace embeddings.** Without this, Table 2's 90–99% success rates are uncalibrated. Report the same Face++ Pass@k metrics for faces generated from original (non-distilled) embeddings to establish ceiling performance.
+2. **Amazon API regeneration results for the main (oracle-access) experiment.** The constrained attack shows a 40+ point gap between Face++ and Amazon (Table 7). The main results (Table 2) depend entirely on Face++. Cross-verifying even a subset (e.g., 200 images) with Amazon would determine whether this gap is systematic or constrained-attack-specific.
+3. **Robustness analysis for the constrained attack's hyperparameters.** Section 6 achieves strong results with a generic high-pass filter, but doesn't report sensitivity to kernel size, strength, or augmentation strategy. One model trained for all three methods is impressive but could be fragile.
+
+### Deeper Analysis Needed
+1. **Analysis of the gap between linkage and regeneration success.** Linkage (72–86% closed-set recall) and regeneration (90–99%) tell different stories. Does Arc2Face compensate for embedding noise/drift by generating identity-consistent faces even from imperfect inputs? If so, the regeneration metric may overstate the extracted identity information's fidelity. This should be discussed explicitly.
+
+### Visualizations & Case Studies
+1. **Failure case analysis.** The paper shows only successful regenerations (Figure 1). Showing and analyzing the ~1–10% of cases that *fail* would reveal whether failures are systematic (certain demographics, poses, identities) or random, and would help calibrate the practical severity of the attack.
+
+### Obvious Next Steps
+1. **Baseline comparison with direct ArcFace embedding inversion.** Since the paper argues the vulnerability is in the *representation*, comparing how easily original ArcFace embeddings (without any protection) can be inverted via Arc2Face vs. how protected-template-extracted embeddings compare would clarify how much "extra" work the protection actually imposes on the attacker.
+
+## Overall Assessment
+
+This paper makes an important conceptual contribution: frequency-domain PPFR systems evaluated on pixel-level reconstruction metrics can fail to detect identity-level information leakage, and a straightforward distillation pipeline demonstrates this convincingly. The threat model analysis and constrained attack experiments are strong. However, the experimental evaluation has a significant calibration gap — without knowing Arc2Face's baseline regeneration success from original embeddings, the headline 96%+ rates are uninterpretable, and the Face++ vs. Amazon API discrepancy for regeneration evaluation raises concerns about metric validity that the paper does not resolve. The core argument survives these issues (the linkage results alone are sufficient to demonstrate extractability), but the regeneration results — which are the paper's most striking and most cited numbers — are on weaker evidential footing than presented. The paper should be accepted but the authors must address the Arc2Face baseline and the Face++ metric concern. As it stands, the conceptual contribution is clear and valuable, but the quantitative claims about regeneration success are not fully established.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Clear demonstration of the disconnect between pixel-level and identity-level privacy**: Table 1 provides compelling evidence that pixel-level metrics do not capture identity leakage—a CanFG-generated face achieves SSIM=0.841 and PSNR=26.81 but identity similarity FS=0.008, while two photos of the same person achieve SSIM=0.235 and PSNR=10.44 but FS=0.586. This single table effectively crystallizes the paper's core conceptual argument.
+
+2. **High attack success rates across all evaluated systems**: Table 2 shows regeneration Success@5 consistently above 97.9% across three PPFR methods and three datasets, with Pass@1e-5 (the strictest commercial threshold) above 90%. Table 3 shows 1-to-1 verification accuracy of 0.92–0.99. These results directly substantiate the claim that current PPFR systems fail to protect identity-level privacy.
+
+3. **Minimal resource requirements prove the vulnerability is fundamental to the representations**: Section 5.1 shows that with only ~800 images and under 50 seconds of training, the FracFace attack achieves 97.0% pass rate at FAR=1e-5 and 99.5% linkage accuracy; with only 256 images, it still achieves 90.5% regeneration success. The estimated attack cost is $0.80–1.60 per method (Section 5). This low barrier demonstrates the vulnerability is structural, not an artifact of sophisticated optimization.
+
+### Supporting strengths
+1. **Constrained attacker scenario extends practical impact**: Section 6 and Table 7 show that even without oracle access to the conversion process—using only a generic Gaussian-blur high-pass filter as a proxy—the attack still achieves >92% matching accuracy and >94% regeneration Success@5 on Face++ across all three methods, demonstrating the vulnerability is not dependent on the specific threat model assumptions.
+
+2. **Cross-verification with independent commercial APIs strengthens credibility**: Rather than relying on the same model for extraction and evaluation, the paper uses Face++ (Table 2) and Amazon's face comparison API via EdenAI (Table 5) for verification, with results closely aligned, ruling out evaluation bias from model self-referencing.
+
+3. **Generalization beyond frequency-domain PPFR**: Table 8 shows the same distillation pipeline successfully recovers identity from TIP-IM (adversarial de-identification, linkage accuracy 0.997 vs. 0.000 under standard ArcFace) and CanFG (non-frequency, non-adversarial), demonstrating the vulnerability is not limited to the frequency-domain family.
+
+4. **Direct comparison with prior defensive claims exposes the evaluation gap**: Table 6 contrasts FracFace's claimed protection rates (0.680–1.000 under their frequency-channel metric) with near-zero protection under FaceLinkGen (0.002–0.015), providing concrete evidence that channel disruption does not correspond to identity protection.
+
+5. **Soft biometric leakage adds an additional privacy dimension**: Table 9 shows race (0.663–0.673), gender (0.893–0.925), and age (MAE 4.7–5.9) can be inferred from protected templates at near-original-image accuracy, directly challenging FracFace's claims of soft-biometric obfuscation.
+
+### Presentation / practical strengths
+1. **Well-reasoned threat model grounded in first principles**: Section 2 carefully argues for the service-provider-as-adversary model, notes that the paper assumes *less* knowledge than prior work (no architecture knowledge vs. Mi et al. [20, 21]), and addresses why separation of conversion and recognition entities fails to resolve the trust issue.
+
+2. **Intentional simplicity of the attack as an analytical tool**: The authors explicitly note the simplicity is by design—if a standard distillation pipeline suffices, the vulnerability lies in the representation itself (Section 3). This makes the results more compelling than a complex, method-specific attack would be.
+
+## Summary
+
+The paper argues that pixel-level reconstruction metrics (PSNR, SSIM) are inadequate for evaluating identity privacy in frequency-domain PPFR systems, and demonstrates this via FaceLinkGen, a simple distillation-based attack that extracts identity embeddings from protected templates. The most important piece of evidence is Table 2, which shows that FaceLinkGen achieves above 97.9% regeneration success (Success@5) and above 90% pass rates even at the strictest commercial verification threshold (FAR=1e-5) across all three evaluated PPFR methods and three datasets—despite these systems claiming strong protection under pixel-level metrics—while Section 5.1 demonstrates this can be achieved with as few as 256 images and under 50 seconds of training, proving the vulnerability is fundamental rather than method-specific.
+
+--- Merged Review ---
+Now I have a thorough understanding of the paper and the calibration anchors. Let me write the final review.
+
+## Summary
+
+FaceLinkGen demonstrates that pixel-level reconstruction metrics (PSNR, SSIM) are inadequate for evaluating identity privacy in frequency-domain PPFR systems. Through a simple knowledge distillation pipeline that extracts identity embeddings from protected templates and feeds them to Arc2Face for regeneration, the paper shows that three recent PPFR methods (PartialFace, MinusFace, FracFace) achieve >97% regeneration success and >92% 1-to-1 matching accuracy — despite claiming strong protection under pixel-level metrics. The attack works with as few as 256 training images in under 50 seconds, and a constrained variant using only a generic high-pass filter achieves strong results without oracle access to the conversion process.
+
+## Strengths
+
+- **Compelling and important conceptual contribution**: Table 1 crystallizes the disconnect between pixel-level and identity-level privacy with a single, powerful example — CanFG-generated faces achieve SSIM=0.841 with originals but identity similarity FS=0.008, while two photos of the same person have SSIM=0.235 but FS=0.586. This cleanly demonstrates that pixel-distortion metrics can be fundamentally misleading for privacy evaluation.
+
+- **Strong experimental results across multiple settings and systems**: Table 2 shows regeneration Success@5 above 97.9% and Pass@1e-5 above 90% across three PPFR methods and three datasets. Table 4 confirms linkage attacks achieve 72–86% closed-set recall vs. 88% for original embeddings. The constrained attack (Table 7) achieves >92% matching and >94% regeneration Success@5 on Face++ without oracle access, and the cross-method linkage results (Table 4) demonstrate cross-system template linkage.
+
+- **Minimal resource requirements demonstrate fundamental vulnerability**: Section 5.1 shows the attack works with 800 images and 50 seconds of training (97.0% pass rate at FAR=1e-5, 99.5% linkage), and with only 256 images (90.5% regeneration success). At an estimated cost of $0.80–1.60 per method, the vulnerability is clearly structural rather than requiring sophisticated optimization.
+
+- **Well-reasoned threat model**: Section 2 carefully argues for the service-provider-as-adversary model, identifies how prior work drifted toward weaker assumptions, and shows that the paper assumes *less* knowledge than prior attacks (no architecture knowledge). The argument about local model reverse-engineering and the impossibility of separating conversion and recognition trust is well-constructed.
+
+- **Effective cross-verification strategy**: Table 5 cross-verifies regeneration results with Amazon's face comparison API on 700 LFW images showing close agreement with Face++ for the main experiment. Section 7 provides an API-independent analysis via cosine similarity in embedding space, showing extracted embeddings have higher similarity to source images than to other images of the same person.
+
+- **Generalization beyond frequency-domain PPFR**: Table 8 shows the attack recovers identity from TIP-IM (adversarial de-identification, linkage accuracy 0.997 vs. 0.000 under original model) and CanFG (non-frequency, non-adversarial), demonstrating the vulnerability is not limited to the frequency-domain family.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Missing Arc2Face ceiling/baseline for regeneration success**: Table 2 reports regeneration success rates of 90–100%, but without knowing Arc2Face's regeneration success rate from *original* (non-distilled) ArcFace embeddings, it is difficult to calibrate how much identity information is truly lost in the distillation process. If Arc2Face achieves 99.5% from original embeddings, then 90% Pass@1e-5 from student-extracted embeddings reflects meaningful degradation; if Arc2Face achieves 93%, the near-identical performance suggests the student is almost a perfect inverter. Either way, the interpretation changes. This does not invalidate the core argument — the linkage results and absolute success rates already demonstrate extractability — but it does leave the most headline-grabbing numbers (">96% regeneration success") without proper calibration. The paper would be significantly stronger with this ceiling reported.
+
+- **Face++ vs. Amazon API gap in the constrained attack is acknowledged but not investigated**: Table 7 shows the constrained attack achieves 94.6–96.3% regeneration Success@5 on Face++ but only 44.7–57.0% on the Amazon API — a >38 percentage point gap. The paper briefly attributes this to Amazon being "more strict or sensitive to AI-generated images" (Section 6), but does not investigate this further. Since the main experiment (Table 5) shows Face++ and Amazon in close agreement on LFW, the gap may reflect genuinely lower-quality regenerated faces in the constrained setting rather than Face++ being permissive. However, the possibility that Face++ systematically overestimates identity match for AI-generated faces deserves discussion, as it could affect the headline regeneration numbers across all experiments. Section 7's cosine similarity analysis partially addresses this (as an API-independent check), but does not directly resolve the question of whether Face++ is miscalibrated for AI-generated faces.
+
+### Minor
+
+- **Preliminary evaluation on de-identification systems**: Table 8's TIP-IM evaluation uses only 2,082 images from 408 identities, which is small relative to the main experiments. CanFG's vulnerability is also evaluated under oracle access, which CanFG's own authors acknowledge. The paper appropriately frames these as "pilot evaluations" with "preliminary results," but the generalization claims beyond frequency-domain PPFR would be stronger with larger-scale evaluation.
+
+- **Constrained attack lacks sensitivity analysis for hyperparameters**: Section 6 shows strong results with a generic high-pass filter, but does not report how sensitive results are to kernel sizes, blur strengths, or augmentation strategy. Since the paper argues the vulnerability is general (one model attacks all three methods), understanding the robustness of this claim to hyperparameter choices would strengthen the argument.
+
+- **The gap between linkage (72–86%) and regeneration (90–99%) success is not analyzed**: This gap could indicate that Arc2Face compensates for embedding noise by generating identity-consistent faces from imperfect inputs, meaning regeneration metrics may overstate the fidelity of extracted identity information. A brief discussion of why these metrics diverge would improve interpretability.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Reporting Arc2Face's regeneration success rate from original ArcFace embeddings as a ceiling/baseline, which would contextualize the 90–100% rates in Table 2.
+- Failure case analysis: showing and analyzing the ~1–10% of regeneration failures (demographic patterns, pose dependence, etc.) to assess whether failures are systematic or random.
+- Comparison between direct ArcFace embedding inversion (without any protection) and protected-template extraction, to quantify how much extra difficulty the protection actually imposes on an attacker.
+
+## Removed Points
+
+These points are flagged to be removed; treat them with caution.
+
+- **Abstract "conflates" regeneration and matching**: The harsh critic claims the abstract conflates different metrics. In fact, the abstract states "over 98.5% matching accuracy and above 96% regeneration success" — two clearly separate claims. This is not a conflation. Removed as factually incorrect.
+
+- **Differentiation from FracFace is insufficient**: The harsh critic argues the paper should "more precisely differentiate" from FracFace. The paper already differentiates in Section 1, noting FracFace "still has a strong reconstruction-centric focus" and that its "simulated U-Net attack remains reconstruction-based, aiming to recover the original pixels." This is adequate differentiation. Removed as already addressed.
+
+- **No variance or confidence intervals**: Standard large-scale evaluation practice in this field. Sample sizes (1000 images per dataset) make variance negligible. Removed as a generic nitpick.
+
+- **256-image experiment not contextualized for regeneration evaluation scope**: The 256-image experiment explicitly states both linkage accuracy (98.7%) and regeneration success (90.5%). It's clear this is evaluated on the FracFace method. Removed as the concern is over-interpreted.
+
+- **TIP-IM and CanFG evaluation size concerns (2,082 images, 408 identities)**: The paper explicitly frames these as "pilot" and "preliminary" results. Downgraded to minor rather than major.
+
+- **The paper's framing as "revealing vulnerabilities" understates the fundamental design tension**: This is an interpretive preference, not a weakness. The paper explicitly acknowledges the fundamental tension ("As long as I persists in T, an attacker can recover I'") and frames the contribution as motivating "identity-centric evaluation alongside existing metrics." The current framing is appropriate — it argues both that specific methods fail and that the evaluation paradigm is flawed. Removed as a strawman weakness.
+
+- **Missing related work citations**: Per guidelines, removed since we cannot verify the existence of uncited works.
+
+## Novel Insights
+
+The most insightful observation across reviews is the under-appreciated tension between the linkage and regeneration metrics. Linkage (72–86% closed-set recall, Table 4) and regeneration success (90–99%, Table 2) tell quantitatively different stories about how much identity information survives. This gap likely reflects Arc2Face's ability to generate identity-consistent faces even from noisy/imperfect embeddings — meaning regeneration success may somewhat overstate the fidelity of the extracted information. The cosine similarity analysis in Section 7 partially addresses this, but the paper would benefit from explicitly discussing why these two attack vectors yield different success rates and what each reveals about the nature of the information leak.
+
+## Suggestions
+
+- Report Arc2Face regeneration success from original ArcFace embeddings as a ceiling baseline, to calibrate whether the 90–100% rates represent near-perfect extraction or a mix of extraction quality and Arc2Face's robustness to input noise.
+- Run at least a subset of the main (oracle-access) regeneration experiment through the Amazon API, not just on LFW but specifically for regeneration (Table 5 appears to cover verification accuracy and regeneration pass rate, but confirming this explicitly on all datasets would resolve the Face++ vs. Amazon question more thoroughly).
+- Include a brief analysis of failure cases in the regeneration attack — which identities fail and whether patterns exist — to assess practical severity and potential demographic bias.
+
+## Calibration and Score
+
+**Calibration anchors:**
+
+| Paper | Avg Score | Comparison |
+|-------|-----------|------------|
+| KAN See Your Face (razAcpFapu) | 3.00 | Face embedding-to-face attack with KAN — criticized for naive attack setting, no comparison to prior attacks, and lack of novelty. FaceLinkGen is substantially stronger: novel conceptual contribution (pixel vs. identity), better methodology, comprehensive evaluation, and generalization. |
+| Revealing Info Leakage in Low-Dim Face Portraits (48CXLrx7K3) | 5.33 | Similar idea (identity leakage from face representations) but questioned on whether identity is truly leaked. FaceLinkGen makes a cleaner, more compelling case with commercial-grade verification and multiple attack vectors. |
+| Spurious Privacy Leakage (vuvG5rNBra) | 5.25 | Privacy vulnerability paper with overclaimed "100x" headline. FaceLinkGen is more careful with claims and has stronger experimental grounding. |
+| Beyond Memorization LLM Privacy (kmn0BhQk7p) | 7.20 | Rethinks evaluation paradigm (memorization → inference) with strong empirical results (85% top-1). Considered a spotlight paper. FaceLinkGen similarly rethinks an evaluation paradigm (pixel-level → identity-level) and achieves strong results, but has the calibration gap with regeneration metrics. |
+| Two-faced Attacks (mXpNp8MMr5) | 7.33 | Reveals fundamental vulnerability in adversarically trained models. FaceLinkGen similarly reveals fundamental vulnerability (identity info preserved despite pixel obfuscation) with a simple attack. Comparable conceptual structure but FaceLinkGen has the uncalibrated regeneration ceiling. |
+| Illusory Attacks (F5dhGCdyYh) | 7.33 | Rethinks evaluation of adversarial attacks with information-theoretic detectability. FaceLinkGen similarly rethinks evaluation metrics. Both are conceptual contributions with empirical support. |
+
+FaceLinkGen is clearly above the weak/low-scoring privacy attack papers (KAN See Your Face at 3.0, face portrait leakage at 5.33). It has a clear conceptual contribution, comprehensive experiments, and important practical implications. Compared to the paradigm-shifting privacy/security papers scoring 7+ (Beyond Memorization at 7.2, Illusory Attacks at 7.33, Two-faced Attacks at 7.33), FaceLinkGen has a comparable conceptual contribution but a notable weakness in the uncalibrated regeneration metrics and the Face++/Amazon discrepancy. However, its core argument — that pixel-level metrics are inadequate for identity privacy — is well-supported by multiple independent lines of evidence (linkage, regeneration, cosine similarity, soft biometrics). The paper would benefit from the ceiling baseline and a deeper investigation of the API discrepancy, but these do not undermine the core contribution.
+
+I place this paper in the 6.5–7.5 range relative to these anchors. The conceptual contribution is strong and important. The experimental evaluation is comprehensive but has the one significant calibration gap (Arc2Face ceiling) and the unexplained API discrepancy in the constrained setting. These are addressable in a camera-ready revision rather than fundamental flaws.
+
+**Originality**: High — the pixel-level vs. identity-level distinction is clearly articulated and not well-made in prior PPFR literature. **Importance**: High — exposes a fundamental evaluation gap in a growing field. **Claims support**: Good — multiple independent metrics support the core claim, though regeneration success rates could be better calibrated. **Soundness of experiments**: Good — comprehensive across three methods, three datasets, multiple attack vectors, and constrained settings, with the noted gaps. **Clarity**: Good — well-organized, clear argument progression. **Value to community**: High — motivates a shift in evaluation paradigm for PPFR research.
+
+MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.0
+
+--- Decision ---
+Accept

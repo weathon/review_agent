@@ -43,6 +43,9 @@ def _ensure_indexes():
     _bm25_db["filenames"] = list(db.keys())
     _bm25_db["vectors"] = np.array(list(db.values()))
 
+    with open("./human_review_score_index.pkl", "rb") as f:
+        _bm25_db["score_index"] = pickle.load(f)
+
 
 def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
     from claude_agent_sdk import create_sdk_mcp_server, tool
@@ -107,46 +110,66 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
 
     @tool(
         "search_file",
-        "Search for a query in human reviews using BM25 or vector embeddings. Returns top n matching files. Set mode='bm25' or 'vector'. **Use bm25 for score search.**",
-        {"query": str, "n": int, "mode": str},
+        "Search human reviews, optionally filtered by avg reviewer score. Args: query, n, mode ('bm25' or 'vector'), low_score (default 0), high_score (default 10). Filtering by score range is applied FIRST, then BM25/vector ranks over the filtered subset — use this to anchor calibration to a specific score band.",
+        {"query": str, "n": int, "mode": str, "low_score": float, "high_score": float},
     )
     async def _search_file(args: dict) -> dict:
         query = args["query"]
         n = args.get("n", 5)
         mode = args.get("mode", "vector")
-        print(f"  [merger:search_file] query='{query}' n={n} mode='{mode}'")
+        low_score = float(args.get("low_score", 0.0) or 0.0)
+        high_score = float(args.get("high_score", 10.0) if args.get("high_score") is not None else 10.0)
+        print(f"  [merger:search_file] query='{query}' n={n} mode='{mode}' score=[{low_score}, {high_score}]")
+        score_index = _bm25_db.get("score_index", {})
         if mode == "bm25":
             bm25 = _bm25_db["bm25"]
             files = _bm25_db["files"]
+            allowed_idx = [
+                i for i, p in enumerate(files)
+                if low_score <= score_index.get(os.path.basename(p), -1.0) <= high_score
+            ]
+            if not allowed_idx:
+                return {"content": [{"type": "text", "text": "No files in that score range."}]}
             tokenized_query = query.split(" ")
             doc_scores = bm25.get_scores(tokenized_query)
-            top_indices = doc_scores.argsort()[-n:][::-1]
+            allowed_sorted = sorted(allowed_idx, key=lambda i: doc_scores[i], reverse=True)[:n]
             results = []
-            for idx in top_indices:
+            for idx in allowed_sorted:
                 fpath = os.path.abspath(files[idx])
-                score = doc_scores[idx]
+                rel = doc_scores[idx]
+                avg = score_index.get(os.path.basename(fpath), -1.0)
                 with open(fpath, "r", errors="replace") as fh:
                     content = fh.read()
-                results.append(f"{fpath}\nscore: {score:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
+                results.append(f"{fpath}\navg_score: {avg:.2f}  bm25: {rel:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
             text = "\n---\n".join(results) if results else "No relevant files found."
         else:
+            vectors = _bm25_db["vectors"]
+            filenames = _bm25_db["filenames"]
+            allowed_mask = np.array([
+                low_score <= score_index.get(fn, -1.0) <= high_score for fn in filenames
+            ])
+            if not allowed_mask.any():
+                return {"content": [{"type": "text", "text": "No files in that score range."}]}
             query_embedding = _or_client.embeddings.create(
                 model="google/gemini-embedding-001",
                 input=query,
                 encoding_format="float",
             )
             query_vector = np.array(query_embedding.data[0].embedding)
-            vectors = _bm25_db["vectors"]
-            filenames = _bm25_db["filenames"]
             similarities = vectors @ query_vector.T
-            top_indices = similarities.argsort()[-n:][::-1]
+            masked = np.where(allowed_mask, similarities, -np.inf)
+            top_indices = masked.argsort()[-n:][::-1]
             results = []
             for idx in top_indices:
-                fpath = os.path.abspath(f"../human_reviews/{filenames[idx]}")
-                score = similarities[idx]
+                if not np.isfinite(masked[idx]):
+                    break
+                fn = filenames[idx]
+                fpath = os.path.abspath(f"../human_reviews/{fn}")
+                rel = similarities[idx]
+                avg = score_index.get(fn, -1.0)
                 with open(fpath, "r", errors="replace") as fh:
                     content = fh.read()
-                results.append(f"{fpath}\nscore: {score:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
+                results.append(f"{fpath}\navg_score: {avg:.2f}  sim: {rel:.2f}\nfirst 1000 chars:\n{content[:1000]}\n")
             text = "\n---\n".join(results) if results else "No relevant files found."
 
         return {"content": [{"type": "text", "text": text}]}
@@ -171,7 +194,7 @@ with open("prompts/cal_without.md", "r") as _f:
 CALIBRATION_SUBAGENT_PROMPT = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
 You have these tools (all under the mcp__merger_fs__ namespace):
-- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- search_file(query, n, mode, low_score=0, high_score=10): BM25 or vector search over human reviews, pre-filtered by the reviewer avg-score range. mode='vector' or 'bm25'. Set low_score/high_score to anchor to a band (e.g. low_score=7 for strong papers, high_score=3 for weak ones).
 - read_file(abs_path, start_line, end_line): read lines from a human review file.
 - grep_file(pattern, abs_path): substring search inside a single file.
 

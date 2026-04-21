@@ -42,6 +42,11 @@ with open("./human_reviews_embeddings.pkl", "rb") as f:
 filenames = list(db.keys())
 vectors = np.array(list(db.values()))
 
+# Per-file avg human score (basename -> float). Used to pre-filter candidates
+# by score range before BM25/vector ranking.
+with open("./human_review_score_index.pkl", "rb") as f:
+    _score_index: dict[str, float] = pickle.load(f)
+
 
 # ── Tools ────────────────────────────────────────────────────────────
 def allow_path(path: str):
@@ -110,42 +115,68 @@ def grep_file(pattern: str, abs_path: str) -> str:
 
 
 @function_tool
-def search_file(query: str, n: int, mode: str) -> str:
-    """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode to 'vector' for semantic similarity search or 'bm25' for keyword matching for specific papers."""
-    print(f"  [search_file] Searching for query '{query}' with mode '{mode}' and n={n}")
-    mode = "bm25"
+def search_file(query: str, n: int, mode: str, low_score: float = 0.0, high_score: float = 10.0) -> str:
+    """Search human reviews, optionally filtered by the reviewer avg-score range.
+
+    Args:
+        query: search query.
+        n: number of top results.
+        mode: 'vector' for semantic similarity, 'bm25' for keyword matching.
+        low_score: include only papers with avg score >= low_score (default 0.0).
+        high_score: include only papers with avg score <= high_score (default 10.0).
+
+    Filtering is applied FIRST by score range, THEN ranking (BM25/vector) runs
+    over the filtered subset. Use this to anchor calibration to a specific
+    score band (e.g. low_score=7, high_score=10 for strong papers).
+    """
+    print(f"  [search_file] query='{query}' mode='{mode}' n={n} score=[{low_score}, {high_score}]")
     if mode == "bm25":
         bm25 = list(database.values())[0]["bm25"]
         files = list(database.values())[0]["files"]
+        allowed_idx = [
+            i for i, p in enumerate(files)
+            if low_score <= _score_index.get(os.path.basename(p), -1.0) <= high_score
+        ]
+        if not allowed_idx:
+            return "No files in that score range."
         tokenized_query = query.split(" ")
         doc_scores = bm25.get_scores(tokenized_query)
-        top_indices = doc_scores.argsort()[-n:][::-1]
+        allowed_sorted = sorted(allowed_idx, key=lambda i: doc_scores[i], reverse=True)[:n]
         results = []
-        for idx in top_indices:
-            file_path = files[idx]
-            file_path = os.path.abspath(file_path)
-            score = doc_scores[idx]
+        for idx in allowed_sorted:
+            file_path = os.path.abspath(files[idx])
+            rel = doc_scores[idx]
+            avg = _score_index.get(os.path.basename(file_path), -1.0)
             with open(file_path, 'r', errors='replace') as f:
                 content = f.read()
-            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+            results.append(f"{file_path}\navg_score: {avg:.2f}  bm25: {rel:.2f}\n first 1000 chars:\n{content[:1000]}\n")
         return "\n---\n".join(results) if results else "No relevant files found."
     elif mode == "vector":
-        query_embedding = or_client.embeddings.create( 
+        allowed_mask = np.array([
+            low_score <= _score_index.get(fn, -1.0) <= high_score for fn in filenames
+        ])
+        if not allowed_mask.any():
+            return "No files in that score range."
+        query_embedding = or_client.embeddings.create(
             model="google/gemini-embedding-001",
             input=query,
-            encoding_format="float" 
+            encoding_format="float"
         )
         query_vector = np.array(query_embedding.data[0].embedding)
         similarities = vectors @ query_vector.T
-        top_indices = similarities.argsort()[-n:][::-1]
+        masked = np.where(allowed_mask, similarities, -np.inf)
+        top_indices = masked.argsort()[-n:][::-1]
         results = []
         for idx in top_indices:
-            file_path = os.path.abspath(f"../human_reviews/{filenames[idx]}")
-            score = similarities[idx]
+            if not np.isfinite(masked[idx]):
+                break
+            fn = filenames[idx]
+            file_path = os.path.abspath(f"../human_reviews/{fn}")
+            rel = similarities[idx]
+            avg = _score_index.get(fn, -1.0)
             with open(file_path, "r", errors="replace") as file_handle:
                 content = file_handle.read()
-            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+            results.append(f"{file_path}\navg_score: {avg:.2f}  sim: {rel:.2f}\n first 1000 chars:\n{content[:1000]}\n")
         return "\n---\n".join(results) if results else "No relevant files found."
-
     else:
         return "ERROR: Invalid search mode. Use 'bm25' or 'vector'."

@@ -9,8 +9,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
-# import weave
-# weave.init("openai-agents")
+import weave
+weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
@@ -149,7 +149,7 @@ _NO_CAL = "--no_cal" in __import__("sys").argv
 CALIBRATION_SUBAGENT_INSTRUCTIONS = """You are a retrieval helper for the main merger agent. The main agent sends you a retrieval request (e.g. "find papers on face recognition privacy with high scores" or "find papers with weakness: unfair baseline comparison"), and you return a concise list of matching paper reviews.
 
 You have these tools:
-- search_file(query, n, mode): BM25 or vector search over human reviews. mode='vector' (default) or 'bm25'.
+- search_file(query, n, mode, low_score=0, high_score=10): BM25 or vector search over human reviews, pre-filtered by the reviewer avg-score range. mode='vector' or 'bm25'. Set low_score/high_score to anchor to a band (e.g. low_score=7 for strong papers, high_score=3 for weak ones).
 - read_file(abs_path, start_line, end_line): read lines from a human review file.
 - grep_file(pattern, abs_path): substring search inside a single file.
 
