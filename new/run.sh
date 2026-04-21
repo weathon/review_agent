@@ -1,3 +1,4 @@
+conda activate neg
 export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
 export HARSH_MODEL="kimi-k2.6"
 export MERGER_MODEL="ollama:kimi-k2.6:cloud"
