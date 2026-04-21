@@ -4,8 +4,8 @@ export MERGER_MODEL="gpt-5.1"
 export NEUTRAL_MODEL="gpt-5.1"
 export OUTPUT_CSV="results/bench_scores_gpt_or.csv"
 export MERGE_LOG="results/pipeline_whole_gpt_or.log"
-export SUBAGENT_MODEL="gpt-5.1-mini"
-
+export SUBAGENT_MODEL="gpt-5.4-mini"
+export CONCURRENCY=10
 # rm bench_scores_qwen.log
 ollama serve & 
 git commit -am "run.sh: $(date)"
