@@ -214,8 +214,9 @@ The paper was extracted from PDF by an automated parser. Treat formatting artifa
 
 
 # ── Core pipeline ────────────────────────────────────────────────────
-
+import time
 async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool = False) -> dict:
+    time.sleep(random.uniform(10, 20))
     paper_path_abs = os.path.abspath(paper_path)
     with open(paper_path, "r") as f:
         paper_content = f.read()
