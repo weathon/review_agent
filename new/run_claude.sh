@@ -8,3 +8,4 @@ ollama serve &
 # use balanced to see quality in the whole spectrum of scores
 export CONCURRENCY=1
 python main.py --n_samples 100 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ') 
+ 
