@@ -1,20 +1,16 @@
-Now I have all the information I need. Let me construct the final review.
+Now I have thoroughly read the paper. Let me synthesize the final review.
 
 ## Summary
 
-The paper introduces REPLM, the first framework for document-level in-context few-shot relation extraction (RE) using pre-trained language models. The method retrieves semantically relevant in-context examples from a distantly-supervised corpus, constructs multiple example sets weighted by similarity, and aggregates generation probabilities to extract relation triplets—eliminating the need for named entity recognition, human annotation, and fine-tuning. Evaluations span 5 LM backbones and 6 RE datasets, with REPLM (GPT-4o) achieving the highest F1 on 3/6 datasets including DocRED (68.35).
+The paper introduces REPLM, the first framework for document-level in-context few-shot relation extraction via pre-trained language models. Rather than fine-tuning, REPLM retrieves multiple sets of distantly-supervised in-context examples for each relation type, prompts a pre-trained LM, and aggregates outputs via weighted probability estimation. The framework eliminates the need for named entity recognition and human annotations, and can swap backbone LMs without retraining. Experiments across 6 datasets and 5 LM backbones show competitive performance, with GPT-4o achieving the highest reported F1 on DocRED (68.35).
 
 ## Strengths
 
-- **Novel problem formulation with clear practical benefits**: REPLM is the first framework to reformulate document-level RE as in-context few-shot learning, eliminating NER error propagation and enabling seamless adoption of new relation types and backbone LMs without retraining. Table 1 systematically establishes this gap, and the conceptual contribution is clear.
-
-- **Probabilistic multi-set aggregation is well-motivated and empirically validated**: Equations 1–4 formalize weighting over L context sets via softmax over cosine similarity, and the ablations in Table 5 consistently show the complete framework outperforms both random and single-best-context retrieval across all 5 backbones and 6 datasets (e.g., DocRED GPT-4o: 52.29 → 61.78 → 67.47).
-
-- **Strong scaling with backbone capability**: Tables 4 and 5 demonstrate consistent F1 gains as LMs improve (GPT-JT 35.09 → Llama-3.1-8B 55.50 → Llama-3.1-70B 62.31 → GPT-3.5 59.66 → GPT-4o 68.35 on DocRED), validating the claim that REPLM benefits from newer LMs without retraining.
-
-- **Evidence against memorization**: The random-entity experiment (Section 8, Fig 4b) shows only a 3.3% relative F1 drop (72.94 → 70.47) when entities are replaced with web-invisible names, confirming genuine extraction rather than fact retrieval.
-
-- **Comprehensive evaluation breadth**: Testing across 6 datasets (3 document-level, 3 sentence-level) and more than 30 baselines provides useful empirical coverage for understanding where in-context RE works and where it falls short.
+- **First in-context few-shot method for document-level RE**: Table 1 systematically shows the gap—prior in-context methods (GPT-RE, CodeIE, Wadhwa et al.) are sentence-level, and REBEL (the only document-level NER-free baseline) requires fine-tuning. REPLM fills this gap with a novel paradigm.
+- **Weighted multi-set aggregation is effective and well-motivated**: The core technical contribution (Eq. 1, aggregated across L context sets with similarity-based weights in Eq. 4) is validated in Table 5, where it consistently outperforms both random and single-best-context selection across all 5 backbones and all 6 datasets (e.g., +9.2% relative improvement on DocRED with GPT-4o: 61.78→67.47).
+- **Extensive benchmarking**: Table 4 provides a comprehensive comparison of 5 REPLM backbone variants against 30+ baselines across 6 datasets, giving a useful picture of how performance scales with backbone choice.
+- **Seamless backbone portability**: Table 4 and Table 5 demonstrate REPLM works across 5 different LMs without retraining, and performance scales with LM quality—a genuine practical advantage.
+- **Identifies evaluation issues with DocRED**: The paper correctly notes that DocRED's annotations are incomplete (Section 6.2, Appendix F) and proposes a Wikidata-augmented evaluation, which has implications beyond this work.
 
 ## Weaknesses
 
@@ -23,76 +19,64 @@ None.
 
 ### Major
 
-- **Overclaimed "state-of-the-art" through selective baseline framing**: The primary results (Section 6, Table 2) establish REPLM's superiority only over REBEL (F1 26.17) and REBEL-sent (F1 27.52)—the sole prior method that doesn't require NER—while the abstract claims "state-of-the-art results across six relation extraction datasets and outperforming more than 30 baseline methods." The broader comparison in Table 4 reveals a more nuanced picture: on DocRED, REPLM (GPT-4o) at 68.35 marginally beats DocRED-CLiP (68.13), but on CDR it loses to SAIS (73.62 vs. 79.0) and on GDA it loses to SAIS (74.11 vs. 87.1). The headline "+27% improvement" in Section 6 is misleading because it compares only against a much weaker baseline, while many NER-requiring methods like ATLOP (63.40), SSAN (65.69), and DocRED-CLiP (68.13) are excluded from the main comparison. The paper does eventually present Table 4, but the narrative framing heavily foregrounds the restricted comparison.
+- **Overclaimed "state-of-the-art" assertion in the abstract and main experiments**: The abstract states "our framework achieves state-of-the-art performance" on DocRED, but the primary experiments (Tables 2–3) compare only against REBEL variants. With the primary backbone GPT-JT, REPLM achieves 33.93–35.09 F1 on DocRED, far below fine-tuned methods like ATLOP (63.40), SSAN (65.69), and DocRED-CLiP (68.13). While REPLM with GPT-4o does achieve 68.35 (narrowly beating DocRED-CLiP's 68.13), this requires orders-of-magnitude more parameters and compute. The abstract's unqualified SOTA claim obscures this critical context. The restriction to NER-free baselines in Section 5 is defensible as a design choice, but the abstract does not disclose this qualifier.
 
-- **Misleading efficiency narrative**: The abstract states "the baseline methods have large computational overhead (e.g., from fine-tuning)" while positioning REPLM as the efficient alternative. However, REPLM requires O(R) separate LM calls per document where R = 96 for DocRED, each with L sets of K in-context examples containing multiple document-length passages. Processing a single document with GPT-4o requires ~96 API calls, each with a long context—making the total inference cost per document vastly exceed the training+inference cost of fine-tuned methods like ATLOP. The paper never acknowledges or quantifies this inference cost. This is not a minor omission: it inverts the stated motivation that fine-tuning has "huge computational overhead" (Section 1). The real trade-off is one-time training cost vs. astronomically higher per-document inference cost, and readers cannot evaluate the practical viability of the method without this information.
+- **Memorization concern untested on DocRED**: GPT-JT is trained on the Pile, which includes Wikipedia, and DocRED documents are derived from Wikipedia. The paper's random-entity experiment (Section 8, Fig. 4b) validating that REPLM extracts relations from context rather than retrieving memorized facts is conducted only on CoNLL04 (a small sentence-level dataset), not on DocRED (the headline document-level dataset where contamination risk is greatest). The slight performance drop (72.9→70.47) on CoNLL04 may not replicate on full Wikipedia-sourced documents, leaving the core "learning vs. memorization" question unanswered for the paper's primary evaluation setting.
 
-- **"Better than ground truth" claim is overstated**: The abstract claims "our framework actually performs much better than the original labels from the development set of DocRED." The evidence (Section 6.2, Table 3) shows only that augmenting the ground truth with Wikidata-matched triples increases REPLM's F1 from 33.93 to 32.33 (actually slightly lower) and REPLM (params adj) from 35.09 to 36.51, reducing the gap with REBEL. This demonstrates that some false positives are actually correct—weakening annotations penalize accurate methods—but does not establish that REPLM's overall output is "much better" than the ground truth. Even with Wikidata augmentation, 36.51 F1 leaves enormous room for error.
+- **Circularity in the "better than labels" evaluation (Section 6.2)**: The distantly-supervised in-context examples are derived from Wikidata (Section 4.1), the same KB used to augment the evaluation gold standard (Section 6.2). This structurally favors REPLM: it is trained to produce Wikidata-compatible outputs and then evaluated against a Wikidata-augmented standard. Methods like REBEL, fine-tuned on human annotations with different naming conventions, are penalized for producing correct but non-Wikidata-aligned triples. The 80% improvement claim over REBEL (36.51 vs. 20.30) reflects this alignment advantage rather than a pure extraction quality improvement. The paper itself notes (footnote 8) that adding relations "does not necessarily imply an improvement in the F1 score for our REPLM," partially acknowledging the issue, but the main claims in Section 6.2 are presented without this caveat.
+
+- **Performance dominated by backbone scale, not framework contribution**: Table 4 shows REPLM's DocRED F1 ranges from 35.09 (GPT-JT) to 68.35 (GPT-4o)—a 33-point gap driven entirely by backbone choice. The framework's own contribution (multi-set aggregation over single-best-context) adds roughly 5–9 F1 points (Table 5). The paper positions REPLM as a framework contribution, but the evidence shows that the backbone model is the overwhelming performance driver, and no comparison isolates the framework's contribution from the backbone advantage (e.g., by fine-tuning a same-scale model on the same task).
 
 ### Minor
 
-- **"No human annotations" claim needs qualification**: The paper repeatedly states REPLM circumvents the need for human annotations (abstract, contributions ②, Section 9). While the main variant uses only distantly-supervised data, the "params adj" variant explicitly uses the human-annotated training set for hyperparameter selection. More importantly, Wikidata itself is human-curated—the "no human annotation" claim is technically about task-specific annotation, but readers could reasonably interpret it more broadly. This should be clearer.
+- **Unsubstantiated "low computational overhead" claim**: The paper repeatedly claims baselines have "large computational overhead (e.g., from fine-tuning)" while REPLM has lower overhead. However, REPLM requires O(96 × L) forward passes per document (one per relation type per context set), and no wall-clock time, FLOPs, or cost analysis is provided. With GPT-4o specifically, API costs would be substantial. Fine-tuning a 340M model once may be cheaper than running 96 × L full-length prompts through a 6B+ model for every new document at inference time.
 
-- **Dev-set evaluation without test-set results**: All primary results evaluate on the DocRED development set. For "REPLM (params adj)," the dev set is used for both hyperparameter selection and evaluation. While the paper acknowledges REBEL's similar circularity, it does not address its own.
+- **No separate precision/recall reporting despite large output volume difference**: REPLM outputs 20.21 triplets/document vs. REBEL's 4.93 (acknowledged in Section 6.1). This 4× difference in output volume could indicate very different precision/recall operating points, and the paper reports only F1. Reporting P and R separately would clarify whether the improvement comes from genuine extraction quality or from a high-recall, low-precision regime.
 
-- **Random entity experiment limited to small sentence-level dataset**: The memorization check (Section 8, Fig 4b) is conducted on CoNLL04, a small sentence-level dataset with 4 relation types, rather than the core document-level setting with 96 relation types. The result may not generalize to the harder setting where the model has more relation types to memorize.
-
-### Trivial
+## Trivial
 None.
 
 ## Nice-to-Haves
 
-- Report per-document inference cost (wall-clock time and/or API cost) alongside F1 scores, so readers can evaluate the efficiency trade-off quantitatively.
-- A relation-type filtering step to reduce inference cost from O(R) to a manageable number, making the method more practical.
-- Evaluate on the DocRED test set or use a held-out portion for "params adj" hyperparameter selection.
+- A comparison of REPLM against a same-scale fine-tuned model (e.g., fine-tuning a 6B/8B model on DocRED) would isolate the framework's contribution from the backbone scale advantage.
+- Running the random-entity experiment on DocRED to validate the "learning vs. memorizing" claim for the headline dataset.
+- Reporting wall-clock time or per-document inference cost across REPLM variants and at least one fine-tuned baseline.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **Harsh Critic's claim that Table 4 "simultaneously claims superiority" over methods like ATLOP/SSAN**: Misleading—Table 4 shows REPLM (GPT-4o) does beat DocRED-CLiP (68.35 vs 68.13) but loses to SAIS on CDR and GDA. The paper presents these honestly in Table 4; the issue is framing, not falsification.
+- **Harsh critic: "The framework's advantage over O(N²) enumeration is shared with REBEL"**: The paper itself acknowledges REBEL shares this property (Section 2, Table 1). The paper does not claim REPLM is unique in this regard—only that it is unique in combining document-level scope + no fine-tuning + no NER. This is a strawman weakness.
 
-- **Harsh Critic's claim that "O(R) separate LM calls per document" makes the method impractical**: This conflates GPT-4o cost with the method itself. GPT-JT (6B) is open-source and can be run locally. The efficiency concern is valid for commercial APIs but not universally so. The fundamental point about inference scaling is kept as a Major weakness.
+- **Harsh critic: "No need for human annotations is overstated since distant supervision relies on a curated KB"**: The paper explicitly states it uses the "distantly-supervised split of DocRED, automatically created via an external knowledge base (KB)" (Section 4.1). The distinction between "no human annotation" and "distant supervision from a KB" is transparent in the paper. Distant supervision is a well-established research methodology; calling the claim "overstated" mischaracterizes what the paper actually claims.
 
-- **Harsh Critic's claim that the "params adj" variant's use of the training set creates the same overfitting circularity as REBEL**: The paper explicitly notes "REPLM (params adj) is a variant for which the hyperparameters (e.g., temperature, threshold) are selected based on the training set" (line 167). This uses the training (not dev) set, which is a standard practice and different from using the dev set for evaluation. The concern about dev-set evaluation without a test set is kept as a Minor weakness.
+- **Harsh critic: "params adj variant uses the human-annotated training set for hyperparameter tuning"**: The paper is transparent about this variant using the training set for hyperparameter selection (Section 5). This is a standard practice, and the base REPLM without tuned hyperparameters is the primary reported result. A hyperparameter sweep on a training set is not "human annotation" in the sense the paper avoids.
 
-- **Harsh Critic's claim about "notational imprecision" in p(C_l | d_i, r)**: This is a presentation nitpick. The notation makes clear it's a constructed weight, and Eq. 4 defines it explicitly. Not a substantive issue.
+- **Strength Finder: "REPLM with GPT-4o achieves best or near-best micro-F1 across 6 datasets against 30+ baselines"**: While technically correct from Table 4, this strength conflates the framework's contribution with the backbone model's power. The same GPT-4o applied through other paradigms (fine-tuning, prompting without REPLM's aggregation) might achieve similar or better results—there is no ablation isolating the framework from the backbone.
 
-- **Strength Finder's claim about "first in-context framework eliminating NER dependency AND fine-tuning"**: Overly broad—CodeIE also eliminates both, though only for sentence-level.
+- **Strength Finder: "Random-entity experiment proves genuine extraction rather than memorization"**: This is only tested on CoNLL04, a small sentence-level dataset, not the headline document-level dataset where contamination is the primary concern. Promoting this as a proven strength would be misleading given the Dataset scope mismatch.
 
-- **Strength Finder's claim about "state-of-the-art across 6 datasets"**: This is the exact overclaiming identified as a weakness; moved here per the rule that strengths conflicting with verified weaknesses are dropped.
-
-- **Harsh Critic's request for "genuine zero-shot comparison without 101,873 distantly-supervised documents"**: The distantly-supervised data is core to the method's design; asking for its removal is scope creep.
+- **Missing related works criticism**: Ignored per instructions—no external sources to verify claims about missing citations.
 
 ## Novel Insights
 
-The paper reveals an important tension in in-context RE: methods that avoid specialized training infrastructure can achieve competitive F1 scores, but at the cost of per-document inference scaling that is O(R) in the number of relation types. The 96-relation DocRED setting makes this scaling especially stark. The finding that annotation incompleteness in DocRED systematically penalizes high-recall extractors is methodologically interesting, though the paper overstates its implications.
+The paper's multi-set aggregation with similarity-weighted context selection (Eq. 1+4) is a clean and effective idea that generalizes well across backbones and datasets. However, the most important insight the paper inadvertently reveals is the overwhelming role of backbone scale: the 33-point gap between GPT-JT and GPT-4o on DocRED dwarfs the 5–9-point improvement from the framework itself. This raises a fundamental question about the framework's value proposition: if performance scales almost entirely with backbone size, the multi-set aggregation contributes a modest constant atop an exponential backbone-driven curve, and the practical advantages (no fine-tuning, no NER) come at significant inference cost (96 × L forward passes per document with large models).
 
 ## Suggestions
 
-- Reframe the "state-of-the-art" claims to explicitly distinguish between NER-free and NER-requiring settings. Claim "state-of-the-art among NER-free methods" for Section 6, and present Table 4 results with appropriate nuance (wins on 3/6 datasets, competitive on others).
-- Add a subsection explicitly computing and discussing inference cost, acknowledging the O(R) scaling and quantifying it for DocRED (96 calls × L sets × K examples per document). The efficiency claim should be reframed from "low computational overhead" to "no fine-tuning overhead, but higher inference cost."
-- Soften the "better than ground truth" claim to "DocRED annotations are incomplete, and some REPLM false positives are actually correct relations" — which is what the evidence actually supports.
-- Evaluate on the DocRED test set, or at minimum use a separate held-out set for "params adj" hyperparameter tuning.
+- Qualify the SOTA claim in the abstract to specify the backbone and the NER-free evaluation scope, and note the gap between the primary GPT-JT results and fine-tuned SOTA methods.
+- Extend the random-entity experiment to DocRED to directly address the memorization concern on the headline dataset.
+- Report precision and recall separately, especially given the 4× output volume difference from REBEL.
+- Provide inference cost analysis (wall-clock time or per-document cost) to substantiate the "low computational overhead" claim relative to fine-tuning.
 
-## Calibration
+<context>
+Original reviewer signal: The Harsh Critic argues the paper's SOTA claim is misleading, the memorization analysis is insufficient, Section 6.2's evaluation is circular, performance is backbone-driven, and computational cost claims are unsupported. The Strength Finder highlights REPLM as the first document-level in-context RE method, effective multi-set aggregation, extensive benchmarking, and backbone portability.
 
-**Anchors compared:**
+What was dropped and why: (1) "REBEL already generates triplets rather than enumerating O(N²) pairs"—the paper acknowledges this and doesn't claim novelty on that dimension. (2) "No human annotation claim is overstated because distant supervision uses a curated KB"—the paper is transparent about using distant supervision; this is standard practice, not an overclaim. (3) "params adj uses human-annotated training data for hyperparameter tuning"—transparent and standard practice. (4) Strength Finder's claim that random-entity experiment proves genuine extraction—only tested on CoNLL04, not DocRED, so overstated. (5) Strength Finder's claim that REPLM achieves SOTA across all datasets—conflates framework contribution with backbone power.
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| ICL falls short on specification-heavy tasks | Cw6lk56w6z | 4.50 | Similar topic area (ICL for IE tasks), weaker novelty but honest framing. This paper has stronger empirical results but more overclaiming. |
-| In-context few-shot molecular property prediction | IP28nY6TJQ | 3.50 | Overclaimed novelty and questionable experimental setup, withdrew. This paper has less severe novelty issues but comparable overclaiming patterns. |
-| LLMs for biomedical KG construction | K1bv86Uvbp | 3.00 | Poor experimental design and evaluation. This paper is substantially more rigorous. |
-| Low-resource multimodal NER via prompting | pLvh9DTyoE | 2.50 | Limited novelty and weak evaluation. This paper has a more complete method and evaluation. |
-| Realistic evaluation of PLL algorithms (Spotlight) | FtX6oAW7Dd | 7.50 | Honest evaluation that exposed overclaiming in prior work. This paper would benefit from similar rigor. |
-| Contextual fine-tuning with prompts | FS2nUkC2jv | 6.75 | Novel prompt-based approach with solid empirical results. Similar level of empirical contribution. |
+Cross-checks performed: (1) Verified Table 2-3 compare only REBEL variants—confirmed. (2) Verified abstract claims SOTA without qualifying backbone or NER-free scope—confirmed. (3) Verified Table 4 shows REPLM-GPT-4o at 68.35 vs DocRED-CLiP at 68.13—narrow margin with much larger model. (4) Verified that Section 6.2 uses Wikidata for both in-context examples and evaluation augmentation—confirmed circularity concern. (5) Verified random-entity experiment is only on CoNLL04, not DocRED—confirmed. (6) Verified no separate P/R reporting despite 20.21 vs 4.93 triplets/document—confirmed. (7) Verified the paper claims baselines have "large computational overhead" without providing its own cost analysis—confirmed.
 
-This paper sits above the low-scoring anchors (3.0, 2.5) because it has a genuine methodological contribution, comprehensive evaluation, and meaningful results with GPT-4o. However, it sits below the mid-range anchors (4.5) because the overclaiming is more severe—the "state-of-the-art," "no computational overhead," and "better than ground truth" claims all require significant qualification. The paper is comparable to the ICL paper scoring 4.5: both have interesting findings undermined by framing issues.
+Severity read: The surviving major weaknesses (overclaimed SOTA, untested memorization on DocRED, circular evaluation, backbone-dominated performance) collectively undermine the paper's strongest claims but do not invalidate the framework itself, which remains a genuine methodological contribution. No single weakness is fatal. The weaknesses are serious enough to warrant significant revision of claims but not rejection of the underlying approach.
 
-## Score and Decision
-
-This paper makes a genuine and novel contribution as the first document-level in-context RE framework, with sound multi-set aggregation, extensive evaluation, and competitive results when powered by a strong LM. However, three overclaims significantly undermine confidence: (1) "state-of-the-art" based on selective baseline comparison in the main results; (2) "no computational overhead" that ignores massive per-document inference cost; (3) "better than ground truth" overstated from Wikidata augmentation evidence. The paper's real contribution—a practical ICL framework for document-level RE—is obscured by these framing choices.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+Anything else load-bearing: The paper explicitly scopes its primary comparison to NER-free methods (Section 5), which is defensible because NER pipelines add complexity and error. However, the abstract and contribution statements omit this scope qualifier, creating a mismatch between stated claims and experimental support. The computational cost asymmetry (many forward passes per document with large models vs. one-time fine-tuning with small models) is a real practical concern that the paper does not address despite repeatedly claiming low overhead.
+</context>

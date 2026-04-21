@@ -5,6 +5,7 @@ Used when MERGER_MODEL starts with 'claude_sdk:'.
 from __future__ import annotations
 
 import os
+import time
 import numpy as np
 import pickle
 from pathlib import Path
@@ -209,6 +210,7 @@ async def _run_claude_sdk_query(
     )
 
     print(f"  [{label}] starting Claude Agent SDK ({model_id}) ...")
+    _wall_start = time.monotonic()
 
     options = ClaudeAgentOptions(
         model=model_id,
@@ -262,7 +264,9 @@ async def _run_claude_sdk_query(
     if not result_text.strip():
         raise RuntimeError(f"[{label}] Claude Agent SDK returned empty output")
 
-    print(f"  [{label}] done — {model_id} (Claude Agent SDK)")
+    wall_ms = int((time.monotonic() - _wall_start) * 1000)
+    sdk_usage["wall_ms"] = wall_ms
+    print(f"  [{label}] done — {model_id} (Claude Agent SDK) — total time {wall_ms/1000:.1f}s")
     return result_text, sdk_usage
 
 

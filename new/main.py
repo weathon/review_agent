@@ -245,6 +245,8 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
 
 
     print("  Phase 2: Merger ...")
+    import time as _time_mod
+    _merger_wall_start = _time_mod.monotonic()
     merger_prompt_body = (
         f"Here is the paper being reviewed (extracted from PDF — formatting "
         f"artifacts are parser issues, not paper problems).\n\n"
@@ -266,8 +268,11 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         allow_path(str(Path(paper_path_abs).parent))
         merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt_body)
         agent_usages["Merger"] = merger_usage
+    merger_wall_ms = int((_time_mod.monotonic() - _merger_wall_start) * 1000)
+    print(f"  [Merger] total time {merger_wall_ms/1000:.1f}s")
 
     print("  Phase 3: Scorer ...")
+    _scorer_wall_start = _time_mod.monotonic()
     if _SCORER_SDK_MODEL is not None:
         from scorer import run_scorer_claude_sdk
         paper_dir = str(Path(paper_path_abs).parent)
@@ -287,9 +292,25 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             scorer_agent, merged_review, HUMAN_REVIEW_DIR, run_agent_with_retry
         )
         agent_usages["Scorer"] = scorer_usage
+    scorer_wall_ms = int((_time_mod.monotonic() - _scorer_wall_start) * 1000)
+    print(f"  [Scorer] total time {scorer_wall_ms/1000:.1f}s")
 
     scorer_output = float(scorer_text.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in scorer_text else -1
     decision = (scorer_text.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in scorer_text else "N/A"
+
+    def _phase_output_tokens(name):
+        u = agent_usages.get(name)
+        if u is not None:
+            return getattr(u, "output_tokens", 0) or 0
+        su = sdk_usages.get(name) or {}
+        return ((su.get("usage") or {}).get("output_tokens")) or 0
+
+    merger_out_tok = _phase_output_tokens("Merger")
+    scorer_out_tok = _phase_output_tokens("Scorer")
+    merger_tps = merger_out_tok / (merger_wall_ms / 1000) if merger_wall_ms > 0 else 0.0
+    scorer_tps = scorer_out_tok / (scorer_wall_ms / 1000) if scorer_wall_ms > 0 else 0.0
+    print(f"  [Merger] rough output tok/s: {merger_tps:.1f} ({merger_out_tok} tok / {merger_wall_ms/1000:.1f}s)")
+    print(f"  [Scorer] rough output tok/s: {scorer_tps:.1f} ({scorer_out_tok} tok / {scorer_wall_ms/1000:.1f}s)")
 
     total_input = total_output = total_tokens = 0
     token_lines = []
@@ -341,6 +362,12 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         log_f.write(f"\n{'='*60}\n")
         log_f.write(f"Paper: {paper_path}\n")
         log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
+        log_f.write(
+            f"\n--- Phase Timings ---\n"
+            f"  Merger: {merger_wall_ms/1000:.1f}s  (~{merger_tps:.1f} output tok/s, {merger_out_tok} tok)\n"
+            f"  Scorer: {scorer_wall_ms/1000:.1f}s  (~{scorer_tps:.1f} output tok/s, {scorer_out_tok} tok)\n"
+            f"  TOTAL (merger+scorer): {(merger_wall_ms+scorer_wall_ms)/1000:.1f}s\n"
+        )
         log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
         if sdk_lines:
             log_f.write(f"\n--- Claude SDK Usage ---\n" + "\n".join(sdk_lines) + "\n")

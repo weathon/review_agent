@@ -15,6 +15,7 @@ scores directly.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from claude_merger import _make_merger_mcp_server, _run_claude_sdk_query
@@ -123,7 +124,12 @@ async def run_scorer_openai(scorer_agent, merged_review: str, human_review_dir: 
     Run an OpenAI-Agents-SDK Scorer. Returns (text, usage).
     """
     user_prompt = build_scorer_user_prompt(merged_review, human_review_dir)
-    return await run_agent_with_retry(scorer_agent, user_prompt)
+    print("  [Scorer] starting OpenAI Agents SDK ...")
+    _wall_start = time.monotonic()
+    out, usage = await run_agent_with_retry(scorer_agent, user_prompt)
+    wall_ms = int((time.monotonic() - _wall_start) * 1000)
+    print(f"  [Scorer] done (OpenAI Agents SDK) — total time {wall_ms/1000:.1f}s")
+    return out, usage
 
 
 # ── Claude Agent SDK path ───────────────────────────────────────────────
