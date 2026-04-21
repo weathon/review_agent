@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy import stats
-from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, auc
+from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, auc, f1_score
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from itertools import combinations
@@ -87,6 +87,23 @@ def auroc_ci(auroc, n_pos, n_neg, confidence=0.95):
     se = np.sqrt(var)
     z_crit = stats.norm.ppf((1 + confidence) / 2)
     return (float(np.clip(auroc - z_crit * se, 0, 1)), float(np.clip(auroc + z_crit * se, 0, 1)))
+
+
+def max_f1_at_threshold(labels, scores):
+    labels = np.asarray(labels, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+    thresholds = np.sort(np.unique(scores))
+    best_f1 = -1.0
+    best_threshold = None
+
+    for threshold in thresholds:
+        preds = (scores >= threshold).astype(int)
+        f1 = f1_score(labels, preds, zero_division=0)
+        if f1 > best_f1:
+            best_f1 = float(f1)
+            best_threshold = float(threshold)
+
+    return best_f1, best_threshold
 
 
 def paired_bootstrap_ci(values, confidence=0.95):
@@ -454,7 +471,7 @@ def analyze_and_plot(path):
     if one_vs_rest is not None:
         print(f"  {'─'*45}")
         print(f"  Human one-vs-rest baseline ({one_vs_rest['n_pairs']} held-out reviews):")
-        print(f"    Note:                high baseline (human-favored, intentionally stricter than AI)")
+        print(f"    Note:                high human baseline: each paper contributes multiple leave-one-reviewer-out comparisons, while AI gets one score per paper")
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
@@ -487,7 +504,7 @@ def analyze_and_plot(path):
     if split_half is not None:
         print(f"  {'─'*45}")
         print(f"  Human split-half baseline ({split_half['n_pairs']} exact split pairs):")
-        print(f"    Note:                high baseline (human-favored, intentionally stricter than AI)")
+        print(f"    Note:                high human baseline: humans are compared against other humans from the same paper, and papers with more reviewers contribute more split pairs")
         print(f"    Spearman:            {split_half['spearman']:.4f}")
         print(f"    Pearson:             {split_half['pearson']:.4f}")
         print(f"    MAE:                 {split_half['mae']:.4f}")
@@ -527,6 +544,7 @@ def analyze_and_plot(path):
     if n_pos > 0 and n_neg > 0:
         auroc = roc_auc_score(gt_binary, pred)
         auroc_ci_val = auroc_ci(auroc, n_pos, n_neg)
+        ai_f1_max, ai_f1_threshold = max_f1_at_threshold(gt_binary, pred)
         fpr, tpr, thresholds = roc_curve(gt_binary, pred)
         # Human baseline AUROC: use individual reviewer scores (not the average)
         # Each individual score is an independent prediction of the paper's accept/reject label
@@ -545,22 +563,26 @@ def analyze_and_plot(path):
         if n_indiv_pos > 0 and n_indiv_neg > 0:
             human_auroc = roc_auc_score(human_indiv_labels, human_indiv_scores)
             human_auroc_ci_val = auroc_ci(human_auroc, n_indiv_pos, n_indiv_neg)
+            human_f1_max, human_f1_threshold = max_f1_at_threshold(human_indiv_labels, human_indiv_scores)
             human_fpr, human_tpr, _ = roc_curve(human_indiv_labels, human_indiv_scores)
         else:
             human_auroc = None
             human_auroc_ci_val = None
+            human_f1_max, human_f1_threshold = None, None
             human_fpr, human_tpr = None, None
         print(
             f"  AUROC (score→A/R):     {auroc:.4f}  "
             f"(95% CI {auroc_ci_val[0]:.4f}, {auroc_ci_val[1]:.4f})"
         )
+        print(f"  F1_max (score→A/R):    {ai_f1_max:.4f}  (threshold={ai_f1_threshold:.2f})")
         if human_auroc is not None:
             print(
                 f"  AUROC (human indiv):   {human_auroc:.4f}  "
                 f"(95% CI {human_auroc_ci_val[0]:.4f}, {human_auroc_ci_val[1]:.4f}; "
                 f"{len(human_indiv_scores)} individual scores)"
             )
-            print("  Note:                  human indiv AUROC is a high baseline (human-favored, intentionally stricter than AI)")
+            print(f"  F1_max (human indiv):  {human_f1_max:.4f}  (threshold={human_f1_threshold:.2f})")
+            print("  Note:                  high human baseline: each reviewer score is matched to that paper's final accept/reject label, humans get multiple within-paper chances while AI gets one score per paper, and the final decision is itself derived from human scores")
         # Find optimal threshold (Youden's J)
         j_scores = tpr - fpr
         best_idx = np.argmax(j_scores)
@@ -575,8 +597,10 @@ def analyze_and_plot(path):
         auroc = None
         auroc_ci_val = None
         auprc = None
+        ai_f1_max, ai_f1_threshold = None, None
         human_auroc = None
         human_auroc_ci_val = None
+        human_f1_max, human_f1_threshold = None, None
         fpr, tpr = None, None
         human_fpr, human_tpr = None, None
         print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
