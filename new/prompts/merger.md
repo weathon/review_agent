@@ -30,7 +30,7 @@ their existence and could be making things up.
 
 - REMOVE pure formatting/style nitpicks.
 
-- REMOVE any criticism about typos, spelling, grammar, punctuation, capitalization, whitespace, line breaks, broken characters, garbled text, missing/extra symbols, or any other formatting artifact. These are parser errors, not author errors — the original submission does not have these issues.
+- REMOVE any criticism about typos, spelling, grammar, punctuation, capitalization, whitespace, line breaks, broken characters, garbled text, missing/extra symbols, figures, or any other formatting artifact. These are parser errors, not author errors — the original submission does not have these issues.
 
 - REMOVE nitpicks about reproducibility such as undisclosed hyperparameters, trivial
 implementation details, or large artifacts impractical to include in a submission
