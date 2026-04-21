@@ -248,14 +248,14 @@ def one_vs_rest_baseline(df, gt_score_cols):
     """Estimate human reliability via leave-one-reviewer-out predictions."""
     rest_means = []
     heldout_scores = []
-    paper_pairs = 0
+    n_papers = 0
     paper_decisions = []
 
     for _, row in df.iterrows():
         human = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
         if len(human) < 2:
             continue
-        paper_pairs += len(human)
+        n_papers += 1
         for idx, heldout in enumerate(human):
             others = human[:idx] + human[idx + 1:]
             if not others:
@@ -273,7 +273,7 @@ def one_vs_rest_baseline(df, gt_score_cols):
 
     return {
         "n_pairs": len(rest_means),
-        "n_papers": paper_pairs,
+        "n_papers": n_papers,
         "pearson": float(pearson),
         "spearman": float(spearman),
         "mae": mae,
@@ -454,6 +454,7 @@ def analyze_and_plot(path):
     if one_vs_rest is not None:
         print(f"  {'─'*45}")
         print(f"  Human one-vs-rest baseline ({one_vs_rest['n_pairs']} held-out reviews):")
+        print(f"    Note:                high baseline (human-favored, intentionally stricter than AI)")
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
@@ -486,6 +487,7 @@ def analyze_and_plot(path):
     if split_half is not None:
         print(f"  {'─'*45}")
         print(f"  Human split-half baseline ({split_half['n_pairs']} exact split pairs):")
+        print(f"    Note:                high baseline (human-favored, intentionally stricter than AI)")
         print(f"    Spearman:            {split_half['spearman']:.4f}")
         print(f"    Pearson:             {split_half['pearson']:.4f}")
         print(f"    MAE:                 {split_half['mae']:.4f}")
@@ -558,6 +560,7 @@ def analyze_and_plot(path):
                 f"(95% CI {human_auroc_ci_val[0]:.4f}, {human_auroc_ci_val[1]:.4f}; "
                 f"{len(human_indiv_scores)} individual scores)"
             )
+            print("  Note:                  human indiv AUROC is a high baseline (human-favored, intentionally stricter than AI)")
         # Find optimal threshold (Youden's J)
         j_scores = tpr - fpr
         best_idx = np.argmax(j_scores)
