@@ -1,5 +1,6 @@
 # Unlocking Volition: Proactive Intention Decoding via Interpretable Graph Learning of Multi-Region ECoG
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

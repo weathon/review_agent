@@ -1,5 +1,6 @@
 # Detecting and Mitigating Memorization in Diffusion Models through Anisotropy of the Log-Probability
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

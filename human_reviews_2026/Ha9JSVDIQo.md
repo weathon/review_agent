@@ -1,5 +1,6 @@
 # SpinVLA: A Spectral-Invariant Vision-Language-Action Model for Robotic Manipulation
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 4, 2, 2
 

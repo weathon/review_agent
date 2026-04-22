@@ -1,5 +1,6 @@
 # Mechanistic Study of Transformer In-Context Learning with Categorical Outputs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 4, 0
 

@@ -1,5 +1,6 @@
 # SemCache:Adaptive Semantic-Aware Caching for Efficient Video Diffusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

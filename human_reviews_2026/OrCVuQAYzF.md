@@ -1,5 +1,6 @@
 # WILD-Diffusion: A WDRO Inspired Training Method for Diffusion Models under Limited Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

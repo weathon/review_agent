@@ -1,5 +1,6 @@
 # APILaNet: Adaptive Physics-Informed Latent Network for Single-Sensor Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

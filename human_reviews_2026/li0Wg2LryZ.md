@@ -1,5 +1,6 @@
 # CGTFra: General Graph Transformer Framework for Consistent Inter-series Dependency Modeling in Multivariate Time Series
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

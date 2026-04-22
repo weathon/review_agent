@@ -1,5 +1,6 @@
 # NetBurst: Event-Centric Forecasting of Bursty, Intermittent Time Series
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

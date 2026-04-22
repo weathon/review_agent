@@ -1,5 +1,6 @@
 # Federated Brain Tumour Segmentation using Multi-Modal Information Fusion
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

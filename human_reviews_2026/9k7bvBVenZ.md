@@ -1,5 +1,6 @@
 # FedMuon: Federated Learning with Bias-corrected LMO-based Optimization
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 2
 

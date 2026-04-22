@@ -1,5 +1,6 @@
 # This Is Your Doge, If It Please You: Exploring Deception and Robustness in Mixture of LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

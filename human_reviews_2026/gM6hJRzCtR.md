@@ -1,5 +1,6 @@
 # Measuring Sparse Autoencoder Feature Space Similarities Across Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6
 

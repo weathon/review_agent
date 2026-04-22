@@ -1,5 +1,6 @@
 # Sequences of Logits Reveal the Low Rank Structure of Language Models
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6
 

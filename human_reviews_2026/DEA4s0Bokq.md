@@ -1,5 +1,6 @@
 # Partner-Bench: Evaluating Visually-Grounded IQ and Interactive EQ in Audio-Visual Dialogue
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 
@@ -149,9 +150,12 @@ The main weaknesses of the paper are as follows:
 2. Partner-Bench contains only 376 curated dialogue units (with two main data sources), which may be insufficient to capture the full diversity of real-world audio-visual dialogue. A small benchmark risks overfitting of models to particular types of conversational or visual patterns and limits statistical robustness for cross-model comparisons.
 
 ### Questions
-I have the following questions to the authors:  
+I have the following questions to the authors:
 
-1. Since Gemini-2.5-Pro is used both as a scorer and as part of the best cascaded systems, did you test evaluation stability with an independent judge (e.g., GPT-series)? How consistent are rankings when a different referee is used? 2. What is the approximate language and topical distribution of the dataset?
+
+
+1. Since Gemini-2.5-Pro is used both as a scorer and as part of the best cascaded systems, did you test evaluation stability with an independent judge (e.g., GPT-series)? How consistent are rankings when a different referee is used?
+2. What is the approximate language and topical distribution of the dataset?
 3. How was the human baseline obtained, did multiple annotators participate, and how consistent were their ratings across the seven dimensions?
 4. How sensitive are the final rankings to the 0.5/0.25/0.25 weighting scheme between IQ, EQ-L, and EQ-P? Did you test alternative weighting strategies?
 5. Have you analyzed what specifically causes the drop in long-context performance: input length limits, attention decay, or dialogue inconsistency? Would summarization or retrieval-based memory mitigate it?

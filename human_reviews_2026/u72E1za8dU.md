@@ -1,5 +1,6 @@
 # $S^3$-Bench: A Comprehensive Study of Multimodal LLMs for Scientific Discovery with Benchmarking
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 2, 6
 

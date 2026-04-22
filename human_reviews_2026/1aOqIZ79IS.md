@@ -1,5 +1,6 @@
 # White Gaussian Noise Constraints for Reward-Guided Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

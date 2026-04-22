@@ -1,5 +1,6 @@
 # Deformable Contact-Aware 3D Object Placement
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

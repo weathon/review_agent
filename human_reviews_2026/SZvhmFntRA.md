@@ -1,5 +1,6 @@
 # Pixel to Gaussian: Ultra-Fast Continuous Super-Resolution with 2D Gaussian Modeling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Enhancing Zeroth-Order Fine-Tuning for LLMs via Gradient-Guided Subspace Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 6, 6
 

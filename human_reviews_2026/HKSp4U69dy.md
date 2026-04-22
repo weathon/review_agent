@@ -1,5 +1,6 @@
 # Adaptive Hopfield Network: Rethinking Similarities in Associative Memory
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

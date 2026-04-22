@@ -1,5 +1,6 @@
 # Cross-Modal Factor Reasoning with LLMs: Toward Semantic-Structured Generalization for Recommendation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

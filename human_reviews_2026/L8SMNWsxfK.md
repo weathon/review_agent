@@ -1,5 +1,6 @@
 # Automata Learning and Identification of the Support of Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

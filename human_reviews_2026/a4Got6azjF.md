@@ -1,5 +1,6 @@
 # Automatic Stage Lighting Control: Is it a Rule-Driven Process or Generative Task?
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

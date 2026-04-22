@@ -1,5 +1,6 @@
 # FLOYDNET: A LEARNING PARADIGM FOR GLOBAL RELATIONAL REASONING
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 4, 8
 

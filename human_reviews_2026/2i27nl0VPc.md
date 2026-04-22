@@ -1,5 +1,6 @@
 # Occluded 3D Object Reconstruction via Masked Multi-view Volumetric Transformer
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

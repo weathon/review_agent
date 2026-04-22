@@ -1,5 +1,6 @@
 # PEA-DPO: Perception-Enhanced Alignment Direct Preference Optimization for MLLMs Alignment
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

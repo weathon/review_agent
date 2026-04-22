@@ -1,5 +1,6 @@
 # KANomaly: Fourier-KAN-based Multi-Scale Patch Mixer for Multivariate Time Series Anomaly Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # ExpeSQL: An Experience-Guided Decompositional Search Framework for Text-to-SQL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # OmniX: From Unified Panoramic Generation and Perception to Graphics-Ready 3D Scenes
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

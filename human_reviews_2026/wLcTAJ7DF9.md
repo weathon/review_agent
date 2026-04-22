@@ -1,5 +1,6 @@
 # Multi-ReduNet: Interpretable Class-Wise Decomposition of ReduNet
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

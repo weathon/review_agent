@@ -1,5 +1,6 @@
 # Adaptive Canonicalization with Application to Invariant Anisotropic Geometric Networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

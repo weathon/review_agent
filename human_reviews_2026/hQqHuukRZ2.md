@@ -1,5 +1,6 @@
 # Conditional KRR: Injecting Unpenalized Features into Kernel Methods with Applications to Kernel Thresholding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

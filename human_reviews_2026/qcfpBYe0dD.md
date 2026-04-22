@@ -1,5 +1,6 @@
 # Efficient Modeling of Long-range fMRI Dynamics with a 2D Natural Image Autoencoder
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 4
 

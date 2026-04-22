@@ -1,5 +1,6 @@
 # FedTAP: Federated Multi-Task Continual Learning via Dynamic Task-Aware Prototypes
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

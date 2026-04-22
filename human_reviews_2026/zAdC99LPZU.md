@@ -1,5 +1,6 @@
 # Graph neural networks extrapolate out-of-distribution for shortest paths
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

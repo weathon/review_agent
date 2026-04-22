@@ -1,5 +1,6 @@
 # SOReL and TOReL: Two Methods for Fully Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

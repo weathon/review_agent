@@ -1,5 +1,6 @@
 # Learnable Fractional Fourier and Graph Fractional Operators for Nonstationary Graph Signals Validated with EEG Seizure Detection
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

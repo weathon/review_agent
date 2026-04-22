@@ -1,5 +1,6 @@
 # FSMLP: Modelling Channel Dependencies With Simplex Theory Based Multi-Layer Perceptions In Frequency Domain
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

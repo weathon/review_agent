@@ -1,5 +1,6 @@
 # Robustness in the Face of Partial Identifiability in Reward Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 8, 8
 

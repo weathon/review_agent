@@ -1,5 +1,6 @@
 # Interpolation-Based Conditioning of Flow Matching Models for Bioisosteric Ligand Design
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2, 2
 

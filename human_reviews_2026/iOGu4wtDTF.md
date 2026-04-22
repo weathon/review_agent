@@ -1,5 +1,6 @@
 # UniQL: Unified Quantization and Low-rank Compression for Adaptive Edge LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

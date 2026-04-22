@@ -1,5 +1,6 @@
 # Surprise-Modulated Meta-Advantages in Reinforcement Learning: Towards Language-Neutral Post-Training for Code LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

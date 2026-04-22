@@ -1,5 +1,6 @@
 # Inverting Data Transformations via Diffusion Sampling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Strata-Sword: A Hierarchical Safety Evaluation towards LLMs based on Reasoning Complexity of Jailbreak Instructions
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # GAMA: A Neural Neighborhood Search Method with Graph-aware Multi-modal Attention for Vehicle Routing Problem
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

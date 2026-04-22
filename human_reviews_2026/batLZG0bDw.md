@@ -1,5 +1,6 @@
 # TriangleMix: Accelerating Prefilling via Decoding-time Contribution Sparsity
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # An Approach for Large Language Model Deployment in Distributed Edge Environments
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

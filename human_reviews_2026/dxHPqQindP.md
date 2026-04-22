@@ -1,5 +1,6 @@
 # SkyEvents: A Large-Scale Event-enhanced UAV Dataset for Robust 3D Scene Reconstruction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

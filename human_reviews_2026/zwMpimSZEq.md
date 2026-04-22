@@ -1,5 +1,6 @@
 # Traceable Evidence Enhanced Visual Grounded Reasoning: Evaluation and Method
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

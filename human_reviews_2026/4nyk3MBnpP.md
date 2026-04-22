@@ -1,5 +1,6 @@
 # Uni-directional Blending: Learning Robust Representations for Few-shot Action Recognition with Frame-level Ambiguities
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

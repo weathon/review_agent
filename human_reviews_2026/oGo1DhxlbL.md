@@ -1,5 +1,6 @@
 # CanonNet: Spectral Canonicalization and Curvature-Driven Learning for Compact Local-Geometry Point-Cloud Operators
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

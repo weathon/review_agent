@@ -1,5 +1,6 @@
 # LLM-mediated pathology models for robust cross-institution generalization
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

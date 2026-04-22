@@ -1,5 +1,6 @@
 # MLE-UVAD: Minimal Latent Entropy Autoencoder for Fully Unsupervised Video Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

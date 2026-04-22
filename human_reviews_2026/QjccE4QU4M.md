@@ -1,5 +1,6 @@
 # vMF Guided Learning for Biomedical Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

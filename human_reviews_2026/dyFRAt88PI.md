@@ -1,5 +1,6 @@
 # ENTP: Enhancing Low-Quality SFT Data via Neural-Symbolic Text Purge-Mix
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 4
 

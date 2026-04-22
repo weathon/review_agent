@@ -1,5 +1,6 @@
 # Generative Auto-Bidding in Large-Scale Auctions via Diffusion Completer-Aligner
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

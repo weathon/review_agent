@@ -1,5 +1,6 @@
 # Inoculation Prompting: Eliciting traits from LLMs during training can reduce trait expression at test-time
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

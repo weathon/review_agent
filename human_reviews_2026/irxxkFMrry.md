@@ -1,5 +1,6 @@
 # MCP Security Bench (MSB): Benchmarking Attacks Against Model Context Protocol in LLM Agents
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # See both ways: A bidirectional evaluation of Multimodal Language Models and Human Spontaneous Speech for Image Captioning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 0
 

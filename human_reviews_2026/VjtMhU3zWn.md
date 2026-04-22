@@ -1,5 +1,6 @@
 # SchemaRAG: Enhancing Knowledge-Intensive Reasoning of LLMs via Inference-Time Adaptive Schema
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

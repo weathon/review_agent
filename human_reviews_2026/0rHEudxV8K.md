@@ -1,5 +1,6 @@
 # FlowCycle: Pursuing Cycle-Consistent Flows for Text-based Editing
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 6
 

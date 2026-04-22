@@ -1,5 +1,6 @@
 # OptiFluence: Scalable and Principled Design of Privacy Canaries
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 8, 4
 

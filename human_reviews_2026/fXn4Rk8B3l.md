@@ -1,5 +1,6 @@
 # TamperBench: Systematically Stress-Testing LLM Safety Under Fine-Tuning and Tampering
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

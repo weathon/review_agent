@@ -1,5 +1,6 @@
 # FutureMind: Equipping Small Language Models with Strategic Thinking-Pattern Priors via Adaptive Knowledge Distillation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Neuro-Cognitive Radios for Dynamic Spectrum Access
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 4, 2, 0, 0
 

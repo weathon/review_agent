@@ -1,5 +1,6 @@
 # On the Impact of the Utility in Semivalue-based Data Valuation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

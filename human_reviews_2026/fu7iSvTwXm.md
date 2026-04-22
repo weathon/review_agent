@@ -1,5 +1,6 @@
 # Achieving Hyperbolic-Like Expressiveness with Arbitrary Euclidean Regions: A New Approach to Hierarchical Embeddings
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

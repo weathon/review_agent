@@ -1,5 +1,6 @@
 # TabINR: An Implicit Neural Representation Framework for Tabular Data Imputation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

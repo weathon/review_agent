@@ -1,5 +1,6 @@
 # Attacking and Securing Masking Scheme for TEE-Based Model Protection
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 0
 

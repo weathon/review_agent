@@ -1,5 +1,6 @@
 # GeneVLM: Automated Parsing Executable Digital Gene from a Single Image
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 0, 6, 6
 

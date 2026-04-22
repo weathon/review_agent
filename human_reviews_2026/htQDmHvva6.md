@@ -1,5 +1,6 @@
 # Token Hidden Reward: Steering Exploration-Exploitation in Group Relative Deep Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

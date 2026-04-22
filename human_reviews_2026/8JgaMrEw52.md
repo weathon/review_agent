@@ -1,5 +1,6 @@
 # Fine-grained Analysis of Brain-LLM Alignment through Input Attribution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 6, 6
 

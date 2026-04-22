@@ -1,5 +1,6 @@
 # PBEBench: A Multi-Step Programming by Examples Reasoning Benchmark inspired by Historical Linguistics
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Sparsity Reveals Strangers: A Sparse Autoencoder Approach to OOD Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

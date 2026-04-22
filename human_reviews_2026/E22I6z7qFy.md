@@ -1,5 +1,6 @@
 # Learning Adaptive Distribution Alignment with Neural Characteristic Function for Graph Domain Adaptation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # KL-Regularization Is Sufficient in Contextual Bandits and RLHF
 
+- Avg Score: 6.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 6, 6
 

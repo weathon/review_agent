@@ -1,5 +1,6 @@
 # What MLLMs Learn about When they Learn about Multimodal Reasoning: Perception, Reasoning, or their Integration?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

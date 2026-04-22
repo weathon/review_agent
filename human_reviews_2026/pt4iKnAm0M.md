@@ -1,5 +1,6 @@
 # Plug-and-Play Fidelity Optimization for Diffusion Transformer Acceleration via Cumulative Error Minimization
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 4
 

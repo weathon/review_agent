@@ -1,5 +1,6 @@
 # Beyond Static Retrieval: Opportunities and Pitfalls of Iterative Retrieval in GraphRAG
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 4
 

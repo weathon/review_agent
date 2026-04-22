@@ -1,5 +1,6 @@
 # StPR: Spatiotemporal Preservation and Routing for Exemplar-Free Video Class-Incremental Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

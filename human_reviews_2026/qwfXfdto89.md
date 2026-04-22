@@ -1,5 +1,6 @@
 # RAPID: An Efficient Reinforcement Learning Algorithm for Small Language Models
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

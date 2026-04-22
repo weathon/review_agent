@@ -1,5 +1,6 @@
 # Effective and Efficient Jailbreaks of Black-Box LLMs with Cross-Behavior Attacks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

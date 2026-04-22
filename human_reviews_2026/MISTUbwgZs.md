@@ -1,5 +1,6 @@
 # Remove360: Benchmarking Residuals After Object Removal in 3D Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

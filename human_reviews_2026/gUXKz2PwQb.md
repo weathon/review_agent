@@ -1,5 +1,6 @@
 # Simulator‑Based Synthetic ECGs for Self-Supervised Pretraining
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 6, 2, 0
 

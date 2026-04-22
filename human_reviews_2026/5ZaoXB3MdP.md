@@ -1,5 +1,6 @@
 # R-WoM: Retrieval-augmented World Model For Computer-use Agents
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

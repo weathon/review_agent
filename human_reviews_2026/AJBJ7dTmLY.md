@@ -1,5 +1,6 @@
 # A Large Scale Analysis of Gender Biases in Text-to-Image Generative Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 2, 6
 

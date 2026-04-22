@@ -1,5 +1,6 @@
 # In-Context Learning Without Copying
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 8, 2
 

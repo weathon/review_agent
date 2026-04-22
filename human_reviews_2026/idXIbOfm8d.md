@@ -1,5 +1,6 @@
 # JET-Diff: Joint-Encoding Tensor Diffusion Model for Accurate DTI Reconstruction from Sparse DWIs
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

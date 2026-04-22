@@ -1,5 +1,6 @@
 # ObjLoc: Indoor Camera Relocalization based on Open-Vocabulary Object-Level Mapping
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 0
 

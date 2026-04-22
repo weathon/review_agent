@@ -1,5 +1,6 @@
 # Is Privacy Always Prioritized over Learning? Probing LLMs' Value Priority Belief under External Perturbations
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4, 2
 

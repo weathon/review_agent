@@ -1,5 +1,6 @@
 # SeRI: Gradient-Free Sensitive Region Identification in Decision-Based Black-Box Attacks
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

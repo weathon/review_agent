@@ -1,5 +1,6 @@
 # Calibration-Guided Quantile Regression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # The Achilles’ Heel of LLMs: How Altering a Handful of Neurons Can Cripple Language Abilities
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

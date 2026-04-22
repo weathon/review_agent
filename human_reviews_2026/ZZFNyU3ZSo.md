@@ -1,5 +1,6 @@
 # UniMoD: Efficient Unified Multimodal Transformers with Mixture-of-Depths
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # SeedPrints: Fingerprints Can Even Tell Which Seed Your Large Language Model Was Trained From
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

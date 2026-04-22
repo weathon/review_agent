@@ -1,5 +1,6 @@
 # Time-To-Inconsistency: A Survival Analysis of Large Language Model Robustness to Adversarial Attacks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

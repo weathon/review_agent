@@ -1,5 +1,6 @@
 # MoVE: Synergistic Integration of Temporal and Cross-Variable Experts for Efficient Multivariate Time Series Forecasting
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

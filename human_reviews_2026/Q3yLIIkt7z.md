@@ -1,5 +1,6 @@
 # Scaling Laws and Spectra of Shallow Neural Networks in the Feature Learning Regime
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 6
 

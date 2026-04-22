@@ -1,5 +1,6 @@
 # UniE2F: A Unified Framework for Event-to-Frame Reconstruction with Diffusion Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

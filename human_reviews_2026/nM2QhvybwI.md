@@ -1,5 +1,6 @@
 # Cognitive models can reveal interpretable value trade-offs in language models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 8
 

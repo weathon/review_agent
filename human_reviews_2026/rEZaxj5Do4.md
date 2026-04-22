@@ -1,5 +1,6 @@
 # Learning to Route LLMs from Bandit Feedback: One Policy, Many Trade-offs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

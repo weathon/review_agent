@@ -1,5 +1,6 @@
 # Poisson Midpoint Method for Log Concave Sampling: Beyond the Strong Error Lower Bounds
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

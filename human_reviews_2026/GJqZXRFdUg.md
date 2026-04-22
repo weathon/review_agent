@@ -1,5 +1,6 @@
 # SCOPE: Spatially-Constrained Parametric Editing for Text-Guided CAD Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

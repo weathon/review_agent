@@ -1,5 +1,6 @@
 # EquAct: An SE(3)-Equivariant Multi-Task Transformer for 3D Robotic Manipulation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 10
 

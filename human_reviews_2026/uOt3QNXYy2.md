@@ -1,5 +1,6 @@
 # NVE-Adaptor: Novel View Editing Adaptor for Unseen View Consistent 3D Editing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

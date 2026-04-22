@@ -1,5 +1,6 @@
 # How to Teach Large Multimodal Models New Skills
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

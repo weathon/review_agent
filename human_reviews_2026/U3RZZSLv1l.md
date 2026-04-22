@@ -1,5 +1,6 @@
 # StateEnsemble: Neural State Chain-based Dynamic Model for Complex Motor Sequence Decoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 0, 4
 

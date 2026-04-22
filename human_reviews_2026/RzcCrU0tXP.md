@@ -1,5 +1,6 @@
 # Negative Pre-activations Differentiate Syntax
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # OUSAC: Optimized gUidance Scheduling with Adaptive Caching for DiT Acceleration
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

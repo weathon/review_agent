@@ -1,5 +1,6 @@
 # SYNC: Measuring and Advancing Synthesizability in Structure-Based Drug Design
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Mean Estimation from Coarse Data: Characterizations and Efficient Algorithms
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

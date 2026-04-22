@@ -1,5 +1,6 @@
 # CAReDiO: Enhancing Cultural Alignment of LLM via Representativeness and Distinctiveness Guided Data Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

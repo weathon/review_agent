@@ -1,5 +1,6 @@
 # SAGE-CoT: Self-Adaptive Generated Chain-of-Thought for Jailbreaking
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

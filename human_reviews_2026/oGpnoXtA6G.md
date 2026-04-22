@@ -1,5 +1,6 @@
 # Towards Efficient Online Exploration for Reinforcement Learning with Human Feedback
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

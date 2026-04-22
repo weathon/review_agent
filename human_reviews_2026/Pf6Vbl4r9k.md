@@ -1,5 +1,6 @@
 # Activation-Deactivation: General Framework for Robust Post-hoc Explainable AI
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

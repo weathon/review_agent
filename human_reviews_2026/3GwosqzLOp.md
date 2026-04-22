@@ -1,5 +1,6 @@
 # Learning Conformal Explainers for Image Classifiers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

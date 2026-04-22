@@ -1,5 +1,6 @@
 # NC-Bench and NCfold: A Benchmark and Closed-Loop Framework for RNA Non-Canonical Base-Pair Prediction
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 4
 

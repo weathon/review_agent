@@ -1,5 +1,6 @@
 # Any-step Generation via N-th Order Recursive Consistent Velocity Field Estimation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

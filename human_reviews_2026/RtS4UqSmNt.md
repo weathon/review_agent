@@ -1,5 +1,6 @@
 # Steering the Herd: A Framework for LLM-based Control of Social Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 2, 8, 8
 

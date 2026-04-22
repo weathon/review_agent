@@ -1,5 +1,6 @@
 # Task Matrices: Linear Maps for Cross-Model Finetuning Transfer
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

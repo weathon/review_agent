@@ -1,5 +1,6 @@
 # DES-LOC: Desynced Low Communication Adaptive Optimizers for Foundation Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

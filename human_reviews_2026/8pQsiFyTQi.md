@@ -1,5 +1,6 @@
 # Provably Accelerated Imaging with Restarted Inertia and Score-based Image Priors
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

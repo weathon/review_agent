@@ -1,5 +1,6 @@
 # Beyond Visual cues: Harnessing Text signal for Test-Time OOD Detection
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 4
 

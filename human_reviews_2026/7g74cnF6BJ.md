@@ -1,5 +1,6 @@
 # Should You Use Your LLM to Explore or Exploit?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 6, 0
 

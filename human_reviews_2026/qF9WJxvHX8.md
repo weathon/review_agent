@@ -1,5 +1,6 @@
 # Building Massively Multimodal Foundation Models with Interaction-aware Mixture-of-Experts
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 
@@ -109,22 +110,28 @@ The authors testes their methods on various multimodal benchmarks, mostly connec
 ### Strengths
 The main strengths of the research are the following:
 
-1. Novel interaction-aware MoE for multimodal data. The authors integrate an information-theoretic framework with modern deep learning to guide Mixture-of-Experts routing using temporal redundancy, uniqueness, and synergy (RUS). This design yields an MoE that is both temporally and modality-grounded, leading to more specialized and interpretable experts.
+1. Novel interaction-aware MoE for multimodal data.
+The authors integrate an information-theoretic framework with modern deep learning to guide Mixture-of-Experts routing using temporal redundancy, uniqueness, and synergy (RUS). This design yields an MoE that is both temporally and modality-grounded, leading to more specialized and interpretable experts.
 2. Unlike prior approaches that rely on static cross-modal correlations, TIME-MoE explicitly models time-lagged multimodal effects, which are especially important in medical and physiological domains.
-3. Thorough and diverse evaluation. The approach is tested on a broad set of multimodal benchmarks — PAMAP2, MIMIC-IV (IHM/LOS), MOSI, WESAD, and Opportunity — covering various modality mix. The authors validate their mechanism through component ablations and routing-pattern analyses, confirming both effectiveness and interpretability.
-4. Comprehensive ablation studies. Each component (redundancy, uniqueness, synergy guidance) is evaluated separately, demonstrating its distinct contribution to the final performance.
+3. Thorough and diverse evaluation.
+The approach is tested on a broad set of multimodal benchmarks — PAMAP2, MIMIC-IV (IHM/LOS), MOSI, WESAD, and Opportunity — covering various modality mix. The authors validate their mechanism through component ablations and routing-pattern analyses, confirming both effectiveness and interpretability.
+4. Comprehensive ablation studies.
+Each component (redundancy, uniqueness, synergy guidance) is evaluated separately, demonstrating its distinct contribution to the final performance.
 
 ### Weaknesses
 I would define the following weaknesses:
 
-1. Pairwise-only interaction modeling. The RUS framework focuses on pairwise modality interactions; higher-order (three-way or more) synergies are not explicitly modeled. While this ensures scalability, it limits the expressiveness of the model.
+1. Pairwise-only interaction modeling.
+The RUS framework focuses on pairwise modality interactions; higher-order (three-way or more) synergies are not explicitly modeled. While this ensures scalability, it limits the expressiveness of the model.
 2. Although the authors claim a τ-fold speedup in RUS computation and improved parameter efficiency, the paper does not provide GPU hours, or memory-usage comparisons. Including such measurements would make the efficiency claims more convincing.
-3. Integration with large-scale LLM-MoE frameworks remains unexplored. Given the rapid development of Large Language Model MoEs (e.g., Mixtral, DeepSeek-MoE, etc.), it would be highly valuable to discuss how TIME-MoE could scale to these architectures. The paper does not explore or speculate on integrating its RUS-guided routing into LLM-scale systems, which could significantly broaden its impact.
+3. Integration with large-scale LLM-MoE frameworks remains unexplored.
+Given the rapid development of Large Language Model MoEs (e.g., Mixtral, DeepSeek-MoE, etc.), it would be highly valuable to discuss how TIME-MoE could scale to these architectures. The paper does not explore or speculate on integrating its RUS-guided routing into LLM-scale systems, which could significantly broaden its impact.
 4. While Appendix E describes architecture and hyperparameters, and Appendix D details the RUS estimation algorithms, the paper lacks a concise description of the training setup (optimizer, learning rate, batch size, epochs, etc.).
 
 ### Questions
 1. Please clarify the optimizer, learning-rate schedule, batch size, number of epochs, and gating top-k used during TIME-MoE training. Were modality encoders frozen or fine-tuned?
-2. Is RUS estimation performed as a fully offline pre-processing step (aligned with train/validation/test splits), or is there any joint optimization of the RUS estimator with TIME-MoE training?
+2.
+Is RUS estimation performed as a fully offline pre-processing step (aligned with train/validation/test splits), or is there any joint optimization of the RUS estimator with TIME-MoE training?
 3. Did you observe any expert collapse (e.g., one expert processing the majority of tokens)?
 4. How sensitive is the final model’s performance to the accuracy of the RUS estimation? If the interaction estimator produces noisy or weak signals, does performance degrade significantly?
 5. Could you report wall-clock training times, GPU type/count, and memory usage for both RUS estimation and TIME-MoE training, relative to baseline MoE models (e.g., FuseMoE, I2MoE)?

@@ -1,5 +1,6 @@
 # NI Sampling: Accelerating Discrete Diffusion Sampling by Token Order Optimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 8
 

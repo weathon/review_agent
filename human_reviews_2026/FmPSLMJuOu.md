@@ -1,5 +1,6 @@
 # Redefining Generalization in Visual Domains: A Two-Axis Framework for Fake Image Detection with FusionDetect
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

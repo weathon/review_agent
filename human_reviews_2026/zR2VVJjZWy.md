@@ -1,5 +1,6 @@
 # Extremum Seeking with Surrogate Gradients: Scalable Derivative-Free Optimization for High-Dimensional Black-Box Functions
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

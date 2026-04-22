@@ -1,5 +1,6 @@
 # Reweighted Flow Matching via Unbalanced OT for Label-free Long-tailed Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

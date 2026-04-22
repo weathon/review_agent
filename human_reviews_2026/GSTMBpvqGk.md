@@ -1,5 +1,6 @@
 # Cooperative Multimodal Energy-based Model with MCMC Revision
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

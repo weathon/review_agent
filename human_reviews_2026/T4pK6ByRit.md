@@ -1,5 +1,6 @@
 # LLaVA-UHD v3: Progressive Visual Compression for Efficient Naive-Resolution Encoding in MLLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

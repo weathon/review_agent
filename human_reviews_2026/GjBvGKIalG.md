@@ -1,5 +1,6 @@
 # EAGLE: Efficient Analytical Gradient LinearEvaluation for Enhanced Recomputation in Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

@@ -1,5 +1,6 @@
 # DiVE-k: DIFFERENTIAL VISUAL REASONING FOR FINE-GRAINED IMAGE RECOGNITION
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4
 

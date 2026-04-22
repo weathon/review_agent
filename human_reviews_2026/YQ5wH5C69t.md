@@ -1,5 +1,6 @@
 # Dimple: Discrete Diffusion Multimodal Large Language Model with Parallel Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

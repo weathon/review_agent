@@ -1,5 +1,6 @@
 # RECODE: Reasoning Through Code Generation for Visual Question Answering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

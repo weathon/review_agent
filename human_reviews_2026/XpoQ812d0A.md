@@ -1,5 +1,6 @@
 # Landscape of Thoughts: Visualizing the Reasoning Process of Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 4
 

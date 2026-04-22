@@ -1,5 +1,6 @@
 # Breaking MCP with Function Hijacking Attacks: Novel Threats for Function Calling and Agentic Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

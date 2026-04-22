@@ -1,5 +1,6 @@
 # Efficient and Interpretable Multi-Agent LLM Routing via Ant Colony Optimization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

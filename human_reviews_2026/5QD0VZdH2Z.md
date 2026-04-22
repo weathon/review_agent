@@ -1,5 +1,6 @@
 # Implicit Surface Reconstruction from Sparse and Noisy Poses with Large Motions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

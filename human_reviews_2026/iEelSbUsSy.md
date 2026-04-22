@@ -1,5 +1,6 @@
 # One2Scene: Geometric Consistent Explorable 3D Scene Generation from a Single Image
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

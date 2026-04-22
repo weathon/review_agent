@@ -1,5 +1,6 @@
 # Understanding Subpopulation Shifts through a Unified Lens of Separability
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Test Time Training for Supervised Causal Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

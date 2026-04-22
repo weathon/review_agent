@@ -1,5 +1,6 @@
 # Offline Reinforcement Learning Through Trajectory Clustering and Lower Bound Penalisation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 6
 

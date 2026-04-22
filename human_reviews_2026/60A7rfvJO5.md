@@ -1,5 +1,6 @@
 # Data-free Asymptotics-Informed Operator Networks for Singularly Perturbed PDEs
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 4, 2
 

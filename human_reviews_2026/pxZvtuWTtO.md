@@ -1,5 +1,6 @@
 # WildSpeech-Bench: Benchmarking End-to-End SpeechLLMs in the Wild
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 6, 4, 6
 

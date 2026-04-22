@@ -1,5 +1,6 @@
 # SLAKE: Softmax-Approximated Training-Free Linear Attention with KV-Cache Eviction for Long-Sequence LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Crosslingual Reasoning through Test-Time Scaling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

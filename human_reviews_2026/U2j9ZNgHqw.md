@@ -1,5 +1,6 @@
 # Test-Time Accuracy-Cost Control in Neural Simulators via Recurrent-Depth
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4
 

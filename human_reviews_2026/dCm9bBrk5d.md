@@ -1,5 +1,6 @@
 # On-Policy RL Meets Off-Policy Experts: Harmonizing Supervised Fine-Tuning and Reinforcement Learning via Dynamic Weighting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

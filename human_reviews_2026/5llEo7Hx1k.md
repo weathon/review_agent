@@ -1,5 +1,6 @@
 # StreetDiffusion: Street Scenes Generation via Multi-view Stable Diffusion with Structure Prompts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

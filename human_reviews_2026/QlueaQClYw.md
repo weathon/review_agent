@@ -1,5 +1,6 @@
 # Continuous Control of LLM Text Generation via Probabilistic Prompting
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

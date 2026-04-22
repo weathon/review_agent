@@ -1,5 +1,6 @@
 # Improving 2D Diffusion Models for 3D Medical Imaging with Inter‑Slice Consistent Stochasticity
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

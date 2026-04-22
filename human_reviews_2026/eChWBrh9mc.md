@@ -1,5 +1,6 @@
 # EntryPrune: Neural Network Feature Selection using First Impressions
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

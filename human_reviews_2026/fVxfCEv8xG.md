@@ -1,5 +1,6 @@
 # A-MemGuard: A Proactive Defense Framework for LLM-Based Agent Memory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Rethinking Transformer Inputs for Time-Series via Neural Temporal Embedding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

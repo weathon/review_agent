@@ -1,5 +1,6 @@
 # A Multimodal Label Forecasting Method for Aperiodic Visuo-Motor Time Series
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

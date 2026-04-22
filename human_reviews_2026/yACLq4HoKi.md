@@ -1,5 +1,6 @@
 # Forecasting Diabetic Complications from Brazilian Billing Codes with Time-Aware Attention
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 0, 2, 2
 

@@ -1,5 +1,6 @@
 # COLD-Steer: Steering Large Language Models via In-Context One-step Learning Dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

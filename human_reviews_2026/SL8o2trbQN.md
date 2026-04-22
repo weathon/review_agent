@@ -1,5 +1,6 @@
 # Multiple Choice Learning of Low Rank Adapters for Language Modeling
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 2, 8, 6
 

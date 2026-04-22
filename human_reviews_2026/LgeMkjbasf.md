@@ -1,5 +1,6 @@
 # Stabilizing Knowledge, Promoting Reasoning: Dual-Token Constraints for RLVR
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 8, 4, 6, 6, 2
 

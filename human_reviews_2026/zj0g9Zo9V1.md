@@ -1,5 +1,6 @@
 # Dual LoRA: Enhancing LoRA with Magnitude and Direction Updates
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Leveraging Historical Interactions for Factual Review Generation with Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

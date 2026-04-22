@@ -1,5 +1,6 @@
 # GAGA: Gaussianity-Aware Gaussian Approximation for Efficient 3D Molecular Generation
 
+- Avg Score: 2.67
 - Decision: Accept (Poster)
 - Scores: 2, 2, 4
 

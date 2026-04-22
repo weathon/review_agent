@@ -1,5 +1,6 @@
 # VisionLogic: From Neuron Activations to Causally Grounded Concept Rules for Vision Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

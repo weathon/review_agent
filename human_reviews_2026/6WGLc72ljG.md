@@ -1,5 +1,6 @@
 # Better, Faster: Harnessing Self-Improvement in Large Reasoning Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

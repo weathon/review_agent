@@ -1,5 +1,6 @@
 # DPMFormer: Dual-Path Mamba-Transformer for Efficient Image Super‑Resolution
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

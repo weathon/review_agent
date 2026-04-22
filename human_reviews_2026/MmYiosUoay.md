@@ -1,5 +1,6 @@
 # Seeing is Understanding: Unlocking Causal Attention into Modality-Mutual Attention for Multimodal LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

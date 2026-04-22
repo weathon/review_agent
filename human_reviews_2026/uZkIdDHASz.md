@@ -1,5 +1,6 @@
 # Fast Two-photon Microscopy by Neuroimaging with Oblong Random Acquisition (NORA)
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

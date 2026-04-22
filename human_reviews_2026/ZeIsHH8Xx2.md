@@ -1,5 +1,6 @@
 # SP-MoMamba: Superpixel-driven Mixture of State Space Experts for Efficient Image Super-Resolution
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6, 6
 

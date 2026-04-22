@@ -1,5 +1,6 @@
 # The Majority is not always right: RL training for solution aggregation
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6
 

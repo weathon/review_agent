@@ -1,5 +1,6 @@
 # ShiftedBronzes: Benchmarking and Analysis of Domain Fine-grained Out-of-Distribution Detection in Gradual Shifts
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4, 4
 

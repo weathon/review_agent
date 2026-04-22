@@ -1,5 +1,6 @@
 # Token-Regulated Group Relative Policy Optimization for Stable Reinforcement Learning in Large Language Models
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

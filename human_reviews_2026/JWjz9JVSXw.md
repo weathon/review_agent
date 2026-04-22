@@ -1,5 +1,6 @@
 # CMPS: Constrained Mixed Precision Search
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

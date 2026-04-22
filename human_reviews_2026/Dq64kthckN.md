@@ -1,5 +1,6 @@
 # EigenScore: OOD Detection using Posterior Covariance in Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

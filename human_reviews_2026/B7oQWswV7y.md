@@ -1,5 +1,6 @@
 # Automatic Instance Selection with Genetic Updating for Few-shot LLM Jailbreak
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Typed Chain-of-Thought: A Curry-Howard Framework for Verifying LLM Reasoning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 0
 

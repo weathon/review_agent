@@ -1,5 +1,6 @@
 # PSR: Subject-Consistency Rewards for Multi-Subject Personalized Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

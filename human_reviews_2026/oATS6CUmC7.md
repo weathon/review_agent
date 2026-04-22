@@ -1,5 +1,6 @@
 # Audio-driven 3D Conversational Full-body Human Avatar Generation from a Single Image
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

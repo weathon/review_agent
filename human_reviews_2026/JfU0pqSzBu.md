@@ -1,5 +1,6 @@
 # When Less Is More: Uncovering the Robustness Advantage of Model Pruning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 6, 6, 2
 

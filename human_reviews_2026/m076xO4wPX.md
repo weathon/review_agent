@@ -1,5 +1,6 @@
 # Fractional Reasoning via Latent Steering Vectors Improves Inference Time Compute
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

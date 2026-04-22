@@ -1,5 +1,6 @@
 # Bridging Past and Future: Distribution-Aware Alignment for Time Series Forecasting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Reasoning-Based Personalized Generation for Users with Sparse Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

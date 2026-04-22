@@ -1,5 +1,6 @@
 # High Accuracy, Less Talk (HALT): Reliable LLMs through Capability-Aligned Finetuning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 10, 4, 4
 

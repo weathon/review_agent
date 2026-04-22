@@ -1,5 +1,6 @@
 # Mitigating Privacy Risk via Forget Set-Free Unlearning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

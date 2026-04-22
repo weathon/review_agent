@@ -1,5 +1,6 @@
 # SPDEBench: An Extensive Benchmark for Learning Regular and Singular Stochastic PDEs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

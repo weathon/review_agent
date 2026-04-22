@@ -1,5 +1,6 @@
 # Surrogate Signals from Format and Length: Reinforcement Learning for Solving Mathematical Problems without Ground Truth Answers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

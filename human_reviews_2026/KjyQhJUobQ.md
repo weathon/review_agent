@@ -1,5 +1,6 @@
 # ProtFunAgent: Agentic LLM Cascades for Low-Resource Protein Function Gap-Filling via Homology RAG and Ontology-Constrained Decoding
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

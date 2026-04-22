@@ -1,5 +1,6 @@
 # Useless, or Untapped? Unlocking the Full Value of Zero-Advantage Samples for Better Policy Optimization
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4, 2
 

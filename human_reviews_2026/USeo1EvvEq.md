@@ -1,5 +1,6 @@
 # The Stability and Convergence of Two-Timescale Stochastic Approximation with Markovian Noise for Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

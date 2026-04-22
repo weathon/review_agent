@@ -1,5 +1,6 @@
 # Uni-PrevPredMap: Extending PrevPredMap to a Unified Framework of Prior-Informed Modeling for Online Vectorized HD Map Construction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

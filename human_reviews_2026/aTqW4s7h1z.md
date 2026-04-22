@@ -1,5 +1,6 @@
 # Perception Through Sparsity: Fusing and Enhancing Multi-Agent Sparse Representation with Deformable Cross-Attention
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Resp-Agent: An Agent-Based System for Multimodal Respiratory Sound Generation and Disease Diagnosis
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

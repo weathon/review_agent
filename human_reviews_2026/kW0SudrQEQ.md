@@ -1,5 +1,6 @@
 # Frozen Policy Iteration: Computationally Efficient RL under Linear $Q^{\pi}$ Realizability for Deterministic Dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

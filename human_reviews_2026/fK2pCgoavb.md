@@ -1,5 +1,6 @@
 # DiMeR: Disentangled Mesh Reconstruction Model with Normal-only Geometry Training
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

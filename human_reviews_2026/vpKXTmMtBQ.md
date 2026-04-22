@@ -1,5 +1,6 @@
 # Model Merging Scaling Laws in Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

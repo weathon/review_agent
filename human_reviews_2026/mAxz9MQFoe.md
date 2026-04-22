@@ -1,5 +1,6 @@
 # GAIR: A Multimodal Geo-Foundation Model with Geo-Aligned Implicit Representations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

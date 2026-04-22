@@ -1,5 +1,6 @@
 # From Inpainting to Editing: A Self-Bootstrapping Paradigm for Context-Rich Visual Dubbing
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

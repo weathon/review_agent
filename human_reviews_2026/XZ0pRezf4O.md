@@ -1,5 +1,6 @@
 # PointWorld: Scaling 3D World Models for In-The-Wild Robotic Manipulation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

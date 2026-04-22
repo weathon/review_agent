@@ -1,5 +1,6 @@
 # Bootstrapped Exploration with Causal Reasoning: A Training Paradigm for Adaptive Forecasting Agent
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # False, misleading, and unfounded statements in a recent TPAMI publication
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0
 

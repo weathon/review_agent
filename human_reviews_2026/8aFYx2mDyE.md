@@ -1,5 +1,6 @@
 # UniVerse-1: Unified Audio-Video Generation via Stitching of Experts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

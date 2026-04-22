@@ -1,5 +1,6 @@
 # ExAI5G: A Logic-Based Explainable AI Framework for Intrusion Detection in 5G Networks
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

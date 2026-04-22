@@ -1,5 +1,6 @@
 # Robust Adaptive Multi-Step Predictive Shielding
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 4
 

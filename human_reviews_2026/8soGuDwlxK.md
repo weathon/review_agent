@@ -1,5 +1,6 @@
 # SymLight: Exploring Interpretable and Deployable Symbolic Policies for Traffic Signal Control
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

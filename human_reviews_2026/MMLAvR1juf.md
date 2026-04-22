@@ -1,5 +1,6 @@
 # Drugging the Undruggable: Benchmarking and Modeling Fragment-Based Screening
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4
 

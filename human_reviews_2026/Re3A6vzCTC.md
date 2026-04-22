@@ -1,5 +1,6 @@
 # Pisces: Cryptography-based Private Retrieval-Augmented Generation with Dual-Path Retrieval
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

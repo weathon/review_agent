@@ -1,5 +1,6 @@
 # EDIT: Early Diffusion Inference Termination for dLLMs Based on Dynamics of Training Gradients
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

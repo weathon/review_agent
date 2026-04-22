@@ -1,5 +1,6 @@
 # TimeScope: Towards Task-Oriented Temporal Grounding In Long Videos
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

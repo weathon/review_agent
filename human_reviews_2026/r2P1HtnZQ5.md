@@ -1,5 +1,6 @@
 # ChemHGNN: A Hierarchical Hypergraph Neural Network for Reaction Virtual Screening and Discovery
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Autoformalizer with Tool Feedback
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

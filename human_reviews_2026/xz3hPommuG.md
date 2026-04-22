@@ -1,5 +1,6 @@
 # Representational Alignment Across Model Layers and Brain Regions with Multi-Level Optimal Transport
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 10, 4
 

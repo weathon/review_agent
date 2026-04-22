@@ -1,5 +1,6 @@
 # Size Doesn't Matter: Data Efficient Deep Learning Beyond the Big Data Paradigm
 
+- Avg Score: 1.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0, 2, 4
 

@@ -1,5 +1,6 @@
 # Adaptive Projected Guidance for Controllable Instruction-Guided Image Editing
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

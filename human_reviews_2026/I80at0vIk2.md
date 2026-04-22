@@ -1,5 +1,6 @@
 # When Novices Teach Better: Improving Behavioral Cloning with Low-Skill Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

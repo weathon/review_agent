@@ -1,5 +1,6 @@
 # Fine-Grained Safety Neurons with Training-Free Continual Projection to Reduce LLM Fine Tuning Risks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 8
 

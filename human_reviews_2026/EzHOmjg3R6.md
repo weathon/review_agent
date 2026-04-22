@@ -1,5 +1,6 @@
 # DiffRhythm 2: Efficient and High Fidelity Song Generation via Block Flow Matching
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

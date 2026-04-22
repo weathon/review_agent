@@ -1,5 +1,6 @@
 # SciTS: Scientific Time Series Understanding and Generation with LLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

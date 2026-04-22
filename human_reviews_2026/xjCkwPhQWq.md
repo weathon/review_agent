@@ -1,5 +1,6 @@
 # SceneTransporter: Optimal Transport-Guided Compositional Latent Diffusion for Single-Image  Structured 3D Scene Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

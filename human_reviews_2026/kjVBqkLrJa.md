@@ -1,5 +1,6 @@
 # Style2Shape: Image Style Guided 3D Shape Material Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

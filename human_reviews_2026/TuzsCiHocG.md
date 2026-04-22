@@ -1,5 +1,6 @@
 # Accurate and Efficient Singular Value Decomposition For LLMs via Decay-aware Rank Allocation and Feature-Preserved Weight Update
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

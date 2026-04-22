@@ -1,5 +1,6 @@
 # MSMR: Bandit with Minimal Switching Cost and Minimal Marginal Regret
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

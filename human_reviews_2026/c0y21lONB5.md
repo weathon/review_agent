@@ -1,5 +1,6 @@
 # $\texttt{GEM}$: 3D Gaussian Splatting for Efficient and Accurate Cryo-EM Reconstruction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

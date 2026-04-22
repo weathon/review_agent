@@ -1,5 +1,6 @@
 # CoM-V2I: Communication-Efficient Multimodal Cooperative Perception via Codebook Pruning and Multiscale Fusion
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

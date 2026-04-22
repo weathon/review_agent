@@ -1,5 +1,6 @@
 # Rethinking Consistent Multi-Label Classification Under Inexact Supervision
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4, 8, 6
 

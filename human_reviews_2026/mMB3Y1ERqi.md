@@ -1,5 +1,6 @@
 # SimuAgent: An LLM-Based Simulink Modeling Assistant Enhanced with Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 0, 6, 8
 

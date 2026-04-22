@@ -1,5 +1,6 @@
 # Balanced Scaling Using Nonlinear Dynamic Metrics in Multivariate Time Series Modeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

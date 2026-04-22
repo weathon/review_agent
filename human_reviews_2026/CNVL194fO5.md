@@ -1,5 +1,6 @@
 # Are Global Dependencies Necessary? Scalable Time Series Forecasting via Local Cross-Variate Modeling
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

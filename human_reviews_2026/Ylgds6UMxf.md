@@ -1,5 +1,6 @@
 # Chat-CBM: Towards Interactive Concept Bottleneck Models with Frozen Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 4, 2
 

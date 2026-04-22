@@ -1,5 +1,6 @@
 # Exploring the Entropy Mechanism in LLM Agents On-policy Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

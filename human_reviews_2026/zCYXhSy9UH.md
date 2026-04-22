@@ -1,5 +1,6 @@
 # Kaleidoscope: In-language Exams for Massively  Multilingual Vision Evaluation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

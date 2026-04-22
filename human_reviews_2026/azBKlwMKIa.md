@@ -1,5 +1,6 @@
 # Supermodel: Rethinking DNN Training and Testing with Open-style Skill Acquisition and Dynamic Inference
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 4
 

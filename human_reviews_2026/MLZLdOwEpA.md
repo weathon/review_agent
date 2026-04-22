@@ -1,5 +1,6 @@
 # AI Alignment with Provable Protection of Human Judgements
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

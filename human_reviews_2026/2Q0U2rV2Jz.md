@@ -1,5 +1,6 @@
 # Neural Networks Learn Generic Multi-Index Models Near Information-Theoretic Limit
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

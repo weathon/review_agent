@@ -1,5 +1,6 @@
 # Learning Tractable Distributions of Language Model Continuations
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 6, 4
 

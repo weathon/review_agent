@@ -1,5 +1,6 @@
 # Bridging Bag-Level and Instance-Level Uncertainty with Conformalizable MIL
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 

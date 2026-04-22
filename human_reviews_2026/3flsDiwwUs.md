@@ -1,5 +1,6 @@
 # The Dynamic Interaction Field Transformer: A Universal, Tokenizer-Free Language Architecture
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

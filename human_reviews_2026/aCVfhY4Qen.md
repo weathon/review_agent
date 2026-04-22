@@ -1,5 +1,6 @@
 # PhyScensis: Physics-Augmented LLM Agents for Complex Physical Scene Arrangement
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

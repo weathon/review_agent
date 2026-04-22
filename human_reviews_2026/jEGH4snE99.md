@@ -1,5 +1,6 @@
 # MOSS-ChatV: Reinforcement Learning with Process Reasoning Reward for Video Temporal Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

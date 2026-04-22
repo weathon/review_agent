@@ -1,5 +1,6 @@
 # Scaling Behavior of Discrete Diffusion Language Models
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 4
 

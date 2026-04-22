@@ -1,5 +1,6 @@
 # Efficient Adversarial Attacks on High-dimensional Offline Bandits
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2
 

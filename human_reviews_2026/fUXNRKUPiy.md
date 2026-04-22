@@ -1,5 +1,6 @@
 # DexBench: Benchmarking LLMs for Personalized Decision Making in Diabetes Management
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

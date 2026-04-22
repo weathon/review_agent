@@ -1,5 +1,6 @@
 # Latent Adaptation with Masked Policy for Diffusion Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

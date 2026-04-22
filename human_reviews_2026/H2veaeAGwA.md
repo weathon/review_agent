@@ -1,5 +1,6 @@
 # RAG-FGO: Enhancing RAG with Fungal Growth Optimizer for LLM Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

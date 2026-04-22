@@ -1,5 +1,6 @@
 # Animating the Still: Physics-Based 3D Cinemagraph from Multi-View Images Using 3D Gaussian Splatting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

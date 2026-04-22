@@ -1,5 +1,6 @@
 # Guided Domain Solver: Structured Exploration of Domain-Specific Tasks with Large Language Models
 
+- Avg Score: 1.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2, 0
 

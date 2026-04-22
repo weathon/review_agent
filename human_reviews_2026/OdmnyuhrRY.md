@@ -1,5 +1,6 @@
 # Mixture of Spectral Wavelets on Simplicial Complex: Analysis of Brain Connectome with Neurodegeneration
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

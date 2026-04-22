@@ -1,5 +1,6 @@
 # DIVA-GRPO: Enhancing Multimodal Reasoning through Difficulty-Adaptive Variant Advantage
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

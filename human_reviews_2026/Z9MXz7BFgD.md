@@ -1,5 +1,6 @@
 # NoisyVideo: A Comprehensive Benchmark for Robust Video Understanding under Visual Noise
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # FLM-Audio: Natural Monologues Improves Native Full-Duplex Chatbots via Dual Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

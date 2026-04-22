@@ -1,5 +1,6 @@
 # GenAR: Next-Scale Autoregressive Generation for Spatial Gene Expression Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

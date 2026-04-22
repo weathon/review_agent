@@ -1,5 +1,6 @@
 # Advancing and Benchmarking Personalized Tool Invocation for LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

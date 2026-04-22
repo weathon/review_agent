@@ -1,5 +1,6 @@
 # Bayesian Additive Regression Trees for Exponential Family Distributions: A Theoretical Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

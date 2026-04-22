@@ -1,5 +1,6 @@
 # Cross-Species Protein Interaction Prediction by Hierarchical Contrastive Pretraining
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

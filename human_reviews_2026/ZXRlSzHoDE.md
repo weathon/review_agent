@@ -1,5 +1,6 @@
 # StarEmbed: Benchmarking Time Series Foundation Models on Astronomical Observations of Variable Stars
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 6, 0
 

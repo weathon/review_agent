@@ -1,5 +1,6 @@
 # Mitigating Conflicts in Multi-Task Reinforcement Learning via Progressively-Trained Dynamic Policy Network
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2
 

@@ -1,5 +1,6 @@
 # TRACE: Coarse-to-Fine Automated Evaluation of Mobile Agents with Safety Considerations in Realistic Environments
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 
@@ -72,19 +73,27 @@ The paper proposes TRACE, a coarse-to-fine automated evaluation framework for mo
 This paper introduces TRACE (TRajectory-based Automated Coarse-to-fine Evaluation), a fully automated VLM-based framework for evaluating mobile GUI agents. TRACE adopts a two-stage coarse-to-fine design that first analyzes individual actions and then performs an overall judgment based on aggregated evidence. The authors also release TRACEBench, a benchmark of 187 mobile tasks across 35 apps with explicit safety-focused cases. Experiments show that TRACE achieves an F1 score of 0.836 against human annotations, outperforming SPA-Bench and demonstrating improved reliability and automation. The work aims to advance realistic, safety-aware, and scalable evaluation of mobile agents.
 
 ### Strengths
-1. **Approach and design**: TRACE proposes a coarse-to-fine decomposition that isolates local reasoning from global evaluation, substantially reducing VLM context complexity. This staged design is intuitive and effective, producing a strong correlation (F1 = 0.836) with human judgment while remaining fully automated.
-2. **Practical and accessible implementation**: TRACE attains competitive evaluation accuracy using an open-source VLM (Qwen2.5-VL-72B-Instruct). The reported improvements in F1 score, precision, and recall over SPA-Bench provide solid empirical evidence of its effectiveness.
+1. **Approach and design**:
+TRACE proposes a coarse-to-fine decomposition that isolates local reasoning from global evaluation, substantially reducing VLM context complexity. This staged design is intuitive and effective, producing a strong correlation (F1 = 0.836) with human judgment while remaining fully automated.
+2. **Practical and accessible implementation**:
+TRACE attains competitive evaluation accuracy using an open-source VLM (Qwen2.5-VL-72B-Instruct). The reported improvements in F1 score, precision, and recall over SPA-Bench provide solid empirical evidence of its effectiveness.
 3. **Clarity and presentation quality**:The paper is clearly written and well structured, with sufficient methodological descriptions and illustrative examples that make the proposed framework easy to follow. The inclusion of multiple VLM evaluators (Qwen, Doubao, GPT-4o, Gemini) also helps demonstrate the robustness and general applicability of the proposed approach.
 
 ### Weaknesses
 1. **Unfocused contribution scope**: The paper claims three contributions—pipeline, benchmark, and safety detection—but only the pipeline represents a substantive methodological novelty. The benchmark and safety modules, though useful, blur the central narrative. A tighter focus on evaluating the pipeline across existing benchmarks (e.g., Mobile-Bench, SPA-Bench) would better clarify its impact.
-2. **Limited benchmark novelty and scale**: TRACEBench’s 187 tasks are modest compared with prior work (e.g., Mobile-Bench 832, Mobile-Bench-v2 > 12 k). The Chinese-only design restricts accessibility and limits cross-lingual generality. The rationale for this language choice and the proportion of newly designed versus adapted tasks should be better justified.
-3. **Insufficient safety evaluation rigor**: The safety detector is prompt-based and lacks quantitative validation (precision/recall) or baseline comparison against simple heuristics. Without such analysis, it appears closer to prompt engineering than a verified safety metric. The trade-off between Success Ratio (SR) and Safety Ratio (SFR) could also be explored more systematically.
-4. **Lack of ablations and pipeline analysis**: Although the step-wise design is conceptually strong, the paper does not test simpler baselines such as (i) final-screenshot-only or (ii) single-pass full-trajectory evaluation. An ablation quantifying how much each stage contributes to accuracy would strengthen the argument that coarse-to-fine evaluation is necessary.
-5. **Uncontrolled execution environment and variance**: TRACEBench relies on real mobile devices, introducing nondeterminism (ads, residual states). The paper acknowledges this but does not quantify benchmark variance or report results from repeated runs. Without this, the statistical significance of agent performance differences remains unclear.
+2. **Limited benchmark novelty and scale**:
+TRACEBench’s 187 tasks are modest compared with prior work (e.g., Mobile-Bench 832, Mobile-Bench-v2 > 12 k). The Chinese-only design restricts accessibility and limits cross-lingual generality. The rationale for this language choice and the proportion of newly designed versus adapted tasks should be better justified.
+3. **Insufficient safety evaluation rigor**:
+The safety detector is prompt-based and lacks quantitative validation (precision/recall) or baseline comparison against simple heuristics. Without such analysis, it appears closer to prompt engineering than a verified safety metric. The trade-off between Success Ratio (SR) and Safety Ratio (SFR) could also be explored more systematically.
+4. **Lack of ablations and pipeline analysis**:
+Although the step-wise design is conceptually strong, the paper does not test simpler baselines such as (i) final-screenshot-only or (ii) single-pass full-trajectory evaluation. An ablation quantifying how much each stage contributes to accuracy would strengthen the argument that coarse-to-fine evaluation is necessary.
+5. **Uncontrolled execution environment and variance**:
+TRACEBench relies on real mobile devices, introducing nondeterminism (ads, residual states). The paper acknowledges this but does not quantify benchmark variance or report results from repeated runs. Without this, the statistical significance of agent performance differences remains unclear.
 6. **Limited comparison to other VLM/LLM evaluators**: SPA-Bench is the only baseline. Other recent works (e.g., Android Agent Arena [1] and OSUniverse [2]) also propose automated evaluators using VLMs or LLMs. Evaluating against these would clarify TRACE’s relative advantage.
-7. **Milestone reliability not evaluated**: The overall judgment phase critically depends on accurate milestone decomposition. Errors in milestone extraction could cascade into incorrect final judgments, yet no quantitative assessment of this stage’s reliability is provided.
-8. **Metric definition and motivation**: Metrics such as Complete Recall/Precision (CR/CP) are introduced but not well-motivated relative to standard success metrics. Concrete examples showing when CR/CP provide distinct insights would help justify their inclusion.
+7. **Milestone reliability not evaluated**:
+The overall judgment phase critically depends on accurate milestone decomposition. Errors in milestone extraction could cascade into incorrect final judgments, yet no quantitative assessment of this stage’s reliability is provided.
+8. **Metric definition and motivation**:
+Metrics such as Complete Recall/Precision (CR/CP) are introduced but not well-motivated relative to standard success metrics. Concrete examples showing when CR/CP provide distinct insights would help justify their inclusion.
 
 ### **References**
 [1] Android Agent Arena: A3 Benchmark for Mobile GUI Agents. https://arxiv.org/abs/2501.01149
@@ -92,11 +101,16 @@ This paper introduces TRACE (TRajectory-based Automated Coarse-to-fine Evaluatio
 [2] OSUniverse: Benchmark for Multimodal GUI-Navigation AI Agents. https://arxiv.org/abs/2505.03570
 
 ### Questions
-1. **Benchmark motivation**: What unique features of TRACEBench justify introducing a new dataset instead of expanding existing ones such as Mobile-Bench or SPA-Bench? How many of the 187 tasks are genuinely new versus adapted?
-2. **Language choice**: Why were all task instructions written in Chinese, including for global apps? 
-3. **Environment control and reproducibility**: When using real devices, how do you ensure fairness across runs? Was any emulator, snapshotting, or re-initialization used?
-4. **Milestone reliability**: Have you measured the correctness of automatically generated milestones? How sensitive is overall performance to errors at this stage?
-5. **Metric usefulness**: Please illustrate cases where CR/CP provide insights beyond success ratio, or consider simplifying the metrics if redundant.
+1. **Benchmark motivation**:
+What unique features of TRACEBench justify introducing a new dataset instead of expanding existing ones such as Mobile-Bench or SPA-Bench? How many of the 187 tasks are genuinely new versus adapted?
+2. **Language choice**:
+Why were all task instructions written in Chinese, including for global apps? 
+3. **Environment control and reproducibility**:
+When using real devices, how do you ensure fairness across runs? Was any emulator, snapshotting, or re-initialization used?
+4. **Milestone reliability**:
+Have you measured the correctness of automatically generated milestones? How sensitive is overall performance to errors at this stage?
+5. **Metric usefulness**:
+Please illustrate cases where CR/CP provide insights beyond success ratio, or consider simplifying the metrics if redundant.
 
 ### Soundness
 2

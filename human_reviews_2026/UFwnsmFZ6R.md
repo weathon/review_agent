@@ -1,5 +1,6 @@
 # Rethinking Data Curation in LLM Training: Online Reweighting  Offers Better Generalization than Offline Methods
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4
 

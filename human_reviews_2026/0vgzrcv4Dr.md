@@ -1,5 +1,6 @@
 # Asymmetric Proximal Policy Optimization: mini-critics boost LLM reasoning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

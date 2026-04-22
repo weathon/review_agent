@@ -1,5 +1,6 @@
 # PTQTP: Post-Training Quantization to Trit-Planes for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

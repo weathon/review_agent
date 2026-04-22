@@ -1,5 +1,6 @@
 # Quantization Meets Reasoning: Exploring and Mitigating Degradation of Low-Bit LLMs in Mathematical Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

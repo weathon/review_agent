@@ -1,5 +1,6 @@
 # PromptHash: Robust Instruction Watermarks Against Paraphrase and Splicing in LLM Forensics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

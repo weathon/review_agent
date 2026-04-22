@@ -1,5 +1,6 @@
 # Retrieval-of-Thought: Efficient Reasoning via Reusing Thoughts
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6
 

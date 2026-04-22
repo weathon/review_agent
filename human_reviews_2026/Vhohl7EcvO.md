@@ -1,5 +1,6 @@
 # Noise Stability of Transformer Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 6
 

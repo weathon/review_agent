@@ -1,5 +1,6 @@
 # X-Pruner: An Adaptive Pruning Method with Self-Compensation Driven by Reinforcement Learning for Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

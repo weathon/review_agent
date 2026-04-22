@@ -1,5 +1,6 @@
 # GTM: A General Time-series Model for Enhanced Representation Learning of Time-Series data
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

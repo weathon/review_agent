@@ -1,5 +1,6 @@
 # Global and Fine-Grained Framework for CLIP with Cross-Modal Mamba in Few-Shot Image Classification
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

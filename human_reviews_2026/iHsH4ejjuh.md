@@ -1,5 +1,6 @@
 # Emergent SO(3)-Invariant Molecular Representations from Multimodal Alignment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

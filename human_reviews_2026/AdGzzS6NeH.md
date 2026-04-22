@@ -1,5 +1,6 @@
 # Text-guided Group Mixup with Canonical Mining for Imbalanced Graph Clustering
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

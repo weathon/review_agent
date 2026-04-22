@@ -1,5 +1,6 @@
 # InfiMed-Foundation: Pioneering Advanced Multimodal Medical Models with Compute-Efficient Pre-Training and Multi-Stage Fine-Tuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # High-Fidelity Scientific Simulation Surrogates via Adaptive Implicit Neural Representations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

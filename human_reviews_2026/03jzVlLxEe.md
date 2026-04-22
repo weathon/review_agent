@@ -1,5 +1,6 @@
 # NERVE: Noise-Variability-Robust EEG Foundation Model with Electrode-Brain Interactions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

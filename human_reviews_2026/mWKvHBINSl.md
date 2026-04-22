@@ -1,5 +1,6 @@
 # PASER: Post-Training Data Selection for Efficient Pruned Large Language Model Recovery
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

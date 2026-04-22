@@ -1,5 +1,6 @@
 # A Theoretical Framework for Rate-Distortion Limits in Learned Image Compression
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

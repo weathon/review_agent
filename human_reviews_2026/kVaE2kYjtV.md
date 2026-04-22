@@ -1,5 +1,6 @@
 # Unpacking Human Preference for LLMs: Demographically Aware Evaluation with the HUMAINE Framework
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 10, 2, 6, 6
 

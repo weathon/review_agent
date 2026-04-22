@@ -1,5 +1,6 @@
 # Towards Scalable Oversight with Collaborative Multi-Agent Debate in Error Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

@@ -1,5 +1,6 @@
 # Controllable diffusion-based generation for multi-channel biological data
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 0, 8
 

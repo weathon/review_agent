@@ -1,5 +1,6 @@
 # Are Small Language Models the Silver Bullet to Low-Resource Languages Machine Translation?
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

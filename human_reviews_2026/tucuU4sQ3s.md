@@ -1,5 +1,6 @@
 # Memory-Free Continual Learning with Null Space Adaptation for Zero-Shot Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

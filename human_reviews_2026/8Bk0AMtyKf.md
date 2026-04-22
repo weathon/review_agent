@@ -1,5 +1,6 @@
 # Towards Robust Agentic Systems through Generative Flow Exploration of Primitives
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

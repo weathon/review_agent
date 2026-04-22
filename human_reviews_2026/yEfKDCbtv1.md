@@ -1,5 +1,6 @@
 # Riemannian Zeroth-Order Gradient Estimation with Structure-Preserving Metrics for Geodesically Incomplete Manifolds
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

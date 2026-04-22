@@ -1,5 +1,6 @@
 # Split, Not Spilled: Practical Obfuscation-Based Privacy-Preserving Split Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

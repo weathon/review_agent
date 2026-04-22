@@ -1,5 +1,6 @@
 # Geometry & Optimization of Three-Layer Networks: Symmetry Breaking as a Unifying Principle
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

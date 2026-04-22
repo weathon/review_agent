@@ -1,5 +1,6 @@
 # Generative Actor Critic
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 8, 8, 4
 

@@ -1,5 +1,6 @@
 # FM-SIREN & FM-FINER: Nyquist-Informed Frequency Multiplier for Implicit Neural Representation with Periodic Activation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

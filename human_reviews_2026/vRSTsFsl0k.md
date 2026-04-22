@@ -1,5 +1,6 @@
 # The Role of Active Learning in Modern Deep Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 0, 4, 2
 

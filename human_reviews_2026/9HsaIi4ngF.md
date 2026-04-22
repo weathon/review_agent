@@ -1,5 +1,6 @@
 # RouterArena: An Open Platform for Comprehensive Comparison of LLM Routers
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 8, 6
 

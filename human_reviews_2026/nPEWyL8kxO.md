@@ -1,5 +1,6 @@
 # CoT-Self-Instruct: Building high-quality synthetic prompts  data  for reasoning and non-reasoning tasks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

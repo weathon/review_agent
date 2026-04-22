@@ -1,5 +1,6 @@
 # On the Expressive Power of Weight Quantization in Deep Neural Networks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

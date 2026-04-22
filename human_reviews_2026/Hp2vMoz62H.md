@@ -1,5 +1,6 @@
 # IgFlow-LM: De Novo Antibody Design via Joint Flow Matching on SE(3) and Protein Language Models Probability Flows
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

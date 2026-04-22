@@ -1,5 +1,6 @@
 # Align-Then-stEer: Adapting the Vision-Language Action Models through Unified Latent Guidance
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Done Is Better than Perfect: Unlocking Efficient Reasoning by Structured Multi-Turn Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

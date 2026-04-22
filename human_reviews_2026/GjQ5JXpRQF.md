@@ -1,5 +1,6 @@
 # OrthoRF: Exploring Orthogonality in Object-Centric Representations
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8, 4
 
@@ -125,32 +126,51 @@ This paper introduces Orthogonal Rotating Features (OrthoRF), an extension of th
 OrthoRF addresses this by imposing orthogonality as an inductive bias in the orientation space. It achieves this through two main architectural modifications:
 
 
-1. Competitive Binding: A per-layer, centered softmax over orientation components to encourage "winner-take-most" specialization, mapping each object to a single, distinct component. 
+1. Competitive Binding: A per-layer, centered softmax over orientation components to encourage "winner-take-most" specialization, mapping each object to a single, distinct component.
 
-2. Orthogonality Regularization: An inner-product based $\mathcal{L}_{ortho}$ loss that penalizes the squared off-diagonal mass of the Gram matrix formed by the latent vectors, explicitly driving cross-component similarities toward zero, effectively enforcing a $90^{\circ}$ separation.  
+
+2. Orthogonality Regularization: An inner-product based $\mathcal{L}_{ortho}$ loss that penalizes the squared off-diagonal mass of the Gram matrix formed by the latent vectors, explicitly driving cross-component similarities toward zero, effectively enforcing a $90^{\circ}$ separation.
+
+
 
 These modifications produce one-hot-like object encodings, which eliminates the need for post-hoc clustering and results in more interpretable representations. In experiments on the 4Shapes and synthetic SEM datasets, OrthoRF matches or outperforms current synchrony-based models on object discovery metrics (ARI-BG, MBO). Crucially, OrthoRF demonstrates superior performance on the shape completion task ($MBO_{i}^{OV}$), especially in overlapping/occluded regions, and shows a unique capability to recover occluded object parts in its intermediate representations—a strength not observed in prior slot-based or synchrony-based models.
 
 ### Strengths
-* Originality and Significance: The core idea of enforcing orthogonality in the orientation space of RF is highly original and delivers a substantial improvement in the interpretability and performance of synchrony-based models. The result is a robust model that eliminates post-hoc clustering and yields one-hot-like encodings.    
+* Originality and Significance: The core idea of enforcing orthogonality in the orientation space of RF is highly original and delivers a substantial improvement in the interpretability and performance of synchrony-based models. The result is a robust model that eliminates post-hoc clustering and yields one-hot-like encodings.
 
-* Handling of Occlusion: OrthoRF exhibits a unique and powerful capability: the recovery of occluded object parts in its internal representations. This is demonstrated on the challenging, realistic SEM dataset and provides a crucial step toward more robust scene decomposition.    
+
+
+
+
+* Handling of Occlusion: OrthoRF exhibits a unique and powerful capability: the recovery of occluded object parts in its internal representations. This is demonstrated on the challenging, realistic SEM dataset and provides a crucial step toward more robust scene decomposition.
+
+
+
+
 
 * Clarity and Efficacy: The method is conceptually clean (competitive binding + orthogonality loss) and empirically highly effective, with strong results across various conditions, noise, and out-of-distribution tests.
 
 ### Weaknesses
-* Hyperparameter Sensitivity: The orthogonality loss is controlled by a weighting factor, $\lambda$. Table 1 shows that optimal performance varies across different settings of $n$ (orientation dimensionality), requiring a hyperparameter search for the specific dataset. For instance, $n=7$ prefers $\lambda=0.1$ while $n=5$ prefers $\lambda=0.8$. A more thorough sensitivity analysis or a proposed dynamic weighting strategy could improve the method's generalizability.   
+* Hyperparameter Sensitivity: The orthogonality loss is controlled by a weighting factor, $\lambda$. Table 1 shows that optimal performance varies across different settings of $n$ (orientation dimensionality), requiring a hyperparameter search for the specific dataset. For instance, $n=7$ prefers $\lambda=0.1$ while $n=5$ prefers $\lambda=0.8$. A more thorough sensitivity analysis or a proposed dynamic weighting strategy could improve the method's generalizability.
 
-* Dependency on Final-Layer Output: The best-performing OrthoRF method (OrthoRF$^{\text{thresh}}$ on $\psi_{final}$) requires binarizing the intermediate map with a threshold (0.1) and no further post-processing. The dependence on a hand-tuned global threshold (0.1) for peak performance might limit its applicability compared to the fully unsupervised k-means approach used by RF and OrthoRF$^{\text{kmeans}}$. The reliance on an *intermediate* layer ($\psi_{final}$) rather than the final $z_{final}$ output for the $MBO_{i}^{OV}$ metric should be discussed as a limitation or characteristic. 
+
+
+
+* Dependency on Final-Layer Output: The best-performing OrthoRF method (OrthoRF$^{\text{thresh}}$ on $\psi_{final}$) requires binarizing the intermediate map with a threshold (0.1) and no further post-processing. The dependence on a hand-tuned global threshold (0.1) for peak performance might limit its applicability compared to the fully unsupervised k-means approach used by RF and OrthoRF$^{\text{kmeans}}$. The reliance on an *intermediate* layer ($\psi_{final}$) rather than the final $z_{final}$ output for the $MBO_{i}^{OV}$ metric should be discussed as a limitation or characteristic.
+
 
 * The authors claim training on noisy and testing on clean data degrades performance. I encourage authors to look at Extreme Image Transforms (EIT) [Crowder and Malik, 2022; Malik, Crowder and Mingolla, 2023, Biol Cybernetics]. They show that training on EITs helps with robustness on object detection tasks. 
 
 * The authors do not compare how their methods compare to other non-RF methods. I would encourage the authors to also compare their findings with methods like Stable and expressive recurrent vision models [Linsley et al., 2020, NeurIPS].
 
 ### Questions
-1. The OrthoRF$^{\text{thresh}}$ results, particularly the striking $MBO_{i}^{OV}$ performance, rely on using the intermediate $\psi_{final}$ with a manually set global threshold of 0.1. Have the authors explored making this threshold adaptive, for instance, by linking it to the statistical properties of the activations (e.g., a multiple of the standard deviation) to maintain the method's unsupervised nature?  
+1. The OrthoRF$^{\text{thresh}}$ results, particularly the striking $MBO_{i}^{OV}$ performance, rely on using the intermediate $\psi_{final}$ with a manually set global threshold of 0.1. Have the authors explored making this threshold adaptive, for instance, by linking it to the statistical properties of the activations (e.g., a multiple of the standard deviation) to maintain the method's unsupervised nature?
 
-2. The paper uses a synthetic SEM dataset to show robustness to noise and occlusions. Could the authors elaborate on how they would apply the OrthoRF framework to a real, complex dataset, like CLEVR or MOVi-C, and what modifications might be necessary to the architecture or training protocol?  
+
+
+2. The paper uses a synthetic SEM dataset to show robustness to noise and occlusions. Could the authors elaborate on how they would apply the OrthoRF framework to a real, complex dataset, like CLEVR or MOVi-C, and what modifications might be necessary to the architecture or training protocol?
+
+
 
 3. Given the effectiveness of orthogonality, have the authors considered applying the orthogonality loss constraint directly to slot-based models (like Slot Attention) in conjunction with their reconstruction or binding losses? This might provide further insight into the general utility of this inductive bias in OCL.
 

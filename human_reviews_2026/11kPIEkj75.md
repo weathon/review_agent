@@ -1,5 +1,6 @@
 # Semantic Uncertainty Quantification of Hallucinations in LLMs: A Quantum Tensor Network Based Method
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

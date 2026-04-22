@@ -1,5 +1,6 @@
 # SocialHarmBench: Revealing LLM Vulnerabilities  to Socially Harmful Requests
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

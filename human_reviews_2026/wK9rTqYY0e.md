@@ -1,5 +1,6 @@
 # Second-Order Bounds for [0,1]-Valued Regression via Betting Loss
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 2, 8, 6
 

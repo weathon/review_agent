@@ -1,5 +1,6 @@
 # Bures-Wasserstein Flow Matching for Graph Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

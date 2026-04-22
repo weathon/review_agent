@@ -1,5 +1,6 @@
 # Can Models Learn From Arbitrary Pairs?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

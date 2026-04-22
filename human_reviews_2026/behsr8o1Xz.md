@@ -1,5 +1,6 @@
 # STDR: Spatio-Temporal Decoupling for Real-Time Dynamic Scene Rendering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

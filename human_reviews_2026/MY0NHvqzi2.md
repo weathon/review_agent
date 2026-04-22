@@ -1,5 +1,6 @@
 # DriveMamba: Task-Centric Scalable State Space Model for Efficient End-to-End Autonomous Driving
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

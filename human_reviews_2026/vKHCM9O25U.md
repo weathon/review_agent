@@ -1,5 +1,6 @@
 # INTENTION MATCHING STOPS JAILBREAKS
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

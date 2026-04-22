@@ -1,5 +1,6 @@
 # Supervised Graph Contrastive Learning for Gene Regulatory Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

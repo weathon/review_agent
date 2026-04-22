@@ -1,5 +1,6 @@
 # On the Convergence Direction of Gradient Descent
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 6, 2
 

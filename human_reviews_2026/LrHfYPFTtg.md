@@ -1,5 +1,6 @@
 # Keep the Best, Forget the Rest: Reliable Alignment with Order-Aware Preference Optimization
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # FaSAS: A Feedback-Augmented Stepwise Algorithm Selection for Software Verification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Dialogue as Discovery: Navigating Human Intent Through Principled Inquiry
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 6, 4
 

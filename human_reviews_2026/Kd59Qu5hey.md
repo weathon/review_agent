@@ -1,5 +1,6 @@
 # Sensitivity as a Shield: Inducing Sensitivity to Prevent Unauthorized Model Merging
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

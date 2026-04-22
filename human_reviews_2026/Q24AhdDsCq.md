@@ -1,5 +1,6 @@
 # EMA Without the Lag: Bias-Corrected Iterate Averaging Schemes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

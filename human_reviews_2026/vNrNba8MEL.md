@@ -1,5 +1,6 @@
 # Circumventing Safety Alignment in Large Language Models via Embedding Space Toxicity Attenuation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # EMBridge: Enhancing Gesture Generalization from EMG Signals Through Cross-modal Representation Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

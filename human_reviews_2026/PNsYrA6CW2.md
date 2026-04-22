@@ -1,5 +1,6 @@
 # Fine-tuning is Not Enough: Rethinking Evaluation in Molecular Self-Supervised Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

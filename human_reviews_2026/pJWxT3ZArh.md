@@ -1,5 +1,6 @@
 # Learning Ordered Representations in Latent Space for Intrinsic Dimension Estimation via Principal Component Autoencoder
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

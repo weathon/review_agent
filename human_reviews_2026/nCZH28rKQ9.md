@@ -1,5 +1,6 @@
 # SpaceVista: All-Scale Visual Spatial Reasoning from mm to km
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

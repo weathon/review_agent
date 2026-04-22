@@ -1,5 +1,6 @@
 # UALM: Unified Audio Language Model for Understanding, Generation and Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 2, 8, 6, 6, 6
 

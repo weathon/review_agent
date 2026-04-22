@@ -1,5 +1,6 @@
 # Gradient Flow Convergence Guarantee for General Neural Network Architectures
 
+- Avg Score: 0.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0, 2
 

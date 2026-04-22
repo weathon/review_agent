@@ -1,5 +1,6 @@
 # Training-Free Spectral Fingerprints of Voice Processing in Transformers
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

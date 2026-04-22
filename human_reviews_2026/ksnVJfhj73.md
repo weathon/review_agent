@@ -1,5 +1,6 @@
 # Hierarchical Decision Making with Structured Policies: A Principled Design via Inverse Optimization
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 2, 6, 4
 

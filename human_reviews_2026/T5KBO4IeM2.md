@@ -1,5 +1,6 @@
 # Parallel Prompting: Fast LLM Inference for Shared-Context, Short-to-Moderate Output
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

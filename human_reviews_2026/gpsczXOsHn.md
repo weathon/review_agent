@@ -1,5 +1,6 @@
 # Global Resolution: Optimal Multi-Draft Speculative Sampling via Convex Optimization
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6
 

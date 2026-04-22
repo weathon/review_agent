@@ -1,5 +1,6 @@
 # GatePro: Parameter-Free Expert Selection Optimization for Mixture-of-Experts Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

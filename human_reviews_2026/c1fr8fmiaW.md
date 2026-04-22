@@ -1,5 +1,6 @@
 # Black-box Attack Robustness with Model Diversity and Randomization
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 8, 4, 2
 

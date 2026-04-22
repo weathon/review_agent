@@ -1,5 +1,6 @@
 # Positive Transfer of Prior Knowledge in Deep Reinforcement Learning via Reward Shaping
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

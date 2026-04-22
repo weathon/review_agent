@@ -1,5 +1,6 @@
 # Quantile Advantage Estimation: Stabilizing RLVR for LLM Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

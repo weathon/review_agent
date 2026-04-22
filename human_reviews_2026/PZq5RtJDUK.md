@@ -1,5 +1,6 @@
 # AgenticIQA: An Agentic Framework for Adaptive and Interpretable Image Quality Assessment
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 4
 

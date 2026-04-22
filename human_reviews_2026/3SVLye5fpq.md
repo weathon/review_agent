@@ -1,5 +1,6 @@
 # EarthScape: A Multimodal Dataset for Surficial Geologic Mapping and Earth Surface Analysis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

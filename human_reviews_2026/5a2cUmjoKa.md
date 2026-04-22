@@ -1,5 +1,6 @@
 # Hi-Agent: Hierarchical Vision-Language Agents for Mobile Device Control
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # DAMamba: Semantic Aware One-shot Test-time Domain Adaptation for Super-resolution
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

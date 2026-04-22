@@ -1,5 +1,6 @@
 # AlignChat: Endowing LLMs with End-to-End Speech-to-Text Chat Capability through Token-Level Representation Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 2, 2, 6
 

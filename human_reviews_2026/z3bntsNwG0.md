@@ -1,5 +1,6 @@
 # Description-Only Supervision: Contrastive Label–Embedding Alignment for Zero-Shot Text Classification
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

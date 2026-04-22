@@ -1,5 +1,6 @@
 # scREBOUND: An Efficient Design of single-cell Foundation Model with Batch Representation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

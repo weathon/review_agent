@@ -1,5 +1,6 @@
 # Closing the Performance Gap in Neural Conjugate Gradient Method: A Hybrid Multigrid Preconditioning Approach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

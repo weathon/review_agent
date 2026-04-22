@@ -1,5 +1,6 @@
 # Learning When to Be Uncertain: A Post-Hoc Meta-Model for Guided Uncertainty Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

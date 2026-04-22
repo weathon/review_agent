@@ -1,5 +1,6 @@
 # Flash-DMD: Unifying Distillation and Refinement for High-Fidelity Few-Step Image Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

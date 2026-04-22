@@ -1,5 +1,6 @@
 # MergeMix: A Unified Augmentation Paradigm for Visual and Multi-Modal Understanding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # SNN-Driven Multimodal Human Action Recognition via Sparse Spatial-Temporal Data Fusion
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

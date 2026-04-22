@@ -1,5 +1,6 @@
 # Revisiting Long-context Modeling from Context Denoising Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

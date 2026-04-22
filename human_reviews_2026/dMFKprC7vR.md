@@ -1,5 +1,6 @@
 # FFHQ-Makeup: Paired Synthetic Makeup Dataset with Facial Consistency Across Multiple Styles
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

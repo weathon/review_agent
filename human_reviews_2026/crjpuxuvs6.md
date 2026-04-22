@@ -1,5 +1,6 @@
 # What is the Color of RED? Vision–Language Models Prefer to Read Rather Than See
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

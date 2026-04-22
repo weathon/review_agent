@@ -1,5 +1,6 @@
 # MasHost Builds It All: Autonomous Multi-Agent System Directed by Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

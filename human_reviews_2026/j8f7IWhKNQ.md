@@ -1,5 +1,6 @@
 # Unsupervised Graph Neural Networks for Solving Combinatorial Optimization Problems by Iterative Solution Refinement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

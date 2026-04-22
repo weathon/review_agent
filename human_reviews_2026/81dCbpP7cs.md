@@ -1,5 +1,6 @@
 # SOCK: A Benchmark for Measuring Self-Replication in Large Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

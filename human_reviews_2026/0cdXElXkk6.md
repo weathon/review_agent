@@ -1,5 +1,6 @@
 # Guidance in the Frequency Domain Enables High-Fidelity Sampling at Low CFG Scales
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

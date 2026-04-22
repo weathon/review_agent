@@ -1,5 +1,6 @@
 # MASDiff: Large Scale Multi-Agent System Emergence Control via Evolutionary Diffusion
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2
 

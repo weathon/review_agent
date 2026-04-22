@@ -1,5 +1,6 @@
 # SceneStreamer: Continuous Scenario Generation as Next Token Group Prediction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

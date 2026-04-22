@@ -1,5 +1,6 @@
 # Semi-Supervised Preference Learning for Multi-modal Large Models via Risk Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Mitigating Exponential Mixed Frequency Growth through Frequency Selection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

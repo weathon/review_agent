@@ -1,5 +1,6 @@
 # Secret Alignment: Reframing Backdooring as Security Primitive in the Personal AI Era
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 2, 4
 

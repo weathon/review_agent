@@ -1,5 +1,6 @@
 # XModBench: Benchmarking Cross-Modal Capabilities and Consistency in Omni-Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

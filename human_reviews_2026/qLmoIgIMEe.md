@@ -1,5 +1,6 @@
 # Data, Not Model: Explaining Bias toward LLM Texts in Neural Retrievers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

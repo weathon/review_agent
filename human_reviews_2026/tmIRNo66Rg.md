@@ -1,5 +1,6 @@
 # TriVLA: A Triple-System-Based Unified Vision-Language-Action Model with Episodic World Modeling for General Robot Control
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

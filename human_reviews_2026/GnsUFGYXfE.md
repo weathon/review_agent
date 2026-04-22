@@ -1,5 +1,6 @@
 # UNAAGI: Atom-Level Diffusion for Generating Non-Canonical Amino Acid Substitutions
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0
 

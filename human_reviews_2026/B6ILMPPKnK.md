@@ -1,5 +1,6 @@
 # Fine-Grained Privacy Extraction from Retrieval-Augmented Generation Systems by Exploiting Knowledge Asymmetry
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

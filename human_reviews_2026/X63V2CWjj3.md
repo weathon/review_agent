@@ -1,5 +1,6 @@
 # Continuum Transformers Perform In-Context Learning by Operator Gradient Descent
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

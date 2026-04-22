@@ -1,5 +1,6 @@
 # Towards open environments and instructions: general vision-language navigation via fast-slow interactive reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

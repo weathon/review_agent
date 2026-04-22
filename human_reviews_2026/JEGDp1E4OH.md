@@ -1,5 +1,6 @@
 # MC-Search: Evaluating and Enhancing Multimodal Agentic Search with Structured Long Reasoning Chains
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 4, 4, 6, 6
 

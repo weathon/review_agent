@@ -1,5 +1,6 @@
 # GraWalkER: Vulnerability Detection via Code Semantic Fusion Graph with Edge-Aware Random Walk
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

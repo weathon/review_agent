@@ -1,5 +1,6 @@
 # Graph Coloring for Multi-Task Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

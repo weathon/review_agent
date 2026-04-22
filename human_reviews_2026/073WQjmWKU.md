@@ -1,5 +1,6 @@
 # Visual Compositional Tuning
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 8, 4
 

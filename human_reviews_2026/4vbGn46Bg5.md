@@ -1,5 +1,6 @@
 # Inversely Learning Transferable Rewards via Abstracted States
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

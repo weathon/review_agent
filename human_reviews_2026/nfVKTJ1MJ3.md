@@ -1,5 +1,6 @@
 # Bures-Isotropy Alignment: Manifold Learning of Generalized Category Discovery
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

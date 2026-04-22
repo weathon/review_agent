@@ -1,5 +1,6 @@
 # CloudNFMM: A Hybrid Hierarchical and Local Neural Operator Inspired by the Fast Multipole Method
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

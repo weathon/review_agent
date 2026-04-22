@@ -1,5 +1,6 @@
 # FineBench: Benchmarking and Enhancing Vision-Language Models for Fine-grained Human Activity Understanding
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 6
 

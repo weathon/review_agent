@@ -1,5 +1,6 @@
 # AsyncTool: Evaluating the Asynchronous Function Calling Capability under Multi-Task Scenarios
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

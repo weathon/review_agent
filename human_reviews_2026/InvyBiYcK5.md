@@ -1,5 +1,6 @@
 # ERTACache: Error Rectification and Timesteps Adjustment for Efficient Diffusion
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

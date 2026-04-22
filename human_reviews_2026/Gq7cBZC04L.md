@@ -1,5 +1,6 @@
 # Steering Language Models for Theorem Proving
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Understanding the role of depth in the neural tangent kernel for overparameterized neural networks.
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

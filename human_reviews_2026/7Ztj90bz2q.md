@@ -1,5 +1,6 @@
 # RISE : Regression Imbalance Handling using Switching Experts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

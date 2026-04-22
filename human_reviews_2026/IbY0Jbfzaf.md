@@ -1,5 +1,6 @@
 # RiboPO: Preference Optimization for Structure- and Stability-Aware RNA Design
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 8, 2
 

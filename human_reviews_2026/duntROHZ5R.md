@@ -1,5 +1,6 @@
 # GAVEL: Towards Rule-Based Safety through Activation Monitoring
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 6
 

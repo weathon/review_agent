@@ -1,5 +1,6 @@
 # Caption as Reward: Enhancing Vision-Language Reasoning through Dense Visual Description
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 2, 6
 

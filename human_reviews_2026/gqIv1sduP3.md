@@ -1,5 +1,6 @@
 # On the practicality of Boltzmann neural samplers
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

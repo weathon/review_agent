@@ -1,5 +1,6 @@
 # Learning to Drive with Two Minds: A Competitive Dual-Policy Approach in Latent World Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

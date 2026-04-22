@@ -1,5 +1,6 @@
 # The Sign Estimator: LLM Alignment in the Face of Choice Heterogeneity
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

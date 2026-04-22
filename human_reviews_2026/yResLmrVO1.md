@@ -1,5 +1,6 @@
 # Rewarding Doubt: A Reinforcement Learning Approach to Calibrated Confidence Expression of Large Language Models
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8, 4, 6
 

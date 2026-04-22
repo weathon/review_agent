@@ -1,5 +1,6 @@
 # Implicit Reconstruct Spatiotemporal Super-Resolution Microscopy in Arbitrary Dimension
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

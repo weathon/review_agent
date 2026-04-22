@@ -1,5 +1,6 @@
 # RLTime: Reinforcement Learning-Based Feature Attribution for Interpretable Time Series Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

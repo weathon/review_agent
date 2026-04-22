@@ -1,5 +1,6 @@
 # VLASim: World Modelling via VLM-Directed Abstraction and Simulation from a Single Image
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

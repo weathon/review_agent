@@ -1,5 +1,6 @@
 # TrustJudge: Inconsistencies of LLM-as-a-Judge and How to Alleviate Them
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

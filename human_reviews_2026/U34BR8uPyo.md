@@ -1,5 +1,6 @@
 # STRIDE: Structure and Embedding Distillation with Attention for Graph Neural Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

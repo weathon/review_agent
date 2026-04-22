@@ -1,5 +1,6 @@
 # Training Hybrid Deep Quantum Neural Network for Efficient Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

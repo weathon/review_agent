@@ -1,5 +1,6 @@
 # ABConformer: Physics‑inspired Sliding Attention for Antibody-Antigen Interface Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 4, 4
 

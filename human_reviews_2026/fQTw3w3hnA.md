@@ -1,5 +1,6 @@
 # CoFiCL: Coarse-to-Fine Continual Learning with Hierarchical Knowledge
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

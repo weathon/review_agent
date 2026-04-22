@@ -1,5 +1,6 @@
 # Nature-Inspired Population-Based Evolution of Large Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

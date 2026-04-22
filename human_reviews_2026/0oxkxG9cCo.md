@@ -1,5 +1,6 @@
 # IL3D: A Large-Scale Indoor Layout Dataset for LLM-Driven 3D Scene Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

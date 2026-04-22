@@ -1,5 +1,6 @@
 # KBVQ-MoE: KLT-guided SVD with Bias-Corrected Vector Quantization for MoE Large Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 4
 

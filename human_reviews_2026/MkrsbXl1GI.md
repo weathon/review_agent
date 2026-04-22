@@ -1,5 +1,6 @@
 # When Language Models Lose Their Mind: The Consequences of Brain Misalignment
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 4
 

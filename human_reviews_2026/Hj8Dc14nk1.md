@@ -1,5 +1,6 @@
 # Children's Intelligence Tests Pose Challenges for MLLMs? KidGym: A 2D Grid-Based Reasoning Benchmark for MLLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

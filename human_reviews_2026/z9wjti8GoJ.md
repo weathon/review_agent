@@ -1,5 +1,6 @@
 # NiceWebRL: a Python library for human subject experiments with reinforcement learning environments
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 6
 

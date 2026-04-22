@@ -1,5 +1,6 @@
 # Best Arm Identification with Correlated Sampling
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 4
 

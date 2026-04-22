@@ -1,5 +1,6 @@
 # Point-It-Out: Benchmarking Embodied Reasoning for Vision Language Models in Multi-Stage  Visual Grounding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

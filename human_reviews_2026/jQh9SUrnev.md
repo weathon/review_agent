@@ -1,5 +1,6 @@
 # LEGO-Puzzles: How Good Are MLLMs at Multi-Step Spatial Reasoning?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

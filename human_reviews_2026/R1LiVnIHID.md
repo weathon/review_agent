@@ -1,5 +1,6 @@
 # GIFT: Gradient-aware Immunization of diffusion models against malicious Fine-Tuning with safe concepts retention
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

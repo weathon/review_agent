@@ -1,5 +1,6 @@
 # Battery-Sim-Agent: Leveraging LLM-Agent for Inverse Battery Parameter Estimation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

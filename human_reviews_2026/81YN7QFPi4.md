@@ -1,5 +1,6 @@
 # Randomized trials in EEG classification experiments are mandatory as   drift is pervasive
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2, 2
 

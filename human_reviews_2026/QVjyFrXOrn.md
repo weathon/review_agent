@@ -1,5 +1,6 @@
 # MoSEL: Modular Self-Reflective Learning for Embodied Decision-Making
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Efficient Offline Reinforcement Learning via Peer-Influenced Constraint
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 
@@ -156,31 +157,40 @@ Could the authors provide more intuition on the mechanism behind the "Coupling E
 The paper proposes Peer-Influenced Constraint (PIC), a plug-in policy regularizer for offline RL that, for a query state, retrieves K nearest “peer” states from the dataset, collects their associated actions as candidates, and selects the best candidate by a critic (min over critics) to constrain the actor toward high-value in-distribution actions. The authors further introduce EPIC (Ensemble PIC), showing a claimed “Coupling Effect” between PIC strength and uncertainty estimation that purportedly enables smaller ensembles without losing performance. Experiments on D4RL (Gym-MuJoCo, AntMaze, Adroit) report competitive or SOTA results and improved efficiency vs. large-ensemble methods. Key ingredients include a KD-Tree for fast peer retrieval, a formal performance-gap bound under Lipschitz assumptions, and ablations over K, δ (PIC strength), and N (ensemble size).
 
 ### Strengths
-1. Practical, plug-and-play idea. PIC cleanly reuses cross-state action candidates to relax over-conservative behavior-cloning constraints while staying in-distribution; integrates with TD3/SAC/IQL. 
+1. Practical, plug-and-play idea. PIC cleanly reuses cross-state action candidates to relax over-conservative behavior-cloning constraints while staying in-distribution; integrates with TD3/SAC/IQL.
 
-2. Clear algorithmic specification. Definition of PIC distance and candidate selection with min-critic action choice is straightforward; EPIC generalizes this to N critics.  
 
-3. Empirical coverage & results. Extensive D4RL results show PIC-TD3 competitive with ensemble-free baselines and EPIC surpassing baselines on many tasks (Gym-MuJoCo, AntMaze, Adroit).  
+2. Clear algorithmic specification. Definition of PIC distance and candidate selection with min-critic action choice is straightforward; EPIC generalizes this to N critics. 
+
+
+3. Empirical coverage & results. Extensive D4RL results show PIC-TD3 competitive with ensemble-free baselines and EPIC surpassing baselines on many tasks (Gym-MuJoCo, AntMaze, Adroit). 
+
 
 4. Efficiency angle. Claimed ability to use smaller ensembles while maintaining performance addresses a common pain-point in offline RL. Parameter studies (K, δ, N) are helpful for practice.
 
 ### Weaknesses
 1. State-space similarity & representation. PIC hinges on Euclidean nearest neighbors in the raw state space (KD-Tree). In many high-dimensional or poorly scaled domains, Euclidean distance can be misleading; the paper lacks experiments comparing learned/state-normalized metrics vs. raw features, and ablations on feature scaling or representation robustness. 
 
-2. Coupling-effect clarity. The section discussing how δ interacts with uncertainty occasionally reads inconsistently (e.g., whether increasing δ “raises” uncertainty vs. “reduces” overestimation leading to “lower” uncertainty). This needs a tighter, causal explanation and clearer metrics (Qmin/Qstd/Qclip) across datasets/time. 
+2.
+Coupling-effect clarity. The section discussing how δ interacts with uncertainty occasionally reads inconsistently (e.g., whether increasing δ “raises” uncertainty vs. “reduces” overestimation leading to “lower” uncertainty). This needs a tighter, causal explanation and clearer metrics (Qmin/Qstd/Qclip) across datasets/time. 
 
-3. Theoretical assumptions are strong/generic. The Lipschitz assumptions and the bound provide qualitative reassurance but do not uniquely characterize PIC’s effect beyond standard smoothness arguments. No finite-sample or function-approximation analysis is provided to justify behavior under approximate critics. 
+3.
+Theoretical assumptions are strong/generic. The Lipschitz assumptions and the bound provide qualitative reassurance but do not uniquely characterize PIC’s effect beyond standard smoothness arguments. No finite-sample or function-approximation analysis is provided to justify behavior under approximate critics. 
 
-4. Scalability of neighbor search. KD-Tree is efficient in moderate dimensions but can degrade with very large |D| and high-dimensional S; the paper acknowledges this limitation without proposing practical approximations (e.g., ANN indices, learned retrieval).
+4.
+Scalability of neighbor search. KD-Tree is efficient in moderate dimensions but can degrade with very large |D| and high-dimensional S; the paper acknowledges this limitation without proposing practical approximations (e.g., ANN indices, learned retrieval).
 
 ### Questions
 1. Distance metric & normalization. What exact preprocessing/normalization is used before KD-Tree (per-dimension scaling, whitening, PCA)? Have you tried learned embeddings (e.g., representation pretraining) for neighbor search, and how does that affect performance vs. raw states? 
 
-2. Coupling effect mechanics. Please reconcile the narrative around δ’s effect on uncertainty. Under fixed N, does increasing δ increase or decrease Q-uncertainty on OOD actions in practice? Can you provide a controlled analysis (same seeds, same checkpoints) that tracks policy action-distribution shift and critic variance step-by-step?  
+2. Coupling effect mechanics. Please reconcile the narrative around δ’s effect on uncertainty. Under fixed N, does increasing δ increase or decrease Q-uncertainty on OOD actions in practice? Can you provide a controlled analysis (same seeds, same checkpoints) that tracks policy action-distribution shift and critic variance step-by-step? 
 
-3. Critic dependence & bias. Since a* is chosen via min over critics, how sensitive is PIC/EPIC to critic underestimation bias? Provide an ablation using single-critic and target-action noise or double Q with clipped targets to test robustness.  
 
-4. Candidate-set composition. Beyond nearest states, did you explore wider but weighted candidate pools (e.g., radius-based retrieval with distance-weighted selection), and what is the trade-off vs. compute? Any results on K beyond 50 and on adaptive K per state? 5. Generalization diagnostics. In AntMaze/Adroit, can you report how often the selected a* comes from (i) the current state vs. (ii) peers, and the distance of chosen peers? This would concretely show when PIC escapes local optima rather than re-selecting the behavior action.
+3. Critic dependence & bias. Since a* is chosen via min over critics, how sensitive is PIC/EPIC to critic underestimation bias? Provide an ablation using single-critic and target-action noise or double Q with clipped targets to test robustness. 
+
+
+4. Candidate-set composition. Beyond nearest states, did you explore wider but weighted candidate pools (e.g., radius-based retrieval with distance-weighted selection), and what is the trade-off vs. compute? Any results on K beyond 50 and on adaptive K per state? 5.
+Generalization diagnostics. In AntMaze/Adroit, can you report how often the selected a* comes from (i) the current state vs. (ii) peers, and the distance of chosen peers? This would concretely show when PIC escapes local optima rather than re-selecting the behavior action.
 
 ### Soundness
 2

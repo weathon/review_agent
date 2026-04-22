@@ -1,5 +1,6 @@
 # Guided Sampling in Reinforcement Learning for LLM Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

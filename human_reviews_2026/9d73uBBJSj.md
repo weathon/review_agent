@@ -1,5 +1,6 @@
 # EWC-Guided Diffusion Replay for Exemplar-Free Continual Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Bridging the Spectrum Gap: Mid‑Frequency Augmentation and Key‑Frequency Mining for Multivariate Time Series
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

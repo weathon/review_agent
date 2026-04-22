@@ -1,5 +1,6 @@
 # Are Object-Centric Representations Better At Compositional Generalization?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

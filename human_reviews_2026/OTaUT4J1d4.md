@@ -1,5 +1,6 @@
 # SpecExit: Accelerating Large Reasoning Model via Speculative Exit
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

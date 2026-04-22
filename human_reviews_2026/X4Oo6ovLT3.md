@@ -1,5 +1,6 @@
 # Libra: Assessing and Improving Reward Model by Learning to Think
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

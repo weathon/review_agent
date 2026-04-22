@@ -1,5 +1,6 @@
 # BoMM: Multi-Modality Large-Small Model Bidirectional Collaboration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

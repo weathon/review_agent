@@ -1,5 +1,6 @@
 # On Understanding Denoising Capability in Hypergraph Representation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

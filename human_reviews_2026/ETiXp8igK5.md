@@ -1,5 +1,6 @@
 # The devil is in the details: Enhancing Video Virtual Try-On via Keyframe-Driven Details Injection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 6
 

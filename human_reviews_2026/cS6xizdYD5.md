@@ -1,5 +1,6 @@
 # On Robustness of Vision-Language-Action Model against Multi-Modal Perturbations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 8
 

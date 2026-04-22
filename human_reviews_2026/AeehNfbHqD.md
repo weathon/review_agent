@@ -1,5 +1,6 @@
 # Improving Human-AI Coordination through Online Adversarial Training and Generative Models
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

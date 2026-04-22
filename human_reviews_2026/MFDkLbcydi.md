@@ -1,5 +1,6 @@
 # Taming Imperfect Process Verifiers: A Sampling Perspective on Backtracking
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

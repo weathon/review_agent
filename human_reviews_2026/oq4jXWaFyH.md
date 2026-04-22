@@ -1,5 +1,6 @@
 # The Natural Geometry of Code: Hyperbolic Representation Learning for Program Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

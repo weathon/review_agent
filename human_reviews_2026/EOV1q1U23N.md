@@ -1,5 +1,6 @@
 # Convergence of Regret Matching in Potential Games and Constrained Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

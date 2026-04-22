@@ -1,5 +1,6 @@
 # ST-WebAgentBench: A Benchmark for Evaluating Safety and Trustworthiness in Web Agents
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

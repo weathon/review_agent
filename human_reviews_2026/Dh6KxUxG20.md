@@ -1,5 +1,6 @@
 # Knowledge Distillation for Large Language Models through Residual Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8
 

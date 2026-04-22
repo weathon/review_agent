@@ -1,5 +1,6 @@
 # Learning a distance measure from the information-estimation geometry of data
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

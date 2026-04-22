@@ -1,5 +1,6 @@
 # Histogram-Guided Source-Free Domain Adaptive Regression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

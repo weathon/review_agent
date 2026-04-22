@@ -1,5 +1,6 @@
 # SPR$^2$Q: Static Priority-based Rectifier Routing Quantization for Image Super-Resolution
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

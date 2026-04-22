@@ -1,5 +1,6 @@
 # Rainbow Padding: Mitigating Early Termination in Instruction-Tuned Diffusion LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

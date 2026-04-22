@@ -1,5 +1,6 @@
 # Extreme Blind Image Restoration via Prompt-Conditioned Information Bottleneck
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

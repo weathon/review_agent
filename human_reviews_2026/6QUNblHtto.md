@@ -1,5 +1,6 @@
 # CEA: Context Engineering Agent for Enhanced Reliability and Sustainability in Deep Research Systems
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

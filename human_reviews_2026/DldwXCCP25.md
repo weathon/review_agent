@@ -1,5 +1,6 @@
 # CLIP Behaves like a Bag-of-Words Model Cross-modally but not Uni-modally
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

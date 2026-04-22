@@ -1,5 +1,6 @@
 # Steering Multimodal Large Language Models Decoding for Context-Aware Safety
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

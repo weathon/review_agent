@@ -1,5 +1,6 @@
 # MetaEmbed: Scaling Multimodal Retrieval at Test-Time with Flexible Late Interaction
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # FedBARRE: Privacy–Utility Optimized Perturbation Ensemble against Gradient Leakage Attacks in Federated Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

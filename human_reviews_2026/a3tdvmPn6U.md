@@ -1,5 +1,6 @@
 # Vascular Information-Guided Automated Conversion Between OCT and OCTA
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # ChartNexus: Evaluating Multi-Chart Reasoning Capabilities of Multimodal Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

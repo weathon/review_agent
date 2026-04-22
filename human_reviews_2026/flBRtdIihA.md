@@ -1,5 +1,6 @@
 # KL-Regularized Reinforcement Learning for Generative Modelling is Designed to Mode Collapse
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

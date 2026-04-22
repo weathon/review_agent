@@ -1,5 +1,6 @@
 # Inverse Entropic Optimal Transport Solves Semi-supervised Learning via Data Likelihood Maximization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Gen-Review: A Dataset and Large-scale Study of AI-Generated and Human-Authored Peer Reviews
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

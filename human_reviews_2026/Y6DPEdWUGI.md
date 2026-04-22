@@ -1,5 +1,6 @@
 # Draining Your Account: A Stealthy Attack on API Billing in Multi-Agent Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

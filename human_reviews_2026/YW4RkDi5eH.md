@@ -1,5 +1,6 @@
 # Cluster Topology‑Driven Placement of Experts Reduces Network Traffic in MoE Inference
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

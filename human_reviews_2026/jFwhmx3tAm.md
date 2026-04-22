@@ -1,5 +1,6 @@
 # Evaluating from Benign to Dynamic Adversarial: A Squid Game for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6, 2, 2
 

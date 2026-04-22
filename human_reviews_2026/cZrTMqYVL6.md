@@ -1,5 +1,6 @@
 # Addressing divergent representations from causal interventions on neural networks
 
+- Avg Score: 5.20
 - Decision: Accept (Oral)
 - Scores: 6, 4, 4, 8, 4
 

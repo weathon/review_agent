@@ -1,5 +1,6 @@
 # Multi-View Causal Discovery without Non-Gaussianity: Identifiability and Algorithms
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

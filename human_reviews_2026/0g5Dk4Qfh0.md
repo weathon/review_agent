@@ -1,5 +1,6 @@
 # Co-LoRA: Collaborative Model Personalization on Heterogeneous Multi-Modal Clients
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Fast and Accurate Fisher-Guided Quantization via Efficient Kronecker Factor Approximation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Don't Pay Attention, PLANT It: Pretraining Attention via Learning-to-Rank
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Simple yet Effective Semi-supervised Knowledge Distillation from Vision-Language Models via Dual-Head Optimization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

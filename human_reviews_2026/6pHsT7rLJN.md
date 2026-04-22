@@ -1,5 +1,6 @@
 # Degradation & Restoration: A Low-cost Pipeline for Long-range Single-frame Turbulence Mitigation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

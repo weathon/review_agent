@@ -1,5 +1,6 @@
 # Discovering Hidden Algebraic Structures via Transformers with Rank-Aware Beam GRPO
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

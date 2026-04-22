@@ -1,5 +1,6 @@
 # FoR-SALE: Frame of Reference-guided Spatial Adjustment in LLM-based Diffusion Editing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

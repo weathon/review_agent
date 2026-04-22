@@ -1,5 +1,6 @@
 # TwinFlow: Realizing One-step Generation on Large Models with Self-adversarial Flows
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

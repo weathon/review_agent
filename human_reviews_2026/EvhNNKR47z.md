@@ -1,5 +1,6 @@
 # GeoFlow: Geo-Aware Modeling of Inter-Area Relationships in OD Flow Prediction and Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

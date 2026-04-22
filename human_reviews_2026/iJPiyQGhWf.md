@@ -1,5 +1,6 @@
 # CSE-ET: Joint Optimization for 3D Multi-UAV Explore-and-Track under Connectivity, Separation, and Energy Constraints
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Blade: A Derivative-free Bayesian Inversion Method using Diffusion Prior
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # A Unified Federated Framework for Trajectory Data Preparation via LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

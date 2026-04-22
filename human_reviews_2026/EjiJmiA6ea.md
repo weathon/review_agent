@@ -1,5 +1,6 @@
 # Detecting Data Contamination from Reinforcement Learning Post-training for Large Language Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

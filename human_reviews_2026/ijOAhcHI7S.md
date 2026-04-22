@@ -1,5 +1,6 @@
 # MSCR: Exploring the Vulnerability of LLMs’ Mathematical Reasoning Abilities Using Multi-Source Candidate Replacement
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

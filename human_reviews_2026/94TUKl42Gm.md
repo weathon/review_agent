@@ -1,5 +1,6 @@
 # Cog-Rethinker: Hierarchical Metacognitive Reinforcement Learning for LLM Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 
@@ -114,15 +115,22 @@ Cog-Rethinker proposes a hierarchical metacognitive reinforcement learning frame
 2. Cog-Rethinker is especially effective for base models with limited reasoning capacity.
 
 ### Weaknesses
-1. Cog-Rethinker is presented as a plug-and-play framework that could be combined with various RL algorithms (e.g., PPO, GRPO, Reinforce++). However, the paper only integrates it with DAPO.   
+1. Cog-Rethinker is presented as a plug-and-play framework that could be combined with various RL algorithms (e.g., PPO, GRPO, Reinforce++). However, the paper only integrates it with DAPO. 
 
-2. The decomposition strategy resembles in-context learning, where the model may merely mimic surface-level patterns from provided templates rather than genuinely mastering systematic problem decomposition. Although the authors claim to enhance “diversity” through dynamic buffer updates, it remains questionable whether similarity-based retrieval (e.g., BM25) combined with fixed decomposition prompts can truly promote diversity in reasoning steps.  
 
-3. The paper aligns outputs from three distinct rollout prompt templates by converting them into the direct-prompt format and applying SFT. While this ensures train-test consistency, it may discard valuable metacognitive signals. Are there more principled alternatives that could better preserve the benefits of hierarchical reasoning and RL? 
+
+2. The decomposition strategy resembles in-context learning, where the model may merely mimic surface-level patterns from provided templates rather than genuinely mastering systematic problem decomposition. Although the authors claim to enhance “diversity” through dynamic buffer updates, it remains questionable whether similarity-based retrieval (e.g., BM25) combined with fixed decomposition prompts can truly promote diversity in reasoning steps.
+
+
+
+3. The paper aligns outputs from three distinct rollout prompt templates by converting them into the direct-prompt format and applying SFT. While this ensures train-test consistency, it may discard valuable metacognitive signals. Are there more principled alternatives that could better preserve the benefits of hierarchical reasoning and RL?
+
 
 4. The paper frequently references “metacognition” and “cognitive engineering”, but the proposed method does not explicitly model or validate any cognitive mechanisms.
 
-5. The experiments focus solely on mathematical reasoning benchmarks. To better demonstrate the generality of Cog-Rethinker, evaluations on broader QA or open-ended reasoning tasks  would be more convincing—especially since the base models used (Qwen base) are general-purpose, not math-specialized.  
+5. The experiments focus solely on mathematical reasoning benchmarks. To better demonstrate the generality of Cog-Rethinker, evaluations on broader QA or open-ended reasoning tasks  would be more convincing—especially since the base models used (Qwen base) are general-purpose, not math-specialized.
+
+
 
 6. The rule-based reward function in the paper only checks the correctness of the final answer but does not consider factors such as format and logical consistency. The simple reward signal leads to a more serious problem of model reward hacking.
 

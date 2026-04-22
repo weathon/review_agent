@@ -1,5 +1,6 @@
 # Finding agreement in disagreement: Simultaneous label alignment and multi-dataset training with SLAMDUNKS
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

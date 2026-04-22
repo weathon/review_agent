@@ -1,5 +1,6 @@
 # Directional Ensemble Aggregation for Actor-Critics
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

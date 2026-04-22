@@ -1,5 +1,6 @@
 # Consis-GCPO: Consistency-Preserving Group Causal Preference Optimization for  Vision Customization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

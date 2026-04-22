@@ -1,5 +1,6 @@
 # FLUX-Reason-6M & PRISM-Bench: A Million-Scale Text-to-Image Reasoning Dataset and Comprehensive Benchmark
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

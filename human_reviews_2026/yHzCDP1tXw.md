@@ -1,5 +1,6 @@
 # MMSU: A Massive Multi-task Spoken Language Understanding and Reasoning Benchmark
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 8
 

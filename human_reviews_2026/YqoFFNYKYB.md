@@ -1,5 +1,6 @@
 # Let's Split Up: Zero-Shot Classifier Edits for Fine-Grained Video Understanding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # JetBench: Benchmarking Vision Models for Jet Observables' Classification in Heavy-Ion Physics
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

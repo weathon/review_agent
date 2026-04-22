@@ -1,5 +1,6 @@
 # EigenBench: A Comparative Behavioral Measure of Value Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 4, 10, 6
 

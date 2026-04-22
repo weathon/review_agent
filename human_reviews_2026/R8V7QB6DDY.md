@@ -1,5 +1,6 @@
 # Instability in Diffusion ODEs: An Explanation for Inaccurate Image Reconstruction
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 6, 2, 2, 2
 

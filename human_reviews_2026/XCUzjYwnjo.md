@@ -1,5 +1,6 @@
 # Learning Dynamics of VLM Finetuning: Cooling-Weighted DPO with Mixed Negatives
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2, 2
 

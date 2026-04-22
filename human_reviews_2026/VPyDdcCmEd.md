@@ -1,5 +1,6 @@
 # Imagine a City: CityGenAgent for Procedural 3D City Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

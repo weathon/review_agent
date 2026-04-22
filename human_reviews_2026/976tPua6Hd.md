@@ -1,5 +1,6 @@
 # Baleen: Self‑Interpretable, Robust SSMs with Stochastic Selective Memory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

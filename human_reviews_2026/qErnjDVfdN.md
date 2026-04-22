@@ -1,5 +1,6 @@
 # Linking forward-pass dynamics in Transformers and real-time processing in humans
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 4
 

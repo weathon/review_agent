@@ -1,5 +1,6 @@
 # Mechanistically Eliciting Latent Behaviors in Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Autoencoding-Free Context Compression for LLMs via Contextual Semantic Anchors
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

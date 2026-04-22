@@ -1,5 +1,6 @@
 # HieraSuite: A Holistic Toolkit for Building Versatile System-User Instruction Hierarchy
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

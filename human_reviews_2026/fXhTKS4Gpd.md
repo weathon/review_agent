@@ -1,5 +1,6 @@
 # DeepTravel: An End-to-End Agentic Reinforcement Learning Framework for Autonomous Travel Planning Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

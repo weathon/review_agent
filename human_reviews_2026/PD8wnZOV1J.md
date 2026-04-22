@@ -1,5 +1,6 @@
 # Near-Optimal Second-Order Guarantees for Model-Based Adversarial Imitation Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 8
 

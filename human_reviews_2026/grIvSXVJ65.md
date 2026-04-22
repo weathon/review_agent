@@ -1,5 +1,6 @@
 # Preference Leakage: A Contamination Problem in LLM-as-a-judge
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

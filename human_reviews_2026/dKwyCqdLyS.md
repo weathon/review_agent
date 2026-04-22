@@ -1,5 +1,6 @@
 # MIRACL: A Robust Framework for Multi-Label Learning on Noisy Multimodal Electronic Health Records
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

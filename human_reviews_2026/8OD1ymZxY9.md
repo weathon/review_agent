@@ -1,5 +1,6 @@
 # Alignment through Meta-Weighted Online Sampling: Bridging the Gap between Data Generation and Preference Optimization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

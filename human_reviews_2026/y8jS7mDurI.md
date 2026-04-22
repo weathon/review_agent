@@ -1,5 +1,6 @@
 # Proactive Interference Reveals Working Memory Limits in LLMs Beyond Context Length
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # SWE-Refactor: A Repository-Aware Benchmark for Evaluating LLMs on Real-World Code Refactoring
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

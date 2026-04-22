@@ -1,5 +1,6 @@
 # MOSS: Efficient and Accurate FP8 LLM Training with Microscaling and Automatic Scaling
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 2
 

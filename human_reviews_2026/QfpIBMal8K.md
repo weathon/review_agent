@@ -1,5 +1,6 @@
 # mmSSR: Harvesting Rich, Scalable and Transferable Multi-Modal Data for Instruction Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

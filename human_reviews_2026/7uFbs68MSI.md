@@ -1,5 +1,6 @@
 # Adaptive Conformal Anomaly Detection with Time Series Foundation Models for Signal Monitoring.
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

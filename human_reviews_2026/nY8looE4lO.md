@@ -1,5 +1,6 @@
 # Macro-from-Micro Planning for High-Quality and Parallelized Autoregressive Long Video Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

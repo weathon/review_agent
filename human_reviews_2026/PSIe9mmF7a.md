@@ -1,5 +1,6 @@
 # Auditing Black-Box LLM APIs with a Rank-Based Uniformity Test
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

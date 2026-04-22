@@ -1,5 +1,6 @@
 # Interaction-aware Representation Modeling With Co-Occurrence Consistency for Egocentric Hand-Object Parsing
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6, 6
 

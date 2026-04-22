@@ -1,5 +1,6 @@
 # Estimating the Empowerment of Language Model Agents
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 6
 

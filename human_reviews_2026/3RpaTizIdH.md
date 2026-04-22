@@ -1,5 +1,6 @@
 # Aligning Video Models with Human Social Judgments via Behavior-Guided Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 
@@ -92,10 +93,14 @@ The paper proposes a novel benchmark of human similarity judgments on short soci
     * The use of TimeSformer pretrained on Kinetics-400 as the main video backbone is a significant limitation. Kinetics-400 is small by current standards and biased toward action recognition, not social understanding.
     * Given the state of the field, stronger and more modern baselines (e.g., Qwen3-VL, InternVL-3.5, SigLIP-v2, DINOv3, CLIP) should be included. Many of these outperform older video models and are standard in current video vision-language research.
     * It is also well known that video encoders underperform image encoders in general visual understanding due to differences in training data and supervision. Testing the best image-based encoders with frame averaging would be an important baseline.
-3. Limited Model Generalization – The authors draw conclusions based on experiments using a model (TimeSformer on Kinetics-400) that is not representative of current top-performing video architectures. Thus, the results and claims about “closing the modality gap” are not convincing in the broader context of modern video-LLMs.
-4. Lack of Qualitative Examples – The paper provides no qualitative examples or visualizations of the dataset or model outputs. This omission weakens the reader’s understanding of what constitutes “social similarity” and how the model captures it.
-5. Section Naming and Style – Minor: Section 3 should be titled “Method” instead of “Methods” for consistency with standard paper structure.
-6. Misaligned with Field Progress – The motivation, while conceptually interesting, does not sufficiently engage with the current landscape of multimodal vision-language research, which already investigates human alignment via large-scale preference learning, contrastive learning, and cross-modal supervision. The contribution therefore feels incremental relative to recent progress.
+3. Limited Model Generalization –
+The authors draw conclusions based on experiments using a model (TimeSformer on Kinetics-400) that is not representative of current top-performing video architectures. Thus, the results and claims about “closing the modality gap” are not convincing in the broader context of modern video-LLMs.
+4. Lack of Qualitative Examples –
+The paper provides no qualitative examples or visualizations of the dataset or model outputs. This omission weakens the reader’s understanding of what constitutes “social similarity” and how the model captures it.
+5. Section Naming and Style –
+Minor: Section 3 should be titled “Method” instead of “Methods” for consistency with standard paper structure.
+6. Misaligned with Field Progress –
+The motivation, while conceptually interesting, does not sufficiently engage with the current landscape of multimodal vision-language research, which already investigates human alignment via large-scale preference learning, contrastive learning, and cross-modal supervision. The contribution therefore feels incremental relative to recent progress.
 
 ### Questions
 see above

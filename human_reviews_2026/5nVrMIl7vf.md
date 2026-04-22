@@ -1,5 +1,6 @@
 # Continual Fine-Tuning with Provably Accurate and Parameter-Free Task Retrieval
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

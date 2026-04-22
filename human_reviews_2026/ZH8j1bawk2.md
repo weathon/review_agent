@@ -1,5 +1,6 @@
 # PALATE: Peculiar Application of the Law of Total Expectation to Enhance the Evaluation of Deep Generative Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 6, 2, 2, 0
 

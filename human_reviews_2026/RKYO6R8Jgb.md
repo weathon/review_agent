@@ -1,5 +1,6 @@
 # Thinking-Free Policy Initialization Makes Distilled Reasoning Models More Effective and Efficient Reasoners
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 8
 

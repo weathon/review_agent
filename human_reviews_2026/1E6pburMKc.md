@@ -1,5 +1,6 @@
 # Benchmarking Physical Reasoning of Video Generative Models with Real Physical Experiments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # EWE: An Agentic Framework for Extreme Weather Analysis
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # DOPPLER: Dual-Policy Learning for Device Assignment in Asynchronous Dataflow Graphs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

@@ -1,5 +1,6 @@
 # Universe of Thoughts: Enabling Creative Reasoning with Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

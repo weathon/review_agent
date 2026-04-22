@@ -1,5 +1,6 @@
 # PCAInit: Training-Free Initialization for Image-Based Neural Representations
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

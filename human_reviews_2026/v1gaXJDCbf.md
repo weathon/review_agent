@@ -1,5 +1,6 @@
 # ResGen: Residual Diffusion Model for LiDAR-based Point Cloud Generation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

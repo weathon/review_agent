@@ -1,5 +1,6 @@
 # Large Depth Completion Model from Sparse Observations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

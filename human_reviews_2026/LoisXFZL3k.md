@@ -1,5 +1,6 @@
 # Faithful Bi-Directional Model Steering via Distribution Matching and Distributed Interchange Interventions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

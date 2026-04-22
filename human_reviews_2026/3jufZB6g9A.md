@@ -1,5 +1,6 @@
 # Utility Boundary of Dataset Distillation: Scaling and Configuration-Coverage Laws
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

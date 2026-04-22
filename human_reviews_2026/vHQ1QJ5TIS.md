@@ -1,5 +1,6 @@
 # Spiking Brain Compression: Post-Training Second-order Compression for Spiking Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

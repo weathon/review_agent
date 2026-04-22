@@ -1,5 +1,6 @@
 # Causality ≠ Invariance: Function and Concept Vectors in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

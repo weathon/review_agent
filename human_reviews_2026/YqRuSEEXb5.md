@@ -1,5 +1,6 @@
 # IRGS++: Robust Geometry, Material, and Light Decomposition with Accelerated Inter-Reflective Gaussian Splatting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

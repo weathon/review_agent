@@ -1,5 +1,6 @@
 # EXPLOR: Extrapolatory Pseudo-Label Matching for OOD Uncertainty Based Rejection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

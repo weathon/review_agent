@@ -1,5 +1,6 @@
 # Self-Knowledge Without a Self? Learning Calibrated and Model-Agnostic Correctness Predictors from Historical Patterns
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

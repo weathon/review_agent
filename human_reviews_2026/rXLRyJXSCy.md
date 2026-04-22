@@ -1,5 +1,6 @@
 # Estimating Worst-Case Frontier Risks of Open-Weight LLMs
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6, 4
 

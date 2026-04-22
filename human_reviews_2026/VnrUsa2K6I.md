@@ -1,5 +1,6 @@
 # The Devil is in the Tokens: Token-Level Structural Analysis Uncovers Hallucinations in LVLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

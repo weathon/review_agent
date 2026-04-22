@@ -1,5 +1,6 @@
 # TwinShield: Secure Foundation Model Execution by Unifying TEEs and Crypto-protected Accelerators
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

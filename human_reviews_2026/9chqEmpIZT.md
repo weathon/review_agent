@@ -1,5 +1,6 @@
 # Mitigating Reward Hacking in LLM-based Recommendation: A Preference Optimization Approach
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

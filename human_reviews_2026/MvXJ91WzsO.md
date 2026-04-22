@@ -1,5 +1,6 @@
 # Exploring the Secondary Risks of Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

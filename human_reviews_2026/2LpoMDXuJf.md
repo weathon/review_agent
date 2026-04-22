@@ -1,5 +1,6 @@
 # Rule-Based Grid World Exploration under Uncertainty
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 6, 4
 

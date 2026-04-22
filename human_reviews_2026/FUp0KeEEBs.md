@@ -1,5 +1,6 @@
 # Towards Understanding Valuable Preference Data for Large Language Model Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

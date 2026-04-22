@@ -1,5 +1,6 @@
 # Non-Asymptotic Analysis of Efficiency in Conformalized Regression
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

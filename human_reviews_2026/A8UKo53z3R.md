@@ -1,5 +1,6 @@
 # WFDroneBench: A Benchmark for Sensor Placement and Drone Routing for Wildfire Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

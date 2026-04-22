@@ -1,5 +1,6 @@
 # Discovering and Steering Interpretable Concepts in Large Generative Music Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

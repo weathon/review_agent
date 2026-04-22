@@ -1,5 +1,6 @@
 # SAKE: Towards Editing Auditory Attribute Knowledge of Large Audio-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

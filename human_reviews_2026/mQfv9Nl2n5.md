@@ -1,5 +1,6 @@
 # QUAD: Q-Gradient Uncertainty-Aware Guidance for Diffusion policies in Offline Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

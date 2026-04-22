@@ -1,5 +1,6 @@
 # Faster Sinkhorn’s Algorithm with Small Treewidth
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

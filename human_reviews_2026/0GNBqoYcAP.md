@@ -1,5 +1,6 @@
 # Context and Diversity Matter: The Emergence of In-Context Learning in World Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

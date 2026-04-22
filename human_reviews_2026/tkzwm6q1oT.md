@@ -1,5 +1,6 @@
 # MACS CODER: A Multi-Agent Coding Framework for Small LMs — From Fast Thinking to Deep Planning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

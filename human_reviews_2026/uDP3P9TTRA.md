@@ -1,5 +1,6 @@
 # Evaluating the Logical Reasoning Abilities of Large Reasoning Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

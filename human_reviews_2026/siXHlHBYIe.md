@@ -1,5 +1,6 @@
 # Web-CogReasoner: Towards Multimodal Knowledge-Induced Cognitive Reasoning for Web Agents
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

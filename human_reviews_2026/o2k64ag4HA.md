@@ -1,5 +1,6 @@
 # ProfASR-Bench: A Professional-talk ASR Dataset for High-Stakes Applications Exposing the Context-Utilization Gap
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # LOVE-R1: Advancing Long Video Understanding with Adaptive Zoom-in Mechanism via Multi-Step Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

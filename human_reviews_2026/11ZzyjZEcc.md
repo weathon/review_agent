@@ -1,5 +1,6 @@
 # LLM-ORBench: Designing a Benchmark Dataset for Complex Ontology-Based Reasoning Tasks in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

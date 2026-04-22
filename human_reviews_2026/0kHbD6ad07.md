@@ -1,5 +1,6 @@
 # Language Models are Injective and Hence Invertible
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 
@@ -132,7 +133,8 @@ The main strength of the paper are as follows:
 I would highlight the following weaknesses of this paper:
 
 1. Large vocabulary scaling. How does SipIt handle very large vocabularies (e.g., 100k+ tokens)? Does runtime grow linearly in practice, or do the gradient-based heuristics keep it manageable?
-2. Uncertain theoretical result of not-analytic estimation. Most modern models use SwiGLU or SiLU activations. Since your proofs assume analytic activations, can you confirm that these fit the theory?
+2. Uncertain theoretical result of not-analytic estimation.
+Most modern models use SwiGLU or SiLU activations. Since your proofs assume analytic activations, can you confirm that these fit the theory?
 3. In continuation to the previous point, it is not clear, what happens with the quantized models. It seems that it can be the main source of the collision.
 4. The experiments are provided for models of relatively small size, thus, we cannot asses what empirically happens with the larger number of parameters.
 
@@ -140,7 +142,8 @@ I would highlight the following weaknesses of this paper:
 My questions to the authors are as following:
 
 1. Have you estimated, how SipIt works on datasets that were seen by the models during training, and on OOD samples, that were not observed by the model. Or even some random sequences of tokens? Does inversion speed or accuracy change compared to natural text?
-2. Instruction-tuned models with identical answers: For instruction models (or even pre-trained ones) where many prompts lead to the same answer (e.g., "yes" or "no"), do the hidden states remain well separated? Have you measured how close they get?
+2. Instruction-tuned models with identical answers:
+For instruction models (or even pre-trained ones) where many prompts lead to the same answer (e.g., "yes" or "no"), do the hidden states remain well separated? Have you measured how close they get?
 3. Did you ever find prompts whose hidden states were almost identical? If so, what kind of prompts were they?
 
 ### Soundness

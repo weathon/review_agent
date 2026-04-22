@@ -1,5 +1,6 @@
 # BadMoE: Backdooring Mixture-of-Experts LLMs via Optimizing Routing Triggers and Infecting Dormant Experts
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

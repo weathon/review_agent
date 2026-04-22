@@ -1,5 +1,6 @@
 # Correlated Policy Optimization in Multi-Agent Subteams
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 
@@ -75,12 +76,15 @@ Empirically, the authors validate their theory in a tabular coordination game th
 - The empirical results are convincing. The proposed heuristic for subteam construction yields consistent performance improvements in deep MARL tasks, as shown in Figures 2–3.
 
 ### Weaknesses
-Dependence on domain-specific priors: The heuristic requires a priori pairwise dependency scores dij , which rely on domain knowledge. This may limit generality and make comparisons to methods that learn dependency structures less direct.
+Dependence on domain-specific priors:
+The heuristic requires a priori pairwise dependency scores dij , which rely on domain knowledge. This may limit generality and make comparisons to methods that learn dependency structures less direct.
 
 ### Questions
 1. How exactly are the dij dependency scores computed in each environment? Are they purely distance-based, or do they involve any learned or empirical statistics?
 2. In Section 6.2.1 you mention that “parent actions are detached from the computation graph to prevent backpropagation.” Could you elaborate on this?
-3. Have the authors seen or considered the following closely related paper? Kapoor, A., Freed, B., Schneider, J., & Choset, H. (2025). Assigning Credit with Partial Reward Decoupling in Multi-Agent Proximal Policy Optimization. Reinforcement Learning Journal, 1, 380–399. This work also decomposes agents into subgroups with partially decoupled rewards and might provide a useful empirical or conceptual comparison.
+3. Have the authors seen or considered the following closely related paper?
+Kapoor, A., Freed, B., Schneider, J., & Choset, H. (2025). Assigning Credit with Partial Reward Decoupling in Multi-Agent Proximal Policy Optimization. Reinforcement Learning Journal, 1, 380–399.
+This work also decomposes agents into subgroups with partially decoupled rewards and might provide a useful empirical or conceptual comparison.
 
 ### Soundness
 4

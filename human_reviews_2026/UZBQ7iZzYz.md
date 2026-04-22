@@ -1,5 +1,6 @@
 # Adaptive Concept Discovery for Interpretable Few-Shot Text Classification
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 6
 

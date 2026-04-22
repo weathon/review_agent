@@ -1,5 +1,6 @@
 # Beyond Conflict: Subspace-Alignment as the Missing Piece of Model Merging
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

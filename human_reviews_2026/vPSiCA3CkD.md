@@ -1,5 +1,6 @@
 # Nesterov Finds GRAAL: Optimal and Adaptive Gradient Method for Convex Optimization
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 8, 10, 6, 6
 

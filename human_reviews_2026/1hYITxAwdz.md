@@ -1,5 +1,6 @@
 # T2I-ReasonBench: Benchmarking Reasoning-Informed Text-to-Image Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

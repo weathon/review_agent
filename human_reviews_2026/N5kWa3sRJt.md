@@ -1,5 +1,6 @@
 # OptimalThinkingBench: Evaluating Over and Underthinking in LLMs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6
 

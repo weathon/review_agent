@@ -1,5 +1,6 @@
 # Auditable Early Stopping for Agentic Routing: Ledger-Verified Run-Wise Certificates under Local DP
 
+- Avg Score: 1.60
 - Decision: Reject
 - Scores: 2, 0, 0, 4, 2
 

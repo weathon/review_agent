@@ -1,5 +1,6 @@
 # Differentiable Verification for Safe Reinforcement Learning in Verifiable Code Synthesis
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 2, 0, 2
 

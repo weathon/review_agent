@@ -1,5 +1,6 @@
 # Tackling Time-Series Forecasting Generalization via Mitigating Concept Drift
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

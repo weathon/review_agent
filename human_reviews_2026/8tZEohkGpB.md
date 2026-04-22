@@ -1,5 +1,6 @@
 # Connecting Where You Look With What You Understand: Trajectory-Driven Localized Understanding for Interactive Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # EPIC: Efficient Personalized Index Construction for Retrieval-Augmented Generation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

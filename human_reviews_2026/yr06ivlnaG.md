@@ -1,5 +1,6 @@
 # DERMARK: A Dynamic, Efficient and Robust Multi-bit Watermark for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

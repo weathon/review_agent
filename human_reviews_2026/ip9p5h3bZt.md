@@ -1,5 +1,6 @@
 # TokenSwap: Backdoor Attack on the Compositional Understanding of Large Vision-Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

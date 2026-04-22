@@ -1,5 +1,6 @@
 # Mamba Can Learn Low-Dimensional Targets In-Context via Test-Time Feature Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

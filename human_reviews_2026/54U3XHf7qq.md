@@ -1,5 +1,6 @@
 # MemoryVLA: Perceptual-Cognitive Memory in Vision-Language-Action Models for Robotic Manipulation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

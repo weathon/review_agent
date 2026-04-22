@@ -1,5 +1,6 @@
 # Trust-Gated State Space Models for Budgeted Decisions with Online Risk Control
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Breaking the Chain: A Causal Analysis of LLM Faithfulness to Intermediate Structures
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 6, 2
 

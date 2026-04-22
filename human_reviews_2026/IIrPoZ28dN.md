@@ -1,5 +1,6 @@
 # InPhyRe Discovers: Large Multimodal Models Struggle in Inductive Physical Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

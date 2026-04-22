@@ -1,5 +1,6 @@
 # Learning Fast and Slow: Addressing Task-Imbalanced Continual Learning with Dual-Speed Adaptation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

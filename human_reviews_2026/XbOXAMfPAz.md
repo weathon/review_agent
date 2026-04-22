@@ -1,5 +1,6 @@
 # Energy-Guided Prompt Optimization for Controllable Cross-Architectural Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 6, 0
 

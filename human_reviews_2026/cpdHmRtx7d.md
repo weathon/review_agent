@@ -1,5 +1,6 @@
 # One step further with Monte-Carlo sampler to guide diffusion better
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 4
 

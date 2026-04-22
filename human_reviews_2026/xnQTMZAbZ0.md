@@ -1,5 +1,6 @@
 # MV-SAM: Multi-view Promptable Segmentation using Pointmap Guidance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

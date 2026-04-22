@@ -1,5 +1,6 @@
 # From Past To Path: Masked History Learning for Next-Item Prediction in Generative Recommendation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

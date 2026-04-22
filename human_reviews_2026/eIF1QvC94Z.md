@@ -1,5 +1,6 @@
 # Turbo-DDCM: Fast and Flexible Zero-Shot Diffusion-Based Image Compression
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Omni-RRM: Automatic Preference & Reasoning Construction Advances Multimodal Reward Modeling
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 2, 6, 6
 

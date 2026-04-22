@@ -1,5 +1,6 @@
 # Beyond Proxy Metrics: A New Evaluation Framework for LLM Compression by Directly Measuring  Generative Faithfulness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 2, 6
 

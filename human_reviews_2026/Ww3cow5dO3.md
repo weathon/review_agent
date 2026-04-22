@@ -1,5 +1,6 @@
 # Statistical Inference Leveraging Synthetic Data with Distribution-Free Guarantees
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 2, 8
 

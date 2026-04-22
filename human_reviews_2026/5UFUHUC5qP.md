@@ -1,5 +1,6 @@
 # GDGB: A Benchmark for Generative Dynamic Text-Attributed Graph Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

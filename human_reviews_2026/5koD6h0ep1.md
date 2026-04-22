@@ -1,5 +1,6 @@
 # CodeStructEval: A Holistic Evaluation Framework of Code Structure Generation and Comprehension
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4
 

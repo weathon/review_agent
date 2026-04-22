@@ -1,5 +1,6 @@
 # Real-Time Evaluation for Novel Class Discovery at Test Time
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

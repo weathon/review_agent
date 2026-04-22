@@ -1,5 +1,6 @@
 # Focusing: View-Consistent Sparse Voxels for Efficient 3D VAE
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

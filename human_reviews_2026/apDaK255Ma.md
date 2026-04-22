@@ -1,5 +1,6 @@
 # Efficient Prediction of SO(3)-Equivariant Hamiltonian Matrices via SO(2) Local Frames
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

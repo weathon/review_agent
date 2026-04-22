@@ -1,5 +1,6 @@
 # PSDNorm: Temporal Normalization for Deep Learning in Sleep Staging
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4, 4
 

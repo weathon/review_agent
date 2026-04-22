@@ -1,5 +1,6 @@
 # Eliciting and evaluating generalizable explanations from large reasoning models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # UP2You: Fast Reconstruction of Yourself from Unconstrained Photo Collections
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

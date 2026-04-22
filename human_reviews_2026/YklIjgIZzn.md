@@ -1,5 +1,6 @@
 # Multimodal vision-language models with guided cross-attention for crisis event understanding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

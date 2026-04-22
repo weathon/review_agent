@@ -1,5 +1,6 @@
 # Binomial Gradient-Based Meta-Learning for Enhanced Meta-Gradient Estimation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 10, 6
 

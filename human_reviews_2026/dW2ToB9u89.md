@@ -1,5 +1,6 @@
 # Connecting the Dots: Generating Realistic Tabular Data with Structural Causal Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

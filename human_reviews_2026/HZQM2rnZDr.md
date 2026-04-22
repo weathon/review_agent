@@ -1,5 +1,6 @@
 # Tokens that Know Where: Self-improving 2D Spatial Vocabulary for Multi-modal Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

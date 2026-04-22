@@ -1,5 +1,6 @@
 # Train for Truth, Keep the Skills: Binary Retrieval-Augmented Reward Mitigates Hallucinations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

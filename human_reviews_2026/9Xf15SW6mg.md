@@ -1,5 +1,6 @@
 # Unmasking LAION-5B: Age, Gender, Race, and Emotion Biases in Large-Scale Image Datasets
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

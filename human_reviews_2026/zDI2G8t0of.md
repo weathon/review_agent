@@ -1,5 +1,6 @@
 # A Statistical Benchmark for Diffusion-Posterior-Sampling Algorithms
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

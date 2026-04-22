@@ -1,5 +1,6 @@
 # Diff4Splat: Controllable 4D Scene Generation with Latent Dynamic Reconstruction Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

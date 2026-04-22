@@ -1,5 +1,6 @@
 # Adaptive Preconditioners Trigger Loss Spikes in Adam
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

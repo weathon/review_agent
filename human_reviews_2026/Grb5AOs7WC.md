@@ -1,5 +1,6 @@
 # Spurious Correlation-Aware Embedding Regularization for Worst-Group Robustness
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

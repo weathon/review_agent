@@ -1,5 +1,6 @@
 # FALCON-S: Fixed-wing Aerodynamics and Learning Control Suite
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

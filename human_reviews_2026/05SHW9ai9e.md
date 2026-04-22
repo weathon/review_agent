@@ -1,5 +1,6 @@
 # MDocAgent: A Multi-Modal Multi-Agent Framework for Document Question Answering
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

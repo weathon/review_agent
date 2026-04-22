@@ -1,5 +1,6 @@
 # Sycophancy Is Not One Thing: Causal Separation of Sycophantic Behaviors in LLMs
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 8, 4
 

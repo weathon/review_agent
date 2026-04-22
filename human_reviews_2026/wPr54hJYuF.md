@@ -1,5 +1,6 @@
 # MA-EgoQA: Question Answering over Egocentric Videos  from Multiple Embodied Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

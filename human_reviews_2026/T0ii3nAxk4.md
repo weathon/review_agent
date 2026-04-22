@@ -1,5 +1,6 @@
 # SentKVCompress: Sentence-Level Dynamic KVCache Compression for Efficient Long-Context LLM Inference
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

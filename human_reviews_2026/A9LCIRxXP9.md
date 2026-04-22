@@ -1,5 +1,6 @@
 # Diagnosing Manifold Collapse: Intervention-Based Topology in Low-Rank RNNs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 
@@ -191,12 +192,18 @@ The paper explores an intriguing question and presents a creative combination of
 * Potential cross-disciplinary relevance: The questions about “manifold/circuit fragility” and recovery could be meaningful if extended to empirical neuroscience or robust ML systems.
 
 ### Weaknesses
-* Overreliance on UMAP without justification: The entire analysis depends on UMAP embeddings, yet the paper neither explains why UMAP is appropriate nor evaluates whether the results are stable under different embeddings or hyperparameters. Given that UMAP is known to be sensitive to parameters such as n_neighbors and min_dist, this is a serious limitation. At the very least, the paper should test robustness empirically or justify the choice theoretically.
-* Lack of statistical rigor: Several figures (e.g., Fig. 1A, Fig. 4) lack error bars or show wide overlaps, making trends ambiguous. For instance, the sudden CTIS drop between 0.4–0.5 lesion fraction in Fig. 1A is unexplained. Without uncertainty quantification or multiple runs, the evidence for the claimed non-linear “collapse threshold” is weak.
-* No baseline or ablation comparisons: The paper introduces several post-hoc metrics (CTIS, AURC, curvature weighting) but does not compare them against simpler alternatives (e.g., using raw persistent homology, PCA instead of UMAP, or unweighted Betti differences). As a result, it is unclear what value CTIS adds.
-* Weak connection to neuroscience or ML relevance: While the “intervention” framing is promising, the work does not clearly link its findings to real neuroscientific hypotheses or machine-learning implications. It reads more as an exploratory RNN case study than a framework addressing a specific gap.
-* Limited interpretability and missing illustrations: Given the geometric and topological focus, the paper should include schematic diagrams showing how manifold structures deform or collapse under lesions. The absence of visual intuition makes the framework hard to follow.
-* Writing clarity: The exposition is serviceable but somewhat descriptive; motivation and framing could be tightened to emphasize the research question and the intended scope of generalization.
+* Overreliance on UMAP without justification:
+The entire analysis depends on UMAP embeddings, yet the paper neither explains why UMAP is appropriate nor evaluates whether the results are stable under different embeddings or hyperparameters. Given that UMAP is known to be sensitive to parameters such as n_neighbors and min_dist, this is a serious limitation. At the very least, the paper should test robustness empirically or justify the choice theoretically.
+* Lack of statistical rigor:
+Several figures (e.g., Fig. 1A, Fig. 4) lack error bars or show wide overlaps, making trends ambiguous. For instance, the sudden CTIS drop between 0.4–0.5 lesion fraction in Fig. 1A is unexplained. Without uncertainty quantification or multiple runs, the evidence for the claimed non-linear “collapse threshold” is weak.
+* No baseline or ablation comparisons:
+The paper introduces several post-hoc metrics (CTIS, AURC, curvature weighting) but does not compare them against simpler alternatives (e.g., using raw persistent homology, PCA instead of UMAP, or unweighted Betti differences). As a result, it is unclear what value CTIS adds.
+* Weak connection to neuroscience or ML relevance:
+While the “intervention” framing is promising, the work does not clearly link its findings to real neuroscientific hypotheses or machine-learning implications. It reads more as an exploratory RNN case study than a framework addressing a specific gap.
+* Limited interpretability and missing illustrations:
+Given the geometric and topological focus, the paper should include schematic diagrams showing how manifold structures deform or collapse under lesions. The absence of visual intuition makes the framework hard to follow.
+* Writing clarity:
+The exposition is serviceable but somewhat descriptive; motivation and framing could be tightened to emphasize the research question and the intended scope of generalization.
 
 ### Questions
 1. How robust are the results to UMAP parameters (n_neighbors, min_dist) or to alternative embeddings (e.g., PCA, Isomap)?

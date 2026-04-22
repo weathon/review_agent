@@ -1,5 +1,6 @@
 # SWE-Perf: Can Language Models Optimize Code Performance on Real-World Repositories?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

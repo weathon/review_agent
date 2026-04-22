@@ -1,5 +1,6 @@
 # HeurekaBench: A Benchmarking Framework for AI Co-scientist
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

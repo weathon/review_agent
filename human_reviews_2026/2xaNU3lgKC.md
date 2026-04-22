@@ -1,5 +1,6 @@
 # From Frames to Sequences: Temporally Consistent Human-Centric Dense Prediction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

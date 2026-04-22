@@ -1,5 +1,6 @@
 # SPIDER: Multi-Layer Semantic Token Pruning and Adaptive Sub-Layer Skipping in Multimodal Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

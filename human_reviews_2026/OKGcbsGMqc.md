@@ -1,5 +1,6 @@
 # Nostra: Enabling Robust Robot Imitation via Multimodal Latent Imagination
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 8, 2
 

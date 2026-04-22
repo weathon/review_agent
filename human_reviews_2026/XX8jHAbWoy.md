@@ -1,5 +1,6 @@
 # STAS: Spatio-Temporal Adaptive Computation Time for Spiking Transformers
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

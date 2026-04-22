@@ -1,5 +1,6 @@
 # The LLM Bottleneck: Why Open-Source Vision LLMs Struggle with Hierarchical Visual Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

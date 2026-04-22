@@ -1,5 +1,6 @@
 # A Rich Knowledge Space for Scalable Deepfake Detection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 0
 

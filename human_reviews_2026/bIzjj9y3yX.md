@@ -1,5 +1,6 @@
 # Experimentation for Different Scheduling Policies on Queues: Mixed Differences-in-Q Estimators Based on Little’s Law
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

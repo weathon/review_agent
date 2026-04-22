@@ -1,5 +1,6 @@
 # Ambient Dataloops: Generative Models for Dataset Refinement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

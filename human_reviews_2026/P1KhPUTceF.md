@@ -1,5 +1,6 @@
 # S4NN: Scalable Self-Supervised Spiking Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

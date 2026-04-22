@@ -1,5 +1,6 @@
 # Trustworthy Retrosynthesis: Eliminating Hallucinations with a Diverse Ensemble of Reaction Scorers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

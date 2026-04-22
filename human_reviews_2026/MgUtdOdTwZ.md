@@ -1,5 +1,6 @@
 # ST-PPO: Stabilized Off-Policy Proximal Policy Optimization for Multi-Turn Agents
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

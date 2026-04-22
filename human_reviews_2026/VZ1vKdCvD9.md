@@ -1,5 +1,6 @@
 # ProbMedTOD: A Bayesian Network Guided Task-Oriented Dialogue System for Patient History Taking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

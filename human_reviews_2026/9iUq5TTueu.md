@@ -1,5 +1,6 @@
 # Revisiting LLM Reasoning via Information Bottleneck
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 4
 

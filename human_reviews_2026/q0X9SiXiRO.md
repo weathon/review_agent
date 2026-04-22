@@ -1,5 +1,6 @@
 # BA-LoRA: Bias-Alleviating Low-Rank Adaptation to Mitigate Catastrophic Inheritance in Large Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4, 0
 

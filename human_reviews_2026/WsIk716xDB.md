@@ -1,5 +1,6 @@
 # "I know that I don’t know... and I explain why'' Interpretable abstention via counterfactual explanations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

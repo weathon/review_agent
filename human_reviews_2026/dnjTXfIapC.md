@@ -1,5 +1,6 @@
 # Benchmarking Large Language Model Benchmarks: Popular Benchmarks vs. Human Perception
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

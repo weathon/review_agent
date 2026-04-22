@@ -1,5 +1,6 @@
 # Transducing Language Models
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 10, 8
 

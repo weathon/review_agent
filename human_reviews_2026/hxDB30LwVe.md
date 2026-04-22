@@ -1,5 +1,6 @@
 # Celo2: Towards Learned Optimization Free Lunch
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

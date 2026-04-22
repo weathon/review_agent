@@ -1,5 +1,6 @@
 # Hierarchical Gradient-Informed Reinforcement Learning for Scalable and Partially Observable Dynamic Resource Allocation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

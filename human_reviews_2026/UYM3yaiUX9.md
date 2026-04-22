@@ -1,5 +1,6 @@
 # Feature compression is the root cause of adversarial fragility in neural networks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

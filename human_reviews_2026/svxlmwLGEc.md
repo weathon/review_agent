@@ -1,5 +1,6 @@
 # ECA: Efficient Continual Alignment for Open-Ended Image-to-Text Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

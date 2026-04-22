@@ -1,5 +1,6 @@
 # Executable Visual Reasoning: From Universal Solver to Emergent Behaviors
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 4, 2
 

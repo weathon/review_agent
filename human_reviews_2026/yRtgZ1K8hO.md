@@ -1,5 +1,6 @@
 # The Polar Express: Optimal Matrix Sign Methods and their Application to the Muon Algorithm
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 6, 10, 8, 8
 

@@ -1,5 +1,6 @@
 # Leto: Modeling Multivariate Time Series with Memorizing at Test Time
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

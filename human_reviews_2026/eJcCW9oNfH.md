@@ -1,5 +1,6 @@
 # EVLP: Learning Unified Embodied Vision-Language Planner with Reinforced Supervised Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

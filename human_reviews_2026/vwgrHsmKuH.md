@@ -1,5 +1,6 @@
 # Sim2Real-HOI: Sim-to-Real HOI Video Generation via Decoupled Motion–Appearance Diffusion
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 2
 

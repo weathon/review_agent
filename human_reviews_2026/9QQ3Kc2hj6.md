@@ -1,5 +1,6 @@
 # No Pixel Left Behind: A Detail-Preserving Architecture for Robust High-Resolution AI-Generated Image Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

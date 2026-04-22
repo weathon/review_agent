@@ -1,5 +1,6 @@
 # Learning to Regularize: A Meta-Learning Approach for Sharpness-Aware Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

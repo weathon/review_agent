@@ -1,5 +1,6 @@
 # Distributionally Robust Linear Regression with Block Lewis Weights
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

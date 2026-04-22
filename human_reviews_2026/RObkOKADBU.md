@@ -1,5 +1,6 @@
 # CORDS - Continuous Representations of Discrete Structures
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 6, 4
 

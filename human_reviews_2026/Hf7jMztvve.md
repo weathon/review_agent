@@ -1,5 +1,6 @@
 # The Secret Agenda: LLMs Strategically Lie and Our Current Safety Tools Are Blind
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

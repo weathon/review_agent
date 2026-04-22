@@ -1,5 +1,6 @@
 # Uni4D-LLM: A Unified SpatioTemporal-Aware VLM for 4D Understanding and Generation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2
 

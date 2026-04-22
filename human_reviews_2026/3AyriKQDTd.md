@@ -1,5 +1,6 @@
 # Decrypt Modality Gap in Multimodal Contrastive Learning: From Convergent Representation  to Pair Alignment
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

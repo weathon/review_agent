@@ -1,5 +1,6 @@
 # Towards demystifying the optimization landscape of RLVR methods
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

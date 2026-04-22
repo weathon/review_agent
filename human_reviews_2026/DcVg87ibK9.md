@@ -1,5 +1,6 @@
 # Does FLUX Already Know How to Perform Physically Plausible Image Composition?
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

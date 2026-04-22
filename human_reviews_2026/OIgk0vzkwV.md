@@ -1,5 +1,6 @@
 # PatchMoE: A Time Series Foundation Model with Hierarchical Patch-wise Mixture-of-Experts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

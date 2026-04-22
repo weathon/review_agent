@@ -1,5 +1,6 @@
 # MoDA: Modulation Adapter for Fine-Grained Visual Understanding in Instructional MLLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Graph Neural Diffusion with Adaptive Skip Connection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # STAR-Bench: Probing Deep Spatio-Temporal Reasoning as Audio 4D Intelligence
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 6
 

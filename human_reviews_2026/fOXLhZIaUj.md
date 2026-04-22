@@ -1,5 +1,6 @@
 # Cancer-Myth: Evaluating Large Language Models on Patient Questions with False Presuppositions
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 10, 6, 2
 

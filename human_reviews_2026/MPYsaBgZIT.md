@@ -1,5 +1,6 @@
 # ELLMob: Event-Driven Human Mobility Generation with Self-Aligned LLM Framework
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

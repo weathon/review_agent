@@ -1,5 +1,6 @@
 # Hyper Hawkes Processes: Interpretable Models of Marked Temporal Point Processes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

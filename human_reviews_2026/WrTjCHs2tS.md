@@ -1,5 +1,6 @@
 # Decomposing Prompts: Discovering Reusable Scaffolds and Task-Specific Residuals
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # From Histopathology Images to Cell Clouds: Learning Slide Representations with Hierarchical Cell Transformer
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

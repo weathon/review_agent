@@ -1,5 +1,6 @@
 # acuSimNet: Multi-View Self-Occlusion-Awared Visibility Learning for Cranio-Cervical Acupuncture Points
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

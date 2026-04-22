@@ -1,5 +1,6 @@
 # Spatial-Temporal-Spectral Unified Modeling for Remote Sensing Dense Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

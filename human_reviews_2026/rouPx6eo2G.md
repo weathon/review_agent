@@ -1,5 +1,6 @@
 # One-Step Score-Based Density Ratio Estimation: Solver-Free with Analytic Frames
 
+- Avg Score: 6.80
 - Decision: Reject
 - Scores: 6, 4, 10, 6, 8
 

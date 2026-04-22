@@ -1,5 +1,6 @@
 # Learning Abstract World Models with a Group-Structured Latent Space
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

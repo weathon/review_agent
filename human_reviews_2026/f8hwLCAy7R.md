@@ -1,5 +1,6 @@
 # On the Vulnerability of Discrete Graph Diffusion Models to Backdoor Attacks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

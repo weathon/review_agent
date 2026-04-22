@@ -1,5 +1,6 @@
 # In-Context Stochastic Gradient Descent with Hybrid Mamba-2 and Linear Self-Attention Model
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

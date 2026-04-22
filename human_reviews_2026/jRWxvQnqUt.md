@@ -1,5 +1,6 @@
 # GraphUniverse: Synthetic Graph Generation for Evaluating Inductive Generalization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Option Discovery via Differentiable Neural Decomposition
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

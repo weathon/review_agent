@@ -1,5 +1,6 @@
 # Explicit Column Relationship-Based Diffusion Model for High-Quality Synthetic Tabular Data Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 6, 0
 

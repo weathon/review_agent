@@ -1,5 +1,6 @@
 # EdgeCape: Edge Weight Prediction For Category-Agnostic Pose Estimation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

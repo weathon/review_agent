@@ -1,5 +1,6 @@
 # A Rigorous Benchmark with Multidimensional Evaluation for Deep Research Agents: From Answers to Reports
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

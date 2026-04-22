@@ -1,5 +1,6 @@
 # Pedestrian Attribute Recognition via Hierarchical Cross-Modality HyperGraph Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4
 

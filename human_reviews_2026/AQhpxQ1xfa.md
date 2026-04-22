@@ -1,5 +1,6 @@
 # Inducing Dyslexia in Vision Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

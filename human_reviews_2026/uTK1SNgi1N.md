@@ -1,5 +1,6 @@
 # Adapt Data to Model: Adaptive Transformation Optimization for Domain-shared Time Series Foundation Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # DiskHIVF: Disk-Resident Hierarchical Inverted File Index For Billion-scale Approximate Nearest Neighbor Search
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

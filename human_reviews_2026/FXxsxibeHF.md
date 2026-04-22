@@ -1,5 +1,6 @@
 # Prompting Decision Transformers for Zero-Shot Reach-Avoid Policies
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

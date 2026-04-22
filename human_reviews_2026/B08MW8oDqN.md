@@ -1,5 +1,6 @@
 # Can Transformers Really Do It All? On the Compatibility of Inductive Biases Across Tasks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

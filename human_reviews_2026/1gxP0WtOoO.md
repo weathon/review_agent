@@ -1,5 +1,6 @@
 # Adaptive Conformal Guidance for Learning under Uncertainty
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

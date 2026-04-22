@@ -1,5 +1,6 @@
 # MVR: Multi-view Video Reward Shaping for Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

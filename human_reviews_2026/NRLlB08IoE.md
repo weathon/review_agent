@@ -1,5 +1,6 @@
 # DL-Bench: Deep learning specific code generation benchmark
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # MEHGT-LKG: Multimodal Edge-enhanced Heterogeneous Graph Transformer with LLM-driven Knowledge Graph for Stock Trend Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

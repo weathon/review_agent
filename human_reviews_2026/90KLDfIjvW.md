@@ -1,5 +1,6 @@
 # Causal pieces: analysing and improving spiking neural networks piece by piece
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

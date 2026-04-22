@@ -1,5 +1,6 @@
 # Diffusion-Inspired Reconfiguration of Transformers for Uncertainty Quantification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

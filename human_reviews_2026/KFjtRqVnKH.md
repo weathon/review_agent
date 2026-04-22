@@ -1,5 +1,6 @@
 # SafeDialBench: A Fine-Grained Safety Evaluation Benchmark for Large Language Models in Multi-Turn Dialogues with Diverse Jailbreak Attacks
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

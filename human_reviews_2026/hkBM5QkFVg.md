@@ -1,5 +1,6 @@
 # Peacemaker or Troublemaker: How Sycophancy Shapes Multi-Agent Debate
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

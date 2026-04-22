@@ -1,5 +1,6 @@
 # Self-Supervised Representation Learning As Mutual Information Maximization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

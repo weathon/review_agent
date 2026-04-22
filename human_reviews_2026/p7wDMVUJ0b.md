@@ -1,5 +1,6 @@
 # Rethinking Defense for Computer-Use Agents: Context Deception Attacks are Simple to Defend
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

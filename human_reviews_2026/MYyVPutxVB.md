@@ -1,5 +1,6 @@
 # Injecting Sensitivity Constraint Into Continual Learning Significantly Enhances Surrogate-Aided Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Guaranteed Simply Connected Mesh Reconstruction from an Unorganized Point Cloud
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

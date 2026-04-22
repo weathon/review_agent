@@ -1,5 +1,6 @@
 # Rigidity-Aware Geometric Pretraining for Protein Design and Conformational Ensembles
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 2
 

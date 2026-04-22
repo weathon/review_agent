@@ -1,5 +1,6 @@
 # ACCELERATE SCALING OF LLM FINETUNING VIA QUANTIFYING THE COVERAGE AND DEPTH OF INSTRUCTION SET
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

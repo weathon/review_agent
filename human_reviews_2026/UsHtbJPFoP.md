@@ -1,5 +1,6 @@
 # Learning in Context, Guided by Choice:  A Reward-Free Paradigm for Reinforcement Learning with Transformers
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

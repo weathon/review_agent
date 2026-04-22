@@ -1,5 +1,6 @@
 # AssetOpsBench: Benchmarking AI Agents for Task Automation in Industrial Asset Operations and Maintenance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 6, 8
 

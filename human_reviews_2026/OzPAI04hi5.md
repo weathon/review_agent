@@ -1,5 +1,6 @@
 # VLSU: Mapping the Limits of Joint Multimodal Understanding for AI Safety
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

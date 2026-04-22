@@ -1,5 +1,6 @@
 # Fire on Motion: Optimizing Video Pass-bands for Efficient Spiking Action Recognition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

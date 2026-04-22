@@ -1,5 +1,6 @@
 # It Depends: Understanding Why Models Struggle with Long-Range Dependencies
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

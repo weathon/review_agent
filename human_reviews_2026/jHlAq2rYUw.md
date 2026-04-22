@@ -1,5 +1,6 @@
 # FSOD-VFM: Few-Shot Object Detection with Vision Foundation Models and Graph Diffusion
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 8
 

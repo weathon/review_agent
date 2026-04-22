@@ -1,5 +1,6 @@
 # A Primer on SO(3) Action Representations in Deep Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

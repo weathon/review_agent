@@ -1,5 +1,6 @@
 # TGM: A Modular and Efficient Library for Machine Learning on Temporal Graphs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

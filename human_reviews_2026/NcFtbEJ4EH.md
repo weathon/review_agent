@@ -1,5 +1,6 @@
 # Beyond Open-World: COSRA, a Training-Free Self-Refining Approach to Open-Ended Object Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

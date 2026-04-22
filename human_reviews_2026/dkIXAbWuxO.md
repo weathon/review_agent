@@ -1,5 +1,6 @@
 # Earth-Agent: Unlocking the Full Landscape of Earth Observation with Agents
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Route-and-Reason: Scaling Large Language Model Reasoning with Reinforced Model Router
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

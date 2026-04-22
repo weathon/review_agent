@@ -1,5 +1,6 @@
 # Local Success Does Not Compose: Benchmarking Large Language Models for Compositional Formal Verification
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 4
 

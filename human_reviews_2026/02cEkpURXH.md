@@ -1,5 +1,6 @@
 # Early Layer Readouts for Robust Knowledge Distillation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

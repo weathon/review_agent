@@ -1,5 +1,6 @@
 # Rethinking Learning-based Symmetric Cryptanalysis: a Theoretical Perspective
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

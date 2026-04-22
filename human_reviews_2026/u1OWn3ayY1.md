@@ -1,5 +1,6 @@
 # CheXGenBench: A Unified Benchmark for Fidelity, Privacy and Utility of Synthetic Chest Radiographs
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # STAR: STacked AutoRegressive Scheme for Unified Multimodal Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 4, 2
 

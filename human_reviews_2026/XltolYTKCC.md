@@ -1,5 +1,6 @@
 # Where Reasoning Fails: Step-wise Confidence Attribution in Black-box LLMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 4, 6, 6
 

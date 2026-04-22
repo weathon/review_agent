@@ -1,5 +1,6 @@
 # Rrls: Robust reinforcement learning suite
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

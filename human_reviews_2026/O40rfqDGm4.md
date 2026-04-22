@@ -1,5 +1,6 @@
 # A Closer Look at In-context Learning of LLMs in Simple Classification Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

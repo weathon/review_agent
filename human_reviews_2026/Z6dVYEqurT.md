@@ -1,5 +1,6 @@
 # MILCO: Learned Sparse Retrieval Across Languages via a Multilingual Connector
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

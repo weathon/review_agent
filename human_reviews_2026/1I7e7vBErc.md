@@ -1,5 +1,6 @@
 # Dense and Indiscernible Object Counting in Agricultural Scenes
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 8
 

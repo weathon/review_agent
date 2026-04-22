@@ -1,5 +1,6 @@
 # Causal Discovery in the Wild: A Voting-Theoretic Ensemble Approach
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Perception-R1: Advancing Multimodal Reasoning Capabilities of MLLMs via Visual Perception Reward
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

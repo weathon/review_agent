@@ -1,5 +1,6 @@
 # Directional Influence Function: Estimating Training Data Influence in Constrained Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 8, 4
 

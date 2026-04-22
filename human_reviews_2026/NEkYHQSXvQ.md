@@ -1,5 +1,6 @@
 # AMStraMGRAM : Adaptive Multi-cutoff Strategy Modification for ANaGRAM
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 6, 8
 

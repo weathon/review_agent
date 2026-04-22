@@ -1,5 +1,6 @@
 # Dual-Branch Center-Surrounding Contrast: Rethinking Contrastive Learning for 3D Point Clouds
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

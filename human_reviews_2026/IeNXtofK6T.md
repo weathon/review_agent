@@ -1,5 +1,6 @@
 # PromptArmor: An Essential Baseline for Prompt Injection Defenses
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

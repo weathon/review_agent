@@ -1,5 +1,6 @@
 # FZOO: Fast Zeroth-Order Optimizer for Fine‑Tuning Large Language Models towards Adam‑Scale Speed
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Time Series Forecasting as Reasoning: A Slow-Thinking Approach with Reinforced LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

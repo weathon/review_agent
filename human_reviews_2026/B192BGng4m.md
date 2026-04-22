@@ -1,5 +1,6 @@
 # A Video Is Not Worth a Thousand Words
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

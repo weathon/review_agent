@@ -1,5 +1,6 @@
 # ViCO: A Training Strategy towards Semantic Aware Dynamic High-Resolution
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

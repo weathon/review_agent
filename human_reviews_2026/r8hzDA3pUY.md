@@ -1,5 +1,6 @@
 # Reducing Belief Deviation in Reinforcement Learning for Active Reasoning of LLM Agents
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 4
 
@@ -122,34 +123,44 @@ The paper presents a method to provide early stop during the RL if the hypothesi
 The paper formalizes belief deviation in multi‑turn, active reasoning and defines a Belief‑Trap Region (BTR) where epistemic progress stalls. It proves that long, uninformative “tails” can flip the sign of early‑step advantages (advantage inversion), then proposes T³, an early‑truncation rule triggered by simple proxy tests of stalled progress in the reasoning trace. T³ is a drop‑in wrapper for PPO/GRPO/GSPO and shows consistent gains across five interactive tasks, smoother learning, and shorter responses.
 
 ### Strengths
-Crisp failure‑mode lens. Clear POMDP framing with a truth‑anchored potential Ψ and a precise BTR definition; theory links tail length to advantage inversion (Theorem 2) 
+Crisp failure‑mode lens. Clear POMDP framing with a truth‑anchored potential Ψ and a precise BTR definition; theory links tail length to advantage inversion (Theorem 2)
 
-Simple, general mechanism. T³ uses observable stalling proxies (e.g., non‑shrinking hypothesis sets, repeated Unknown judgments) so it can integrate with standard RL without changing optimizers 
+
+Simple, general mechanism. T³ uses observable stalling proxies (e.g., non‑shrinking hypothesis sets, repeated Unknown judgments) so it can integrate with standard RL without changing optimizers
+
 
 The proposed method shows broad, consistent empirical gains. Improvements on CircuitDetection (CD), SituationPuzzles (SP), GuessNumbers (GN), PreferenceEstimation (PE), MovieRecommendation (MR) with 14/18 metric wins; OOD robustness; works across model sizes/types.
 
 Stability & efficiency: Learning curves are smoother and responses shorter, implying fewer wasted tokens.
 
 ### Weaknesses
-Theory–practice gap. Assumptions (e.g., value calibration to truth probability; linear update‑error growth) are strong and not empirically validated against measured beliefs/values. 
+Theory–practice gap. Assumptions (e.g., value calibration to truth probability; linear update‑error growth) are strong and not empirically validated against measured beliefs/values.
 
-Privileged proxies. PE/MR use oracle preference similarity to trigger truncation, limiting deployability without ground truth. 
-“Shorter is better” confound. Random truncation sometimes helps (Table 3), so more direct evidence of advantage inversion would strengthen the causal story. 
 
-Tuning guidance. Heuristics for window size/thresholds are task‑specific; no adaptive rule is provided. 
+Privileged proxies. PE/MR use oracle preference similarity to trigger truncation, limiting deployability without ground truth.
+
+“Shorter is better” confound. Random truncation sometimes helps (Table 3), so more direct evidence of advantage inversion would strengthen the causal story.
+
+
+Tuning guidance. Heuristics for window size/thresholds are task‑specific; no adaptive rule is provided.
+
 Comparisons & scope. Limited real‑world tasks and reliance on an LLM judge in SP; baselines could be more apples‑to‑apples vs. open, strong models trained under similar budgets.
 
 ### Questions
-No‑oracle proxies: How would you instantiate T³ on PE/MR‑like tasks without access to the true preference vector (e.g., entropy/disagreement/self‑consistency signals)? 
-Direct test of Theorem 2: Can you measure early‑token advantages with/without truncation and show the predicted sign flips as tail length grows? 
+No‑oracle proxies: How would you instantiate T³ on PE/MR‑like tasks without access to the true preference vector (e.g., entropy/disagreement/self‑consistency signals)?
 
-Adaptive T³: Any online procedure to target a truncation‑ratio band (or validation return) and auto‑tune window/thresholds? Sensitivity to the SP judge identity/temperature? 
+Direct test of Theorem 2: Can you measure early‑token advantages with/without truncation and show the predicted sign flips as tail length grows?
+
+
+Adaptive T³: Any online procedure to target a truncation‑ratio band (or validation return) and auto‑tune window/thresholds? Sensitivity to the SP judge identity/temperature?
+
 
 Actionable feedback
 
 Add a one‑page algorithm box for T³ (inputs, trigger, where truncation enters GAE/PPO).
 Provide equal‑length ablations to disentangle truncation vs. better credit assignment; include γ/λ/KL sensitivity.
-Add a small calibration check: value vs. correctness reliability plots. Report token & wall‑clock to fixed reward thresholds.
+Add a small calibration check: value vs. correctness reliability plots.
+Report token & wall‑clock to fixed reward thresholds.
 
 ### Soundness
 2

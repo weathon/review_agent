@@ -1,5 +1,6 @@
 # From Lab to Line: Deployment-Aware NMR–Text Expert Routing for Real-Time Apple Moldy Core Disease Screening and Explanation
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 6, 2, 4
 

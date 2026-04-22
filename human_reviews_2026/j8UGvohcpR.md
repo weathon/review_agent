@@ -1,5 +1,6 @@
 # Learning to Trust: Bayesian Adaptation to Varying Suggester Reliability in Sequential Decision Making
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

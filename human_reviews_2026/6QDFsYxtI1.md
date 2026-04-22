@@ -1,5 +1,6 @@
 # When More is Less: Understanding Chain-of-Thought Length in LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 2
 

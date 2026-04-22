@@ -1,5 +1,6 @@
 # Latent Adaptation of Foundation Policies for Sim-to-Real Transfer
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

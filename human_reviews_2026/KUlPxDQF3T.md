@@ -1,5 +1,6 @@
 # Convergence of an actor-critic gradient flow for entropy regularised MDPs in general spaces
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # LoC-Decomp: LLM Autoformalization via Logical Concept Decomposition and Iterative Feedback Correction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2
 

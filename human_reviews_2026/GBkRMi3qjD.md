@@ -1,5 +1,6 @@
 # Understanding and Relaxing the Limitations of Transformers for Linear Algebra
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6, 2
 

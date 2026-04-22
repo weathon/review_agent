@@ -1,5 +1,6 @@
 # scDFM: Distributional Flow Matching Model for Robust Single-Cell Perturbation Prediction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

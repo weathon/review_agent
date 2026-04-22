@@ -1,5 +1,6 @@
 # High-Fidelity and Generalizable Neural Surface Reconstruction with Sparse Scene Representations
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

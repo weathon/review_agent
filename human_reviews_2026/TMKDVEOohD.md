@@ -1,5 +1,6 @@
 # Theoretically Understanding the Hidden Adversarial Price of Low-Rank Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # NExT-OMNI: Towards Any-to-Any Omnimodal Foundation Models with Discrete Flow Matching
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

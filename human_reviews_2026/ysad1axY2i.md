@@ -1,5 +1,6 @@
 # GAF-Pano: Zero-Shot Layout-Controlled Panorama Generation via Global Attention Fusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

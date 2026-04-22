@@ -1,5 +1,6 @@
 # Gradient Fan-in Asymmetry: The Structural Cause of Layer Redundancy in Deep Transformers
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

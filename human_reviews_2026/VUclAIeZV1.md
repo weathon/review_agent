@@ -1,5 +1,6 @@
 # Don't Lose Sight: Visually-Grounded Credit Assignment for Multimodal Reasoning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Semantic-Guided Hierarchical Stackelberg Games for Multi-Agent Coordination with Fuzzy Constraints
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 2
 

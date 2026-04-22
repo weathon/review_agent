@@ -1,5 +1,6 @@
 # Are Large Vision-Language Models Good Annotators for Image Tagging?
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

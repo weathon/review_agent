@@ -1,5 +1,6 @@
 # Measurement-Consistent Langevin Corrector: A Remedy for Latent Diffusion Inverse Solvers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Automated Stateful Specialization for Adaptive Agent Systems
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Human-like Supramodal Concept Learning Boosts Emotion Recognition
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

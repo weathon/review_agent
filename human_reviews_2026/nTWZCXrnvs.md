@@ -1,5 +1,6 @@
 # FedDefuse: Mitigating Strategic Model Poisoning for Federated Learning via Divide-and-Compute Driven Composite Behavioral Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

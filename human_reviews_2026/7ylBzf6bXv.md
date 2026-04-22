@@ -1,5 +1,6 @@
 # Effective Probabilistic Time Series Forecasting with Fourier Adaptive Noise-Separated Diffusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 8, 6, 2
 

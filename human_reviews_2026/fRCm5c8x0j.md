@@ -1,5 +1,6 @@
 # Improving Attributed Long-form Question Answering with Intent Awareness
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

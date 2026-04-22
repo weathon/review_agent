@@ -1,5 +1,6 @@
 # HiDet: Hierarchical AI Text Detection via Coarse Filtering and Multi-Grained Contrastive Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

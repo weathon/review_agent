@@ -1,5 +1,6 @@
 # Query Circuits: Explaining How Language Models Answer User Prompts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

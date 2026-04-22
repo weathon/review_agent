@@ -1,5 +1,6 @@
 # A Proximal-Sinkhorn-Newton Method for Entropic Optimal Transport
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # F4-ITS: Fine-grained Feature Fusion for Food Image-Text Search
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

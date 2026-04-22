@@ -1,5 +1,6 @@
 # Data Selection for LLM Reinforcement Learning with Improved Gradient Alignment
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

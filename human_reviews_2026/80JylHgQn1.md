@@ -1,5 +1,6 @@
 # Instilling an Active Mind in Avatars via Cognitive Simulation
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 6
 

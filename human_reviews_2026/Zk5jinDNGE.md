@@ -1,5 +1,6 @@
 # Stochastic Gaussian Zeroth-Order Optimization: Improved Convergence Analysis under Skewed Hessian Spectra
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

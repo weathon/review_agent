@@ -1,5 +1,6 @@
 # ePC: Overcoming Exponential Signal Decay in Deep Predictive Coding Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 6, 0
 

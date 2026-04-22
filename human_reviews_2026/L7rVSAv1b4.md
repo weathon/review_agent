@@ -1,5 +1,6 @@
 # CONCUR: Benchmarking LLMs for Concurrent Code Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 2, 2
 

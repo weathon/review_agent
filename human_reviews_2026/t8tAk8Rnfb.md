@@ -1,5 +1,6 @@
 # Capturing Structure and Feature Signals in Graph Self-Supervised Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 
@@ -23,14 +24,17 @@ This paper analyzes graph self-supervised learning (SSL) methods for node-level 
 This paper primarily investigates methods for node-level prediction tasks in Graph SSL. Initially, the paper conducts a thorough evaluation of several representative Graph SSL methods, revealing a surprising finding: the performance of two popular generative methods, MaskGAE and GraphMAE, often fails to surpass that of carefully tuned supervised baselines. Meanwhile, the comparative methods BGRL and GRACE exhibit superior average performance compared to both generative methods and supervised baselines. The authors hypothesize that this is because BGRL and GRACE are capable of simultaneously capturing information about graph structure and node features. Based on these observations, the authors propose a method named grasp, which jointly processes graph structure and node features through a GNN encoder, and then employs three MLP decoders to reconstruct masked edges, reconstruct original features, and predict node degrees, respectively.
 
 ### Strengths
-1. Rigorous benchmarking. The most notable advantage of the paper lies in its comprehensive and rigorous empirical evaluation. The authors conducted experiments on 10 diverse datasets, encompassing homogeneous graphs, heterogeneous graphs, and various types of node features.  
-2. Fair tuning of the baseline: Unlike previous studies, this paper conducts a thorough hyperparameter search and architectural enhancement for supervised baselines. It is this rigor that reveals that the performance of SSL methods in previous studies may have been overestimated.  
+1. Rigorous benchmarking. The most notable advantage of the paper lies in its comprehensive and rigorous empirical evaluation. The authors conducted experiments on 10 diverse datasets, encompassing homogeneous graphs, heterogeneous graphs, and various types of node features. 
+
+2. Fair tuning of the baseline: Unlike previous studies, this paper conducts a thorough hyperparameter search and architectural enhancement for supervised baselines. It is this rigor that reveals that the performance of SSL methods in previous studies may have been overestimated. 
+
 3. Clear motivation and concise method: Based on the analysis, the suggestion of "capturing both structural and feature signals" is clear in motivation and instructive.
 
 ### Weaknesses
 1. Limited innovation; this paper is more like an experimental report, which can provide some insight to researchers in graph SSL, but lacks theoretical and methodological innovation. The proposed method, GRASP, merely integrates several existing SSL tasks, which should be common in previous work and represents a relatively trivial innovation in methodology.
 
-2. Scope limited to node-level tasks: The author explicitly states in the limitations section that this study is entirely focused on node-level prediction tasks. 
+2. Scope limited to node-level tasks: The author explicitly states in the limitations section that this study is entirely focused on node-level prediction tasks.
+
 3. Tuning limitations of SSL methods: Although the authors emphasize the importance of tuning, they also acknowledge that due to the high computational cost, the supervised baseline was re-optimized 10 times, while the hyperparameters of the SSL method were only optimized once. This constitutes a potential weakness in the evaluation.
 
 ### Questions

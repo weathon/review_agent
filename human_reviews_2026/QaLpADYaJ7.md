@@ -1,5 +1,6 @@
 # Learning to Communicate Locally for Large-Scale Multi-Agent Pathfinding
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

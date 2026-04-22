@@ -1,5 +1,6 @@
 # SpikeLoRA: Learnable Activation Sparsity for Low-Rank Adaptation using Spiking Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

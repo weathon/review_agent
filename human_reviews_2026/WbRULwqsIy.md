@@ -1,5 +1,6 @@
 # Understanding In-Context Learning on Structured Manifolds: Bridging Attention to Kernel Methods
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Interpretable Oracle Bone Script Decipherment through Radical and Pictographic Analysis with LVLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

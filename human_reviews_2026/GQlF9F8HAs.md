@@ -1,5 +1,6 @@
 # HoVer: Holistic Verification for Semantic-Aware Speculative Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

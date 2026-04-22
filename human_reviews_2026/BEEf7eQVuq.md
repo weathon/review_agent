@@ -1,5 +1,6 @@
 # Accelerating Transformer Training: Architectural Symmetry, Positional Encoding, and Teleportation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

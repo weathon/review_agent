@@ -1,5 +1,6 @@
 # ChineseVideoBench: Benchmarking Multi-modal Large Models for Chinese Video Question Answering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Beyond Extrapolation: Knowledge Utilization with Bidirectional Inference for Time Series Forecasting
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 6
 

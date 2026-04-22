@@ -1,5 +1,6 @@
 # Feedforward 4D Reconstruction for Dynamic Driving Scenes using Unposed Images
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

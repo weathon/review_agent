@@ -1,5 +1,6 @@
 # Sigma: Semantically Informative Pre-training for Skeleton-based Sign Language Understanding
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

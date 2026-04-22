@@ -1,5 +1,6 @@
 # Task Priors: Enhancing Model Evaluation by Considering the Entire Space of Downstream Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

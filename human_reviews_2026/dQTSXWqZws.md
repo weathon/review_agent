@@ -1,5 +1,6 @@
 # Customizing Visual Emotion Evaluation for MLLMs: An Open-vocabulary, Multifaceted, and Scalable Approach
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

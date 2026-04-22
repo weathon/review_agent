@@ -1,5 +1,6 @@
 # Empowering Memory Assistance: An Episodic Memory-Based Framework for Personalized Recommendations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

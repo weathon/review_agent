@@ -1,5 +1,6 @@
 # VISOR: VIsual Spatial Object Reasoning for Language-driven Object Navigation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

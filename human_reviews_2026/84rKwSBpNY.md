@@ -1,5 +1,6 @@
 # Bias as a Virtue: Rethinking Generalization under Distribution Shifts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

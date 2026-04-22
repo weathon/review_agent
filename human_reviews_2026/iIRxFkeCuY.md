@@ -1,5 +1,6 @@
 # PAT3D: Physics-Augmented Text-to-3D Scene Generation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

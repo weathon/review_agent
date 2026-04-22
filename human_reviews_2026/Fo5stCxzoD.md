@@ -1,5 +1,6 @@
 # Beyond Slater’s Condition in Online CMDPs with Stochastic and Adversarial Constraints
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 6
 

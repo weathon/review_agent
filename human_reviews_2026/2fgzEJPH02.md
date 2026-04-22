@@ -1,5 +1,6 @@
 # LipNeXt: Scaling up Lipschitz-based Certified Robustness to Billion-parameter Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

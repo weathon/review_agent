@@ -1,5 +1,6 @@
 # Adversarial Agent Collaboration for C to Rust Translation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

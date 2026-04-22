@@ -1,5 +1,6 @@
 # Reflection Trigger: Latent Self-Correction for Question Answering by Steering Vector Injection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

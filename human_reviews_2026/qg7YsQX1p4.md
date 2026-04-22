@@ -1,5 +1,6 @@
 # MoFA: Dual-Task Motion Factorization for Human Motion Synthesis with Imperfect and Limited Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

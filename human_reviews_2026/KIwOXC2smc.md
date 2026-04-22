@@ -1,5 +1,6 @@
 # Integrating Solving Forward and Inverse Problems in PDEs with Flow-based Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 4
 

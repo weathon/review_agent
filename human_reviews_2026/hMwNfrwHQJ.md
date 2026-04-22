@@ -1,5 +1,6 @@
 # HCDA: Hierarchical Contrastive Learning with Dynamic Attention Fusion
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Combining-on-Graph: Structured Reasoning of LLMs with Knowledge Graph
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

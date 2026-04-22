@@ -1,5 +1,6 @@
 # From Score Distributions to Balance:  Plug-and-Play Mixture-of-Experts Routing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

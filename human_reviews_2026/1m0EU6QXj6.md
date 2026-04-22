@@ -1,5 +1,6 @@
 # SafeMPO: Constrained Reinforcement Learning with Probabilistic Incremental Improvement
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 4
 

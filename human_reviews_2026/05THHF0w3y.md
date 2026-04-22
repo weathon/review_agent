@@ -1,5 +1,6 @@
 # R-Capsule: Compressing High-Level Plans for Efficient Large Language Model Reasoning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 4
 

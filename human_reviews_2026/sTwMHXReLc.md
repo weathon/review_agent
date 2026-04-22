@@ -1,5 +1,6 @@
 # Inverse IFEval: Can LLMs Unlearn Stubborn Training Conventions to Follow Real Instructions?
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

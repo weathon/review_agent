@@ -1,5 +1,6 @@
 # On the Complexity Theory of Masked Discrete Diffusion: From $\mathrm{poly}(1/\epsilon)$ to Nearly $\epsilon$-Free
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # Physics-informed learning under mixing: How physical knowledge speeds up learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Fourier Minds, Forget Less: Discrete Fourier Transform for Fast and Robust Continual Learning in LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

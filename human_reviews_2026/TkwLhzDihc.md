@@ -1,5 +1,6 @@
 # Transforming Weather Data from Pixel to Latent Space
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 8, 4
 

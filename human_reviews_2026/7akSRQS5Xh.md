@@ -1,5 +1,6 @@
 # From Data Statistics to Feature Geometry: How Correlations Shape Superposition
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 8
 

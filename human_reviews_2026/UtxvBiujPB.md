@@ -1,5 +1,6 @@
 # Vulnerable Agent Identification in Large-Scale Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

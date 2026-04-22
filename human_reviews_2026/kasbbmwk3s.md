@@ -1,5 +1,6 @@
 # Scaling Direct Feedback Learning with Jacobian Alignment Guarantees
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8, 2
 

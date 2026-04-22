@@ -1,5 +1,6 @@
 # Activation Steering with a Feedback Controller
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

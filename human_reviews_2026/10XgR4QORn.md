@@ -1,5 +1,6 @@
 # Analyzing and Internalizing Complex Policy Documents for LLM Agents
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 6
 

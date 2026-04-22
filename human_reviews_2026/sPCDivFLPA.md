@@ -1,5 +1,6 @@
 # Differential-Integral Neural Operator for Long-Term Turbulence Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

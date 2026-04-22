@@ -1,5 +1,6 @@
 # Bridging Pairwise and Pointwise GRMs: Preference-Aware Reward Mechanism with Dynamic Rubric Adaptation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 8
 

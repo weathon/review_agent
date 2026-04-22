@@ -1,5 +1,6 @@
 # VLA-Risk: Benchmarking Vision-Language-Action Models with Physical Robustness
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 6, 0, 2, 2
 

@@ -1,5 +1,6 @@
 # Understanding Generative Recommendation with Semantic IDs from a Model-scaling View
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

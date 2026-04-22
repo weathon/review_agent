@@ -1,5 +1,6 @@
 # When LLMs get significantly worse: A statistical approach to detect model degradations
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

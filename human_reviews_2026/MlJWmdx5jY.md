@@ -1,5 +1,6 @@
 # Diff-Fair: Mitigating Intersectional Bias Through Diffusion-Driven Fair Representation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

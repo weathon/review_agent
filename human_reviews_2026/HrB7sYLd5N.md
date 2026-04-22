@@ -1,5 +1,6 @@
 # Efficient LLM Collaboration via Planning
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2, 2
 

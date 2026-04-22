@@ -1,5 +1,6 @@
 # Prior-free Tabular Test-time Adaptation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2
 

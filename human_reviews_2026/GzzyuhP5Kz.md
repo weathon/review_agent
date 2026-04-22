@@ -1,5 +1,6 @@
 # RULERv2: From Basic Retrieval to Complex Reasoning, A Bottom-Up Benchmark for Long-Context Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

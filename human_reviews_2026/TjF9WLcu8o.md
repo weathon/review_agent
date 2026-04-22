@@ -1,5 +1,6 @@
 # Contrastive-Online-Meta (COM): A Dynamic Adaptation Mechanism for Instruction-Tuned CodeLLMs
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0, 0
 

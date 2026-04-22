@@ -1,5 +1,6 @@
 # SuperHype: Hypergraph Generation via Graph-Superposition Decomposition
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 4, 8
 

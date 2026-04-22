@@ -1,5 +1,6 @@
 # Generative Modeling from Black-Box Corruptions via Self-Consistent Stochastic Interpolants
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 0, 8
 

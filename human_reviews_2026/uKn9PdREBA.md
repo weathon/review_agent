@@ -1,5 +1,6 @@
 # Learning residue level protein dynamics with multiscale Gaussians
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Cross-modal Alignment and Human Preference Learning for Fine-grained Music-guided Image Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 8
 

@@ -1,5 +1,6 @@
 # Variable-Length Audio Fingerprinting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

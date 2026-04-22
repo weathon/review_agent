@@ -1,5 +1,6 @@
 # Code2Video: A Code-centric Paradigm for Educational Video Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

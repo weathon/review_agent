@@ -1,5 +1,6 @@
 # Consistent Low-Rank Approximation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4
 

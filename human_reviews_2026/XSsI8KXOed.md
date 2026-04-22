@@ -1,5 +1,6 @@
 # Log-Normal State-Space Model
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

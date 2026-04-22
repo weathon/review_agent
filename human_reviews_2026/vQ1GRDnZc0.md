@@ -1,5 +1,6 @@
 # All-Task Convergence and Backward Transfer in Federated Domain-Incremental Learning with Partial Participation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 2, 6, 8
 

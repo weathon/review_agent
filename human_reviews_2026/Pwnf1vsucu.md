@@ -1,5 +1,6 @@
 # Expressive Power of Implicit Models: Rich Equilibria and Test-Time Scaling
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 2, 8
 

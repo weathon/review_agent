@@ -1,5 +1,6 @@
 # Sieve Attention: Fusing Context-Aware Filtering and Sequential Allocation For Long Sequence
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

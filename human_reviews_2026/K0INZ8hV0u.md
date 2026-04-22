@@ -1,5 +1,6 @@
 # LEMMA-RCA: A Large Multi-modal Multi-domain Dataset for Root Cause Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

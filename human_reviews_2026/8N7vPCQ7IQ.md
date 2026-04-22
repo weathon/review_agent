@@ -1,5 +1,6 @@
 # Convergence Theory of Decentralized Diffusion Models via Pseudo-Non-Markov Analysis
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 2, 6
 

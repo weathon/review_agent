@@ -1,5 +1,6 @@
 # Multi-Marginal Flow Matching with Adversarially Learnt Interpolants
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

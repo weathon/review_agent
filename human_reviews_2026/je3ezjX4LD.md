@@ -1,5 +1,6 @@
 # OneFlow: Concurrent Mixed-Modal and Interleaved Generation with Edit Flows
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

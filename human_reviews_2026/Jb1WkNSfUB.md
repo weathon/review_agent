@@ -1,5 +1,6 @@
 # TileLang: Bridge Programmability and Performance in Modern Neural Kernels
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 4, 8
 

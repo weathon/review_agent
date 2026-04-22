@@ -1,5 +1,6 @@
 # Learning Chemical Knowledge from Large-Scale Unlabeled Molecular Data for Retrosynthesis
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

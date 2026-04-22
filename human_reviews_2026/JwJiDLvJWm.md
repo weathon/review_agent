@@ -1,5 +1,6 @@
 # Position-Aware Singular Value Shrinkage for Unfolded Dynamic MRI Reconstruction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

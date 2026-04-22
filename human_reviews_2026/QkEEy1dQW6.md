@@ -1,5 +1,6 @@
 # Breaking the Limits of Autoregression! A Diffusion-Bridge with Mutual-Information for Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

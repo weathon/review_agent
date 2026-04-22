@@ -1,5 +1,6 @@
 # SortedRL: Accelerating RL Training for LLMs through Online Length-aware Scheduling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 6, 0
 

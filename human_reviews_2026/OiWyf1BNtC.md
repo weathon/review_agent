@@ -1,5 +1,6 @@
 # Realtime Video Frame Interpolation using One-Step Diffusion Sampling
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

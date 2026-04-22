@@ -1,5 +1,6 @@
 # Adaptive Text Transformations Defend Against Dataset Inference Attacks
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 4, 2, 4
 

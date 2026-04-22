@@ -1,5 +1,6 @@
 # Knowledge Reasoning Language Model: Unifying Knowledge and Language for Inductive Knowledge Graph Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

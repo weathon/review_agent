@@ -1,5 +1,6 @@
 # DockedAC: A Dataset with Comprehensive 3D Protein-ligand Complexes for Activity Cliff Analysis
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

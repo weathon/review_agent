@@ -1,5 +1,6 @@
 # RL-Obfuscation: Can Language Models Learn to Evade Latent-Space Monitors?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

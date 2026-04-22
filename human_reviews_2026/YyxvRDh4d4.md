@@ -1,5 +1,6 @@
 # VQKV: High-Fidelity and High-Ratio Cache Compression via Vector-Quantization
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Learning A Linear Delay Surrogate Model for Timing-Driven Chip Global Placement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

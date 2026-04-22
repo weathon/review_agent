@@ -1,5 +1,6 @@
 # gen2seg: Generative Models Enable Generalizable Instance Segmentation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

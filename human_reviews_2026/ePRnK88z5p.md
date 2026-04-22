@@ -1,5 +1,6 @@
 # Post-training quantization of vision encoders needs prefixing registers
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

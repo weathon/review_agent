@@ -1,5 +1,6 @@
 # Uncover Underlying Correspondence for Robust Multi-view Clustering
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 8
 

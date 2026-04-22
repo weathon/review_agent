@@ -1,5 +1,6 @@
 # Silent Neighbors, Loud Secrets: Privacy Leakage from Nearby Classes in Unlearned Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

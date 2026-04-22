@@ -1,5 +1,6 @@
 # ChildEval: How Large language models meet children’s personalities
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 4
 

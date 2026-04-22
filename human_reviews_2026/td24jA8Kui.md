@@ -1,5 +1,6 @@
 # TraCache: Trajectory-Aware Feature Prediction for Training-Free Diffusion Transformer Acceleration
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

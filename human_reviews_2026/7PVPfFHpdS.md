@@ -1,5 +1,6 @@
 # TraMEL: An Exemplar Replay-Based Continual Learning Framework for Malware Traffic Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # NoisePrints: Distortion-Free Watermarks for Authorship in Private Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

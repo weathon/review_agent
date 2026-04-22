@@ -1,5 +1,6 @@
 # R2-Dreamer: Redundancy-Reduced World Models without Decoders or Augmentation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

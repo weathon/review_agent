@@ -1,5 +1,6 @@
 # Making, Not Taking, the Best of N
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

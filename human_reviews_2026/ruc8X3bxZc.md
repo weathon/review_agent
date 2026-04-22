@@ -1,5 +1,6 @@
 # USDPnet: An Unsupervised Symmetric Deep Framework for Robust Parcellation of Infant Subcortical Nuclei
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

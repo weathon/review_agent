@@ -1,5 +1,6 @@
 # No Labels, No Problem: Training Visual Reasoners with Multimodal Verifiers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

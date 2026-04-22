@@ -1,5 +1,6 @@
 # FailureAtlas: Mapping the Failure Landscape of T2I Models via Active Exploration
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

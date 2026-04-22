@@ -1,5 +1,6 @@
 # Displacement-Resistant Extensions of DPO with Nonconvex $f$-Divergences
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

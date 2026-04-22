@@ -1,5 +1,6 @@
 # Factored Representation for Neuro-Symbolic AI
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 4, 0, 2
 

@@ -1,5 +1,6 @@
 # FactGuard: Detecting Unanswerable Questions in Long-Context Texts for Reliable LLM Responses
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

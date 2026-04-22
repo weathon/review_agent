@@ -1,5 +1,6 @@
 # Support Your Local LMs: Redistributing LM Traffic from Cloud to Edge with TrafficBench
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

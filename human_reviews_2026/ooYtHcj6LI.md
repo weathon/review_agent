@@ -1,5 +1,6 @@
 # EarthMind: Leveraging Cross-Sensor Data for Advanced Earth Observation Interpretation with a Unified Multimodal LLM
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 2
 

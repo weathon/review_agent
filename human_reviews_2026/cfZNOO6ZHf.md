@@ -1,5 +1,6 @@
 # AMDP: Asynchronous Multi-Directional Pipeline Parallelism for Large-Scale Models Training
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

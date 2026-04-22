@@ -1,5 +1,6 @@
 # ScaLoRA: Optimally Scaled Low-Rank Adaptation for Efficient High-Rank Fine-Tuning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 2, 8, 4
 

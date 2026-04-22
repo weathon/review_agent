@@ -1,5 +1,6 @@
 # ViPER: Empowering the Self-Evolution of Visual Perception Abilities in Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Rethinking Parameter Sharing for LLM Fine-Tuning with Multiple LoRAs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

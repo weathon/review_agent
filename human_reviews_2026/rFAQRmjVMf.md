@@ -1,5 +1,6 @@
 # Transfer Entropy as a Measure of Information Flow in LLMs and VLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

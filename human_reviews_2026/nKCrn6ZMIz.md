@@ -1,5 +1,6 @@
 # Benchmarking MLLM-based Web Understanding: Reasoning, Robustness and Safety
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

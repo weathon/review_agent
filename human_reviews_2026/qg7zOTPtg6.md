@@ -1,5 +1,6 @@
 # ASCIIEval: Benchmarking Models' Visual Perception in Text Strings via ASCII Art
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

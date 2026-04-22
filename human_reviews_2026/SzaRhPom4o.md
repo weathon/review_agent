@@ -1,5 +1,6 @@
 # On the Wings of Imagination: Conflicting Script-based Multi-role Framework for Humor Caption Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

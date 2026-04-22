@@ -1,5 +1,6 @@
 # MIGA: Mutual Information-Guided Attack on Denoising Models for Semantic Manipulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

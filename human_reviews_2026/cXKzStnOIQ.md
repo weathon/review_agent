@@ -1,5 +1,6 @@
 # LATTE: Learner-Adaptive Teacher-Forced Reflection for Advancing Deep Search
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4
 

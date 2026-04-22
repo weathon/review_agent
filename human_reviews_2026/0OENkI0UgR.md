@@ -1,5 +1,6 @@
 # PDUNet: Proximal-Guided Deep Unrolling Network for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Can Large Vision-Language Models Refuse Synthetic Images in Geo-localization?
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 0
 

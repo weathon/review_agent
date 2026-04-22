@@ -1,5 +1,6 @@
 # QeRL: Beyond Efficiency - Quantization-enhanced Reinforcement Learning for LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

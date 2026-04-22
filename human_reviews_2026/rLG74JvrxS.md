@@ -1,5 +1,6 @@
 # CausalPlan: Empowering Efficient LLM Multi-Agent Collaboration Through Causality-Driven Planning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

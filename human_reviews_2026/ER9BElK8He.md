@@ -1,5 +1,6 @@
 # HiddenEcho: Mitigating Noise Amplification in Differentially Private LLMs with Hidden-State Correction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

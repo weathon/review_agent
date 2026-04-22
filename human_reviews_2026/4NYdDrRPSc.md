@@ -1,5 +1,6 @@
 # MoWM: Mixture-of-World-Models for Embodied Planning via Latent-to-Pixel Feature Modulation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

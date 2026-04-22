@@ -1,5 +1,6 @@
 # Severing the Link: A Unified Adversarial Attack on Image and Video MLLMs via Generative Disruption
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 6
 

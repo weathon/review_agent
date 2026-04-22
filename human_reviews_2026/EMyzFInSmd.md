@@ -1,5 +1,6 @@
 # DynaIP: Dynamic Image Prompt Adapter for Scalable Zero-shot Personalized Text-to-Image Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

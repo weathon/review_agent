@@ -1,5 +1,6 @@
 # Verifying GNNs with Readout is Intractable
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

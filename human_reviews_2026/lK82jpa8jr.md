@@ -1,5 +1,6 @@
 # HEIST: A Graph Foundation Model for Spatial Transcriptomics and Proteomics Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

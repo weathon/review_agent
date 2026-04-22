@@ -1,5 +1,6 @@
 # From Noisy Traces to Stable Gradients: Bias--Variance Optimized Preference Optimization for Aligning Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

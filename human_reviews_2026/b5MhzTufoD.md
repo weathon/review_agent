@@ -1,5 +1,6 @@
 # Bimodal masked language modeling for bulk RNA-seq and DNA methylation representation learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

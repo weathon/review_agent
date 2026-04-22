@@ -1,5 +1,6 @@
 # Understanding the Role of Training Data in Test-Time Scaling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

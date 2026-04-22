@@ -1,5 +1,6 @@
 # Handling Tabular Data under Coupled Shifts of Feature Missingness and Distributional Change
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

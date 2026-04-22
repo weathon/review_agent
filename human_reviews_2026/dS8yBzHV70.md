@@ -1,5 +1,6 @@
 # Learning to Interrupt in Language-based Multi-agent Communication
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

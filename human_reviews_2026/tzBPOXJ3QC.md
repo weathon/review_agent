@@ -1,5 +1,6 @@
 # Efficient-LVSM: Faster, Cheaper, and Better Large View Synthesis Model via Decoupled Co-Refinement Attention
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

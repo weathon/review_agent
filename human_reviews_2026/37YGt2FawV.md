@@ -1,5 +1,6 @@
 # RRRA: Resampling and Reranking through a Retriever Adapter
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

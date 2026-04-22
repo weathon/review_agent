@@ -1,5 +1,6 @@
 # Where MLLMs Attend and What They Rely On: Explaining Autoregressive Token Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 0
 

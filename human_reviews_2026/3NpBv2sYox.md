@@ -1,5 +1,6 @@
 # Needle: A Generative AI-Powered Multi-modal Database for Answering Complex Natural Language Queries
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 8, 4, 4
 

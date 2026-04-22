@@ -1,5 +1,6 @@
 # Mind the gap: A method for evaluating and comparing regional knowledge in LLMs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

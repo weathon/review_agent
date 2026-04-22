@@ -1,5 +1,6 @@
 # MME-Emotion: A Holistic Evaluation Benchmark for Emotional Intelligence in Multimodal Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

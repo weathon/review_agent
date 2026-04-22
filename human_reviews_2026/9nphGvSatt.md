@@ -1,5 +1,6 @@
 # ELViS: Efficient Visual Similarity from Local Descriptors that Generalizes Across Domains
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # ClimateLLM: Efficient Weather Forecasting via Frequency-Aware Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

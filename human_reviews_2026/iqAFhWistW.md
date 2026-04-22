@@ -1,5 +1,6 @@
 # Easier Painting Than Thinking: Can Text-to-Image Models Set the Stage, but Not Direct the Play?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

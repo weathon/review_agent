@@ -1,5 +1,6 @@
 # Generative 3D Object Particle Dynamics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

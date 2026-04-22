@@ -1,5 +1,6 @@
 # First Things First: Teaching LLM-Based Agents to Prioritize Must-Haves before Nice-to-Haves
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

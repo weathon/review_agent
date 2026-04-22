@@ -1,5 +1,6 @@
 # Same Content, Different Representations: A Controlled Study for Table QA
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

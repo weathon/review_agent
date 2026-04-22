@@ -1,5 +1,6 @@
 # Indistinguishability from Benign Requests Enables Jailbreak Success
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 0
 

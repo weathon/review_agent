@@ -1,5 +1,6 @@
 # MolLangBench: A Comprehensive Benchmark for Language-Prompted Molecular Structure Recognition, Editing, and Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

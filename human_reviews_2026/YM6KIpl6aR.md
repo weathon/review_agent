@@ -1,5 +1,6 @@
 # Fundamental bounds on efficiency-confidence trade-off for transductive conformal prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

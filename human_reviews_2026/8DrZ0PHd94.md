@@ -1,5 +1,6 @@
 # Mixture-of-Channels: Exploiting Sparse FFNs for Efficient LLMs Pre-Training and Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

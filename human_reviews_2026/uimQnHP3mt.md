@@ -1,5 +1,6 @@
 # SegDAC: Improving Visual Reinforcement Learning by Extracting Dynamic Objectc-Centric Representations from Pretrained Vision Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Learning Exposure Mapping Functions for Inferring Heterogeneous Peer Effects
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

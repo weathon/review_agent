@@ -1,5 +1,6 @@
 # Hierarchical Feedback Interface for Human-in-the-Loop Reinforcement Learning in Debugging
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 0, 2, 2
 

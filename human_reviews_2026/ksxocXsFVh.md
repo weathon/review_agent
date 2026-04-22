@@ -1,5 +1,6 @@
 # Context Tuning for In-Context Optimization
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0
 

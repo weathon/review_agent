@@ -1,5 +1,6 @@
 # FETAL-GAUGE: A BENCHMARK FOR ASSESSING VISION-LANGUAGE MODELS IN FETAL ULTRASOUND
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

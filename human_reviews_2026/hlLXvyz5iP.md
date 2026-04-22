@@ -1,5 +1,6 @@
 # Reasoning-Aligned Perception Decoupling for Scalable Multi-modal Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 2
 

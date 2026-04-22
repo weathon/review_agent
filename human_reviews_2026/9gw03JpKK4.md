@@ -1,5 +1,6 @@
 # Gaia2: Benchmarking LLM Agents on Dynamic and  Asynchronous Environments
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 10, 6, 8
 

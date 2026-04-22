@@ -1,5 +1,6 @@
 # Trajectory Graph Copilot: Pre-Action Error Diagnosis in LLM Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

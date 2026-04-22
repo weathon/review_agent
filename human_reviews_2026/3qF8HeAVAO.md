@@ -1,5 +1,6 @@
 # CLAP: Unsupervised 3D Representation Learning for Fusion 3D Perception via Curvature Sampling and Prototype Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

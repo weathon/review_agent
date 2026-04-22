@@ -1,5 +1,6 @@
 # Ra-NEM: Faithful model explanations through stochastic feature selection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

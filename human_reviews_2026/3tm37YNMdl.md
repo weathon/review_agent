@@ -1,5 +1,6 @@
 # CUMath: A Benchmark and Evaluation Framework for LLMs on Mathematical Reasoning in Undergraduate Computational Math
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

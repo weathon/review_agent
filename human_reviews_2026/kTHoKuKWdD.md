@@ -1,5 +1,6 @@
 # OptAgent: Optimizing Query Rewriting for E-commerce via Multi-Agent Simulation
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4, 4
 

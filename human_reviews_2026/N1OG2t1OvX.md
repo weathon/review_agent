@@ -1,5 +1,6 @@
 # Semi-3DETR: Semi-Supervised Detection Transformer for 3D Object Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

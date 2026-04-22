@@ -1,5 +1,6 @@
 # Unbiased Object Detection Beyond Frequency with Visually Prompted Image Synthesis
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

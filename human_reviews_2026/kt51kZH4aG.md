@@ -1,5 +1,6 @@
 # X-VLA: Soft-Prompted Transformer as Scalable Cross-Embodiment Vision-Language-Action Model
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

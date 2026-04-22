@@ -1,5 +1,6 @@
 # GapONet: Nonlinear Operator Learning for Bridging the Humanoid Sim-to-Real Gap
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

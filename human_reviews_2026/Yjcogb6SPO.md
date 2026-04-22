@@ -1,5 +1,6 @@
 # No One Size Fits All: QueryBandits for Hallucination Mitigation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

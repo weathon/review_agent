@@ -1,5 +1,6 @@
 # Pharmacophore-Conditioned Diffusion Model for Ligand-Based De Novo Drug Design
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

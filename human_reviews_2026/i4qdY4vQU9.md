@@ -1,5 +1,6 @@
 # PROPGCL: Unleashing the Power of Propagation in Graph Contrastive Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

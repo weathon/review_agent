@@ -1,5 +1,6 @@
 # Two step diffusion:  fast sampling and reliable prediction of 3D Keller-Segel chemotaxis systems in fluid flows
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

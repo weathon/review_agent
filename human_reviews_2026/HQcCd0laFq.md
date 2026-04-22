@@ -1,5 +1,6 @@
 # Exchangeability of GNN Representations  with Applications to Graph Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 4, 6
 

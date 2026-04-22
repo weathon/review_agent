@@ -1,5 +1,6 @@
 # ESI: Epistemic Uncertainty Quantification via Semantic-preserving Intervention for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

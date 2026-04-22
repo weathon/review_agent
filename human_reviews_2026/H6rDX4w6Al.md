@@ -1,5 +1,6 @@
 # FlashVID: Efficient Video Large Language Models via Training-free Tree-based Spatiotemporal Token Merging
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 4, 8, 6
 

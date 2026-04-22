@@ -1,5 +1,6 @@
 # Composer: A Search Framework for Hybrid Neural Architecture Design
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6, 6
 

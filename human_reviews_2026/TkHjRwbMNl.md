@@ -1,5 +1,6 @@
 # Trion: FFT-based Dynamic Subspace Selection for Low-Rank Adaptive Optimization of LLMs
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # MINT: Minimal Information Neuro-Symbolic Tree for Objective-Driven Knowledge-Gap Reasoning and Active Human Elicitation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

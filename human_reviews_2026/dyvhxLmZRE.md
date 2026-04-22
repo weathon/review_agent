@@ -1,5 +1,6 @@
 # UKAT: Uncertainty-aware Kernel Association Test
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

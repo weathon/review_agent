@@ -1,5 +1,6 @@
 # From Shortcuts to Reasoning: Robust Post-Training of Theory of Mind with Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

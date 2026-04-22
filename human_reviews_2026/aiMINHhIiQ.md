@@ -1,5 +1,6 @@
 # Flexible Feature Distillation for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 0, 4, 2
 

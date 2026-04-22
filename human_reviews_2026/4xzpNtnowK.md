@@ -1,5 +1,6 @@
 # Sketched Gaussian Mechanism on Matrix for Private Federated LoRA
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

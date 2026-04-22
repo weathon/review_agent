@@ -1,5 +1,6 @@
 # Reasoning Against Alignment: When Logical Consistency Overrides Ethical Safeguards in LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

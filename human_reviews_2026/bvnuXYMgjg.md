@@ -1,5 +1,6 @@
 # Unintended Harmful Knowledge Elicitation Issue in Large Reasoning Models and a RL Solution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Spatial Sign based Direct Sparse Linear Discriminant Analysis for High Dimensional Data
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

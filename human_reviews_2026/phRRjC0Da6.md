@@ -1,5 +1,6 @@
 # Bayesian Primitive Distributing for Compositional Zero-shot Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 6, 10, 4
 

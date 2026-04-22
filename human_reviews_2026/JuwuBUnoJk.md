@@ -1,5 +1,6 @@
 # SABER: Small Actions, Big Errors — Safeguarding Mutating Steps in LLM Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

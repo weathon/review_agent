@@ -1,5 +1,6 @@
 # QuantV2X: A Fully Quantized Multi-Agent System for Cooperative Perception
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

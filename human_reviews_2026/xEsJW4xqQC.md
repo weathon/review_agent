@@ -1,5 +1,6 @@
 # FlatLand: Personalized Graph Federated Learning via Tailored Lorentz Space
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

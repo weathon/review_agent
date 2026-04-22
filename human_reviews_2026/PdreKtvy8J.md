@@ -1,5 +1,6 @@
 # WebPlanner: Task Planning with Autonomous Experience Exploration and Utilization for Real World Multimodal Web Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

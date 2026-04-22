@@ -1,5 +1,6 @@
 # Small Models, Smarter Learning: The Power of Joint Task Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Analysis of approximate linear programming solution to Markov decision problem with log barrier function
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

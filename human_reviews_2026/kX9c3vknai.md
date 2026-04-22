@@ -1,5 +1,6 @@
 # Diffusion-based Behavior Cloning in Multi-Agent Games via Dynamic Guidance
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

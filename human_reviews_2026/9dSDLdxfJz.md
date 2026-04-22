@@ -1,5 +1,6 @@
 # Combinational Backdoor Attack against Customized Text-to-Image Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

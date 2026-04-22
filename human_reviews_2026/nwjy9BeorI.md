@@ -1,5 +1,6 @@
 # EgoHandICL: Egocentric 3D Hand Reconstruction with In-Context Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

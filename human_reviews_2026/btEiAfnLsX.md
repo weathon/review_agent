@@ -1,5 +1,6 @@
 # Why DPO is a Misspecified Estimator and How to Fix It
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6
 

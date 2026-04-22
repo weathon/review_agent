@@ -1,5 +1,6 @@
 # DeepResearchGym: A Free, Transparent, and Reproducible Evaluation Sandbox for Deep Research
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

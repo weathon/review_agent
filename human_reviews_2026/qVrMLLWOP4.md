@@ -1,5 +1,6 @@
 # Un-Doubling Diffusion: LLM-guided Disambiguation of Homonym Duplication
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

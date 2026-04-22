@@ -1,5 +1,6 @@
 # SenseFlow: A Physics-Informed and Self-Ensembling Iterative Framework for Power Flow Estimation
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4, 2
 

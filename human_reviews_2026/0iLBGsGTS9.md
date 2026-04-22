@@ -1,5 +1,6 @@
 # HSelKD: Selective Knowledge Distillation for Hypergraphs using Optimal Transport
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

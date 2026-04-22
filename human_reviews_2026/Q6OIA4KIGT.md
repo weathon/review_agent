@@ -1,5 +1,6 @@
 # When Can you TRUST Large Language Models?
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4, 2, 2
 

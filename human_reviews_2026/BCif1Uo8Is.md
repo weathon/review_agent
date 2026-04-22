@@ -1,5 +1,6 @@
 # Exploring weightless neural networks: From logic gates to convolutional lookup tables
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

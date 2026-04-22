@@ -1,5 +1,6 @@
 # Go with Your Gut: Scaling Confidence for Autoregressive Image Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

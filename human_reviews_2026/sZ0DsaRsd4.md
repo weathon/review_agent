@@ -1,5 +1,6 @@
 # CogFlow: Bridging Perception and Reasoning through Knowledge Internalization for Visual Mathematical Problem Solving
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

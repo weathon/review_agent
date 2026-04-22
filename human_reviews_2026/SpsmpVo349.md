@@ -1,5 +1,6 @@
 # Samples Are Not Equal: A Sample Selection Approach for Deep Clustering
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

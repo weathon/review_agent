@@ -1,5 +1,6 @@
 # Reasoning-Intensive Regression
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 2, 2, 4, 4, 4, 6
 

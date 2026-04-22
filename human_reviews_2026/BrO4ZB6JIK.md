@@ -1,5 +1,6 @@
 # Spatial-Spectral Binarized Neural Network for Panchromatic and Multi-spectral Images Fusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # REI-Bench: Can Embodied Agents Understand Vague Human Instructions in Task Planning?
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # An Afrocentric Perspective on Algorithm Watermarking of AI-generated Content
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 0, 2, 0
 

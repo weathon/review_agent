@@ -1,5 +1,6 @@
 # VoiceBridge: Designing Latent Bridge Models for General Speech Restoration at Scale
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

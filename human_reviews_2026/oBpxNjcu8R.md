@@ -1,5 +1,6 @@
 # CSO: Refining Robotic Policies via Skill Distribution Alignment and Skill-Grained Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 0, 6, 4
 

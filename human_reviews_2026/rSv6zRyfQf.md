@@ -1,5 +1,6 @@
 # Learning to Interact in World Latent for Team Coordination
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

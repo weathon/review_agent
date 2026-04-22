@@ -1,5 +1,6 @@
 # Learning the energy relaxation manifold from unrelaxed structures with RelaxNet
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

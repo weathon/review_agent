@@ -1,5 +1,6 @@
 # Leveraging Instruction Language Model to Generate Vectorized RISC-V Tensor Programs
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 4, 0
 

@@ -1,5 +1,6 @@
 # Compositional Generalization through Gradient Search in Nonparametric Latent Space
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 4, 8
 

@@ -1,5 +1,6 @@
 # Shared Recurrent Memory Transformer for Multi-agent Lifelong Pathfinding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

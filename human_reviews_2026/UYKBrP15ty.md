@@ -1,5 +1,6 @@
 # Variance-Reduced Reinforcement Learning for Large Reasoning Models via James-Stein Baselines
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 4, 6
 

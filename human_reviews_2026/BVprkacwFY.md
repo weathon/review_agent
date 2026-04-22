@@ -1,5 +1,6 @@
 # FrontierCO: Real-World and Large-Scale Evaluation of Machine Learning Solvers for Combinatorial Optimization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Metanetworks as Regulatory Operators: Learning to Edit for Requirement Compliance
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

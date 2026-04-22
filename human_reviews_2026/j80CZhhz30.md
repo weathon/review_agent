@@ -1,5 +1,6 @@
 # Towards Compact and Certified Robust DNNs Against Semantic Perturbations
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0, 2
 

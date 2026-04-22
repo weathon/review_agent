@@ -1,5 +1,6 @@
 # To Compress or Not? Pushing the Frontier of Lossless GenAI Model Weights Compression with Exponent Concentration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

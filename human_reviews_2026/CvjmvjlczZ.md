@@ -1,5 +1,6 @@
 # DynamicInfer: Runtime-Aware Sparse Offloading for LLMs Inference on a Consumer-Grade GPU
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

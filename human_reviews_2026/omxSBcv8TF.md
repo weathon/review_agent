@@ -1,5 +1,6 @@
 # Teaching Language Model to Act Efficiently
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 
@@ -160,18 +161,23 @@ This paper introduces Optimized Tool Call-controlled Policy Optimization (OTC-PO
 
 - A follow-up to Search-R1 [1] demonstrates that incorporating a format reward can substantially improve performance, particularly when training from base LLMs. For example, using Qwen2.5-3B-Base, Search-R1 with a format reward reaches **0.428** (NQ) and **0.371** (HotpotQA) under PPO, and **0.429** (NQ) and **0.372** (HotpotQA) under GRPO. With Qwen2.5-7B-Base, the PPO variant attains **0.488** (NQ) and **0.436** (HotpotQA), while the GRPO variant achieves **0.458** (NQ) and **0.412** (HotpotQA); refer to Table 1 in [1]. These results are competitive with, and in some settings exceed, the performance of OTC-PO variants. A more extensive comparison against such methods would better contextualize the contribution.
 
-- The paper reports single-run results and notes that hyper-parameters are reused from Search-R1. However, LLMs are known to exhibit high run-to-run variance, and sampling parameters can significantly influence outcomes. Without repeated trials and confidence intervals, it is difficult to assess the stability and practical significance of the reported improvements.   
+- The paper reports single-run results and notes that hyper-parameters are reused from Search-R1. However, LLMs are known to exhibit high run-to-run variance, and sampling parameters can significantly influence outcomes. Without repeated trials and confidence intervals, it is difficult to assess the stability and practical significance of the reported improvements.
+
+
+
 
 ---
 
 References
 
- [1] Jin et al., An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents
+
+[1] Jin et al., An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents
 
 ### Questions
 1. Could the authors clarify the sampling parameters used during inference for all reported experiments? Such details are important for reproducibility and for understanding potential performance sensitivity to decoding settings.
 
-2. Minor typos.  Line 106: “Only few of studies” should be revised to “Only a few studies.” Line 157: “generate outputs consists” should be revised to “the generated output, consisting.”
+2. Minor typos. 
+Line 106: “Only few of studies” should be revised to “Only a few studies.” Line 157: “generate outputs consists” should be revised to “the generated output, consisting.”
 
 ### Soundness
 3

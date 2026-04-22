@@ -1,5 +1,6 @@
 # Dynamic Multi-sample Mixup with Gradient Exploration for Open-set Graph Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

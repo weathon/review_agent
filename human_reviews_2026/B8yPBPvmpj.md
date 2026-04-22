@@ -1,5 +1,6 @@
 # An Axiomatic Framework for N-Agent Ad Hoc Teamwork: From Shapley Axioms to Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 
@@ -84,7 +85,8 @@ This paper introduces an **axiomatic framework for N-Agent Ad Hoc Teamwork (NAHT
 2. Despite extensive proofs, many theoretical results merely reinterpret Shapley axioms to constrain the learning structure, without introducing fundamentally new optimization principles specific to NAHT. The proposed methods do not explicitly address the defining challenges of NAHT, such as teammate uncertainty, heterogeneity, adaptive coordination and so on. Thus limiting the framework’s task-specific effectiveness.
 
 ### Questions
-**Q1.** How does the proposed axiomatic framework ensure robustness when agents operate in highly uncertain or partially observable environments? Since the axioms (Efficiency, Symmetry, Linearity) are defined under idealized cooperative settings, it remains unclear how the framework maintains stable performance when the underlying dynamics or teammate behaviors are stochastic or adversarial.
+**Q1.** How does the proposed axiomatic framework ensure robustness when agents operate in highly uncertain or partially observable environments?
+Since the axioms (Efficiency, Symmetry, Linearity) are defined under idealized cooperative settings, it remains unclear how the framework maintains stable performance when the underlying dynamics or teammate behaviors are stochastic or adversarial.
 
 **Q2.** Could the authors provide a more intuitive interpretation of how the proposed axiomatic structure concretely addresses the specific challenges of NAHT? A higher-level conceptual or visual explanation could help clarify why enforcing Shapley-inspired constraints improves the perfoemance specific in NAHT setting, rather than a generic framework suitable for both AHT and MARL.
 

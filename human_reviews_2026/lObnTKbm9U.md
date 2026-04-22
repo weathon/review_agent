@@ -1,5 +1,6 @@
 # FlowRL: Matching Reward Distributions for LLM Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

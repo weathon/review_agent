@@ -1,5 +1,6 @@
 # FleetAgent: Natural Language Driving Explanation and Evaluation for Vehicle Teleoperation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

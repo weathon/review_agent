@@ -1,5 +1,6 @@
 # OS-MAP: How Far Can Computer-Using Agents Go in Breadth and Depth?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 10, 4, 4
 

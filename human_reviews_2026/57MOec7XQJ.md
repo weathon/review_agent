@@ -1,5 +1,6 @@
 # Picky LLMs and Unreliable RMs: An Empirical Study on Safety Alignment after Instruction Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

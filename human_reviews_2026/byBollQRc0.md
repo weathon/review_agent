@@ -1,5 +1,6 @@
 # From Kakeya to Kernels: A Multi-Scale Geometric Framework for Robust Representation Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 
@@ -188,10 +189,14 @@ With additional context connecting the theory to existing notions of smoothness 
 * Interesting bridge between mathematics and deep learning: The Kakeya-inspired formulation connects a deep geometric concept to neural network analysis in a way that feels fresh and principled.
 
 ### Weaknesses
-* Unclear motivation for Lipschitz-ness: The paper emphasizes the link between stickiness and the Lipschitz constant but does not sufficiently explain why Lipschitz-ness is a desirable property in this context. Is it intended as a proxy for robustness, stability, or generalization? A short discussion of its conceptual or practical significance would strengthen the narrative.
-* Lack of connection to prior work: It is unclear whether there are existing approaches relating network representations to Lipschitz continuity (e.g., via Jacobian norms, spectral bounds, or curvature regularization). Providing a short literature comparison would help contextualize the contribution.
-* Missing empirical or computational illustration: While the paper is primarily theoretical, it would be valuable to include at least a small toy example (e.g., a simple MLP or 2D dataset) demonstrating how stickiness can be estimated and how it scales with network smoothness or architecture.
-* Complexity considerations: A discussion of the computational cost of estimating stickiness—either analytically or numerically—would improve the paper’s practical relevance.
+* Unclear motivation for Lipschitz-ness:
+The paper emphasizes the link between stickiness and the Lipschitz constant but does not sufficiently explain why Lipschitz-ness is a desirable property in this context. Is it intended as a proxy for robustness, stability, or generalization? A short discussion of its conceptual or practical significance would strengthen the narrative.
+* Lack of connection to prior work:
+It is unclear whether there are existing approaches relating network representations to Lipschitz continuity (e.g., via Jacobian norms, spectral bounds, or curvature regularization). Providing a short literature comparison would help contextualize the contribution.
+* Missing empirical or computational illustration:
+While the paper is primarily theoretical, it would be valuable to include at least a small toy example (e.g., a simple MLP or 2D dataset) demonstrating how stickiness can be estimated and how it scales with network smoothness or architecture.
+* Complexity considerations:
+A discussion of the computational cost of estimating stickiness—either analytically or numerically—would improve the paper’s practical relevance.
 
 ### Questions
 1. What makes Lipschitz continuity a particularly meaningful or desirable property in the context of representation learning?

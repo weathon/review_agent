@@ -1,5 +1,6 @@
 # Phantom-Data:  Towards a General Subject-Consistent Video Generation Dataset
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 10, 6, 4, 4
 

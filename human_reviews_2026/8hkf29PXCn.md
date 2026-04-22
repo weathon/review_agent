@@ -1,5 +1,6 @@
 # Training LLMs for EHR-Based Reasoning Tasks via Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

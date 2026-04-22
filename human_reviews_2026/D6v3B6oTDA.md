@@ -1,5 +1,6 @@
 # Video-STR: Reinforcing MLLMs in Video Spatio-Temporal Reasoning with Relation Graph
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

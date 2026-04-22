@@ -1,5 +1,6 @@
 # Enhancing Adversarial Transferability in Vision-Language Models via Search-Space Expansion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

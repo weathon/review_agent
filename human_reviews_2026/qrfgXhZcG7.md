@@ -1,5 +1,6 @@
 # ARCS: Agentic Retrieval-Augmented Code Synthesis with Iterative Refinement
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 0, 2
 

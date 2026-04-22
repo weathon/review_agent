@@ -1,5 +1,6 @@
 # HistoPrism: Unlocking Functional Pathway Analysis from Pan-Cancer Histology via Gene Expression Prediction
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 2
 

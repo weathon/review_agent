@@ -1,5 +1,6 @@
 # Sample Size Estimation for Chest X-ray Classification with Foundation Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 6, 2, 0
 

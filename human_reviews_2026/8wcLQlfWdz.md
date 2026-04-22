@@ -1,5 +1,6 @@
 # UniCoD: Enhancing Robot Policy via Unified Continuous and Discrete Representation Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 2, 8, 8
 

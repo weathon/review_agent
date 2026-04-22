@@ -1,5 +1,6 @@
 # TableDART: Dynamic Adaptive Multi-Modal Routing for Table Understanding
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 4, 8
 

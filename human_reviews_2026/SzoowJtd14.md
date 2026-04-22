@@ -1,5 +1,6 @@
 # Faster Vision Transformers with Adaptive Patches
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

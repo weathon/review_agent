@@ -1,5 +1,6 @@
 # H+: An Efficient Similarity-Aware Aggregation for Byzantine Resilient Federated Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # When Students Surpass Teachers: Hypergraph-Aware Knowledge Distillation with Spectral Guarantees
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 0, 4, 2, 4
 

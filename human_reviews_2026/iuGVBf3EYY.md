@@ -1,5 +1,6 @@
 # S$^2$-ETC: Semantic-Structure Aware Encrypted Traffic Classification via Hyper-Bipartite Graph
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

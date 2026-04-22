@@ -1,5 +1,6 @@
 # Forge: Foundational Optimization Representations from Graph Embeddings
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

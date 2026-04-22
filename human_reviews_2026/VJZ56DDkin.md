@@ -1,5 +1,6 @@
 # SKARL: Provably Scalable Kernel Mean Field Reinforcement Learning for Variable-Size Multi-Agent Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # CATMark: A Context-Aware Thresholding Framework for Robust Cross-Task Watermarking in Large Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

@@ -1,5 +1,6 @@
 # On the Role of Temperature Sampling in Test-Time Scaling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

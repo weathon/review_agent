@@ -1,5 +1,6 @@
 # Discovering Quality-Diversity Algorithms via Meta-Black-Box Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

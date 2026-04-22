@@ -1,5 +1,6 @@
 # MBMamba: When Memory Buffer Meets Mamba for Structure-Aware Image Deblurring
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

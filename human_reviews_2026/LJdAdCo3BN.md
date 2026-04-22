@@ -1,5 +1,6 @@
 # Implicit Bias of Per-sample Adam on Separable Data: Departure from the Full-batch Regime
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

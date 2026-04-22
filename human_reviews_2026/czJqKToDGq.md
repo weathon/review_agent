@@ -1,5 +1,6 @@
 # Gauge-invariant representation holonomy
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 
@@ -77,12 +78,18 @@ The concept is theoretically intriguing and potentially valuable for studying th
 * Potential significance: In principle, this idea could offer new insights for feature-space curvature and robustness that go beyond CKA and related similarity measures.
 
 ### Weaknesses
-* Incomplete and inconclusive experiments: The reported results (e.g., Figs. 2–3) show overlapping confidence intervals, and several key correlations (Table 2) are weak or include zero within the 95% CI. Without stronger or broader evidence, the empirical support for holonomy as a meaningful metric remains limited.
-* Missing comparisons to existing metrics: Although the paper discusses CKA and CCA extensively, it never provides side-by-side empirical comparisons. Such baselines are crucial to demonstrate what new insights holonomy provides.
-* Lack of sensitivity analysis: The estimator relies on multiple hyperparameters (e.g., k). The paper should quantify how results depend on these choices to establish robustness.
-* Unclear connection to task relevance: Theoretical results (e.g., Eq. 4) include several interacting error terms, but it remains unclear how holonomy relates in a concrete or predictive way to model performance or generalization.
-* Poor illustration of geometric intuition: Given the geometric nature of the work, schematic or pictorial figures showing loops, transports, or curvature effects are essential. The heavy formalism and lack of visual explanation make the paper difficult to follow.
-* Presentation density: The writing style is more reminiscent of a mathematical physics paper than a machine-learning paper, which may alienate part of the ICLR audience.
+* Incomplete and inconclusive experiments:
+The reported results (e.g., Figs. 2–3) show overlapping confidence intervals, and several key correlations (Table 2) are weak or include zero within the 95% CI. Without stronger or broader evidence, the empirical support for holonomy as a meaningful metric remains limited.
+* Missing comparisons to existing metrics:
+Although the paper discusses CKA and CCA extensively, it never provides side-by-side empirical comparisons. Such baselines are crucial to demonstrate what new insights holonomy provides.
+* Lack of sensitivity analysis:
+The estimator relies on multiple hyperparameters (e.g., k). The paper should quantify how results depend on these choices to establish robustness.
+* Unclear connection to task relevance:
+Theoretical results (e.g., Eq. 4) include several interacting error terms, but it remains unclear how holonomy relates in a concrete or predictive way to model performance or generalization.
+* Poor illustration of geometric intuition:
+Given the geometric nature of the work, schematic or pictorial figures showing loops, transports, or curvature effects are essential. The heavy formalism and lack of visual explanation make the paper difficult to follow.
+* Presentation density:
+The writing style is more reminiscent of a mathematical physics paper than a machine-learning paper, which may alienate part of the ICLR audience.
 
 ### Questions
 1. How sensitive are the results to hyperparameter choices such as k?

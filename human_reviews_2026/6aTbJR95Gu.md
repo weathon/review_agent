@@ -1,5 +1,6 @@
 # Parameter-Free Variance Reduced Zeroth-Order Optimization for Non-Convex Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Dive into the Agent Matrix: A Realistic Evaluation of Self‑Replication Risk in LLM Agents
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

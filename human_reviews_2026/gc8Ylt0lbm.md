@@ -1,5 +1,6 @@
 # DynaGuard: A Dynamic Guardian Model With User-Defined Policies
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Provably Efficient Learning Algorithms for Noisy Quantum State and Process Tomography
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 2
 

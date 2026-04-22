@@ -1,5 +1,6 @@
 # Little By Little: Continual Learning via Self-Activated Sparse Mixture-of-Rank Adaptive Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

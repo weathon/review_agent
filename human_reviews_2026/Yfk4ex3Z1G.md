@@ -1,5 +1,6 @@
 # Noise-Adaptive Diffusion Sampling for Inverse Problems Without Task-Specific Tuning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 8
 

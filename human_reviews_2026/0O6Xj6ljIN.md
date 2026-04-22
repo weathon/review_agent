@@ -1,5 +1,6 @@
 # Revisiting Hallucination Detection Through The Lens Of Effective Rank-based Uncertainty
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 6, 6
 

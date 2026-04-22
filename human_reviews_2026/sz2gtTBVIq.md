@@ -1,5 +1,6 @@
 # TrustGen: Benchmarking Trustworthiness in Generative Models for Russian Language Processing Tasks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

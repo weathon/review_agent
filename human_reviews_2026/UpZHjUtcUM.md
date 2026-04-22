@@ -1,5 +1,6 @@
 # Erase to Improve: Erasable Reinforcement Learning for Search-Augmented LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

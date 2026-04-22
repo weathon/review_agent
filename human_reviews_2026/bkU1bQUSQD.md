@@ -1,5 +1,6 @@
 # VeriReason: Reinforcement Learning with Testbench Feedback for Reasoning-Enhanced Verilog Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

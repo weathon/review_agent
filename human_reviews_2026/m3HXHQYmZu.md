@@ -1,5 +1,6 @@
 # ProxyAttn: Guided Sparse Attention via Representative Heads
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

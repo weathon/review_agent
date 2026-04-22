@@ -1,5 +1,6 @@
 # When Alignment Hurts: Decoupling Representational Spaces in Multilingual Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

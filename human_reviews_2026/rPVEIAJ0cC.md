@@ -1,5 +1,6 @@
 # The Principle of Isomorphism: A Theory of Population Activity in Grid Cells and Beyond
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

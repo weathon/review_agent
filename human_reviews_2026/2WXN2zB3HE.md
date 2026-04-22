@@ -1,5 +1,6 @@
 # LLM Reasoning for Machine Translation: Synthetic Data Generation over Thinking Tokens
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

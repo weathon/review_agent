@@ -1,5 +1,6 @@
 # High-Probability Bounds for the Last Iterate of Clipped SGD
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 2
 

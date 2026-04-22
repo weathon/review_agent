@@ -1,5 +1,6 @@
 # Analyzing the Role of Spinal Joint Dynamics in the Movement of a Sprawling Robot
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

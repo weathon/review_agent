@@ -1,5 +1,6 @@
 # LLM2Fx-Tools: Tool Calling for Music Post-Production
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

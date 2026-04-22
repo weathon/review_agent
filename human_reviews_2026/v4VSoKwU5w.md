@@ -1,5 +1,6 @@
 # LinguaMate: Language‑Guided Metamaterial Discovery via Symbolic-Driven Latent Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

@@ -1,5 +1,6 @@
 # SynthWorlds: Controlled Parallel Worlds for Disentangling Reasoning and Knowledge in Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

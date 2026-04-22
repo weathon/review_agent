@@ -1,5 +1,6 @@
 # Mitigating Modality and Language-Style Gaps for Zero-Shot Video Moment Retrieval
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

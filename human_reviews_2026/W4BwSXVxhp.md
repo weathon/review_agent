@@ -1,5 +1,6 @@
 # LinAJD: Scalable Gradient-Free Jailbreak Defense via Linearly Separable Embeddings
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

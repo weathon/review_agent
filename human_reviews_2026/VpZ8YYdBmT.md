@@ -1,5 +1,6 @@
 # Improving Block-Wise LLM Quantization by 4-bit Block-Wise Optimal Float (BOF4): Analysis and Variations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

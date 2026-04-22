@@ -1,5 +1,6 @@
 # A Bi-metric Framework for Efficient Nearest Neighbor Search
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 2, 4, 4, 8, 8
 

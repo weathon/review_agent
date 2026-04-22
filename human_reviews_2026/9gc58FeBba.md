@@ -1,5 +1,6 @@
 # Provenance-Enabled Multi-View Diabetic Retinopathy Diagnosis Through Interpretable Process Mining
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 8, 6
 

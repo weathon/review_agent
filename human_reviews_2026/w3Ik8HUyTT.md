@@ -1,5 +1,6 @@
 # ViPRA: Video Prediction for Robot Actions
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 6
 

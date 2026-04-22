@@ -1,5 +1,6 @@
 # Ransomware Detection on Android: Performance and Energy
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

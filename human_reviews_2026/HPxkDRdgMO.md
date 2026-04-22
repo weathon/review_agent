@@ -1,5 +1,6 @@
 # Attention Calibration for Reducing Hallucination in Large Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

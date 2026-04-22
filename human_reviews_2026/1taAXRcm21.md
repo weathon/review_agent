@@ -1,5 +1,6 @@
 # A Unification of Discrete, Gaussian, and Simplicial Diffusion
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

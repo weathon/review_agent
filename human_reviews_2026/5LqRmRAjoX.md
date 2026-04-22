@@ -1,5 +1,6 @@
 # Progressive Vision-Language Alignment via LLM-based Embedder
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

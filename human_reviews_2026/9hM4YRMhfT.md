@@ -1,5 +1,6 @@
 # GUI-Shepherd: Reliable Process Reward and Verification for Long-Sequence GUI Tasks
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

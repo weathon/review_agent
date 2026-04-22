@@ -1,5 +1,6 @@
 # Multimodal Aligned Semantic Knowledge for Unpaired Image-text Matching
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8
 

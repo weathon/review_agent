@@ -1,5 +1,6 @@
 # Better Learning-Augmented Spanning Tree Algorithms via Metric Forest Completion
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 4
 

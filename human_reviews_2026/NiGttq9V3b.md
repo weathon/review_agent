@@ -1,5 +1,6 @@
 # UniISP: A Unified ISP Framework for Both Human and Machine Vision
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

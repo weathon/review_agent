@@ -1,5 +1,6 @@
 # Accurate RNA 3D Structure Prediction via Language Model-Augmented AlphaFold 3
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 6, 4
 

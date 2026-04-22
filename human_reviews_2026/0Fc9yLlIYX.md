@@ -1,5 +1,6 @@
 # Lost in Time: Systematic Temporal Bias in Large Audio Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

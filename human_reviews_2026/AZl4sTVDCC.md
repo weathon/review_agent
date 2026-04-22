@@ -1,5 +1,6 @@
 # Query-aware Hub Prototype Learning for Few-Shot 3D Point Cloud Semantic Segmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

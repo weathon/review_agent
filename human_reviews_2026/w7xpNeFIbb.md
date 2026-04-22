@@ -1,5 +1,6 @@
 # A Diffusion-based Foundation Model for Irregular Spatio-Temporal Trajectories
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

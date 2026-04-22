@@ -1,5 +1,6 @@
 # Deep Global-sense Hard-negative Discriminative Generation Hashing for Cross-modal Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

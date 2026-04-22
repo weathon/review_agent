@@ -1,5 +1,6 @@
 # Influence without Confounding: Causal Discovery from Temporal Data with Long-term Carry-over Effects
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

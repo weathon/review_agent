@@ -1,5 +1,6 @@
 # A Statistical Theory of Overfitting for Imbalanced Classification
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

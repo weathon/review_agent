@@ -1,5 +1,6 @@
 # TARE: Lightweight Token-Aware Representation Editing for Fine-tuning Transformer
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

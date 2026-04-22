@@ -1,5 +1,6 @@
 # Don't Run with Scissors: Pruning Breaks VLA Models but They Can Be Recovered
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 6, 4, 2
 

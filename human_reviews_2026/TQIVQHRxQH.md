@@ -1,5 +1,6 @@
 # Ghost in Topological Neural Flux Prediction: Boundary Conditions Matter
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

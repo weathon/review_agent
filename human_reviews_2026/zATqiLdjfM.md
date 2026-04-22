@@ -1,5 +1,6 @@
 # MARVEL: Multi-Agent RTL Vulnerability Extraction using Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

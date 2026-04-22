@@ -1,5 +1,6 @@
 # The Open Proof Corpus: A Large-Scale Study of LLM-Generated Mathematical Proofs
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

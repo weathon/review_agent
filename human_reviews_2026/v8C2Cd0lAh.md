@@ -1,5 +1,6 @@
 # Hallucination-aware Intermediate Representation Edit in Large Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # One-Step Flow for Image Super-Resolution with Tunable Fidelity-Realism Trade-offs
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # On Optimal Hyperparameters for Differentially Private Deep Transfer Learning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 2
 

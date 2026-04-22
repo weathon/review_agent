@@ -1,5 +1,6 @@
 # MoL: Adaptive Mixture-of-Length Reasoning for Efficient Question Answering with Context
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 2
 

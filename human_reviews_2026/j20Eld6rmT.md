@@ -1,5 +1,6 @@
 # IndexNet: Timestamp and Variable-Aware Modeling for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

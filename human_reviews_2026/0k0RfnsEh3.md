@@ -1,5 +1,6 @@
 # PointLAM: Local Attentive Mamba for Efficient Point-based 3D Object Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Zero4D: Training-Free 4D Video Generation From Single Video Using Off-the-Shelf Video Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

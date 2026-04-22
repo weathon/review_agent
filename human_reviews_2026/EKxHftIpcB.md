@@ -1,5 +1,6 @@
 # Reasoning to Edit: Hypothetical Instruction-Based Image Editing with Visual Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Adversarial Déjà Vu: Jailbreak Dictionary Learning for Stronger Generalization to Unseen Attacks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

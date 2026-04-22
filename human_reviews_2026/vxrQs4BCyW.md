@@ -1,5 +1,6 @@
 # LiDAR-Anchored Collaborative Distillation for Robust 2D Representations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

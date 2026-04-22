@@ -1,5 +1,6 @@
 # GeneLLM: Inheriting 1.25% of MoE-LLMs to Build Models of 8% Size that Retain 80% Performance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

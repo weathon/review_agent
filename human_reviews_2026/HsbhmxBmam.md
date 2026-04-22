@@ -1,5 +1,6 @@
 # RFG: Test-Time Scaling for Diffusion Large Language Model Reasoning with Reward-Free Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

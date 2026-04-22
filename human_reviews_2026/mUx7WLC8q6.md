@@ -1,5 +1,6 @@
 # DAMR: Efficient and Adaptive Context-Aware Knowledge Graph Question Answering with LLM-Guided MCTS
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

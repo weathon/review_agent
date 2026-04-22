@@ -1,5 +1,6 @@
 # Restore3D: Breathing Life into Broken Objects with Shape and Texture Restoration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

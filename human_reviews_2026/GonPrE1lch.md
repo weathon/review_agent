@@ -1,5 +1,6 @@
 # MeshWeaver: Sparse-Voxel-Guided Surface Weaving for Autoregressive Mesh Generation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

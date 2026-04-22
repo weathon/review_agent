@@ -1,5 +1,6 @@
 # CausNVS: Autoregressive Multi-view Diffusion for Flexible 3D Novel View Synthesis
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

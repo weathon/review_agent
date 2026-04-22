@@ -1,5 +1,6 @@
 # Looking Alike From Far to Near: Enhancing Cross-Resolution Re-Identification via Feature Vector Panning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

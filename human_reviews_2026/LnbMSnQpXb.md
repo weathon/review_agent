@@ -1,5 +1,6 @@
 # ADDI: A Simplified E2E Autonomous Driving Model with Distinct Experts and Implicit Interactions
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

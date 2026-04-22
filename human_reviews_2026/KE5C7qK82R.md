@@ -1,5 +1,6 @@
 # A Formal Comparison Between Chain-of-Thought and Latent Thought
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

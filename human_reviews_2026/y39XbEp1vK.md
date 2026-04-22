@@ -1,5 +1,6 @@
 # Frame Guidance: Training-Free Guidance for Frame-Level Control in Video Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

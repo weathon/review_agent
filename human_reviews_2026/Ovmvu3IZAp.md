@@ -1,5 +1,6 @@
 # SupGRPO: Enhancing GRPO with Matching-based Online SFT for Text Spotting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Improving Code Translation Correctness and Efficiency with Multi-Perspective Exploration and Difference-Aware Selection
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 2, 4, 8, 6
 

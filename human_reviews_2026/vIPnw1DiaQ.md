@@ -1,5 +1,6 @@
 # $\pi$-CoT: Prolog-Initialized Chain-of-Thought Prompting for Multi-Hop Question-Answering
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Noise Augmented Fine Tuning for Mitigating Hallucinations in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # ProteinVista: A compute-efficient atom-level 3D CNN that outperforms sequence transformers in protein–ligand prediction
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 0, 4, 4, 6
 

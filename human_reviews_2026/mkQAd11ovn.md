@@ -1,5 +1,6 @@
 # MMaDA-Parallel: Multimodal Large Diffusion Language Models for Thinking-Aware Editing and Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

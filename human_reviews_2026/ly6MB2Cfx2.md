@@ -1,5 +1,6 @@
 # Towards a Sharp Analysis of Offline Policy Learning for $f$-Divergence-Regularized Contextual Bandits
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

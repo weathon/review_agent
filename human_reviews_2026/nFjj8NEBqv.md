@@ -1,5 +1,6 @@
 # SERQ: Saliency-Aware Low-Rank Error Reconstruction for LLM Quantization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

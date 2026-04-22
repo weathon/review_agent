@@ -1,5 +1,6 @@
 # Rethinking Human-Object Interaction Evaluation for both Vision-Language Models and HOI-Specific Methods
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

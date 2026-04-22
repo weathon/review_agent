@@ -1,5 +1,6 @@
 # TEPO: A Transferable EDA Prediction Optimization Method Based on Learngene Characterization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 0, 4
 

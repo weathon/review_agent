@@ -1,5 +1,6 @@
 # Signed in Ink, Hidden in Noise: Watermarking Diffusion Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

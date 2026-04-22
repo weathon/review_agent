@@ -1,5 +1,6 @@
 # When Evolution Meets Momentum: Orchestrating Goal-oriented and Process-oriented reasoning for LLM Inference Scaling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

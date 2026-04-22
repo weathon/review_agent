@@ -1,5 +1,6 @@
 # PairFlow: Closed-Form Source-Target Coupling for Few-Step Generation in Discrete Flow Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

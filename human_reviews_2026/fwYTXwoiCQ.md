@@ -1,5 +1,6 @@
 # Large Language Models do Not Make Complete Use of Math Reasoning Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

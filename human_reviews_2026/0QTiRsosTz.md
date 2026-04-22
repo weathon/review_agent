@@ -1,5 +1,6 @@
 # Neural SDEs as a Unified Approach to Continuous-Domain Sequence Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

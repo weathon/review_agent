@@ -1,5 +1,6 @@
 # Implicit Regularisation in Diffusion Models: An Algorithm-Dependent Generalisation Analysis
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

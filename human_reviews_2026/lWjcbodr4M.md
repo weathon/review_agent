@@ -1,5 +1,6 @@
 # When Reasoning Meets Its Laws
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

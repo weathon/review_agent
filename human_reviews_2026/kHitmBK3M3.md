@@ -1,5 +1,6 @@
 # Assembly-R1: 3D Assembly Reasoning via RL-based Vision Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

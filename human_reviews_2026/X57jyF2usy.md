@@ -1,5 +1,6 @@
 # SPG-SAM: Semantic Prompt Graph Learning for Multi-class Medical Image Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

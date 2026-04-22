@@ -1,5 +1,6 @@
 # $\alpha$-DPO: Robust Preference Alignment for Diffusion Models via $\alpha$ Divergence
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

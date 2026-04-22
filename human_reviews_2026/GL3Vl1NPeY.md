@@ -1,5 +1,6 @@
 # Parallel Test-Time Scaling with Multi-Sequence Verifiers
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

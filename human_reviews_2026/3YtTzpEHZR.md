@@ -1,5 +1,6 @@
 # LoBE-GS: Load-Balanced and Efficient 3D Gaussian Splatting for Large-Scale Scene Reconstruction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

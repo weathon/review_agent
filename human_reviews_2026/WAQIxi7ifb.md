@@ -1,5 +1,6 @@
 # Learning Admissible Heuristics for A*:  Theory and Practice
 
+- Avg Score: 5.71
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 6, 8, 6
 

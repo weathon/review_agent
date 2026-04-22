@@ -1,5 +1,6 @@
 # Neural Algorithmic Reasoning for Hypergraphs with Looped Transformers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

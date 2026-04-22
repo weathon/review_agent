@@ -1,5 +1,6 @@
 # ESSA: Evolutionary Strategies for Scalable Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

@@ -1,5 +1,6 @@
 # ExpertSteer: Intervening in LLMs through Expert Knowledge
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 6
 

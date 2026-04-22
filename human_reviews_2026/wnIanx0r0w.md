@@ -1,5 +1,6 @@
 # Efficient algorithms for Incremental Metric Bipartite Matching
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

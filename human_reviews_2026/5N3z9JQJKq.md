@@ -1,5 +1,6 @@
 # AutoFigure: Generating and Refining Publication-Ready Scientific Illustrations
 
+- Avg Score: 3.60
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 4, 4
 

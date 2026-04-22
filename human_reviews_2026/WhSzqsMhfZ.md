@@ -1,5 +1,6 @@
 # Evaluating and Improving Cultural Awareness of Reward Models for LLM Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

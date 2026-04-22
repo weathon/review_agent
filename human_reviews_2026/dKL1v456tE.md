@@ -1,5 +1,6 @@
 # Linear Preference Optimization: Decoupled Gradient Control via Absolute Regularization
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 2
 

@@ -1,5 +1,6 @@
 # Flash-Mono: Feed-Forward Accelerated Gaussian Splatting Monocular SLAM
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2
 

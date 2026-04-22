@@ -1,5 +1,6 @@
 # DiagramDiff:A Diagram Reconstruction and Recognition Method to Enhance Large Language Models' Diagram Understanding
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

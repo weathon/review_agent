@@ -1,5 +1,6 @@
 # Online Differential Privacy Bayesian Optimization with Sliced Wasserstein Compression
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

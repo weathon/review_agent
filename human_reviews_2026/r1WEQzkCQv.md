@@ -1,5 +1,6 @@
 # Thinking on the Fly: Test-Time Reasoning Enhancement via Latent Thought Policy Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

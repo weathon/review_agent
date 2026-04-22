@@ -1,5 +1,6 @@
 # T2I-ConBench: Text-to-Image Benchmark for Continual Post-training
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

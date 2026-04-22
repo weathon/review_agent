@@ -1,5 +1,6 @@
 # MagicStain: High-Fidelity Pathology Image Virtual Staining via Guided Single-Step Diffusion
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

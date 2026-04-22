@@ -1,5 +1,6 @@
 # Skyfall-GS: Synthesizing Immersive 3D Urban Scenes from Satellite Imagery
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 6, 6, 8
 

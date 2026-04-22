@@ -1,5 +1,6 @@
 # Reinforcement Learning with Inverse Rewards for World Model Post-training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

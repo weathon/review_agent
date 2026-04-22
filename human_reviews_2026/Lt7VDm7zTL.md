@@ -1,5 +1,6 @@
 # Balancing Plasticity and Stability with Fast and Slow Successor Features
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

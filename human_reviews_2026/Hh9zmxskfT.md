@@ -1,5 +1,6 @@
 # Fantastic Reasoning Behaviors and Where to Find Them: Unsupervised Discovery of the Reasoning Process
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

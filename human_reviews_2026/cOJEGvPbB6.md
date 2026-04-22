@@ -1,5 +1,6 @@
 # Foundation for Chinese Poetry Research: An Open Large-Scale and Fine-Grained Multimodal Knowledge Graph
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

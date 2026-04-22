@@ -1,5 +1,6 @@
 # When Greedy Wins: Emergent Exploitation Bias in Meta-Bandit LLM Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 10, 2, 6
 

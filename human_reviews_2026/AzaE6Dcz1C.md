@@ -1,5 +1,6 @@
 # Single-Loop Byzantine-Resilient Federated Bilevel Optimization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

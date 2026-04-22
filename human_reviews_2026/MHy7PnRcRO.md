@@ -1,5 +1,6 @@
 # Causal Discovery under Changing Mechanisms: A Unified Graphical Approach
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 8, 0, 2
 

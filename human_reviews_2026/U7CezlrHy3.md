@@ -1,5 +1,6 @@
 # COP-Q: Safety-First Reinforcement Learning with Cholesky Ordered Projection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

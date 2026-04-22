@@ -1,5 +1,6 @@
 # From Memory to Reasoning: Generative Models Enable Explainable Continual Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

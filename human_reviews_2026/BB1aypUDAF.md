@@ -1,5 +1,6 @@
 # Two Minds Better Than One: Collaborative Reward Modeling for LLM Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

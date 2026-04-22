@@ -1,5 +1,6 @@
 # Two-Way Garment Transfer: Unified Diffusion Framework for Dressing and Undressing Synthesis
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

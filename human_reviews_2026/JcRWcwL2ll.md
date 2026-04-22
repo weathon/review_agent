@@ -1,5 +1,6 @@
 # Efficient and scalable MARL from images by trust-region autoencoders
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

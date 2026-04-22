@@ -1,5 +1,6 @@
 # One-Shot Multi-Label Causal Discovery in High-Dimensional Event Sequences
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

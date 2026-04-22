@@ -1,5 +1,6 @@
 # ShotSight: Explaining KGE Models with an LLM-Ready, Example-Based Heuristic
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

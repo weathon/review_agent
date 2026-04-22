@@ -1,5 +1,6 @@
 # Multi-Layer Diffusion Strategy for Multi-IP Interaction-Aware Human Erasing
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

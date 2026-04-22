@@ -1,5 +1,6 @@
 # Boosting Latent Diffusion Models via Semantic-Disentangled VAE
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

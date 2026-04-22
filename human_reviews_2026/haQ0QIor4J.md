@@ -1,5 +1,6 @@
 # Physics-Inspired All-Pair Interaction Learning for 3D Dynamics Modeling
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

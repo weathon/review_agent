@@ -1,5 +1,6 @@
 # SCOPE: Selective Cross-modal Orchestration of Visual Perception Experts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

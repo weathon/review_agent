@@ -1,5 +1,6 @@
 # AbstRaL: Augmenting LLMs' Reasoning by Reinforcing Abstract Thinking
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 2
 

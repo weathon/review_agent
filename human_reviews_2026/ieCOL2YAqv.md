@@ -1,5 +1,6 @@
 # Defending against Backdoor Attacks via Module Switching
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4, 4
 

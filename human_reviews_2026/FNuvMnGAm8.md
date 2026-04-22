@@ -1,5 +1,6 @@
 # Load Balancing Mixture of Experts with Similarity Preserving Routers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

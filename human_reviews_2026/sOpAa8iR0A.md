@@ -1,5 +1,6 @@
 # Stable coresets: Unleashing the power of uniform sampling
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 6, 8
 

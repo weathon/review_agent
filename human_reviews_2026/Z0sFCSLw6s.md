@@ -1,5 +1,6 @@
 # Cross-Batch Gradient Consistency for Adaptive Loss Balancing in Knowledge Distillation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

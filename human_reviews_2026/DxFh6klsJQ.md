@@ -1,5 +1,6 @@
 # Electric Currents for Discrete Data Generation
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 2
 

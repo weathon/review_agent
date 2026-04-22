@@ -1,5 +1,6 @@
 # The Dual Power of Interpretable Token Embeddings: Jailbreaking Attacks and Defenses for Diffusion Model Unlearning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

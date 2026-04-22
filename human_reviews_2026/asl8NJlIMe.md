@@ -1,5 +1,6 @@
 # FastVGGT: Fast Visual Geometry Transformer
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

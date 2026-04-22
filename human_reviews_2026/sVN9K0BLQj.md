@@ -1,5 +1,6 @@
 # Urban Socio-Semantic Segmentation with Vision-Language Reasoning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Bicriteria Algorithms for Submodular Cover with Partition and Fairness Constraints
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

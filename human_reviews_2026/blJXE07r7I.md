@@ -1,5 +1,6 @@
 # EditVerse: Unifying Image and Video Editing and Generation with In-Context Learning
 
+- Avg Score: 5.60
 - Decision: Accept (Oral)
 - Scores: 8, 4, 6, 4, 6
 

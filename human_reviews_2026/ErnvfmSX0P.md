@@ -1,5 +1,6 @@
 # ResearchRubrics: A Benchmark of Prompts and Rubrics For Evaluating Deep Research Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # SoftCFG: Uncertainty-guided Stable Guidance for Visual Autoregressive Model
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

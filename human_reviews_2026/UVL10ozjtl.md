@@ -1,5 +1,6 @@
 # Diversity-aware Training for Test-time Scaling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

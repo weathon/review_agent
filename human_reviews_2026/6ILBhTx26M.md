@@ -1,5 +1,6 @@
 # Grounding GUI Anything: Efficient and Semantically-Aware Parsing via Continuous Coordinate Decoding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 4
 

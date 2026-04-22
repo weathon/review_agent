@@ -1,5 +1,6 @@
 # Stretching Beyond the Obvious: A Gradient-Free Framework to Unveil the Hidden Landscape of Visual Invariance
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 
@@ -70,29 +71,48 @@ For probing invariance ($\Xi_{inv}$), SnS seeks to maximize the distance (stretc
 
 Applying SnS to standard and adversarially trained CNNs (ResNet50), the authors make several significant discoveries:
 
-1. Hierarchical Invariance: The nature of the discovered invariant images varied dramatically depending on the representation layer being stretched: pixel-level changes mainly affected luminance/contrast, mid-layers altered texture, and late-layers altered pose.   
+1. Hierarchical Invariance: The nature of the discovered invariant images varied dramatically depending on the representation layer being stretched: pixel-level changes mainly affected luminance/contrast, mid-layers altered texture, and late-layers altered pose.
 
-2. Interpretability of Robust vs. Standard Models: Adversarially trained (robust) networks yielded invariant images that were initially more human-interpretable than those from standard models. However, this advantage eroded or reversed at deeper layers: robust network invariances became less interpretable when stretching deeper, while standard network invariances became more interpretable.   
 
-3. Conclusion on Robustness: This suggests that adversarial training, while improving pixel-level perceptual alignment, fails to increase the interpretability of high-level invariances.  
+
+
+2. Interpretability of Robust vs. Standard Models: Adversarially trained (robust) networks yielded invariant images that were initially more human-interpretable than those from standard models. However, this advantage eroded or reversed at deeper layers: robust network invariances became less interpretable when stretching deeper, while standard network invariances became more interpretable.
+
+
+
+
+3. Conclusion on Robustness: This suggests that adversarial training, while improving pixel-level perceptual alignment, fails to increase the interpretability of high-level invariances.
+
+
 
 The framework's versatility is demonstrated by its application to different CNN architectures (ResNet18, VGG16_bn) and Vision Transformers (ViT), and its potential utility in visual neuroscience experiments by showing efficacy even when only a small fraction of units are recorded.
 
 ### Strengths
-* Originality and Technical Novelty: SnS is a gradient-free, model-agnostic framework for systematically exploring the full invariance manifold of a unit, moving beyond local measures or pre-defined transformations. The bi-objective optimization scheme is elegant and powerful, unifying the search for invariant images and adversarial examples.  
+* Originality and Technical Novelty: SnS is a gradient-free, model-agnostic framework for systematically exploring the full invariance manifold of a unit, moving beyond local measures or pre-defined transformations. The bi-objective optimization scheme is elegant and powerful, unifying the search for invariant images and adversarial examples.
 
-* High Quality and Rigor: The experimental design is robust. The authors not only apply the method to a benchmark (ResNet50) but also validate the findings across different architectures (ResNet18, VGG16_bn, ViT) and use a multi-observer and human classification setup for interpretability.  
 
-* Clarity of Insight: The results are not just empirical observations but yield a deep conceptual insight: the stark, hierarchical divergence in interpretability between standard and robust networks at deeper layers. This challenges existing conclusions about adversarial robustness and perceptual alignment.  
+
+* High Quality and Rigor: The experimental design is robust. The authors not only apply the method to a benchmark (ResNet50) but also validate the findings across different architectures (ResNet18, VGG16_bn, ViT) and use a multi-observer and human classification setup for interpretability.
+
+
+
+* Clarity of Insight: The results are not just empirical observations but yield a deep conceptual insight: the stark, hierarchical divergence in interpretability between standard and robust networks at deeper layers. This challenges existing conclusions about adversarial robustness and perceptual alignment.
+
+
 
 * Broad Significance: The technique is directly applicable to visual neuroscience, offering a method to probe biological neurons without relying on perfect "digital twin" fidelity, which is a major constraint in current gradient-based neuro-visual studies.
 
 ### Weaknesses
-* Computational Cost: The reliance on evolutionary algorithms (CMA-ES) is a known trade-off for gradient-free and model-agnostic optimization. The computational cost can be very high, especially given the search space dimension ($n=4096$). While the results are excellent, the practical utility of SnS for very large-scale or high-throughput experiments may be limited compared to gradient-based methods.  
+* Computational Cost: The reliance on evolutionary algorithms (CMA-ES) is a known trade-off for gradient-free and model-agnostic optimization. The computational cost can be very high, especially given the search space dimension ($n=4096$). While the results are excellent, the practical utility of SnS for very large-scale or high-throughput experiments may be limited compared to gradient-based methods.
 
-* Generative Model Dependency: The quality and expressivity of the invariant images are fundamentally constrained by the generative model ($\psi$) used. The authors assume a "powerful prior" is embodied in the model. The choice of generative model, and its potential bias on the invariant manifold, warrants further discussion or empirical analysis.  
 
-* Convergence Analysis: The paper notes that a significant percentage of runs did not reach the maximum iteration count (up to 86.75% for some standard network conditions). While the authors state the final populations still reached "functionally relevant activation regimes", a more detailed discussion on the impact of non-convergence or early stopping on the resulting Pareto front quality would strengthen the completeness of the method's presentation. 
+
+* Generative Model Dependency: The quality and expressivity of the invariant images are fundamentally constrained by the generative model ($\psi$) used. The authors assume a "powerful prior" is embodied in the model. The choice of generative model, and its potential bias on the invariant manifold, warrants further discussion or empirical analysis.
+
+
+
+* Convergence Analysis: The paper notes that a significant percentage of runs did not reach the maximum iteration count (up to 86.75% for some standard network conditions). While the authors state the final populations still reached "functionally relevant activation regimes", a more detailed discussion on the impact of non-convergence or early stopping on the resulting Pareto front quality would strengthen the completeness of the method's presentation.
+
 
 * References: The authors also missed citing some critical works in this domain. For e.g. Extreme Image Transforms (EITs) [Crowder et al., 2022; Malik et al., 2023, Biol Cybernetics, Malik et al., 2023, arXiv] which present a novel view of structural changes in the input images, and MIRC [Ullman et al., 2016, PNAS] which present similar experiments with human and network observers. Authors should also mention a comparison of their method to that of EITs given they also make changes to the image space at varying levels and test against VOneResNet [Dapello et al., 2020, NeurIPS] that claims to explain the V1 variance, showing that EITs outperform VOneResNet by a significant margin.
 

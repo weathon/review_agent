@@ -1,5 +1,6 @@
 # Efficient Multi-turn RL for GUI Agents via Decoupled Training and Adaptive Data Curation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

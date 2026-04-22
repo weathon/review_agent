@@ -1,5 +1,6 @@
 # Building the dual graph of the activation regions in a deep neural network: what it means for interpretability
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

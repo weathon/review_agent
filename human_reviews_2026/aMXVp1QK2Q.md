@@ -1,5 +1,6 @@
 # Distribution-Free Lower Predictive Bounds for Right-Censored Time-to-Event Data via Hybrid Quantile Learning and DFT-Adaptive Conformal Calibration
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

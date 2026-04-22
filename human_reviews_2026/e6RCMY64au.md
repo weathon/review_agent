@@ -1,5 +1,6 @@
 # Node-Centric Knowledge Graph
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0
 

@@ -1,5 +1,6 @@
 # InfiGUI-R1: Advancing Multimodal GUI Agents from Reactive Actors to Deliberative Reasoners
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

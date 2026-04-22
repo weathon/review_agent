@@ -1,5 +1,6 @@
 # A Formal Combinatorial Benchmark Emphasizing Structures for Automated Theorem Proving
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4, 2
 

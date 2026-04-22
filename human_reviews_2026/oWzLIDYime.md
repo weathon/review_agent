@@ -1,5 +1,6 @@
 # Who Matters Matters: Agent-Specific Conservative Offline MARL
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Beyond Solving Math Quiz: Evaluating the Ability of Large Reasoning Models to Ask for Information
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

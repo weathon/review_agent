@@ -1,5 +1,6 @@
 # Reducing Hallucinations in Generative Models through Truncated Statistics
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

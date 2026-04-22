@@ -1,5 +1,6 @@
 # BUDDY: BUdget-Driven DYnamic Depth Routing for Adaptive Large Language Models Inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

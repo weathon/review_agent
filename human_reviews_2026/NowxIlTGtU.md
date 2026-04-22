@@ -1,5 +1,6 @@
 # X2C: Enabling Realistic Human-to-Humanoid Facial Expression Imitation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

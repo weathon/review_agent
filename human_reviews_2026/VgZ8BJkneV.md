@@ -1,5 +1,6 @@
 # LieDynNet: Learning Lie Symmetries from Spatiotemporal Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

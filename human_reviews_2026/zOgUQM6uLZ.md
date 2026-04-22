@@ -1,5 +1,6 @@
 # Identifying and Mitigating Errors in Gradient Aggregation of Distributed Data Parallel Training
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # Log-Augmented Generation: Scaling Test-Time Reasoning with Reusable Computation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

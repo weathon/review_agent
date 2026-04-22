@@ -1,5 +1,6 @@
 # Pretrain–Test Task Alignment Governs Generalization in In-Context Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

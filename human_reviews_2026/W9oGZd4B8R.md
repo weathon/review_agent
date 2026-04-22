@@ -1,5 +1,6 @@
 # Training LLM Agents to Empower Humans
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

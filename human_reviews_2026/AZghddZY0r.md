@@ -1,5 +1,6 @@
 # When We Don’t See the Same Picture: Aligning Agents with Divergent Visual Spaces
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

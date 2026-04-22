@@ -1,5 +1,6 @@
 # Enhancing Persona Following at Decoding Time via Dynamic Importance Estimation for Role-Playing Agents
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

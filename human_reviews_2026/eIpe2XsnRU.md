@@ -1,5 +1,6 @@
 # Quantum Autoencoder: An Efficient Representation Learner for Quantum Features
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Learning To Acquire Resources in Competition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 
@@ -62,7 +63,8 @@ This paper studies how multiple strategic agents acquire a costly divisible reso
 The paper introduces a model of resource acquisition games and analyse it under various information conditions. Under complete information, the paper shows existence and uniqueness of a pure Nash equilibrium which can be efficiently computed but has worst-case unbounded price of anarchy. When information is partial but agents share a common prior, there exists a unique Bayesian Nash equilibrium, which can also be compute efficiently. When no common prior is available the paper studies the case in which agents gather information while playing by following an online learning algorithm. The paper provides sufficient conditions for convergence to a Bayesian CCE and last-iterate convergence to the BNE.
 
 ### Strengths
-The model studied in the paper is interesting and well motivated by practical applications in finance and other markets. The paper is generally well written and clear. Technical results appear to be correct. Experiments, despite being on very simple instances, hint at interesting behaviors that may open up new directions of research on this model.
+The model studied in the paper is interesting and well motivated by practical applications in finance and other markets.
+The paper is generally well written and clear. Technical results appear to be correct. Experiments, despite being on very simple instances, hint at interesting behaviors that may open up new directions of research on this model.
 
 ### Weaknesses
 My main concern is with the strength of the technical contributions. Once equipped with Lemma 1, Section 3 and 4 rely on fairly standard tools for these kind of problems. In particular, the positive results are kind of expected given the specific structure of the problem being considered. 

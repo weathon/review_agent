@@ -1,5 +1,6 @@
 # Mapping Post-Training Forgetting in Language Models at Scale
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

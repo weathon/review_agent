@@ -1,5 +1,6 @@
 # End-to-End Document Understanding via Chain-of-Reading
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Self-Speculative Decoding Accelerates Lossless Inference in Any-Order and Any-Subset Autoregressive Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8
 

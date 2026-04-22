@@ -1,5 +1,6 @@
 # The Accumulation of Score Estimation Error in Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

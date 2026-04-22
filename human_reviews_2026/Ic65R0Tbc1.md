@@ -1,5 +1,6 @@
 # Repairing Reward Functions with Human Feedback to Mitigate Reward Hacking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

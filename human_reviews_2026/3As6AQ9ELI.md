@@ -1,5 +1,6 @@
 # The Markovian Thinker: Architecture-Agnostic Linear Scaling of Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

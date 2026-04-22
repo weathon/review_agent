@@ -1,5 +1,6 @@
 # CE-Bench: Towards a Reliable Contrastive Evaluation Benchmark of Interpretability of Sparse Autoencoders
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 0
 

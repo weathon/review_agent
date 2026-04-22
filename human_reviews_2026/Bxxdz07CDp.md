@@ -1,5 +1,6 @@
 # Pedagogically-Inspired Data Synthesis for Language Model Knowledge Distillation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

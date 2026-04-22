@@ -1,5 +1,6 @@
 # Bridging the Perception Gap: Probe-Guided Data Optimization Framework for Robotic Imitation Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

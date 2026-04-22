@@ -1,5 +1,6 @@
 # Revealing and Pushing Legal Reasoning Boundary of Large Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

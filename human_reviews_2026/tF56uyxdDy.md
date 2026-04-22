@@ -1,5 +1,6 @@
 # Test-Time Scaling with Reflective Generative Model
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 8, 2
 

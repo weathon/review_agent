@@ -1,5 +1,6 @@
 # La-Proteina: Atomistic Protein Generation via Partially Latent Flow Matching
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 10
 

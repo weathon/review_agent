@@ -1,5 +1,6 @@
 # Symmetry-Aware Bayesian Optimization via Max Kernels
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

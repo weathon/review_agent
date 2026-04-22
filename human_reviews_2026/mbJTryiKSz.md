@@ -1,5 +1,6 @@
 # Neural Feature Geometry Evolves as Discrete Ricci Flow
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

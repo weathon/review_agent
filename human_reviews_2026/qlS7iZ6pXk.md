@@ -1,5 +1,6 @@
 # WebExplorer: Explore and Evolve for Training Long-Horizon Web Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Leave No TRACE: Black-box Detection of Copyrighted Dataset Usage in Large Language Models via Watermarking
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

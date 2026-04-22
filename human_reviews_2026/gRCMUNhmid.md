@@ -1,5 +1,6 @@
 # Daily-Omni: Towards Audio-Visual Reasoning with Temporal Alignment across Modalities
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # MedMeta: A Benchmark for LLMs in Synthesizing Meta-Analysis Conclusion from Medical Studies
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

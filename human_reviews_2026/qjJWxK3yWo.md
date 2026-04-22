@@ -1,5 +1,6 @@
 # AudioX: A Unified Framework for Anything-to-Audio Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 10, 6
 

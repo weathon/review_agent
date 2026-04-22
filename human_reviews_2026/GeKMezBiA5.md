@@ -1,5 +1,6 @@
 # Lower-level Duality Based Penalty Methods for Nonsmooth Bilevel Hyperparameter Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

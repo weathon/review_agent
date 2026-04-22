@@ -1,5 +1,6 @@
 # When Weak LLMs Speak with Confidence, Preference Alignment Gets Stronger
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2, 6
 

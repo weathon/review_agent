@@ -1,5 +1,6 @@
 # CodePDE: An Inference Framework for LLM-driven PDE Solver Generation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

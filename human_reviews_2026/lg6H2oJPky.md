@@ -1,5 +1,6 @@
 # Online Learning and Equilibrium Computation with Ranking Feedback
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 2, 6, 8, 6
 

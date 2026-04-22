@@ -1,5 +1,6 @@
 # LENS: Multi-level Evaluation of Multimodal Reasoning with Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Rethink Mini-batch Gradient: Cascade Momentum
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 2
 

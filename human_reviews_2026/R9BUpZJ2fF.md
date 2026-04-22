@@ -1,5 +1,6 @@
 # Lang-Prune: Unlocking Fair and Powerful Pruning for Multilingual Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

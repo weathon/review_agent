@@ -1,5 +1,6 @@
 # Geometric and Information Compression of Representations in Deep Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

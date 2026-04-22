@@ -1,5 +1,6 @@
 # Measuring and Mitigating Identity Bias in Multi-Agent Debate via Anonymization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

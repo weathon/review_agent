@@ -1,5 +1,6 @@
 # Meta-Researcher: Empowering Planning and Reflection Mechanisms in Large Reasoning Models for Advanced Deep Research Abilities
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

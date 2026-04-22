@@ -1,5 +1,6 @@
 # Transformers with RL or SFT  Provably Learn Sparse Boolean Functions, But Differently
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

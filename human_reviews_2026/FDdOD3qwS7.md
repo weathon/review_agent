@@ -1,5 +1,6 @@
 # Beyond Uniformity: Sample and Frequency Meta Weighting for Post-Training Quantization of Diffusion Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

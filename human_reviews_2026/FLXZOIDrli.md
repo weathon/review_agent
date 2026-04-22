@@ -1,5 +1,6 @@
 # RAD3D-Prefix:  Anomaly-Aware Prefix Learning on Frozen LLM for 3D CT Image to Report Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

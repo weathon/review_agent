@@ -1,5 +1,6 @@
 # Diffusion Posterior Sampling for Nonlinear Contextual Bandits
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

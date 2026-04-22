@@ -1,5 +1,6 @@
 # EDMolGPT: A Decoder-Only Framework for 3D Drug Design via Electron Density
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

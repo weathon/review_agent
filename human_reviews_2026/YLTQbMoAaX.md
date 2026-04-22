@@ -1,5 +1,6 @@
 # HYPER: A Foundation Model for Inductive Link Prediction with Knowledge Hypergraphs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

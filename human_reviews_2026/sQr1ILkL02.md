@@ -1,5 +1,6 @@
 # FLORA: Generalizable Motion-Flow-Based Reward Shaping for Scalable Real-World Robot Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 0
 

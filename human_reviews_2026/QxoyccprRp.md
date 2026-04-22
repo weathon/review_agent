@@ -1,5 +1,6 @@
 # A Gauge-Theory-based Graph Neural Network
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 2
 

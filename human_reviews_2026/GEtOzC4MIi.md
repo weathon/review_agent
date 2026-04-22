@@ -1,5 +1,6 @@
 # Fisher-Rao Sensitivity for Out-of-Distribution Detection in Deep Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 6, 4
 

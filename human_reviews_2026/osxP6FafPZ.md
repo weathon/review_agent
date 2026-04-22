@@ -1,5 +1,6 @@
 # SimULi: Real-Time LiDAR and Camera Simulation with Unscented Transforms
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

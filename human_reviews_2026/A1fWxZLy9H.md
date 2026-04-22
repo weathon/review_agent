@@ -1,5 +1,6 @@
 # Disentangling Instruction Influence in Diffusion Transformers for Parallel Multi-Instruction-Guided Image Editing
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MAGNET: Multi-granular Adaptive Gradient-guided Knowledge Distillation for Pareto-Efficient Tuning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Scaling Laws for Uncertainty in Deep Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

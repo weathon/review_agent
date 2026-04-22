@@ -1,5 +1,6 @@
 # Demystifying Robot Diffusion Policies: Action Memorization and a Simple Lookup Table Alternative
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 2
 

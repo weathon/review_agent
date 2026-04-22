@@ -1,5 +1,6 @@
 # VisuLogic: A Benchmark for Evaluating Visual Reasoning in Multi-modal Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

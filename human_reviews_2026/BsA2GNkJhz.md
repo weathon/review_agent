@@ -1,5 +1,6 @@
 # CellAgent: LLM-Driven Multi-Agent Framework  for Natural Language-Based Single-Cell Analysis
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 2
 

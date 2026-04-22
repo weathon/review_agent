@@ -1,5 +1,6 @@
 # Black-Box Red-Teaming of Multi-Agent Systems via Reinforcement Learning
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

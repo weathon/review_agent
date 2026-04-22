@@ -1,5 +1,6 @@
 # Fairness by Design: Efficient Fair Ensembles for Low-Data Classification
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

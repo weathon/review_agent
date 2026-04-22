@@ -1,5 +1,6 @@
 # PartSAM: A Scalable Promptable Part Segmentation Model Trained on Native 3D Data
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

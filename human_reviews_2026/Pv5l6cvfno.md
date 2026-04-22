@@ -1,5 +1,6 @@
 # Human or Machine? A Preliminary Turing Test for Speech-to-Speech Interaction
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 8
 

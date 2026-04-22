@@ -1,5 +1,6 @@
 # Real-time Personalized Federated Continuous Learning via Generative Replay
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 4
 

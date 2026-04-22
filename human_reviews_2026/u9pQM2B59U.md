@@ -1,5 +1,6 @@
 # SPaRFT: Self-Paced Reinforcement Fine-Tuning for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

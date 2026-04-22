@@ -1,5 +1,6 @@
 # Differential Fine-Tuning Large Language Models Towards Better Diverse Reasoning Abilities
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

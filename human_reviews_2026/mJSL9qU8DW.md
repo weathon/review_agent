@@ -1,5 +1,6 @@
 # SecureLLM: Using Inference-time Compositionality to Build Secure Language Models for Private, Sensitive, and Secret Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

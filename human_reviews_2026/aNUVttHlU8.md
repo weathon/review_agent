@@ -1,5 +1,6 @@
 # A Lightweight Heuristic for Detecting Unfair Tests in Software Engineering Benchmarks
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

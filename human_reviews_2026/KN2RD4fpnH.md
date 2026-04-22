@@ -1,5 +1,6 @@
 # Geometry of Nash Mirror Dynamics: Adaptive $\beta$-Control for Stable and Bias-Robust Self-Improving LLM Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

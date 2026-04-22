@@ -1,5 +1,6 @@
 # Transport Clustering: Solving Low-Rank Optimal Transport via Clustering
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 8, 6, 6
 

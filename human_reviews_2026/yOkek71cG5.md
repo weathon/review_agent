@@ -1,5 +1,6 @@
 # Clapping: Removing Per-sample Storage for Pipeline Parallel Distributed Optimization with Communication Compression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

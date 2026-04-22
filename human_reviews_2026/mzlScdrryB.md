@@ -1,5 +1,6 @@
 # Permutation-Invariant Spectral Learning via Dyson Diffusion
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 6
 

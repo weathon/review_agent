@@ -1,5 +1,6 @@
 # DeepDefense: Layer-Wise Gradient-Feature Alignment for Building Robust Neural Networks
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

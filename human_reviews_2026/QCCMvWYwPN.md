@@ -1,5 +1,6 @@
 # M$^3$Ret: A Mixed Multimodal Image Dataset and Benchmark for Personalized Multi-Retinal Disease Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

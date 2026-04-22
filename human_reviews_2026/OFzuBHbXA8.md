@@ -1,5 +1,6 @@
 # OmniLayout: Enabling Coarse-to-Fine Learning with LLMs for Universal Document Layout Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

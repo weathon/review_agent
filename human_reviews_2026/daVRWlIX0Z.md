@@ -1,5 +1,6 @@
 # FedDOR: Orthogonal Initialization and Dual Regularization for Prototype Integrity in Heterogeneous Federated Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

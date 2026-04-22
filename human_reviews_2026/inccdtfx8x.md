@@ -1,5 +1,6 @@
 # GPG: A Simple and Strong Reinforcement Learning Baseline for Model Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

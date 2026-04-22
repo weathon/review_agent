@@ -1,5 +1,6 @@
 # A Disentangled Low-Rank RNN Framework For Uncovering Neural Connectivity and Dynamics
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 
@@ -83,7 +84,8 @@ Q1. What is the difference between lrRNN and LINT, whether or not a Post-Hoc SVD
 
 Q2. The learned recurrent matrices seem very similar between all methods (see e.g., A.2.2) - in fact, if I understand the method correctly, the improvements just comes from how we decompose the recurrent weights? If so could we not also find the desired decomposition easier after training, i.e., find a decomposition of the weights that minimises the disentanglement?
 
-Q3.   You also use your method to fit spiking data, but don't show any plots. Do you indeed learn a good generative model of spiking data when simulating the RNN?
+Q3.  
+You also use your method to fit spiking data, but don't show any plots. Do you indeed learn a good generative model of spiking data when simulating the RNN?
 
 Q4. For the SMC posterior, did you plot the mean of the posterior (with a reasonable number of particles)? The explanation (line 320) for the lower performance in any case seem not right, in the original paper, also fits without using direction labels reached good $r^2$ values - but the authors of that paper seemed to have used a different dataset than here (of a similar task), so we can't make a direct comparison.
 

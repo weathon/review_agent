@@ -1,5 +1,6 @@
 # Flow-IB: Information Bottleneck Meets Flow Matching for 32,768× Video Compression
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

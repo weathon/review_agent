@@ -1,5 +1,6 @@
 # The Road Less Traveled: Enhancing Exploration in LLMs via Sequential Sampling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

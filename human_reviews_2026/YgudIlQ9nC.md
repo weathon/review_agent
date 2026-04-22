@@ -1,5 +1,6 @@
 # Never Saddle for Reparameterized Steepest Descent as Mirror Flow
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 0, 4
 

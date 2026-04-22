@@ -1,5 +1,6 @@
 # SIMSHIFT: A Benchmark for Adapting Neural Surrogates to Distribution Shifts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

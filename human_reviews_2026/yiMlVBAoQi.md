@@ -1,5 +1,6 @@
 # Efficient Quantization of Mixture-of-Experts with Theoretical Generalization Guarantees
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

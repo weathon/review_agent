@@ -1,5 +1,6 @@
 # ROPES: Robotic Pose Estimation via Score-based Causal Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

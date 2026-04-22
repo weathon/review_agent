@@ -1,5 +1,6 @@
 # Offline Multi-Agent Reinforcement Learning via Sequential Score Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

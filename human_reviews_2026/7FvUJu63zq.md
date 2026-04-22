@@ -1,5 +1,6 @@
 # Unified Brain Surface and Volume Registration
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

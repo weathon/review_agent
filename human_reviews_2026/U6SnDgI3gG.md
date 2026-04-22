@@ -1,5 +1,6 @@
 # On the Spectral Differences Between NTK and CNTK and Their Implications for Point Cloud Recognition
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

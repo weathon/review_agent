@@ -1,5 +1,6 @@
 # ReplicationBench: Can AI Agents Replicate Astrophysics Research Papers?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

@@ -1,5 +1,6 @@
 # Weight-Space Linear Recurrent Neural Networks
 
+- Avg Score: 7.20
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6, 8
 
@@ -77,17 +78,24 @@ This paper proposes WARP, a novel class of recurrent neural networks (RNNs) that
 Extensive experiments are conducted across time-series analysis, dynamical system reconstruction, and multivariate time-series classification. WARP shows consistent or superior performance to state-of-the-art baselines on most tasks. A physics-informed variant, WARP-Phys, achieves significant improvements on physical dynamics reconstruction tasks.
 
 ### Strengths
-1. Novel conceptual framing:  The idea of treating the recurrent hidden state of a linear state-space model as the weights of another neural network is both elegant and novel. It bridges ideas from fast weights, meta-learning, hypernetworks and structured state-space models while maintaining linear recurrence efficiency. Additionally, it offers a built-in support for gradient-free adaptation, in-context learning, and physics-informed modeling in a single architecture.
+1. Novel conceptual framing:
+ The idea of treating the recurrent hidden state of a linear state-space model as the weights of another neural network is both elegant and novel. It bridges ideas from fast weights, meta-learning, hypernetworks and structured state-space models while maintaining linear recurrence efficiency. Additionally, it offers a built-in support for gradient-free adaptation, in-context learning, and physics-informed modeling in a single architecture.
 2. Computational Efficiency: Once the model has learned from the context, the final root network can be extracted and reused to process subsequent queries without reevaluating the entire sequence, yielding significant computational savings compared to other in-context learning models. Furthermore, the proposed architecture leverages a dual training mode that combines linear recurrence with a parallel scan operator – a well-established technique in the State Space Model (SSM) literature – to accelerate state propagation. Together, these design choices lead to notable computational efficiency improvements.
 3. Strong empirical results: Competitive or superior performance on time-series analysis, especially Traffic Flow Forecasting (despite ignoring graph priors) and Image completion, as well as dynamical system reconstruction. The inclusion of a physics-informed variant further demonstrates the framework’s adaptability and potential for interpretability.
-4. Clarity and completeness:  The paper is well-written, includes high-quality figures, ablations, detailed appendices, and clear pseudocode.
+4. Clarity and completeness:
+ The paper is well-written, includes high-quality figures, ablations, detailed appendices, and clear pseudocode.
 
 ### Weaknesses
-1. Scalability constraints:  The main bottleneck is the large transition matrix which scales quadratically with the number of root-network parameters. Experiments are thus limited to moderate model sizes, raising questions about feasibility for large-scale models.
-2. Limited theoretical grounding:  While the empirical evidence is compelling, the theoretical analysis of representational capacity and stability (e.g., under linear recurrence updates) still remains to be established. 
-3. Computational cost reporting:  Although the recurrence is linear, updating and decoding weight vectors remains costly. Memory and compute scaling with model size are not fully quantified and are only provided in the appendix, but entirely missing from the main body of the paper.
-4. Limited setting for dynamical system reconstruction:  While the possibility of making the network physics-informed is compelling, the shown examples illustrate this for relatively simple systems with a small number of parameters. While the proposed method clearly allows for in-context learning, and hence does not need to retrain a network for each new dynamical system (from the same category), the setups are done for what appears to be noiseless input-output data, and a low number of parameters. One could, instead of learning the entire mapping of the system, learn only its phase or exponential mapping for any other sequence model that allows for ICL, in the same way as demonstrated in this work. This alternative formulation would serve as a fairer baseline for comparison.
-5. Novelty relative to prior work:  There is conceptual overlap with other concepts briefly outlined in the related work (e.g., fast weight RNNs), though the authors’ framing is distinctive. A more explicit comparison to those baselines would help to better position WARP’s contribution.
+1. Scalability constraints: 
+The main bottleneck is the large transition matrix which scales quadratically with the number of root-network parameters. Experiments are thus limited to moderate model sizes, raising questions about feasibility for large-scale models.
+2. Limited theoretical grounding:
+ While the empirical evidence is compelling, the theoretical analysis of representational capacity and stability (e.g., under linear recurrence updates) still remains to be established. 
+3. Computational cost reporting:
+ Although the recurrence is linear, updating and decoding weight vectors remains costly. Memory and compute scaling with model size are not fully quantified and are only provided in the appendix, but entirely missing from the main body of the paper.
+4. Limited setting for dynamical system reconstruction:
+ While the possibility of making the network physics-informed is compelling, the shown examples illustrate this for relatively simple systems with a small number of parameters. While the proposed method clearly allows for in-context learning, and hence does not need to retrain a network for each new dynamical system (from the same category), the setups are done for what appears to be noiseless input-output data, and a low number of parameters. One could, instead of learning the entire mapping of the system, learn only its phase or exponential mapping for any other sequence model that allows for ICL, in the same way as demonstrated in this work. This alternative formulation would serve as a fairer baseline for comparison.
+5. Novelty relative to prior work:
+ There is conceptual overlap with other concepts briefly outlined in the related work (e.g., fast weight RNNs), though the authors’ framing is distinctive. A more explicit comparison to those baselines would help to better position WARP’s contribution.
 
 ### Questions
 1. Have you evaluated WARP’s performance on noisy measurement scenarios for dynamical system reconstruction?

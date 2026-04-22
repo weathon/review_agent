@@ -1,5 +1,6 @@
 # SciPro Arena: a Case Study of AI Agent Capabilities in Scientific Analysis Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

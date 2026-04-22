@@ -1,5 +1,6 @@
 # A Comprehensive Evaluation of Code Language Models for Security Patch Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

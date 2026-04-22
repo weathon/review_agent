@@ -1,5 +1,6 @@
 # FlowCast: Trajectory Forecasting for Scalable Zero-Cost Speculative Flow Matching
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 8
 

@@ -1,5 +1,6 @@
 # What are Key Factors for Updates in RL for LLM Reasoning?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

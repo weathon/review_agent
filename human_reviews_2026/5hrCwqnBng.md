@@ -1,5 +1,6 @@
 # SYNTHIA: A Multi-Agent GAN-LLM Fusion for Statistically Guided Synthetic Data Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 2, 10
 

@@ -1,5 +1,6 @@
 # RedAHD: Toward End-to-End LLM-Based Automatic Heuristic Design using Reductions
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

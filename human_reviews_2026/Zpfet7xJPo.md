@@ -1,5 +1,6 @@
 # CODA: Learning to Guide Constraint-Aware Optimization for Hardware Accelerators
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

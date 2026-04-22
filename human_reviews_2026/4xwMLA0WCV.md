@@ -1,5 +1,6 @@
 # Guaranteed Optimal Compositional Explanations for Neurons
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

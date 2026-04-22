@@ -1,5 +1,6 @@
 # SEEING THROUGH LANGUAGE: HOW TEXT REVEALS OBJECT AND STATE BIAS IN VLMS
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

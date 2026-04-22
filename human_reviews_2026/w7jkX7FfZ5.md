@@ -1,5 +1,6 @@
 # Formal-Lagrangian Policy Optimization for Safe Reinforcement Learning in Code Generation with Differentiable Verification
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 0, 4, 0
 

@@ -1,5 +1,6 @@
 # Revisiting Meta-Learning with Noisy Labels: Reweighting Dynamics and Theoretical Guarantees
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 0, 6
 

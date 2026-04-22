@@ -1,5 +1,6 @@
 # Forge-and-Quench: Enhancing Image Generation for Higher Fidelity in Unified Multimodal Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

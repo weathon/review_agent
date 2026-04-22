@@ -1,5 +1,6 @@
 # RAE: A Neural Network Dimensionality Reduction Method for Nearest Neighbors Preservation in Vector Search
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

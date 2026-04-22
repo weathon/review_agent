@@ -1,5 +1,6 @@
 # CodeMirage: Stress-Testing AI-Generated Code Detectors Against Production-Level LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2
 

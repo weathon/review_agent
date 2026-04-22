@@ -1,5 +1,6 @@
 # Abnaolizer: An AI Agent for Converting Antibodies to Nanobodies
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2
 

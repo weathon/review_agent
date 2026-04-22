@@ -1,5 +1,6 @@
 # SeWA: Selective Weight Average via Probabilistic Masking
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 
@@ -122,7 +123,8 @@ This work addresses an adaptive weight selecting method for weight averaging met
 The continuation of the weight averaging is a good idea on the class of weight averaging methods for improving the generalization ability of DNNs.
 
 ### Weaknesses
-1. The results are insufficient: except Table 2, the results (e.g.g, Figure 3 and 4 for image class-action and text classification) do not show distinctive improvements so  the competitiveness  lacks convincing supports; otherwise, the performance improvement look increment in general setups.  Besides, the evaluated network architectures are datasets can be extended for comprehensiveness.
+1. The results are insufficient: except Table 2, the results (e.g.g, Figure 3 and 4 for image class-action and text classification) do not show distinctive improvements so  the competitiveness  lacks convincing supports; otherwise, the performance improvement look increment in general setups.
+ Besides, the evaluated network architectures are datasets can be extended for comprehensiveness.
 2. As it claims its particular effectiveness on RL that may have more unstable training. Would it be possible to have particular theoretical analysis focusing on such task and settings?
 3. Similar to the insight in the above bullet, at the early training stage “more unstable training” can be expected, what if SeWA is applied in such scenario? (TWA claims its advantage also at the early training stage, as it also somehow optimizes the weights. By the way, why not compare with TWA in the experiments?).
 

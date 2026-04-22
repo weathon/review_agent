@@ -1,5 +1,6 @@
 # Grasp Any Region: Towards Precise, Contextual Pixel Understanding for Multimodal LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

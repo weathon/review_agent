@@ -1,5 +1,6 @@
 # GraphPFN: A Prior-Data Fitted Graph Foundation Model
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

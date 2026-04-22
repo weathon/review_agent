@@ -1,5 +1,6 @@
 # Spinning Straw into Gold: Relabeling LLM Agent Trajectories in Hindsight for Successful Demonstrations
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 4
 

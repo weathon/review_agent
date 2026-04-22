@@ -1,5 +1,6 @@
 # ParallelTime: Dynamically Weighting the Balance of Short- and Long-Term Temporal Dependencies
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

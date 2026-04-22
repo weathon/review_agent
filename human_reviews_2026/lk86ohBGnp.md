@@ -1,5 +1,6 @@
 # Text2Lip: Progressive Lip-Synced Talking Face Generation from Text via Viseme-Guided Rendering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

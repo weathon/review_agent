@@ -1,5 +1,6 @@
 # From Binary to Continuous: Stochastic Re-Weighting for Robust Graph Explanation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 0, 4, 6
 

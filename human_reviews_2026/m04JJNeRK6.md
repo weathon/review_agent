@@ -1,5 +1,6 @@
 # Premise Selection for a Lean Hammer
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 4, 6
 

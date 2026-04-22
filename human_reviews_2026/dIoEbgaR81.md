@@ -1,5 +1,6 @@
 # SKATE, a Scalable Tournament Eval: Weaker LLMs differentiate between stronger ones using verifiable challenges
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

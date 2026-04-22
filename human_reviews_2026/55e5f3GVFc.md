@@ -1,5 +1,6 @@
 # Protein Structure Tokenization via Geometric Byte Pair Encoding
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 10, 8, 6, 6
 

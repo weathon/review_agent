@@ -1,5 +1,6 @@
 # Radiometrically Consistent Gaussian Surfels for Inverse Rendering
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 2
 

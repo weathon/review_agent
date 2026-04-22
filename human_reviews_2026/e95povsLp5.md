@@ -1,5 +1,6 @@
 # Learning to Reason Across Parallel Samples for LLM Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 2, 6
 

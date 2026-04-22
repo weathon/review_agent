@@ -1,5 +1,6 @@
 # ACTIVE-o3 : Empowering MLLMs with Active Perception via Pure Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Do Depth-Grown Models Overcome The Curse Of Depth? An In-Depth Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Auto-SWE-Bench: A Framework for the Scalable Generation of Software Engineering Benchmark from Open-Source Repositories
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

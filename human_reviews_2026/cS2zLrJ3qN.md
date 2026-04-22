@@ -1,5 +1,6 @@
 # Noise-Resilient Quantum Neural Networks via Zero-Noise Knowledge Distillation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

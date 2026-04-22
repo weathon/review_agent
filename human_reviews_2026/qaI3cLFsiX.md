@@ -1,5 +1,6 @@
 # FM4NPP: A Scaling Foundation Model for Nuclear and Particle Physics
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

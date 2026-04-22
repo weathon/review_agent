@@ -1,5 +1,6 @@
 # GQA: Generation Quality Assessment of AIGC Videos based on Human Assessment: Dataset, Scoring and Explanation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 4
 

@@ -1,5 +1,6 @@
 # Bridging Fairness and Explainability: Can Input-Based Explanations Promote Fairness in Hate Speech Detection?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

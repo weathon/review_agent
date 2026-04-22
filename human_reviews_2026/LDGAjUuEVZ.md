@@ -1,5 +1,6 @@
 # BrowseComp-ZH: Benchmarking Web Browsing Ability of Large Language Models in Chinese
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # A KL-regularization framework for learning to plan with adaptive priors
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

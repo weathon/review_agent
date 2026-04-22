@@ -1,5 +1,6 @@
 # Dynamical Latent Flow Matching for High-Performance Few-Shot Neural Adaptation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 8
 

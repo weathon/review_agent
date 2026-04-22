@@ -1,5 +1,6 @@
 # Is Exploration or Optimization the Problem for Deep Reinforcement Learning?
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 2, 6
 

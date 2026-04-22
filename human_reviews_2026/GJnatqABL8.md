@@ -1,5 +1,6 @@
 # Scalable Single-Cell Gene Expression Generation with Latent Diffusion Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

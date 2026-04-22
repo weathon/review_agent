@@ -1,5 +1,6 @@
 # RoboFace: Face Restoration Made Robust via Implicit and Explicit Textual Guidance
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

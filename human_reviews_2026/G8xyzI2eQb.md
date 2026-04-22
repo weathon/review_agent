@@ -1,5 +1,6 @@
 # Confidence Is All You Need: Few-Shot RL Fine-Tuning of Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

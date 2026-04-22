@@ -1,5 +1,6 @@
 # PiFlow: Principle-aware Scientific Discovery with Multi-Agent Collaboration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

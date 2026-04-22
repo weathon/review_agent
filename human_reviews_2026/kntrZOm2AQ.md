@@ -1,5 +1,6 @@
 # FLoRG: Federated Fine-tuning with Low-rank Gram Matrices and Procrustes Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

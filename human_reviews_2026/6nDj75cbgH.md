@@ -1,5 +1,6 @@
 # Multi-Frequency Fusion for Robust Video Face Forgery Detection
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

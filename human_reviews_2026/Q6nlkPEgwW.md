@@ -1,5 +1,6 @@
 # Grove MoE: Towards Efficient and Superior MoE LLMs with Adjugate Experts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # OAT-FM: Optimal Acceleration Transport for Improved Flow Matching
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # ClueVQA: Enhancing Query Based Retrieval in Video-LLMs with Answer Clues
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

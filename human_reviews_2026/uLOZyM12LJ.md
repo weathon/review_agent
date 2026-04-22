@@ -1,5 +1,6 @@
 # RL Fine-Tuning Heals OOD Forgetting in SFT
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

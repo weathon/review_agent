@@ -1,5 +1,6 @@
 # Semi-Supervised Diseased Detection from Speech Dialogues with Multi-Level Data Modeling
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

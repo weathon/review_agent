@@ -1,5 +1,6 @@
 # Enhancing Conversational Agents with Skill-of-Mind-Infused Large Language Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Holistic Token Efficient in Speculative Decoding: Post-use & Pre-cut
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Free Lunch for Stabilizing Rectified Flow Inversion
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

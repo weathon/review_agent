@@ -1,5 +1,6 @@
 # Dyana: Benchmarking Dynamic Hand Intelligence
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # ChartReasoner: Code-Driven Modality Bridging for Long-Chain Reasoning in Chart Question Answering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Diminishing Noise Maintains Differential Privacy and Enhances Convergence
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0, 2
 

@@ -1,5 +1,6 @@
 # The Grammar of a Polysemantic Neuron: Understanding How Neurons Compress Multiple Concepts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

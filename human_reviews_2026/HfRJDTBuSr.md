@@ -1,5 +1,6 @@
 # SWIRL: A Staged Workflow for Interleaved Reinforcement Learning in Mobile GUI Control
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 2, 4, 4
 

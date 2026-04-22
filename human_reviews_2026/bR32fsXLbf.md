@@ -1,5 +1,6 @@
 # Bridging the Gap Between Zeroth-Order and First-Order Fine-Tuning via Dynamic Adaptive Subspace Pre-tuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

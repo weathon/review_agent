@@ -1,5 +1,6 @@
 # EvA: An Evidence-First Audio Understanding Paradigm for LALMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 2, 4, 2, 8
 

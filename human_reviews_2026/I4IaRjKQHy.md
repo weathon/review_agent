@@ -1,5 +1,6 @@
 # WiSparse: Boosting LLM Inference Efficiency with Weight-Aware Mixed Activation Sparsity
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

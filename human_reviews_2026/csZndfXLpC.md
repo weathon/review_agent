@@ -1,5 +1,6 @@
 # SILA: Enhancing Long-Context Retrieval Capability of Linear Attention via Selective Ignoring
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

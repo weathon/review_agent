@@ -1,5 +1,6 @@
 # TCMReasonSet: A Dataset for Explainable Medical Reasoning in Traditional Chinese Medicine
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

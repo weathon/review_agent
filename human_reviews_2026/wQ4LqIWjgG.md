@@ -1,5 +1,6 @@
 # The Quiet Prompt: Erasing Ineffable Styles from Diffusion via Concept Embedding
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 6, 2
 

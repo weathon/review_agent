@@ -1,5 +1,6 @@
 # Know When to Fold 'Em: Predicting an LLM-Judge for Efficient but Performant Inference
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

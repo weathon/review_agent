@@ -1,5 +1,6 @@
 # Necessary Conditions for Compositional Generalization in Visual Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 2, 8, 6, 2
 

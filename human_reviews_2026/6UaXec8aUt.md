@@ -1,5 +1,6 @@
 # HLStrans: Dataset for C-to-HLS Hardware Code Synthesis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

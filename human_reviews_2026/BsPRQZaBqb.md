@@ -1,5 +1,6 @@
 # Mitigating Unobserved Confounding via Diffusion Probabilistic Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 2, 0
 
@@ -170,9 +171,11 @@ The paper introduces a novel method to mitigate the unobserved confounding for c
 The application of diffusion models to mitigate the unobserved confounding is an original idea (I haven’t seen it in other works so far).
 
 ### Weaknesses
-The main flaw of the paper, in my opinion, is the lack of clear separation between identifiability and estimability assumptions. Specifically, the assumptions H1-H4 combine both the assumptions on the data-generating mechanism (= identifiability) and the assumptions on the chosen estimation model (= estimability). I encourage the authors to fully revisit the paper so that those two parts are clearly separated.  Also, the assumptions are important enough to be in the main part of the paper.   
+The main flaw of the paper, in my opinion, is the lack of clear separation between identifiability and estimability assumptions. Specifically, the assumptions H1-H4 combine both the assumptions on the data-generating mechanism (= identifiability) and the assumptions on the chosen estimation model (= estimability). I encourage the authors to fully revisit the paper so that those two parts are clearly separated.  Also, the assumptions are important enough to be in the main part of the paper.  
 
-Furthermore, I had a hard time understanding what specific setting the paper operates in. In Sec. 4-5, the authors mention proxy variables, but no related work is provided about the proximal causal inference, and no relevant baselines are selected for benchmarking (e.g., [1]). On the other hand, in Appendix A, the authors made the standard ignorability assumption (=no unmeasured confounding). Also, standard CATE baselines are used in the experiments, which are originally not tailored for the proximal (or any other hidden confounding) setting.  
+
+Furthermore, I had a hard time understanding what specific setting the paper operates in. In Sec. 4-5, the authors mention proxy variables, but no related work is provided about the proximal causal inference, and no relevant baselines are selected for benchmarking (e.g., [1]). On the other hand, in Appendix A, the authors made the standard ignorability assumption (=no unmeasured confounding). Also, standard CATE baselines are used in the experiments, which are originally not tailored for the proximal (or any other hidden confounding) setting. 
+
 
 Also, I found some smaller mistakes:
 

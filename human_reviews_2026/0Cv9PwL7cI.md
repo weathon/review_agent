@@ -1,5 +1,6 @@
 # AdaBlock-dLLM: Semantic-Aware Diffusion LLM Inference via Adaptive Block Size
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

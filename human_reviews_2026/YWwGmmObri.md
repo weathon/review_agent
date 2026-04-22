@@ -1,5 +1,6 @@
 # Primus: Enforcing Attention Usage for 3D Medical Image Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # IGU-LoRA: Adaptive Rank Allocation via Integrated Gradients and Uncertainty-Aware Scoring
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4, 4
 

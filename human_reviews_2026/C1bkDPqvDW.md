@@ -1,5 +1,6 @@
 # Flow Map Learning Via Non-Gradient Vector Flow
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

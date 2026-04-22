@@ -1,5 +1,6 @@
 # From Gradient Volume to Shapley Fairness: Towards Fair Multi-Task Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

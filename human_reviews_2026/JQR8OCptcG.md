@@ -1,5 +1,6 @@
 # Improving Set Function Approximation with Quasi-Arithmetic Neural Networks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

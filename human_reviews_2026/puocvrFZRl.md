@@ -1,5 +1,6 @@
 # Global-Recent Semantic Reasoning on Dynamic Text-Attributed Graphs with Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

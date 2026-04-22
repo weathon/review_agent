@@ -1,5 +1,6 @@
 # MATA: Memory-Augmented Temporal Anchors for Sparse-Time Dynamic Knowledge Graph Embedding
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

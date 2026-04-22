@@ -1,5 +1,6 @@
 # Mixing Configurations for Downstream Prediction
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

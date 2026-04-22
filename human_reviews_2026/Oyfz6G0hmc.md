@@ -1,5 +1,6 @@
 # PateGAIL++: Utility Optimized Private Trajectory Generation with Imitation Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 4, 6
 

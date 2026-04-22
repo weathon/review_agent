@@ -1,5 +1,6 @@
 # RefP2C: Reflective Paper-to-Code Development Enabled by Fine-Grained Verification
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

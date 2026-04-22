@@ -1,5 +1,6 @@
 # Know When to Abstain: Optimal Selective Classification with Likelihood Ratios
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

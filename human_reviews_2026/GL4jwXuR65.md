@@ -1,5 +1,6 @@
 # Learning Hippo: A Hippocampal Neural Architecture for Deep Learning
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

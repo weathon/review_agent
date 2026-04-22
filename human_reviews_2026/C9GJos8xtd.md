@@ -1,5 +1,6 @@
 # Index2Sort: Sorting Algorithm Using Static Index Data Structure
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 2, 2, 8, 4, 4, 2
 

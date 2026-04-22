@@ -1,5 +1,6 @@
 # DocPruner:  A Storage-Efficient Framework for Multi-Vector Visual Document Retrieval via Adaptive Patch-Level Embedding Pruning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

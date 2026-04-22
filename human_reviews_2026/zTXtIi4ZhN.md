@@ -1,5 +1,6 @@
 # CycleIE: Robust Document Information Extraction through Iterative Verification and Refinement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

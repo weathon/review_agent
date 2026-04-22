@@ -1,5 +1,6 @@
 # Debugging Concept Bottleneck Models through Removal and Retraining
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

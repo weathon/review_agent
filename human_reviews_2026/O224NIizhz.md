@@ -1,5 +1,6 @@
 # Flow Along the $K$-Amplitude for Generative Modeling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # How Far Are LLMs from Professional Poker Players? Revisiting Game-Theoretic Reasoning with Agentic Tool Use
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

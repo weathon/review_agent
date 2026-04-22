@@ -1,5 +1,6 @@
 # CogVLN: Cognitive Map-Guided Vision-and-Language Navigation in Large-Scale Environments
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

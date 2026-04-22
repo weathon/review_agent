@@ -1,5 +1,6 @@
 # Diversity–Ambiguity Exploration for Weakly Supervised Video Anomaly Detection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

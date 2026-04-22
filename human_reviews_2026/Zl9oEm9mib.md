@@ -1,5 +1,6 @@
 # From Internal Representations to Text Quality: A Geometric Approach to LLM Evaluation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

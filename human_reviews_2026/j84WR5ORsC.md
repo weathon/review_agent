@@ -1,5 +1,6 @@
 # Latent Visual Reasoning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Learning to Reason on Hard Problems with Privileged On-Policy Exploration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Limited Reference, Reliable Generation: Rule-Guided Tabular Data Generation with Dual-Granularity Filtering
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

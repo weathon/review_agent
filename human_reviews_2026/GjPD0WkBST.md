@@ -1,5 +1,6 @@
 # Ethical Dialogue Modeling: Dual-Phase Prompt Design for Safety-Constrained Mental Health Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 4, 0
 

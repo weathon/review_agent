@@ -1,5 +1,6 @@
 # Hybrid Mamba–Transformer Decoder for Error-Correcting Codes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

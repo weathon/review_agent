@@ -1,5 +1,6 @@
 # Learning Dynamic Stability Landscapes from Graph Topology
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # CoLD: A Co-evolutionary Latent Diffusion Model for MSA Generation
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 0, 0, 2
 

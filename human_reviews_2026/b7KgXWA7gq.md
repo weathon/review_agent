@@ -1,5 +1,6 @@
 # Are you going to finish that? A Practical Study of the Tokenization Boundary Problem
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

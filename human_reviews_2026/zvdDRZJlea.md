@@ -1,5 +1,6 @@
 # AgentAda: Skill-Adaptive Data Analytics for Tailored Insight Discovery
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

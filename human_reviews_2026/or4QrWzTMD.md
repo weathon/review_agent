@@ -1,5 +1,6 @@
 # UWYN (Use Only What You Need): Efficient Inferencing in 2D and 3D Vision Transformers
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 2, 8
 

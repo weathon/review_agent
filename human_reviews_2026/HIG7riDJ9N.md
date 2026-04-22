@@ -1,5 +1,6 @@
 # Exploring Real-Time Super-Resolution: Benchmarking and Fine-Tuning for Streaming Content
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

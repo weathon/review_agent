@@ -1,5 +1,6 @@
 # TRIDENT: An Efficient Data-Free Model Extraction Attack for Graph Neural Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

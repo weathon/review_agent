@@ -1,5 +1,6 @@
 # Alignment-Sensitive Minimax Rates for Spectral Algorithms with Learned Kernels
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

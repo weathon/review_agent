@@ -1,5 +1,6 @@
 # Non-metric multidimensional scaling at scale
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

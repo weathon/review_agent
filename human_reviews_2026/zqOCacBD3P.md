@@ -1,5 +1,6 @@
 # Prompt Curriculum Learning for Efficient LLM Post-Training
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 2
 

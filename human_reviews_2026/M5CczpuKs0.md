@@ -1,5 +1,6 @@
 # Never Skip a Batch: Continuous Training of Temporal GNNs via Adaptive Pseudo-Supervision
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

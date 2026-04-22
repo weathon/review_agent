@@ -1,5 +1,6 @@
 # SOPSeg: Prompt-based Small Object Instance Segmentation in Remote Sensing Imagery
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 6
 

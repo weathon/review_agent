@@ -1,5 +1,6 @@
 # Scalable Evaluation of Language Models with Generated Games
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 6, 6, 2
 

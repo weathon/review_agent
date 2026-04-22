@@ -1,5 +1,6 @@
 # Improving Online Reinforcement Learning via Behavior Prior Distillation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 
@@ -162,7 +163,8 @@ From a technical standpoint, using a CVAE to model a multimodal policy distribut
 - Related to hyperparameter sensitivity ablation, are there practical tuning heuristics or observed failure modes when these parameters are mis-set?
 - Could the authors provide a direct comparison or analytical discussion with recent approaches, as mentioned in the weakness section?
 - Table E.1 and Figure E.1 compare KL-divergence vs. MSE objectives for distillation. Do the authors have principled guidelines for choosing between them depending on the policy’s stochasticity or parameterization?
-- To what extent can the CVAE generate actions outside the replay buffer support? Does it meaningfully encourage exploration beyond previously seen behaviors, or mainly reinforce high-value regions already represented in the buffer?
+- To what extent can the CVAE generate actions outside the replay buffer support?
+Does it meaningfully encourage exploration beyond previously seen behaviors, or mainly reinforce high-value regions already represented in the buffer?
 
 ### Soundness
 3

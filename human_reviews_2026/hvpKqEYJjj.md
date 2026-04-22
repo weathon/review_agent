@@ -1,5 +1,6 @@
 # A Theoretical Analysis of Mamba’s Training Dynamics: Filtering Relevant Features for Generalization in State Space Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

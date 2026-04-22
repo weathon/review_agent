@@ -1,5 +1,6 @@
 # TwinsFormer: Revisiting Inherent Dependencies via Two Interactive Components for Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

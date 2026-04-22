@@ -1,5 +1,6 @@
 # Reconstructing KV Caches with Cross-Layer Fusion for Enhanced Transformers
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

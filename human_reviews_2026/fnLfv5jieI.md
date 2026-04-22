@@ -1,5 +1,6 @@
 # HyperFlow: Gradient-Free Emulation of Few-Shot Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

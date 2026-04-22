@@ -1,5 +1,6 @@
 # Revisiting Out-of-Distribution Detection: Angular Separation Learning as a Powerful and Simple Baseline
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

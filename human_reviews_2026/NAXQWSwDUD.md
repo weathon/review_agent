@@ -1,5 +1,6 @@
 # FlashPlanner: Accelerating Diffusion-based Planner for Autonomous Driving via Globally Consistent Velocity Field and Redundancy Reduction
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8
 

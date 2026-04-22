@@ -1,5 +1,6 @@
 # Emergence of Superposition: Unveiling the Training Dynamics of Chain of Continuous Thought
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # What Deep Networks Want to Learn and How to Get There
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

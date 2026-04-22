@@ -1,5 +1,6 @@
 # CC-Time: Cross-Model and Cross-Modality Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

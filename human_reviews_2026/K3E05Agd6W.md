@@ -1,5 +1,6 @@
 # Multi-Policy Pareto Front Tracking Based Multi-Objective Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

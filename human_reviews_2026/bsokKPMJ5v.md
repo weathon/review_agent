@@ -1,5 +1,6 @@
 # STAR : Semantic-ID Token-Embedding Alignment For Generative Recommenders
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

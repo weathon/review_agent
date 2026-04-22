@@ -1,7 +1,7 @@
 
 from agents import Agent, Runner, function_tool
 import os
-ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
+ALLOWED_PATHS = [os.path.abspath("../human_reviews_2026/")]
 
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
@@ -35,7 +35,7 @@ print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
 
 
 import numpy as np
-with open("./human_reviews_embeddings.pkl", "rb") as f:
+with open("./human_reviews_embeddings_2026.pkl", "rb") as f:
     import pickle
     db = pickle.load(f)
 
@@ -44,7 +44,7 @@ vectors = np.array(list(db.values()))
 
 # Per-file avg human score (basename -> float). Used to pre-filter candidates
 # by score range before BM25/vector ranking.
-with open("./human_review_score_index.pkl", "rb") as f:
+with open("./human_review_score_index_2026.pkl", "rb") as f:
     _score_index: dict[str, float] = pickle.load(f)
 
 
@@ -171,7 +171,7 @@ def search_file(query: str, n: int, mode: str, low_score: float = 0.0, high_scor
             if not np.isfinite(masked[idx]):
                 break
             fn = filenames[idx]
-            file_path = os.path.abspath(f"../human_reviews/{fn}")
+            file_path = os.path.abspath(f"../human_reviews_2026/{fn}")
             rel = similarities[idx]
             avg = _score_index.get(fn, -1.0)
             with open(file_path, "r", errors="replace") as file_handle:

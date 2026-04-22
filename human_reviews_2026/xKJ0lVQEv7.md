@@ -1,5 +1,6 @@
 # AgentXploit: End-to-End Red-Teaming for AI Agents Powdered by Multi-Agent Systems
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

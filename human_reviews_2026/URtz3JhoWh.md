@@ -1,5 +1,6 @@
 # LiveOIBench: Can Large Language Models Outperform Human Contestants in Informatics Olympiads?
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # SCOPED: Score–Curvature Out-of-distribution Proximity Evaluator for Diffusion
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # PROS: Towards Compute-Efficient RLVR via Rollout Prefix Reuse
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Chunking the Critic: A Transformer-based Soft Actor-Critic with N-Step Returns
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

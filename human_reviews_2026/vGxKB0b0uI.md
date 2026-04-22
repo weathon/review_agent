@@ -1,5 +1,6 @@
 # SIREN: Subgraph Isomorphism via Reinforcement Enhanced Graph Neural Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

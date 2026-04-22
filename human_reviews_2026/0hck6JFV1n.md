@@ -1,5 +1,6 @@
 # Latent Back-projection Network: a missing-wedge generative model for cryo-electron tomography
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

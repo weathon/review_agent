@@ -1,5 +1,6 @@
 # ResT: Reshaping Token-Level Policy Gradients for Tool-Use Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

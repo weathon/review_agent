@@ -1,5 +1,6 @@
 # A Unified Representation Learning Framework for Functional, Temporal, and Irregular Data
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 2
 

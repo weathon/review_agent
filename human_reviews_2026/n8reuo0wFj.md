@@ -1,5 +1,6 @@
 # Interpretable Graph Embeddings: Feature-Level Decomposition for Trustworthy Graph Neural Networks
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

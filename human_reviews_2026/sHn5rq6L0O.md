@@ -1,5 +1,6 @@
 # On the Limits of Curriculum Learning for Post-Training Large Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

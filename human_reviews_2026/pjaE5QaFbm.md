@@ -1,5 +1,6 @@
 # ETC: training-free diffusion models acceleration with Error-aware Trend Consistency
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

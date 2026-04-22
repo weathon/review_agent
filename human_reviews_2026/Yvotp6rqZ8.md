@@ -1,5 +1,6 @@
 # Risk-Optimal Prediction under Unseen Causal Perturbations
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

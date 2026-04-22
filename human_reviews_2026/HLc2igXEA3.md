@@ -1,5 +1,6 @@
 # PEAR: Phase Entropy Aware Reward for Efficient Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

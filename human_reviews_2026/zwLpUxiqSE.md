@@ -1,5 +1,6 @@
 # Space Filling Curves as Spatial Priors for Small or Data-Scarce Vision Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

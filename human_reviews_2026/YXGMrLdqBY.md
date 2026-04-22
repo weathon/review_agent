@@ -1,5 +1,6 @@
 # CoDiffSplat: Sparse-View Generalizable 3D Gaussian Splatting with Single-Step Conditional Diffusion
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # MLLMEraser: Achieving Test-Time Unlearning in Multimodal Large Language Models through Activation Steering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

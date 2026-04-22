@@ -1,5 +1,6 @@
 # BaNEL: Exploration Posteriors for Generative Modeling Using Only Negative Rewards
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

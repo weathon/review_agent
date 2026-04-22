@@ -1,5 +1,6 @@
 # Learning to Respond:  A Large-Scale Benchmark and Progressive Learning Framework for Trigger-Centric Online Video Understanding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

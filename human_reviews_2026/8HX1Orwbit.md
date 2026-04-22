@@ -1,5 +1,6 @@
 # ML-Tool-Bench: Tool-Augmented Planning for ML Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

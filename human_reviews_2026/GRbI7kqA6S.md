@@ -1,5 +1,6 @@
 # EXPLOITING TREE STRUCTURE FOR CREDIT ASSIGNMENT IN RL TRAINING OF LLMS
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

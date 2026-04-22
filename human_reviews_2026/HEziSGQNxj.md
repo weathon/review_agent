@@ -1,5 +1,6 @@
 # Do Natural Language Descriptions of Model Activations Convey Privileged Information?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

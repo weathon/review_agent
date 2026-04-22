@@ -1,5 +1,6 @@
 # ASSESS: A Semantic and Structural Evaluation Framework for Statement Similarity
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

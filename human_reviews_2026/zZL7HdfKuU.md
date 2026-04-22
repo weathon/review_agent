@@ -1,5 +1,6 @@
 # RAD: Retrieval High-quality Demonstrations to Enhance Decision-making
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

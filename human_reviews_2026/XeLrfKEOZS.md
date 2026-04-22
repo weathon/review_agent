@@ -1,5 +1,6 @@
 # SigLIP-HD by Fine-to-Coarse Supervision
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

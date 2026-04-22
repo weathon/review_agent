@@ -1,5 +1,6 @@
 # ChatThero: A Language Agent for Recovery Support
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

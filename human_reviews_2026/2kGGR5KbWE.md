@@ -1,5 +1,6 @@
 # Rethinking Intracranial Aneurysm Vessel Segmentation: A Perspective from Computational Fluid Dynamics Applications
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

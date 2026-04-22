@@ -1,5 +1,6 @@
 # Point-MoE: Large-Scale Multi-Dataset Training with Mixture-of-Experts for 3D Semantic Segmentation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

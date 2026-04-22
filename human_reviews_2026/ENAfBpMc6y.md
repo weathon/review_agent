@@ -1,5 +1,6 @@
 # Refine Now, Query Fast: A Decoupled Refinement Paradigm for Implicit Neural Fields
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 0, 4, 8, 6
 

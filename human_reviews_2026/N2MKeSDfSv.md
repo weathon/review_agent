@@ -1,5 +1,6 @@
 # Enhancing the Representational Power of Spiking Neural Networks via Diversified Spike Patterns
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

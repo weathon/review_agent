@@ -1,5 +1,6 @@
 # Rewards Simplified: Reducing Risk in RL for Cyber Defence
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

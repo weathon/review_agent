@@ -1,5 +1,6 @@
 # Online Budget-Aware Guidance for Blockwise Discrete Text Diffusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

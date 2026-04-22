@@ -1,5 +1,6 @@
 # AdvChain: Adversarial Chain-of-Thought Tuning for Robust Safety Alignment of Large Reasoning Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

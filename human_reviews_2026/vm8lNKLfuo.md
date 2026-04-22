@@ -1,5 +1,6 @@
 # TIIF-Bench: How Does Your T2I Model Follow Your Instructions?
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

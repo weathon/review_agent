@@ -1,5 +1,6 @@
 # Test Time Scaling of Diffusion Model via Flow Matching Corrector
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

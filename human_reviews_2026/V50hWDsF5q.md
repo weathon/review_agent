@@ -1,5 +1,6 @@
 # CRISP - Complexity-based Reasoning of Internal Subprocessing
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

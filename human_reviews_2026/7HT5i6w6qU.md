@@ -1,5 +1,6 @@
 # TinyEye: Sharpening Visual Reasoning of Tiny Models with Offline Policy Optimization
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 2
 

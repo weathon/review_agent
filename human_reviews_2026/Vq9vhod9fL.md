@@ -1,5 +1,6 @@
 # Linear Separability in Contrastive Learning via Neural Training Dynamics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

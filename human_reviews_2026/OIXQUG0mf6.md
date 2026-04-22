@@ -1,5 +1,6 @@
 # Human-in-the-Loop Adaptive Optimization for Improved Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

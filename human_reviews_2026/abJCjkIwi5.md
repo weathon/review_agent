@@ -1,5 +1,6 @@
 # OccDriver: Future Occupancy Guided Dual-branch Trajectory Planner in Autonomous Driving
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2
 

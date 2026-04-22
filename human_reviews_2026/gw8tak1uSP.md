@@ -1,5 +1,6 @@
 # Spatiotemporal Spiking Entropic Bottleneck: Data-efficient Learning with Joint Redundancy Reduction in Spiking Neural Networks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 8
 

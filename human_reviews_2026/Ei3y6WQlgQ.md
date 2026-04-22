@@ -1,5 +1,6 @@
 # No Free Lunch in Active Learning: LLM Embedding Quality Dictates Query Strategy Success
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

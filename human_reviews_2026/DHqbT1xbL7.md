@@ -1,5 +1,6 @@
 # Anon: Exploring the Adaptivity of Optimizers and Beyond
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

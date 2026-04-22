@@ -1,5 +1,6 @@
 # Tensor learning with orthogonal, Lorentz, and symplectic symmetries
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 4, 8, 6
 

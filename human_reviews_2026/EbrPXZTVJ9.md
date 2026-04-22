@@ -1,5 +1,6 @@
 # Tell me Habibi, is it Real or Fake?
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

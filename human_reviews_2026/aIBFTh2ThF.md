@@ -1,5 +1,6 @@
 # Robust Fine-Tuning from Non-Robust Pretrained Models: Mitigating Suboptimal Transfer With Epsilon-Scheduling
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

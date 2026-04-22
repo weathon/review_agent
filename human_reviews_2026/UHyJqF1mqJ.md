@@ -1,5 +1,6 @@
 # Text-to-SQL domain adaptation via automated benchmark transformation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

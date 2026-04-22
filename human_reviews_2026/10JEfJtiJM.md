@@ -1,5 +1,6 @@
 # The Deleuzian Representation Hypothesis
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 2
 

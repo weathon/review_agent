@@ -1,5 +1,6 @@
 # FVBench：Benchmarking Deepfake Video Detection Capability of Large Multimodal Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

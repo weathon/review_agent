@@ -1,5 +1,6 @@
 # Test-time Offline Reinforcement Learning on Goal-related Experience
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Where is Motion From? Scalable Motion Attribution for Video Generation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

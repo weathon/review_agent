@@ -1,5 +1,6 @@
 # Memory Determines Learning Direction: A Theory of Gradient-Based Optimization in State Space Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

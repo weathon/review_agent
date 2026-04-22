@@ -1,5 +1,6 @@
 # What Are You Doing? A Closer Look at Controllable Human Video Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Likelihood-free inference of phylogenetic tree posterior distributions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

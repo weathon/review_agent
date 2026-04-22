@@ -1,5 +1,6 @@
 # Semantic differentiation for tackling challenges in watermarking low-entropy constrained generation outputs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

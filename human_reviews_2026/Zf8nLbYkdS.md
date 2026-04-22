@@ -1,5 +1,6 @@
 # The Unanticipated Asymmetry Between Perceptual Optimization and Assessment
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

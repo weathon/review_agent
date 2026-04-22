@@ -1,5 +1,6 @@
 # Why is the LLM unsure? Profiling the Causes of LLM Uncertainty for Adaptive Model and Uncertainty Metric Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

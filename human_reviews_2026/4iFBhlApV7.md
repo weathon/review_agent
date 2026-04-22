@@ -1,5 +1,6 @@
 # Beyond Memorization: Extending Reasoning Depth with Recurrence, Memory, and Test Time Compute Scaling
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 4, 4
 

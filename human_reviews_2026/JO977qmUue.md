@@ -1,5 +1,6 @@
 # Regularization via Invariant Patterns: Temporal Domain Randomization for Human Activity Recognition
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 0, 4
 

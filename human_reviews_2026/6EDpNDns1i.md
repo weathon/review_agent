@@ -1,5 +1,6 @@
 # Beyond Jailbreaking: Auditing Contextual Privacy in LLM Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

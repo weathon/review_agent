@@ -1,5 +1,6 @@
 # MAPA: Multi-turn Adaptive Prompting Attack On Large Vision-Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Provable Derivative-Free Inference with Score-Based Generative Priors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

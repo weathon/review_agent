@@ -1,5 +1,6 @@
 # A Comedy of Estimators: On KL Regularization in RL Training of LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

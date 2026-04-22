@@ -1,5 +1,6 @@
 # Learning under Quantization for High-Dimensional Linear Regression
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

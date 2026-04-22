@@ -1,5 +1,6 @@
 # TAB-DRW: A DFT-based Robust Watermark for Generative Tabular Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Video Detective: Seek Critical Clues Recurrently to Answer Question from Long Videos
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

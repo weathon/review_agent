@@ -1,5 +1,6 @@
 # FusionFormer: Multi-Window Fusion for Efficient Real-Time Segmentation with Vision Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

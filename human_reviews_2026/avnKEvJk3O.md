@@ -1,5 +1,6 @@
 # Transformers self-organize like newborn visual systems when trained in prenatal worlds
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 8
 

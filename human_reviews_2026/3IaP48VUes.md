@@ -1,5 +1,6 @@
 # Can Aha Moments Be Fake? Identifying True and Decorative Thinking Steps in Chain-of-Thought
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

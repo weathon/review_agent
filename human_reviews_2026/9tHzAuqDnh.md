@@ -1,5 +1,6 @@
 # Hybrid Quantum-Classical Policy Gradients for Multi-Agent Reinforcement Learning: A Principled Analysis of Expressivity and Trade-offs
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 0
 

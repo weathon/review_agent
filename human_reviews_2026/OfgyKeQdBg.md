@@ -1,5 +1,6 @@
 # CoDaPO: Confidence and Difficulty-Adaptive Policy Optimization for Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 8, 2, 4
 

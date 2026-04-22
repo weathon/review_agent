@@ -1,5 +1,6 @@
 # ParaFlow: Parallel Sampling for Flow Matching Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0
 

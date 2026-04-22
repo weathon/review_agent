@@ -1,5 +1,6 @@
 # SBFA: Single Sneaky Bit Flip Attack to Break Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

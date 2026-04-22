@@ -1,5 +1,6 @@
 # QuadGPT: Native Quadrilateral Mesh Generation with Autoregressive Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

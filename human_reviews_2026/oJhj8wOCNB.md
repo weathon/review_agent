@@ -1,5 +1,6 @@
 # PDMBench: A Standardized Platform for Predictive Maintenance Research
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 6, 0
 

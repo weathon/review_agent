@@ -1,5 +1,6 @@
 # Make it NoisEasier: Boosting Text-to-Video Generation with Direct Noise Optimization
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

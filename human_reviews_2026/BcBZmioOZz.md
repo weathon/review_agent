@@ -1,5 +1,6 @@
 # InfoAgent: Advancing Autonomous Information‑Seeking Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

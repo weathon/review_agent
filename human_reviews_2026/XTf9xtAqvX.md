@@ -1,5 +1,6 @@
 # Reframing Generative Models for Physical Systems using Stochastic Interpolants
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

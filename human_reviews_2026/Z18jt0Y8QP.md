@@ -1,5 +1,6 @@
 # PyTupli: A Scalable Infrastructure for Collaborative Offline Reinforcement Learning Projects
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Prior-based 4D Human-Scene Reconstruction from Monocular Videos
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

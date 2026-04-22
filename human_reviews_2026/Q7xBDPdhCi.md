@@ -1,5 +1,6 @@
 # Attractive and Repulsive Perceptual Biases Naturally Emerge in Generative Adversarial Inference
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

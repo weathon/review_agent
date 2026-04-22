@@ -1,5 +1,6 @@
 # Curing "Miracle Steps'' in LLM Math Reasoning with Rubric Rewards
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

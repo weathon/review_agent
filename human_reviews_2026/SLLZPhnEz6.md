@@ -1,5 +1,6 @@
 # Zero-Shot Cross-Domain Dialogue State Tracking with Small LLMs: Learning to Think through Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Internal Evaluation of Density-Based Clusterings with Noise
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Improving Tool Calling Accuracy for Large Language Models
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 2, 2, 0
 

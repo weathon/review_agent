@@ -1,5 +1,6 @@
 # pFedMMA: Personalized Federated Fine-Tuning with Multi-Modal Adapter for Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

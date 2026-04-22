@@ -1,5 +1,6 @@
 # Molar: Multimodal LLMs with Collaborative Filtering Alignment for Enhanced Sequential Recommendation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

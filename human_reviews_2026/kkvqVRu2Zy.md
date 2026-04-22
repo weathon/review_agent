@@ -1,5 +1,6 @@
 # Constrained Diffusion for Protein Design with Hard Structural Constraints
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

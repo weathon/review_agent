@@ -1,5 +1,6 @@
 # Learning Inter-Atomic Potentials without Explicit Equivariance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

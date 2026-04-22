@@ -1,5 +1,6 @@
 # DevBench: A Realistic, Developer-Informed Benchmark for Code Generation Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

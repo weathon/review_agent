@@ -1,5 +1,6 @@
 # DynamicBench: Evaluating Real-Time Report Generation in Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 6, 2
 

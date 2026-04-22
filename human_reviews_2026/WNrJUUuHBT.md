@@ -1,5 +1,6 @@
 # SchulzNN: A Neural Network-Based Matrix Inversion Solver Inspired by Schulz Iteration
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

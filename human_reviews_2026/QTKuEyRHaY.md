@@ -1,5 +1,6 @@
 # How Much Can a Query Reveal? Structural Knowledge Stealing from Graph RAG via Traversal Reconstruction
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 0
 

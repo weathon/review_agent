@@ -1,5 +1,6 @@
 # Unveiling the Scaling Law of PINNs under Non-Euclidean Geometry
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

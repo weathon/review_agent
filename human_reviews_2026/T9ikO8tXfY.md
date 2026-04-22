@@ -1,5 +1,6 @@
 # Breaking Down and Building Up: Mixture of Skill-Based Vision-and-Language Navigation Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

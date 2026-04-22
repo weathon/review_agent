@@ -1,5 +1,6 @@
 # Conformal Prediction with Corrupted Labels: Uncertain Imputation and Robust Re-weighting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MLE-Smith: Scaling MLE Tasks with Automated Multi-agent Pipeline
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

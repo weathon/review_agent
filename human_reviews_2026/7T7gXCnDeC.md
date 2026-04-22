@@ -1,5 +1,6 @@
 # Graph-Guided Concept Selection for Efficient Retrieval-Augmented Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

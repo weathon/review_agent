@@ -1,5 +1,6 @@
 # FOE-RL: Flexible Online Reinforcement Learning for Efficient Inference in Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 4, 0
 

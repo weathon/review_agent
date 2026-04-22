@@ -1,5 +1,6 @@
 # End-to-End One Step Flow Matching via Flow Fitting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Learnable Wavelet-Enhanced Bidirectional Autoencoders: A Unified Framework for Multi-Resolution Speech Enhancement
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

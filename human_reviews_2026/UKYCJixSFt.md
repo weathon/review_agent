@@ -1,5 +1,6 @@
 # Towards Reliable Benchmarking: A Contamination Free, Controllable Evaluation Framework for Multi-step LLM Function Calling
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4, 4
 

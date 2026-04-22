@@ -1,5 +1,6 @@
 # Manipulation as in Simulation: Enabling Accurate Geometry Perception in Robots
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10, 6
 

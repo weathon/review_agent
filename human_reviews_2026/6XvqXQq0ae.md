@@ -1,5 +1,6 @@
 # NextLocMoE: Enhancing Next Location Prediction via Location-Semantics Mixture-of-Experts and Personalized Mixture-of-Experts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

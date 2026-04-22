@@ -1,5 +1,6 @@
 # Pitfalls in Evaluating Language Model Forecasters
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

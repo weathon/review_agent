@@ -1,5 +1,6 @@
 # LLMInertia: Investigating and Mitigating Large Language Models' Unfaithfulness to Input Evidence from a Cognitive Inertia Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

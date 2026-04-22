@@ -1,5 +1,6 @@
 # Investigating Token-Level Supervision of Multi-Dimensional Attribute Combinations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

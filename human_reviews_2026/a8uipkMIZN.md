@@ -1,5 +1,6 @@
 # A Theoretical Framework for Escaping Local Optima in MSE toward Global Convergence
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

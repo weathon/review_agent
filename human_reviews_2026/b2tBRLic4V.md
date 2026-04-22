@@ -1,5 +1,6 @@
 # Bayesian Post Training Enhancement of Regression Models with Calibrated Rankings
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

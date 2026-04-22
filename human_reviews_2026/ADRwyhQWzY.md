@@ -1,5 +1,6 @@
 # Bayesian Speech Synthesisers Can Learn from Multiple Teachers
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

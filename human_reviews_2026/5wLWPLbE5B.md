@@ -1,5 +1,6 @@
 # From Compression to Expression: A Layerwise Analysis of In-Context Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # AutoMixQ: Automatic Mixed-precision Quantization for Deploying Bit-Efficient LLMs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

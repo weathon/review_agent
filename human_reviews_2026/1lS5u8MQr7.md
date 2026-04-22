@@ -1,5 +1,6 @@
 # Compact Wisdom at Small Scale: Can Small Language Models Serve as Cultural Assistants?
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 0
 

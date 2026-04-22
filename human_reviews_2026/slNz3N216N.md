@@ -1,5 +1,6 @@
 # HIERARCHICAL BIO-INSPIRED COGNITIVE MEMORY SYSTEMS: A UNIFIED FRAMEWORK FOR SEQUEN- TIAL INFORMATION PROCESSING AND LONG-TERM BEHAVIORAL PREDICTION
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 0
 
@@ -28,9 +29,11 @@ The paper proposes a “Hierarchical Bio-Inspired Cognitive Memory System,” wh
 They evaluate on (i) financial forecasting, where they report information coefficients of ~0.35 and Sharpe ratios >5 over 30-day horizons, and ~“perfect” Hit@5/Hit@10 performance on an e-commerce recommendation dataset collected from 13 Taobao users over a 31-day study (10,742 chat messages and 16,131 logged behavioral events), while claiming NDCG@5 of 0.63.
 
 ### Strengths
-1. Ambitious scope.  The paper tries to unify physiological affect modeling, salience-gated memory, hierarchical abstraction, and long-horizon forecasting. That integration is intellectually interesting and hits a real open problem: today’s RAG / memory mechanisms mostly fetch by semantic similarity and struggle on long-horizon behavioral prediction. 
+1. Ambitious scope.
+ The paper tries to unify physiological affect modeling, salience-gated memory, hierarchical abstraction, and long-horizon forecasting. That integration is intellectually interesting and hits a real open problem: today’s RAG / memory mechanisms mostly fetch by semantic similarity and struggle on long-horizon behavioral prediction. 
 
-2. Focus on long-horizon prediction.  
+2. Focus on long-horizon prediction.
+ 
 Instead of next-step forecasting, the paper explicitly targets horizons like T+15 to T+30 and claims only modest performance degradation at those ranges for tasks like stock movement prediction, which is a meaningful goal for sequential decision-making systems.
 
 ### Weaknesses

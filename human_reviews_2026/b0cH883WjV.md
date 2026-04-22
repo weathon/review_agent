@@ -1,5 +1,6 @@
 # Conditional Guided Flow Matching: Modeling Prediction Residuals for Enhanced Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

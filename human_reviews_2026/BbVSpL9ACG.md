@@ -1,5 +1,6 @@
 # WorldMirror: Universal  3D World Reconstruction with Any-Prior Prompting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

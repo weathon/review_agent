@@ -1,5 +1,6 @@
 # Supervised Fine-Tuning or Contrastive Learning? Towards Better Multimodal LLM Reranking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

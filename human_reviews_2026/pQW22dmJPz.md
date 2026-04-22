@@ -1,5 +1,6 @@
 # Spatially-Aware U-Net to Defend against Adversarial Attacks on YOLO Object Detectors
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

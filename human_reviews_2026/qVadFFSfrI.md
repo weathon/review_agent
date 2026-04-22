@@ -1,5 +1,6 @@
 # Diagnosing and Remedying Knowledge Deficiencies in LLMs via Label-free Curricular Meaningful Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

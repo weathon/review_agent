@@ -1,5 +1,6 @@
 # Finding the Broad Gini in the Bottle: Optimizing Equity, Efficiency, and Resilience in Grid Restoration
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 
@@ -29,7 +30,8 @@ This paper proposes an end-to-end methodology for post-disaster power grid resto
 ### Strengths
 The usage of CVaR to capture the tail risk induced by renewables is a nice inclusion that speaks to the realistic challenges posed by renewables.
 
- Modeling of the underlying constraints and physics is correct and aligns well with practical considerations for grid restoration.
+
+Modeling of the underlying constraints and physics is correct and aligns well with practical considerations for grid restoration.
 
 Subject to some questions I have that relate to the presentation of the experimental results, the proposed framework appears to be effective on the standard IEEE 30-bus test case used in the experiments.
 

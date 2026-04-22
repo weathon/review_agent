@@ -1,5 +1,6 @@
 # Dynamic Early Exit in Reasoning Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

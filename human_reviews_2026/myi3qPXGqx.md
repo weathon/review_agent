@@ -1,5 +1,6 @@
 # IndiaWeatherBench: A Dataset and Benchmark for Data-Driven Regional Weather Forecasting over India
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

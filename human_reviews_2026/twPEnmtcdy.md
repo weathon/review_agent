@@ -1,5 +1,6 @@
 # Addressing Data Heterogeneity Through a Pre-learned Manifold for Distributed Learning Scenarios
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

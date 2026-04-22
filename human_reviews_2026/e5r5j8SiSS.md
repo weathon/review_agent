@@ -1,5 +1,6 @@
 # E-DDPG: Dual-Objective Deep Deterministic Policy Gradient for MRI Acceleration and Disease Classification
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

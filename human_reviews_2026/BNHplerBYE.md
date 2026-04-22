@@ -1,5 +1,6 @@
 # Score-based Greedy Search for Structure Identification of Partially Observed Causal Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

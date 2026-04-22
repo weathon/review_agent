@@ -1,5 +1,6 @@
 # SHAPING LATENT DIFFUSION FOR EFFICIENT TEXT-CONDITIONED INTERACTION GENERATION
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 
@@ -67,11 +68,15 @@ This paper proposes a diffusion-based framework for interaction generation. With
 
 ### Weaknesses
 1. The proposed method modifies multiple components within the classical diffusion framework for motion generation. While these engineering refinements collectively improve performance, the theoretical novelty appears limited, as many of the introduced techniques have been explored in prior works. Overall, the paper presents a solid integration of existing methods for enhanced performance but lacks a clear conceptual takeaway or deeper insight.
-2. The dimensionality trade-off solution raises two concerns. The method leverages a pre-trained RVQ-VAE as an alignment target: (a) Since the RVQ-VAE is trained for single-human motion generation, would it introduce bias or alignment errors when applied to multi-agent interaction scenarios? (b) If the RVQ-VAE demonstrates strong performance, why not directly replace the IA-VAE with it? What specific advantages does the proposed alignment design offer compared to simply adopting RVQ-VAE?
+2. The dimensionality trade-off solution raises two concerns. The method leverages a pre-trained RVQ-VAE as an alignment target:
+(a) Since the RVQ-VAE is trained for single-human motion generation, would it introduce bias or alignment errors when applied to multi-agent interaction scenarios?
+(b) If the RVQ-VAE demonstrates strong performance, why not directly replace the IA-VAE with it? What specific advantages does the proposed alignment design offer compared to simply adopting RVQ-VAE?
 3. Formatting issue: The manuscript formatting appears inconsistent to ICLR template, particularly in the spacing before each section. It is recommended to standardize the formatting for readability and compliance with publication guidelines.
 
 ### Questions
-The dimensionality trade-off solution raises two concerns. The method leverages a pre-trained RVQ-VAE as an alignment target: (a) Since the RVQ-VAE is trained for single-human motion generation, would it introduce bias or alignment errors when applied to multi-agent interaction scenarios? (b) If the RVQ-VAE demonstrates strong performance, why not directly replace the IA-VAE with it? What specific advantages does the proposed alignment design offer compared to simply adopting RVQ-VAE?
+The dimensionality trade-off solution raises two concerns. The method leverages a pre-trained RVQ-VAE as an alignment target:
+(a) Since the RVQ-VAE is trained for single-human motion generation, would it introduce bias or alignment errors when applied to multi-agent interaction scenarios?
+(b) If the RVQ-VAE demonstrates strong performance, why not directly replace the IA-VAE with it? What specific advantages does the proposed alignment design offer compared to simply adopting RVQ-VAE?
 
 ### Soundness
 3

@@ -1,5 +1,6 @@
 # CoopGuard : Cooperative Agents Safeguarding LLMs Against Evolving Adversarial Attacks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # HEART-ViT: HESSIAN-GUIDED EFFICIENT DYNAMIC ATTENTION AND TOKEN PRUNING IN VISION TRANSFORMERS
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

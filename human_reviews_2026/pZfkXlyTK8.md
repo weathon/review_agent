@@ -1,5 +1,6 @@
 # Estimating Markov Chain Transition Probabilities for Steady Aging Models from $n$-step Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 0, 4, 8
 

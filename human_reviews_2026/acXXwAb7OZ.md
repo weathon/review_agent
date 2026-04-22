@@ -1,5 +1,6 @@
 # Text Modality Oriented Image Feature Extraction for Detecting Diffusion-based DeepFake
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

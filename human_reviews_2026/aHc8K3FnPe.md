@@ -1,5 +1,6 @@
 # MedCEG: Reinforcing Verifiable Medical Reasoning with Critical Evidence Graph
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

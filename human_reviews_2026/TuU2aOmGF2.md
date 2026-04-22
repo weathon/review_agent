@@ -1,5 +1,6 @@
 # Progressive Graph Structure Adjustment for Homophily Shift in Graph Domain Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 6
 

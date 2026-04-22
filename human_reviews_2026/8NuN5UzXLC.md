@@ -1,5 +1,6 @@
 # Universal Inverse Distillation for Matching Models with Real-Data Supervision (No GANs)
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 4, 6, 6
 

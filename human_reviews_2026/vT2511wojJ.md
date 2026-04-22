@@ -1,5 +1,6 @@
 # Openhelix: Empirical Analysis of Dual-System VLA Models for Robotic Manipulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

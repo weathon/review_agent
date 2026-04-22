@@ -1,5 +1,6 @@
 # Shared Modular Recurrence for Universal Morphology Control
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

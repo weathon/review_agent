@@ -1,5 +1,6 @@
 # Multi-Level Stochastic Latent Noise Perturbation for Single Domain Generalization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

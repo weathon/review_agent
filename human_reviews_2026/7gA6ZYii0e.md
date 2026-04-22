@@ -1,5 +1,6 @@
 # RAISE the Bar: Ensemble-based Online Reinforcement Learning for Dynamic Workflow Scheduling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

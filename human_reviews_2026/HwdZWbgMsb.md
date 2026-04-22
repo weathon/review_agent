@@ -1,5 +1,6 @@
 # BEEP3D: Box-Supervised End-to-End Pseudo-Mask Generation for 3D Instance Segmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # DrivingGen: A Comprehensive Benchmark for Generative Video World Models in Autonomous Driving
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

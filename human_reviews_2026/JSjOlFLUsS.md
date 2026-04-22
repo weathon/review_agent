@@ -1,5 +1,6 @@
 # Localized Concept Erasure in Text-to-Image Diffusion Models via High-Level Representation Misdirection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

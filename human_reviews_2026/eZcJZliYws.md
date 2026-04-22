@@ -1,5 +1,6 @@
 # CLoVE: Personalized Federated Learning through Clustering of Loss Vector Embeddings
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

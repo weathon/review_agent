@@ -1,5 +1,6 @@
 # Towards Pixel-level VLM Perception via Simple Points Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 6, 6
 

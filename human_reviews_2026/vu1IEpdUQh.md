@@ -1,5 +1,6 @@
 # FlowSymm: Physics–Aware, Symmetry–Preserving Graph Attention for Network Flow Completion
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # DGMS: Domain Generalization Method for Mamba-based Super-Resolution Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

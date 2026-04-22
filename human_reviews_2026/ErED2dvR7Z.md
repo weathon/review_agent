@@ -1,5 +1,6 @@
 # Cascaded Flow Matching for Heterogeneous Tabular Data with Mixed-Type Features
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

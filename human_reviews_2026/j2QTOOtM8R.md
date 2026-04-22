@@ -1,5 +1,6 @@
 # COSMOS: A Hybrid Adaptive Optimizer for Efficient Training of Large Language Models
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 4
 

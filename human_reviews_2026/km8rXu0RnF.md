@@ -1,5 +1,6 @@
 # LOGIT: Learning to Generate Gradients for Federated Learning with Arbitrary Client Unavailability
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

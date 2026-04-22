@@ -1,5 +1,6 @@
 # PCLR: Progressively Compressed LoRA for Multimodal Continual Instruction Tuning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

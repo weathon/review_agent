@@ -1,5 +1,6 @@
 # SyncKV: A Syncopated Scheduling Approach to KV Cache Compression for Efficient Long-Context LLM Inference
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

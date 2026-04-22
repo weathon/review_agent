@@ -1,5 +1,6 @@
 # Configuring Parallel Training of Neural Networks using Bayesian Optimization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

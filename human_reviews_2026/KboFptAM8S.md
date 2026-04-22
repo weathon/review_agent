@@ -1,5 +1,6 @@
 # VEAttack: Downstream-agnostic Vision Encoder Attack against Large Vision Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 2
 

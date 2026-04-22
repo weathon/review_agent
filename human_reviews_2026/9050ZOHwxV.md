@@ -1,5 +1,6 @@
 # Model Utility Law: Evaluating LLMs beyond Performance via Mechanistically Interpretable Metric
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 6, 2
 

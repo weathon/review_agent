@@ -1,5 +1,6 @@
 # SF-PE: A Synergistic Fusion of Absolute and Relative Positional Encoding for Spiking Transformers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

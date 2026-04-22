@@ -1,5 +1,6 @@
 # Imitate Optimal Policy: Prevail and Induce Action Collapse in Policy Gradient
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

@@ -1,5 +1,6 @@
 # Subversion Strategy Eval: Can LLMs statelessly strategize to subvert control protocols?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

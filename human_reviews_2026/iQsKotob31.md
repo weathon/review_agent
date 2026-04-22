@@ -1,5 +1,6 @@
 # HSSBench: Benchmarking Humanities and Social Sciences Ability for Multimodal Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4
 

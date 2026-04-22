@@ -1,5 +1,6 @@
 # Flatter Tokens are More Valuable for Speculative Draft Model Training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

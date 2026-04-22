@@ -1,5 +1,6 @@
 # 3DRot: 3D Rotation Augmentation for RGB-Based 3D Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

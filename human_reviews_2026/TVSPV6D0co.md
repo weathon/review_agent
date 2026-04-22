@@ -1,5 +1,6 @@
 # Fast, Secure, And High-Capacity Image Watermarking With Text Autoencoded Text Vectors
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

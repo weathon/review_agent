@@ -1,5 +1,6 @@
 # ReSafe: Enhancing Safety of Text-to-Image Diffusion via Post-Hoc Image Back Translation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

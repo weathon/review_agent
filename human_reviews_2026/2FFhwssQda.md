@@ -1,5 +1,6 @@
 # Buckingham $\pi$-Invariant Test‑Time Projection for Robust PDE Surrogate Modeling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

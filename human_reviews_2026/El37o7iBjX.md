@@ -1,5 +1,6 @@
 # Tree-based Dialogue Reinforced Policy Optimization for Red-Teaming Attacks
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

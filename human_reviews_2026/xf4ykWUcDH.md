@@ -1,5 +1,6 @@
 # EEG-ImageNet: A Benchmark for Pre-training and Cross-Time Generalization of EEG-based Visual Decoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 2, 8
 

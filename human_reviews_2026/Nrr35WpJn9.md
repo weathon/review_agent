@@ -1,5 +1,6 @@
 # AutoRAN: Automated Hijacking of Safety Reasoning in Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

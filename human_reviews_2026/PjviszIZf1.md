@@ -1,5 +1,6 @@
 # WinT3R: Window-Based Streaming Reconstruction with Camera Token Pool
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

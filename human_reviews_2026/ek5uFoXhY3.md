@@ -1,5 +1,6 @@
 # Adaptive Federated Learning Defences via Trust-Aware Deep Q-Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 6, 4
 

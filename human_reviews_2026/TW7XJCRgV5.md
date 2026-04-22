@@ -1,5 +1,6 @@
 # Image-POSER: Reflective RL for Multi-Expert Image Generation and Editing
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 4, 10
 

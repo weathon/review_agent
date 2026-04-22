@@ -1,5 +1,6 @@
 # Chimera: Compositional Image Generation  using Part-based Concepting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

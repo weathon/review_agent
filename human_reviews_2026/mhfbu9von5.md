@@ -1,5 +1,6 @@
 # TESSAR: Geometry-Aware Active Regression via Dynamic Voronoi Tessellation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4
 

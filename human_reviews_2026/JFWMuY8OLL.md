@@ -1,5 +1,6 @@
 # Deepfake Detection through Color-Based Spatial-Temporal Feature Mapping with Biometric Information
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

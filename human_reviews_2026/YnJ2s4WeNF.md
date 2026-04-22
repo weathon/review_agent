@@ -1,5 +1,6 @@
 # Revisiting the Scaling Properties of Downstream Metrics in Large Language Model Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

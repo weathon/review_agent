@@ -1,5 +1,6 @@
 # AutoBio: A Simulation and Benchmark for Robotic Automation in Digital Biology Laboratory
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Sample by Step, Optimize by Chunk: Chunk-Level GRPO for Text-to-Image Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

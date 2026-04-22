@@ -1,5 +1,6 @@
 # Proto-SaGa: Prototype-based 3D Scene Segmentation with Semantic-aware Gaussian Grouping
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

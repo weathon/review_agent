@@ -1,5 +1,6 @@
 # A Bayesian Multi-agent Multi-arm Bandit Framework for Optimal Decision Making in Dynamically Changing Environments
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

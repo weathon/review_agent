@@ -1,5 +1,6 @@
 # Adapting, Fast and Slow: Transportable Circuits for Few-Shot Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

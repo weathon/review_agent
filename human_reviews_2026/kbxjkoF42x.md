@@ -1,5 +1,6 @@
 # Ensemble Learning for AUC Maximization via Surrogate Loss
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 0
 

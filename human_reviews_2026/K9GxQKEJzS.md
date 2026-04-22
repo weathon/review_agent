@@ -1,5 +1,6 @@
 # Bootstrapping Language and Numerical Feedback for Reinforcement Learning in LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Actor-Critic without Actor
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

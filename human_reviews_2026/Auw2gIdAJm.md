@@ -1,5 +1,6 @@
 # Learning by Moving Closer: Adapting Vision Models on Movable Agents without Manual Labeling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2, 4
 

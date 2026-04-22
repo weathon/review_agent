@@ -1,5 +1,6 @@
 # Watch your steps: Dormant Adversarial Behaviors that Activate upon LLM Finetuning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 4, 8
 

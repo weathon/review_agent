@@ -1,5 +1,6 @@
 # Gavel: Agent Meets Checklist for Evaluating LLMs on Long-Context Legal Summarization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

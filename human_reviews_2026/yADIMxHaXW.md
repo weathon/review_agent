@@ -1,5 +1,6 @@
 # Fast Training Dataset Attribution via In-Context Learning
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 4, 2, 0, 4
 

@@ -1,5 +1,6 @@
 # STT-LLM: Structural-Temporal Tokenization for Adapting LLMs to Longitudinal Profiles
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

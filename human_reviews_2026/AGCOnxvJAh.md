@@ -1,5 +1,6 @@
 # Constrained-Data-Value-Maximization: Utilizing Data Attribution for Effective Data Pruning in Low-Data Environments
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 4
 

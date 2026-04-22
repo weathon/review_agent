@@ -1,5 +1,6 @@
 # Unveiling Downstream Performance Scaling of LLMs: A Clustering-Based Perspective
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

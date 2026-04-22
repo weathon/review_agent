@@ -1,5 +1,6 @@
 # DeepCompress: A Dual Reward Strategy for Dynamically Exploring and Compressing Reasoning Chains
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

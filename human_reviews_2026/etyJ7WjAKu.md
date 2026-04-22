@@ -1,5 +1,6 @@
 # Training Long-Context, Multi-Turn Software Engineering Agents with Reinforcement Learning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 4, 6, 2
 

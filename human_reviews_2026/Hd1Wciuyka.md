@@ -1,5 +1,6 @@
 # Jodi: Unification of Visual Generation and Understanding via Joint Modeling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

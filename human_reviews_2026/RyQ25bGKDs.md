@@ -1,5 +1,6 @@
 # Subjective Neural Networks: Bayesian Dropout with Trust-Aware Opinions
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

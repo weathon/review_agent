@@ -1,5 +1,6 @@
 # AAPO: Enhancing the Reasoning Capabilities of LLMs with Advantage Momentum
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2, 4
 

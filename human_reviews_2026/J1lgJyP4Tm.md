@@ -1,5 +1,6 @@
 # SWE-fficiency: Can Language Models Optimize Real-World Repositories on Real Workloads?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 8, 0
 

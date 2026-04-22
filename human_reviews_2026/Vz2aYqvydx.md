@@ -1,5 +1,6 @@
 # Cooperative variance estimation and Bayesian neural networks disentangle aleatoric and epistemic uncertainties
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

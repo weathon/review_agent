@@ -1,5 +1,6 @@
 # From Observations to Events: Event-Aware World Models for Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4
 

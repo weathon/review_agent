@@ -1,5 +1,6 @@
 # TAMAS: Benchmarking Adversarial Risks in Multi-Agent LLM Systems
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 2
 

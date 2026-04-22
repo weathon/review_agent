@@ -1,5 +1,6 @@
 # Generative Point Tracking with Flow Matching
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

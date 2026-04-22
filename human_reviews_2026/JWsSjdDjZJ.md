@@ -1,5 +1,6 @@
 # Class Incremental Continual Learning with Self-Organizing Maps and Synthetic Replay
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Thinking is Seeing: Multi-modal Large Language Models are Exceptional in Understanding Knowledge Graphs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

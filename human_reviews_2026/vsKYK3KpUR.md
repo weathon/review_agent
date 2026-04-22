@@ -1,5 +1,6 @@
 # When to Use Which? An Investigation of Search Methods on Expensive Black-box Optimisation Problems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

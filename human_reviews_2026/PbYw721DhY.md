@@ -1,5 +1,6 @@
 # Cell2Text: Multimodal LLM for Generating Single-Cell Descriptions from RNA-Seq Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

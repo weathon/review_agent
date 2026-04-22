@@ -1,5 +1,6 @@
 # DeRL: Diverse‑Exploration Reinforcement Learning for Large Language Models Improves Mathematical Reasoning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

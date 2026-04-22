@@ -1,5 +1,6 @@
 # Policy Regret Minimization in Partially Observable Markov Games
 
+- Avg Score: 6.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 10
 

@@ -1,5 +1,6 @@
 # QuRL: Low-Precision Reinforcement Learning for Efficient Reasoning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

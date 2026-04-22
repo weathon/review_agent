@@ -1,5 +1,6 @@
 # TwinVLA: Data-Efficient Bimanual Manipulation with Twin Single-Arm Vision-Language-Action Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

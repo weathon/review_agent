@@ -1,5 +1,6 @@
 # GenColorBench: A Color Evaluation Benchmark for Text-to-Image Generation Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

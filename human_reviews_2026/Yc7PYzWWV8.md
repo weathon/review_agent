@@ -1,5 +1,6 @@
 # Instruction-Free Tuning of Large Vision Language Models for Medical Instruction Following
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

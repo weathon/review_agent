@@ -1,5 +1,6 @@
 # Token-Efficient Item Representation via Images for LLM Recommender Systems
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

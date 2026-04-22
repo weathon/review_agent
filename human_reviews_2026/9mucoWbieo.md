@@ -1,5 +1,6 @@
 # Inference-Time Alignment Control for Diffusion Models with Reinforcement Learning Guidance
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

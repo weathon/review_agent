@@ -1,5 +1,6 @@
 # Robust Adversarial Attacks Against Unknown Disturbance via Inverse Gradient Sample
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Self-Improvement Anomaly Detection via Large Language Model for Unsupervised Zero-shot Anomaly Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

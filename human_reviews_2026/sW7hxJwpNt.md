@@ -1,5 +1,6 @@
 # Directed Information $\gamma$-covering: An Information-Theoretic Framework for Context Engineering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # GNNUpdater: Adaptive Self-Triggered Training Framework on Dynamic Graphs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

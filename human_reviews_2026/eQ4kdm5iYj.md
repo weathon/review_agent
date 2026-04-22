@@ -1,5 +1,6 @@
 # Real-IKEA : Simulating What Robots Will Really See and Touch
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 
@@ -118,8 +119,10 @@ This paper introduces Real-IKEA, an articulated object dataset for contact-rich 
 [3] Lim, Vincent, et al. "Real2sim2real: Self-supervised learning of physical single-step dynamic actions for planar robot casting." 2022 International Conference on Robotics and Automation (ICRA). IEEE, 2022.
 
 ### Questions
-1. For Table 2 (FID/EMD): How many real-world videos were used for computing the distribution distances? Were these captured in a controlled lighting environment, or across multiple real settings?
-2. For Table 3 (Success Rates): How many objects, human subjects, and trials per condition were used to compute the success-rate distributions?
+1. For Table 2 (FID/EMD):
+How many real-world videos were used for computing the distribution distances? Were these captured in a controlled lighting environment, or across multiple real settings?
+2. For Table 3 (Success Rates):
+How many objects, human subjects, and trials per condition were used to compute the success-rate distributions?
 3. How were the damping and friction parameters (2/5, 5/15, 10/30) determined. Is it through physical measurement on real furniture, or empirical tuning in simulation?
 4. The paper mentioned the knobs and handles are systematically combined with the base cabinets, but there are missing details on how the attach locations and rotation axises are generated.
 

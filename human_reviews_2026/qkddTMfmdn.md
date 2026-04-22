@@ -1,5 +1,6 @@
 # The Three Regimes of Offline-to-Online Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

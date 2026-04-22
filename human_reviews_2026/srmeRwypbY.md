@@ -1,5 +1,6 @@
 # Bigger Isn’t Always Memorizing: Early Stopping Overparameterized Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Drug Repurposing with a Graph-of-Thoughts Inspired Reasoning Framework
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 2, 0
 

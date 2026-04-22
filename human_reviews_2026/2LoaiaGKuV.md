@@ -1,5 +1,6 @@
 # ViTSP: A Vision Language Models Guided Framework for Solving Large-Scale Traveling Salesman Problems
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 2
 

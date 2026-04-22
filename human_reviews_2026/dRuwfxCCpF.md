@@ -1,5 +1,6 @@
 # Focused Diffusion GAN: Object-Centric Image Generation Using Integrated GAN and Diffusion Frameworks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

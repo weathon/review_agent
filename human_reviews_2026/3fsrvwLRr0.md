@@ -1,5 +1,6 @@
 # Symbolic Regression with Self-Supervised Heuristic Beam Search
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

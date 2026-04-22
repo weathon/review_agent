@@ -1,5 +1,6 @@
 # TAR-TVG: Enhancing LVLMs with Timestamp Anchor-Constrained Reasoning for Temporal Video Grounding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

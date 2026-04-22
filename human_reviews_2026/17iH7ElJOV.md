@@ -1,5 +1,6 @@
 # Environment-Aware On-Manifold 3D Texture Camouflage for Physical Attacks on Vehicle Detectors
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 4
 

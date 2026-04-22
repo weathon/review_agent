@@ -1,5 +1,6 @@
 # SOLA: Text-based animated vector graphics generation with agentic orchestration
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 4, 2, 4
 

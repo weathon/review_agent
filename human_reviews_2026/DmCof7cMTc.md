@@ -1,5 +1,6 @@
 # GRF-LLM: Environment-Aware Wireless Channel Modeling via LLM-Guided 3D Gaussians
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

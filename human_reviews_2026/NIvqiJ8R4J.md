@@ -1,5 +1,6 @@
 # PELICAN: Personalized Education via LLM-powered Cognitive Diagnosis and Adaptive Tutoring
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

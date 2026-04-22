@@ -1,5 +1,6 @@
 # Beyond Data Filtering: Knowledge Localization for Capability Removal in LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Chain-of-Generation: Progressive Latent Diffusion for Text-Guided Molecular Design
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

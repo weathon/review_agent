@@ -1,5 +1,6 @@
 # Whisfusion: Parallel ASR Decoding via a Diffusion Transformer
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 10, 4, 2, 0
 

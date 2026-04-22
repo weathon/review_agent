@@ -1,5 +1,6 @@
 # Towards Understanding Primacy and Recency Effects in Mamba: A Mechanistic Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

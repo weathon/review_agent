@@ -1,5 +1,6 @@
 # Language in the Flow of Time: Time-Series-Paired Texts Weaved into a Unified Temporal Narrative
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

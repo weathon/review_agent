@@ -1,5 +1,6 @@
 # ChangingGrounding: 3D Visual Grounding in Changing Scenes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

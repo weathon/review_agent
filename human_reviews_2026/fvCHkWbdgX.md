@@ -1,5 +1,6 @@
 # ProTDyn: A Foundation Protein Language Model for Thermodynamics and Dynamics Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Improving RAG Question Answering Generation with Synthetic Data
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

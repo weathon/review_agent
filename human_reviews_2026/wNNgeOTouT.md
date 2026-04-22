@@ -1,5 +1,6 @@
 # One-for-All Model Initialization with Frequency-Domain Knowledge
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

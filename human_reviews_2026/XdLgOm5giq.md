@@ -1,5 +1,6 @@
 # Can vision language models learn intuitive physics from interaction?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

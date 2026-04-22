@@ -1,5 +1,6 @@
 # Bayesian Optimization by Minimum Filling Distance Search
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

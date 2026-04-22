@@ -1,5 +1,6 @@
 # Do you know what k-means? Clustering with constant number of samples
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Distilled Pretraining: A modern lens of Data, In-Context Learning and Test-Time Scaling
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

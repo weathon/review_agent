@@ -1,5 +1,6 @@
 # Analytica: Soft Propositional Reasoning for Robust and Scalable LLM-Driven Analysis
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Mechanism of Task-oriented Information Removal in In-context Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 4, 10, 10, 6
 

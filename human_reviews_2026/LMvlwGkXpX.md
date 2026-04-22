@@ -1,5 +1,6 @@
 # Homeostatic Adaptation of Optimal Population Codes under Metabolic Stress
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

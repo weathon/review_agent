@@ -1,5 +1,6 @@
 # Adaptive Mixture of Disentangled Experts for Dynamic Graph Out-of-Distribution Generalization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

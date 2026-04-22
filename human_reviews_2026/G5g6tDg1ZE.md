@@ -1,5 +1,6 @@
 # Harpoon: Generalised Manifold Guidance for Conditional Tabular Diffusion
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

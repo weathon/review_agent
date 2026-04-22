@@ -1,5 +1,6 @@
 # When Large Multimodal Models Confront Evolving Knowledge: Challenges and Explorations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

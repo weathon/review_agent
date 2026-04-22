@@ -1,5 +1,6 @@
 # Error as Signal: Stiffness-Aware Diffusion Sampling via Embedded Runge-Kutta Guidance
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

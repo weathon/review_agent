@@ -1,5 +1,6 @@
 # Discontinuity-Preserving Image Super-Resolution via MAP-Regularized One-Step Diffusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

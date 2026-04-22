@@ -1,5 +1,6 @@
 # EDIF: Editing via Dynamic Interactive Tuning with Feedback
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 6, 0, 4, 4
 

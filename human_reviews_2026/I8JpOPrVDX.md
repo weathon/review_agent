@@ -1,5 +1,6 @@
 # Multi-Objective-Guided Discrete Flow Matching for Controllable Biological Sequence Design
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

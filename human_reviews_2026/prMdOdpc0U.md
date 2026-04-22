@@ -1,5 +1,6 @@
 # Image Generation from Contextually-Contradictory Prompts
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

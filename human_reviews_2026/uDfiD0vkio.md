@@ -1,5 +1,6 @@
 # A Proximal Stochastic Gradient Method for Doubly-regularized Spectral Risk Minimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

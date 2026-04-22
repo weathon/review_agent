@@ -1,5 +1,6 @@
 # MVGE: Scale-invariant and Temporal-consistent Monocular Video Geometry Estimation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

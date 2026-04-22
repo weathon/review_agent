@@ -1,5 +1,6 @@
 # SALMAN: Stability Analysis of Language Models Through the Maps Between Graph-based Manifolds
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

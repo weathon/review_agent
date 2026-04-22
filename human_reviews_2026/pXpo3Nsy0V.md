@@ -1,5 +1,6 @@
 # Learning Treatment Representations for Downstream Instrumental Variable Regression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

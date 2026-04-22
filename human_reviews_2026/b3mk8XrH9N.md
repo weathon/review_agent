@@ -1,5 +1,6 @@
 # Reinforcement Learning for Versatile Video Reasoning Capabilities in Base Multimodal LLMs
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6, 2
 

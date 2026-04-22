@@ -1,5 +1,6 @@
 # Dual-MoE: Learning Time and Channel Dependencies via Dual Mixture-of-Experts for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 4, 2
 

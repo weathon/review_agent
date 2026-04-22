@@ -1,5 +1,6 @@
 # What Makes Looped Transformers Perform Better Than Non-Recursive Ones (Provably)
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4
 

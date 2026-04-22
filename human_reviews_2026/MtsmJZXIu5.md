@@ -1,5 +1,6 @@
 # Can In-Context Reinforcement Learning Recover From Reward Poisoning Attacks?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Unlearning Shapley: Data Valuation through Machine Unlearning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Training Large Reasoning Models Efficiently via Progressive Thought Encoding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

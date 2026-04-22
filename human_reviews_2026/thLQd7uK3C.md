@@ -1,5 +1,6 @@
 # IBiT: Utilizing Inductive Biases to Create a More Data Efficient Attention Mechanism
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

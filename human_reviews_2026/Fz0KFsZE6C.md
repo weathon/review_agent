@@ -1,5 +1,6 @@
 # OpenSIR: Open-Ended Self-Improving Reasoner
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

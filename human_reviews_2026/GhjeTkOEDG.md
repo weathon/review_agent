@@ -1,5 +1,6 @@
 # CountTRuCoLa: Rule Learning for Explainable Temporal Knowledge Graph Forecasting
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # AIGID-RFT: Reinforcement Fine-Tuning Multimodal LLMs for AI-Generated Image Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Hierarchy Decoding: A Training-free Parallel Decoding Strategy  for Diffusion Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

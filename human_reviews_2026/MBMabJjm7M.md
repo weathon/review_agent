@@ -1,5 +1,6 @@
 # Latent-to-Observable Score Correction for Probabilistic Time Series Imputation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

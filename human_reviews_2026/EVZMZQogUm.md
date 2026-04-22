@@ -1,5 +1,6 @@
 # Late-to-Early Training: LET LLMs Learn Earlier, So Faster and Better
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

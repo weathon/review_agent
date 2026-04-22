@@ -1,5 +1,6 @@
 # Explicit Representation Alignment via Subspace Elimination for Robust LLM Unlearning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Practical Diffusion Planning via Temperature-Guided Reward Conditioning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

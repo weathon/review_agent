@@ -1,5 +1,6 @@
 # Language Models Do Not Have Human-Like Working Memory
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

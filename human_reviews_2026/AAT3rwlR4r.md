@@ -1,5 +1,6 @@
 # Learning Continuous and Discrete Dynamics for Time Series Anomaly Detection via Probabilistic Modeling
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 2, 8, 8
 

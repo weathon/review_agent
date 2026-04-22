@@ -1,5 +1,6 @@
 # Mixture of Groups: Grouped Gating and Cross Mixing for Parameter-Efficient LLM Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Preserving Representation In Continual Learning via Feature-Preserving Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

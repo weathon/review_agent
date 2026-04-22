@@ -1,5 +1,6 @@
 # Beyond Static Vision: Scene Dynamic Field Unlocks Intuitive Physics Understanding in Multi-modal Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

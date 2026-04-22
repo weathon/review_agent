@@ -1,5 +1,6 @@
 # Probabilistic DiffusionNet: A geometry informed probabilistic generative surrogate for PDEs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

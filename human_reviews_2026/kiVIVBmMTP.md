@@ -1,5 +1,6 @@
 # SAVIOR: Sample-efficient Alignment of Vision-Language Models for OCR Representation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

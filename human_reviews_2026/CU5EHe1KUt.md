@@ -1,5 +1,6 @@
 # Diffusion Negative Preference Optimization Made Simple
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

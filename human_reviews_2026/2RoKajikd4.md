@@ -1,5 +1,6 @@
 # RL Beats SFT while Mitigating Definition Bias in LLM-based Information Extraction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

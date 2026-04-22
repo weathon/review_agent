@@ -1,5 +1,6 @@
 # Malice in Agentland: Down the Rabbit Hole of Backdoors in the AI Supply Chain
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

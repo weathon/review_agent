@@ -1,5 +1,6 @@
 # BioRNN: Bio-Inspired Synergistic Integration of Neuromodulation and Wave Propagation in Recurrent Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

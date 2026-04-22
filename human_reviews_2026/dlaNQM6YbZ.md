@@ -1,5 +1,6 @@
 # The Flaw of Averages: Quantifying Uniformity of Performance on Benchmarks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Privacy Leakage via Output Label Space and Differentially Private Continual Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

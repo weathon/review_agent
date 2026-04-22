@@ -1,5 +1,6 @@
 # (U)NFV: (Un)Supervised Neural Finite Volume Methods for Solving Hyperbolic PDEs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

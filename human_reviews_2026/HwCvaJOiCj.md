@@ -1,5 +1,6 @@
 # Mamba-3: Improved Sequence Modeling using State Space Principles
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # MUSEG: Reinforcing Video Temporal Understanding via Timestamp-Aware Multi-Segment Grounding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

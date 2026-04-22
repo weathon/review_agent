@@ -1,5 +1,6 @@
 # Supra-Tuning: Combining Outlier and Low-Rank Adaptation for Sparse and Efficient LLM Fine-Tuning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

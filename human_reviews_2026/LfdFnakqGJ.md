@@ -1,5 +1,6 @@
 # A2ASecBench: A Protocol-Aware Security Benchmark for Agent-to-Agent Multi-Agent Systems
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

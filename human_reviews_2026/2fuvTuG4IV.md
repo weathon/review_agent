@@ -1,5 +1,6 @@
 # SinoMultiAffect: A Chinese Multi-Label and Fine-Grained Emotional Text Dataset with fMRI Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Attributing Data for Sharpness-Aware Minimization
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4, 2
 

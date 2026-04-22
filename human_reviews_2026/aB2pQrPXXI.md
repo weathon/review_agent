@@ -1,5 +1,6 @@
 # Learning Compact Vision Tokens for Large Multimodal Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

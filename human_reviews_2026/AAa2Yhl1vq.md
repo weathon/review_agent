@@ -1,5 +1,6 @@
 # LLMs Reading the Rhythms of Daily Life: Aligned Understanding for Behavior Prediction and Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

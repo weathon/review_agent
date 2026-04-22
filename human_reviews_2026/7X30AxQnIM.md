@@ -1,5 +1,6 @@
 # In-situ Adaptation for LLM-based Link Prediction: A Dynamic Cognition Paradigm for Temporal Knowledge Graphs
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 6, 2
 

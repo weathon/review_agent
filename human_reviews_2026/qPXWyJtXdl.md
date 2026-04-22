@@ -1,5 +1,6 @@
 # LoRE: Robust and Adaptive Graph Embeddings via Local Self-Reconstruction Mechanisms
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

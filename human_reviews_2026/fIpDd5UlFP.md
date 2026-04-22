@@ -1,5 +1,6 @@
 # AA-SVD: Anchored and Adaptive SVD for Large Model Compression
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

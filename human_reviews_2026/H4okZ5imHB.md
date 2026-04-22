@@ -1,5 +1,6 @@
 # Lean Clients, Full Accuracy: Hybrid Zeroth- and First-Order Split Federated Learning
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2, 2
 

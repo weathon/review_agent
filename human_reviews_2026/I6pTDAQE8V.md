@@ -1,5 +1,6 @@
 # SNAP: Generalizable Zero-Shot Prediction of Neural Architecture Performance via Semantic Embedding and Graph Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

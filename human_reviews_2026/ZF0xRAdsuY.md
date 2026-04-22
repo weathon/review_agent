@@ -1,5 +1,6 @@
 # Bound by semanticity: universal laws governing the generalization-identification tradeoff
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 10, 8, 6, 6
 

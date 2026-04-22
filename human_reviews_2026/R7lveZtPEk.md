@@ -1,5 +1,6 @@
 # LongRM: Revealing and Unlocking the Context Boundary of Reward Modeling
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

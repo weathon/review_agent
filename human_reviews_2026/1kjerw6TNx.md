@@ -1,5 +1,6 @@
 # Learning to Anticipate: A Conditional Representation Fusion Network for Pre-Stroke Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 0, 6, 4
 

@@ -1,5 +1,6 @@
 # Compositional Text-to-Image Generation Via Region-aware Bimodal Direct Preference Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

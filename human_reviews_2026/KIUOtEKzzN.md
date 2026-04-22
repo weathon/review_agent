@@ -1,5 +1,6 @@
 # NoLLMRAG: LLM-Free Makes Graph-Based RAG Highly Efficient, Effective and Generalizable
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

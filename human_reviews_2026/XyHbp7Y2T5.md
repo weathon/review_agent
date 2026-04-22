@@ -1,5 +1,6 @@
 # PhyCo: Physics-Consistent Learning of Implicit Constitutive Laws via Monocular Observations of 3D Gaussians
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

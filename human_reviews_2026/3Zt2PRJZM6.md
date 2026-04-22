@@ -1,5 +1,6 @@
 # ReasAlign: Reasoning Enhanced Safety Alignment against Prompt Injection Attack
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

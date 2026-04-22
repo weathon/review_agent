@@ -1,5 +1,6 @@
 # Multi-Agent Reinforcement Learning for Heterogeneous Large-Scale Blotto Games
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0, 2
 

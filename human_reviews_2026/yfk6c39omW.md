@@ -1,5 +1,6 @@
 # Escaping Model Collapse via Synthetic Data Verification:  Near-term Improvements and Long-term Convergence
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6, 6
 
@@ -24,7 +25,8 @@ The paper studies verifier-guided synthetic retraining: a loop that (i) generate
 
 ### Strengths
 - The work formalizes a widely used practice, i.e., filtering synthetic data with a verifier and shows how it changes collapse dynamics.
- 
+
+
 - A clear theoretical framework and detailed analysis followed by empirical evidence in simple setup.
 
 ### Weaknesses

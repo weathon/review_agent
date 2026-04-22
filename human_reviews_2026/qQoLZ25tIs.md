@@ -1,5 +1,6 @@
 # Neural Diversity Regularizes Hallucinations in Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

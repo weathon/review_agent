@@ -1,5 +1,6 @@
 # NOAH: Benchmarking Narrative Prior driven Hallucination and Omission in Video Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

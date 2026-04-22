@@ -1,5 +1,6 @@
 # ELEPHANT: Measuring and understanding social sycophancy in LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

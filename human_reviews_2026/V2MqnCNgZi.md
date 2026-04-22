@@ -1,5 +1,6 @@
 # Concise Reasoning via Reinforcement Learning
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 8
 

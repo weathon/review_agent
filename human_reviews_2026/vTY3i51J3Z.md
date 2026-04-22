@@ -1,5 +1,6 @@
 # Keep CALM and Avoid Harmful Content: Concept Alignment and Latent Manipulation Towards Safer Answers
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

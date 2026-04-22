@@ -1,5 +1,6 @@
 # SecMCP: Quantifying Conversation Drift in MCP via Latent Polytope
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

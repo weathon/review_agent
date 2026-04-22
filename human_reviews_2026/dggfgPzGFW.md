@@ -1,5 +1,6 @@
 # PhysWorld: From Real Videos to World Models of Deformable Objects via Physics-Aware Demonstration Synthesis
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 6
 

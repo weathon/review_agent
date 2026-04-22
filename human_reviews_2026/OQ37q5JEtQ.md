@@ -1,5 +1,6 @@
 # Improving Causal Inference Robustness via Reinforcement-guided Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 
@@ -165,7 +166,8 @@ The work proposes a new method to ensure robustness to covariate shifts for cond
 The paper studies a relatively underexplored problem of causal machine learning: robustness to covariate shifts and external validity of CATE learners. The proposed method is somewhat original.
 
 ### Weaknesses
-However, I found multiple fundamental flaws in the current version of the paper: 
+However, I found multiple fundamental flaws in the current version of the paper:
+
 
 - **Lack of theoretical guarantees**. The suggested method promises to address multiple issues of the covariate shift (i.e., (a) measurement errors, (b) missing values, and (c) unmeasured confounding). Yet, **no theoretical assumptions** were provided on (1) how the  CARD tackles all these settings, and (2) whether CATE is identifiable at all (with any method), given target domain data. For example, the authors have used the approach of [1] for setting (b) missing values, but provided no discussion on the underlying assumptions of [1]. Although some assumptions were offered in Sec. 3.1, they do not directly relate to (a)-(c) but rather to the absence/presence of the effect modifiers between source/target domains. Therefore, I fail to see how the proposed method achieves consistent estimation in all the settings (a)-(c). I understand that the experimental evidence suggests a high effectiveness of the method, yet the authors cannot claim that the method works for any general type of (a) measurement errors, (b) missing values, and (c) unmeasured confounding. For example, given unmeasured confounding in the target domain data, the CATE is not point-identifiable, and I fail to see how CARD solves this issue. 
 
@@ -177,7 +179,10 @@ Apart from the major issues listed above, I found small mistakes in the paper:
 
 - Not all the notation is clearly defined. What is $\bigoplus$ and how is $\Omega$ defined?
 - Line 250. There is no Enc in Eq. (5).
-- Line 208. Missing date in (Black et al.) paper.   
+- Line 208. Missing date in (Black et al.) paper.
+
+
+
 
 References:
 - [1] Nathan Kallus, Xiaojie Mao, and Madeleine Udell. Causal inference with noisy and missing covariates via matrix factorization. Advances in neural information processing systems, 31, 2018.

@@ -1,5 +1,6 @@
 # AI-for-Science Low-code Platform with Bayesian Adversarial Multi-Agent Framework
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Challenging VLMs' Structural Spatial Intelligence through Complex Reasoning Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

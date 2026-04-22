@@ -1,5 +1,6 @@
 # GEDAN: Learning the Edit Costs for Graph Edit Distance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

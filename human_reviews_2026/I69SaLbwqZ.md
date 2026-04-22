@@ -1,5 +1,6 @@
 # Distribution-informed Online Conformal Prediction
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 4
 

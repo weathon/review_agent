@@ -1,5 +1,6 @@
 # PURE: Prototypical Mutual Prompting Enhancement for Zero-shot Text-attributed Graph Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

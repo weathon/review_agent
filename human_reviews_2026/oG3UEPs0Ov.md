@@ -1,5 +1,6 @@
 # From Neural Mechanisms of Short-Term Memory to the Computational Architecture of the Human Brain
 
+- Avg Score: 0.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 2, 0
 

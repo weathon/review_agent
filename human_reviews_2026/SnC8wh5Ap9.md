@@ -1,5 +1,6 @@
 # Hyperbolic Hierarchical Clustering for Visual Representation Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 2, 6
 

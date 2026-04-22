@@ -1,5 +1,6 @@
 # TTT3R: 3D Reconstruction as Test-Time Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # AMPED: Adaptive Multi-objective Projection for balancing Exploration and skill Diversification
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 4
 

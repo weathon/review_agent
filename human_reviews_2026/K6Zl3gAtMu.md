@@ -1,5 +1,6 @@
 # Foliagen: Framework for Foliage Image Generation from Individual Crop Leaf Images
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8
 

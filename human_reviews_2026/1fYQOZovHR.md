@@ -1,5 +1,6 @@
 # MOLM: Mixture of LoRA Markers
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4
 

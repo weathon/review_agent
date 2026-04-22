@@ -1,5 +1,6 @@
 # Improved high-dimensional estimation with Langevin dynamics and stochastic weight averaging
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

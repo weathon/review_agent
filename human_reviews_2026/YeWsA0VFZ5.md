@@ -1,5 +1,6 @@
 # LoCoT2V-Bench: A Benchmark for Long-Form and Complex Text-to-Video Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

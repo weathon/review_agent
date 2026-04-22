@@ -1,5 +1,6 @@
 # From Offline to Online Memory-Free and Task-Free Continual Learning via Fine-Grained Hypergradients
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

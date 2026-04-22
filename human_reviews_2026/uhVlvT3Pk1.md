@@ -1,5 +1,6 @@
 # Probing Human Visual Robustness with Neurally-Guided Deep Neural Networks
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 2, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # GradPruner: Gradient-guided Layer Pruning Enabling Efficient Fine-Tuning and Inference for LLMs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

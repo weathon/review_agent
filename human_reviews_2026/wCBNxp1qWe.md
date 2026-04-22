@@ -1,5 +1,6 @@
 # Online Fitting Connectome-constrained Drosophila Whole-brain Model Reproduces Critical Resting-state Dynamics
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

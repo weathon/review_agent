@@ -1,5 +1,6 @@
 # SmartDJ: Declarative Audio Editing with Audio Language Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

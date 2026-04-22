@@ -1,5 +1,6 @@
 # DriveE2E: Closed-Loop Benchmark for End-to-End Autonomous Driving through Real-to-Simulation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

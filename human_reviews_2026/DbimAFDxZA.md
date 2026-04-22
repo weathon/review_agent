@@ -1,5 +1,6 @@
 # Universality and kernel-adaptive training for classically trained, quantum-deployed generative models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

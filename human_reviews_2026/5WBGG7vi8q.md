@@ -1,5 +1,6 @@
 # LIHE: Linguistic Instance-Split Hyperbolic-Euclidean Framework for Weakly-Supervised Generalized Referring Expression Comprehension
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

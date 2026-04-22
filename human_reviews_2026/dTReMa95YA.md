@@ -1,5 +1,6 @@
 # Modality Curation: Building Universal Embeddings for Advanced Multimodal Information Retrieval
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

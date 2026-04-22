@@ -1,5 +1,6 @@
 # Beyond Benchmarks: Toward Causally Faithful Evaluation of Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

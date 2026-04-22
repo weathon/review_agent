@@ -1,5 +1,6 @@
 # CPiRi: Channel Permutation-Invariant Relational Interaction for Multivariate Time Series Forecasting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

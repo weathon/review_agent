@@ -1,5 +1,6 @@
 # Not All Imbalance Is Random: Cluster-Balanced Ensembling for Missing-Not-At-Random Class Imbalance
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 6, 2, 0, 2
 

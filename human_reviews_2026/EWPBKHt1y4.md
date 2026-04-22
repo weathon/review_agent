@@ -1,5 +1,6 @@
 # Hierarchical Molecular Representation Learning via Fragment-Based Self-Supervised Embedding Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Generation is Required for Data-Efficient Perception
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # A Benchmark for Automatic ML Research Agents Highlighting the Importance of Exploration Breadth
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Three Forms of Stochastic Injection for Improved Distribution-to-Distribution Generative Modeling
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # MARS: Toward More Efficient Multi-agent Collaboration for LLM Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

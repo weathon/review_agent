@@ -1,5 +1,6 @@
 # ZeroSiam: An Efficient Asymmetry for Test-Time Entropy Optimization without Collapse
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # QDOT: An Efficient Quantile-weighted Distance Metric for Geometric Comparison via Optimal Transport
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 2, 6, 4, 6
 

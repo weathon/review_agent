@@ -1,5 +1,6 @@
 # Shoot First, Ask Questions Later? Building Rational Agents that Explore and Act Like People
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 8, 4, 8
 

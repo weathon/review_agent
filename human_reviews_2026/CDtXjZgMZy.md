@@ -1,5 +1,6 @@
 # Policy-Based Trajectory Clustering in Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

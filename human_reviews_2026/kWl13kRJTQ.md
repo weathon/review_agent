@@ -1,5 +1,6 @@
 # AC-Sampler: Accelerate and Correct Diffusion Sampling with Metropolis-Hastings Algorithm
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

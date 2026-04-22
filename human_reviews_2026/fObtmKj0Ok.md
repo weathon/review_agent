@@ -1,5 +1,6 @@
 # Model Merging beyond Image Classification: A Reality Check
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # From Sparse to Dense: Spatio-Temporal Fusion for Multi-View 3D Human Pose Estimation with DenseWarper
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

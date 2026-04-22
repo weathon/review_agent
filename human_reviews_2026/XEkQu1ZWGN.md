@@ -1,5 +1,6 @@
 # ChemBOMAS: Accelerated Bayesian Optimization for Scientific Discovery in Chemistry with LLM-Enhanced Multi-Agent System
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

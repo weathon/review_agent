@@ -1,5 +1,6 @@
 # Balancing the False Positive-Negative tradeoff to enhance Image Segmentation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

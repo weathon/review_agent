@@ -1,5 +1,6 @@
 # Reliable Fine-Grained Evaluation of Natural Language Math Proofs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

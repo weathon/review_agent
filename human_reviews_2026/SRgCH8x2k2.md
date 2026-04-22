@@ -1,5 +1,6 @@
 # H3AE: High Compression, High Speed, and High Quality AutoEncoder for Video Diffusion Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 4, 2, 8, 8
 

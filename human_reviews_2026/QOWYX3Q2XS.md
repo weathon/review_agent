@@ -1,5 +1,6 @@
 # MENLO: From Preferences to Proficiency – Evaluating and Modeling Native-like Quality Across 47 Languages
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

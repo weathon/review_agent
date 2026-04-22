@@ -1,5 +1,6 @@
 # MotionGPT3: Human Motion as a Second Modality
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

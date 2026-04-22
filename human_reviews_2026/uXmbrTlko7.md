@@ -1,5 +1,6 @@
 # ScalingCache: Extreme Acceleration of DiTs through Difference Scaling and Dynamic Interval Caching
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

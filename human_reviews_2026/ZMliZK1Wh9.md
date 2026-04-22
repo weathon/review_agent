@@ -1,5 +1,6 @@
 # Granular Computing-driven SAM: From Coarse-to-fine Guidance for Prompt-free Segmentation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # DGPO: Mitigating Likelihood Displacement with Bidirectional KL Divergence Gap
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

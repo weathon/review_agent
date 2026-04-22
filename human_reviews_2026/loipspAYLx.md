@@ -1,5 +1,6 @@
 # Who Gets Cited Most? Benchmarking Long-Context Language Models on Scientific Articles
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

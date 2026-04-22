@@ -1,5 +1,6 @@
 # OpenFly: A COMPREHENSIVE PLATFORM FOR AERIAL VISION-LANGUAGE NAVIGATION
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

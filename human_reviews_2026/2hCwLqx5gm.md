@@ -1,5 +1,6 @@
 # Numerion: A Multi-Hypercomplex Model for Time Series Forecasting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

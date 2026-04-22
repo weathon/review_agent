@@ -1,5 +1,6 @@
 # PICABench: How Far are We from Physical Realistic  Image Editing?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

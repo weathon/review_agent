@@ -1,5 +1,6 @@
 # SUN-DSBO: A Structured Unified Framework for Nonconvex Decentralized Stochastic Bilevel Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

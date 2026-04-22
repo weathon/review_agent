@@ -1,5 +1,6 @@
 # On Smoothness Bounds for Non-Clairvoyant Scheduling with Predictions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 2
 

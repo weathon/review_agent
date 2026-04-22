@@ -1,5 +1,6 @@
 # ADReLU: Enhancing Neural Network Expressivity with Attention-based Dynamic ReLU
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 2
 

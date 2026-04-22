@@ -1,5 +1,6 @@
 # RDAR: Reward-Driven Agent Relevance Estimation for Autonomous Driving
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

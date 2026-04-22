@@ -1,5 +1,6 @@
 # IceCache: Memory-Efficient KV-cache Management for Long-Sequence LLMs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

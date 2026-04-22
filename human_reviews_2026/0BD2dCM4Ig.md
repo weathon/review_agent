@@ -1,5 +1,6 @@
 # Two Sides of the Same Optimization Coin: Model Degradation and Representation Collapse in Graph Foundation Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

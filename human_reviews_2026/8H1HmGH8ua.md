@@ -1,5 +1,6 @@
 # LongVTG-R1: Reinforcement Learning for Robust Long-Video Temporal Grounding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

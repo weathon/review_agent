@@ -1,5 +1,6 @@
 # Robust Preference Alignment via Directional Neighborhood Consensus
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

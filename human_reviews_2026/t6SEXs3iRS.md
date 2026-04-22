@@ -1,5 +1,6 @@
 # Toward Preference-aligned Large Language Models via Residual-based Model Steering
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

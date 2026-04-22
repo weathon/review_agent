@@ -1,5 +1,6 @@
 # Cross-ControlNet: Training-Free Fusion of Multiple Conditions for Text-to-Image Generation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8, 4
 

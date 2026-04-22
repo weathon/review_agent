@@ -1,5 +1,6 @@
 # SELF: A Robust Singular Value and Eigenvalue Approach for LLM  Fingerprinting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # OS-Catalyst: Advancing Computer-Using Agents Efficiency through Adaptive Action Compression
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

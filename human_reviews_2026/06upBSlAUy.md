@@ -1,5 +1,6 @@
 # SIPO: Stabilized and Improved Preference Optimization for Aligning Diffusion Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

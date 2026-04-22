@@ -1,5 +1,6 @@
 # Jackal: A Real-World Execution-Based Benchmark Evaluating Large Language Models on Text-to-JQL Tasks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

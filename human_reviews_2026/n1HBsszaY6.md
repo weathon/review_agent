@@ -1,5 +1,6 @@
 # SABRE-FL: Selective and Accurate Backdoor Rejection for Federated Prompt Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

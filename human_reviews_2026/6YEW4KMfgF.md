@@ -1,5 +1,6 @@
 # Boosting Federated Model Convergence with Anomaly Detection and Exclusion
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

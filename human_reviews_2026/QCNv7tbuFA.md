@@ -1,5 +1,6 @@
 # Expert or not? Assessing data quality in offline reinforcement learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

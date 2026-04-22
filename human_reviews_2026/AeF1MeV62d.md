@@ -1,5 +1,6 @@
 # Latent Planning via Embedding Arithmetic: A Contrastive Approach to Strategic Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

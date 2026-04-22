@@ -1,5 +1,6 @@
 # AnomSeer: Reinforcing Multimodal LLMs to Reason for Time-Series Anomaly Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

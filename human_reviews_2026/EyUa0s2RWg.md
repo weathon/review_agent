@@ -1,5 +1,6 @@
 # PI-Controlled Uncertainty for Steady-State Error Elimination in  Ultrasound Image Segmentation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

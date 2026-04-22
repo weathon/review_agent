@@ -1,5 +1,6 @@
 # Multi-Agent Design: Optimizing Agents with Better Prompts and Topologies
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

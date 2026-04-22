@@ -1,5 +1,6 @@
 # Information Gain-based Policy Optimization: A Simple and Effective Approach for Multi-Turn Search Agents
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

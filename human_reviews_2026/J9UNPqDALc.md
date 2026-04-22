@@ -1,5 +1,6 @@
 # EverydayMMQA: A Multimodal and Multilingual Framework for Culturally Grounded VQA
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

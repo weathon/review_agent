@@ -1,5 +1,6 @@
 # Refining Dual Spectral Sparsity in Transformed Tensor Singular Values
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

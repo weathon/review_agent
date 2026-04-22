@@ -1,5 +1,6 @@
 # Designing Affine-Invariant Neural Networks for Photometric Corruption Robustness and Generalization
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

@@ -1,5 +1,6 @@
 # A Guardrail for Safety Preservation: When Safety-Sensitive Subspace Meets Harmful-Resistant Null-Space
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8, 4
 

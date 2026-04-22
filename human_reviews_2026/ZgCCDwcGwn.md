@@ -1,5 +1,6 @@
 # AgentGym-RL: An Open-Source Framework to Train LLM Agents for Long-Horizon Decision Making via Multi-Turn RL
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 10
 

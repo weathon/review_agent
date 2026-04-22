@@ -1,5 +1,6 @@
 # UniRA: Unified Representation Alignment for Diffusion Models via Local, Structural, and Global Constraints
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

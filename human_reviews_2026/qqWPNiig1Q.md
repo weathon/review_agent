@@ -1,5 +1,6 @@
 # One Bad Sample May Spoil the Whole Batch: A Novel Backdoor-Like Attack Towards Large Batch Processing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

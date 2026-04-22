@@ -1,5 +1,6 @@
 # A Pitfall in Conformal Prediction:  When Shorter Intervals Are Not Better
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

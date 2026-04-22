@@ -1,5 +1,6 @@
 # From Intents to Actions: Agentic AI in Autonomous Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

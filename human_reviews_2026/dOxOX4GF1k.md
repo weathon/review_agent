@@ -1,5 +1,6 @@
 # The Robustness-Security Paradox: Channel-Aware Feature Learning for Adversarial Watermark Exploitation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

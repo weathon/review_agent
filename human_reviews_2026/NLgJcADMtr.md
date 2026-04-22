@@ -1,5 +1,6 @@
 # Hierarchical Aggregation Deconstruction Search for Vehicle Routing Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

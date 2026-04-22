@@ -1,5 +1,6 @@
 # Reduce What You Use: Input‑Aware Matrix‑Multiplication Pruning for LLMs
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 8, 4, 2, 2
 

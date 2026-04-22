@@ -1,5 +1,6 @@
 # Don’t Waste Mistakes: Leveraging Negative RL-Groups via Confidence Reweighting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

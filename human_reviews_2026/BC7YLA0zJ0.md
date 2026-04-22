@@ -1,5 +1,6 @@
 # In-Context Algorithm Emulation in Fixed-Weight Transformers
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

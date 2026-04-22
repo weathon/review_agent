@@ -1,5 +1,6 @@
 # Robust Deep Reinforcement Learning against Adversarial Behavior Manipulation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Softly Constrained Denoisers for Diffusion Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

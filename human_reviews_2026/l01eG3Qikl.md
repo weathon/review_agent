@@ -1,5 +1,6 @@
 # DriftLite: Lightweight Drift Control for Inference-Time Scaling of Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

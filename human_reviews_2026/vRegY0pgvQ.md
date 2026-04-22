@@ -1,5 +1,6 @@
 # Mobile-GS: Real-time Gaussian Splatting for Mobile Devices
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 6
 

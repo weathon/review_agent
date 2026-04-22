@@ -1,5 +1,6 @@
 # Simple Stepsizes for Quasi-Newton Methods with Global Convergence Guarantees
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

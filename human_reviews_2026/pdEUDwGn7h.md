@@ -1,5 +1,6 @@
 # Enhancing structural consistency of 3D Human Pose Estimation through Trainable Loss Function
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

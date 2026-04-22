@@ -1,5 +1,6 @@
 # Finding Dori: Memorization in Text-to-Image Diffusion Models Is Not Local
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 8, 2
 

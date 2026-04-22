@@ -1,5 +1,6 @@
 # Graph Logic Flows: Geometry-Driven, Certificate-Carrying Reasoning on Dynamic Graphs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

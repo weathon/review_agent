@@ -1,5 +1,6 @@
 # On Powerful Ways to Generate: Autoregression, Diffusion, and Beyond
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

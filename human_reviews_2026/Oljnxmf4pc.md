@@ -1,5 +1,6 @@
 # OrchestrationBench: LLM-Driven Agentic Planning and Tool Use in Multi-Domain Scenarios
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4, 8
 

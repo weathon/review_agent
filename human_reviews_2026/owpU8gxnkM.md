@@ -1,5 +1,6 @@
 # ENCOURAGING CRITICAL THINKING FOR MULTIAGENT DEBATE
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

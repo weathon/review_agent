@@ -1,5 +1,6 @@
 # Language Models as Noisy Experts for Sequential Causal Discovery
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

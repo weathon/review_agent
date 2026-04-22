@@ -1,5 +1,6 @@
 # LLM knowledge is brittle: truthfulness representations rely on superficial resemblance
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # HAPPI: Efficient KV cache compression with Hadamard PCA-based Power iteration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 6, 6
 

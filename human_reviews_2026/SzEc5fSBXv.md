@@ -1,5 +1,6 @@
 # FSPO: Few-Shot Optimization of Synthetic Preferences Effectively Personalizes to Real Users
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

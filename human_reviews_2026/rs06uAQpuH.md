@@ -1,5 +1,6 @@
 # Parallelizing Tree Search With Twice Sequential Monte Carlo
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

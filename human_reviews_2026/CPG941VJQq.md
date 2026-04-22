@@ -1,5 +1,6 @@
 # RankGen: A Statistically Robust Framework for Ranking Generative Models Using Classifier-Based Metrics
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 0, 4, 4, 4
 

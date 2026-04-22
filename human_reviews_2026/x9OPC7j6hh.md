@@ -1,5 +1,6 @@
 # Low-Resource Finetuning for Hallucination Mitigation in Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

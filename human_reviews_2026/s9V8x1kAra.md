@@ -1,5 +1,6 @@
 # Robust Safety Guarantee for Large Language Models via Preference-Augmented Distributional Alignment
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 4, 2
 

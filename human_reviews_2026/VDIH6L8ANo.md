@@ -1,5 +1,6 @@
 # Convergence Dynamics of Over-Parameterized Score Matching for a Single Gaussian
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

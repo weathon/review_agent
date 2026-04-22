@@ -1,5 +1,6 @@
 # Token Distillation: Attention-Aware Input Embeddings for New Tokens
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

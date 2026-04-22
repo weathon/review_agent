@@ -1,5 +1,6 @@
 # Mitigating Non-IID Drift in Zeroth-Order Federated LLM Fine-Tuning with Transferable Sparsity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

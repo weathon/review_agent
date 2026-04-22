@@ -1,5 +1,6 @@
 # TravelReasoner: Reasoning-Augmented Travel Survey Simulations with Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

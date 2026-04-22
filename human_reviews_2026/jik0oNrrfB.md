@@ -1,5 +1,6 @@
 # EmoNet-Voice: A Large-Scale Synthetic Benchmark for Fine-Grained Speech Emotion
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

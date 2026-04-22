@@ -1,5 +1,6 @@
 # How Much Backtracking is Enough? Exploring the Interplay of SFT and RL in Enhancing LLM Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

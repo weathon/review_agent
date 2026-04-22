@@ -1,5 +1,6 @@
 # Conductor: Dynamically Orchestrating Pipeline Parallelism with Multi-Granularity Control
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

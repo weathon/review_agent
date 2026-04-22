@@ -1,5 +1,6 @@
 # MobileGUI-RL: Advancing Mobile GUI Agent through Reinforcement Learning in Online Environment
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 4
 

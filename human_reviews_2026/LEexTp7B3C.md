@@ -1,5 +1,6 @@
 # BridgEAD: A Vision-Language Framework for Action Modeling in End-to-End Autonomous Driving
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

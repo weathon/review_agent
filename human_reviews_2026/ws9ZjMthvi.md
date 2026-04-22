@@ -1,5 +1,6 @@
 # Quantifying Memory Use in Reinforcement Learning with Temporal Range
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

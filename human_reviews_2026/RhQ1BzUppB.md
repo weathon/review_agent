@@ -1,5 +1,6 @@
 # FD-Bench: A Modular and Fair Benchmark for Data-driven Fluid Simulation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

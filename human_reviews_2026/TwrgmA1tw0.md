@@ -1,5 +1,6 @@
 # Rating Quality of Diverse Time Series Data by Meta-learning from LLM Judgment
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

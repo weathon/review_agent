@@ -1,5 +1,6 @@
 # Unsupervised Domain Adaptation for 6-DoF Pose Estimation with Contrastive Alignment and Pseudo-Label Refinement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

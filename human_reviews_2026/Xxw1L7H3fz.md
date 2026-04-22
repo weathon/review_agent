@@ -1,5 +1,6 @@
 # CGES: Confidence-Guided Early Stopping for Efficient and Accurate Self-Consistency
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # InfoDeepSeek: Benchmarking Agentic Information Seeking for Retrieval-Augmented Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

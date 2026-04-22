@@ -1,5 +1,6 @@
 # Curricular Adversarial Training for Robust Code Generation via Hierarchical Reinforcement Learning
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 0, 2, 0
 

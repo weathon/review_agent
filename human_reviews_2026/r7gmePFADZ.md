@@ -1,5 +1,6 @@
 # SmartDS-Solver: Agentic AI for Vertical Domain Problem Solving in Data Science
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

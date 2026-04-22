@@ -1,5 +1,6 @@
 # PLOT: Pseudo-Labeling via Object Tracking for Monocular 3D Object Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

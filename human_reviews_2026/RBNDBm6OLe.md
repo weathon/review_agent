@@ -1,5 +1,6 @@
 # VIQS: Overcoming the Teacher Ceiling with Value-Guided Intervention and Quality-Aware Shaping
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

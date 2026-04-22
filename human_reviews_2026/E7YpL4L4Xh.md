@@ -1,5 +1,6 @@
 # EditScore: Unlocking Online RL for Image Editing via High-Fidelity Reward Modeling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

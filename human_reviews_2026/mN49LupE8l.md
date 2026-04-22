@@ -1,5 +1,6 @@
 # GeoPurify: A Data-Efficient Geometric Distillation Framework for Open-Vocabulary 3D Segmentation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 2
 

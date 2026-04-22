@@ -1,5 +1,6 @@
 # PEML: Parameter-efficient Multi-Task Learning with Optimized Continuous Prompts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

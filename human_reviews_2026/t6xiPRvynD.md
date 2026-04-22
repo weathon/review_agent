@@ -1,5 +1,6 @@
 # RCPU: Rotation-Constrained Error Compensation for Structured Pruning of Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

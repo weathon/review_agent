@@ -1,5 +1,6 @@
 # AI Realtor: Towards Grounded Persuasive Language Generation for Automated Copywriting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

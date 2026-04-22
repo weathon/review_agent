@@ -1,5 +1,6 @@
 # ATTS: Asynchronous Test-Time Scaling via Conformal Prediction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8
 

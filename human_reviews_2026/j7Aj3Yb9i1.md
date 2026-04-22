@@ -1,5 +1,6 @@
 # Bridging the High-Frequency Data Gap: A Millisecond-Resolution Dataset for Advancing Time Series Foundation Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

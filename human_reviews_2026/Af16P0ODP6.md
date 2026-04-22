@@ -1,5 +1,6 @@
 # Reforming the Mechanism: Editing Reasoning Patterns in LLMs with Circuit Reshaping
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

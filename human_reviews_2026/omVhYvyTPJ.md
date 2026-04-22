@@ -1,5 +1,6 @@
 # LongRLVR: Long-Context Reinforcement Learning Requires Verifiable Context Rewards
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8
 

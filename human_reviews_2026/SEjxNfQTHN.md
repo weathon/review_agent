@@ -1,5 +1,6 @@
 # PSC: Efficient Grammar-Constrained Decoding via Parser Stack Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 
@@ -199,11 +200,15 @@ Syncode (Ugare et. al.) performs single parsing step per decoding step as well. 
 
 The main difference appears to be that Syncode requires mask lookup for each terminal sequence and a union operation over those masks, while PSC combines FSAs offline leading to a single lookup during inference. Can the authors confirm this characterization is accurate?
 
-3) While PSC maintains syntactic correctness guarantees (Table 2), it's unclear whether the efficiency gains allow for practical improvements in downstream tasks.  Even if PSC does not lead to improved semantic correctness, I would encourage the authors to include an experiment for computing pass@k accuracy on standard code generation tasks. 
+3) While PSC maintains syntactic correctness guarantees (Table 2), it's unclear whether the efficiency gains allow for practical improvements in downstream tasks.
+
+Even if PSC does not lead to improved semantic correctness, I would encourage the authors to include an experiment for computing pass@k accuracy on standard code generation tasks. 
  
 Nits:
 
-* Section 4.2 should mention the size of models used for the experiment  
+* Section 4.2 should mention the size of models used for the experiment
+
+
 * I spotted a few places with missing whitespace after punctuations. Line 149, 482. 
 
 > Line 194: While some methods employ precomputation to optimize certain cases, they still fundamentally require
@@ -213,7 +218,9 @@ Precise citations here will be helpful.
 ### Questions
 q1) Is the combination of FSAs the primary novel algorithmic contribution compared to GreatGemma and Syncode? Can you provide an ablation study focusing on efficiency gains from: algorithmic improvements such as FSA combination to disregard the gains from implementation optimizations like use Cython? 
 
-q2) What is the effect of lookahead of LALR parser in overall strength of PSC? Are there any downsides in using LALR parser instead of an Earley parser?  
+q2) What is the effect of lookahead of LALR parser in overall strength of PSC? Are there any downsides in using LALR parser instead of an Earley parser?
+
+
 
 q3) What is the offline time taken for pre-computation performed by PSC for grammars considered in the evaluation? 
 

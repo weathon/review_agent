@@ -1,5 +1,6 @@
 # Predictive Differential Training Guided by Training Dynamics
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

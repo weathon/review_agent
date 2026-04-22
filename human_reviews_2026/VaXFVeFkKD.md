@@ -1,5 +1,6 @@
 # MM-UNet: Meta Mamba UNet for Medical Image Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

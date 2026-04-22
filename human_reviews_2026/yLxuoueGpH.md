@@ -1,5 +1,6 @@
 # Focusing on the Riskiest: Gaussian Mixture Models for Safe Reinforcement Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 2, 4, 8, 6
 

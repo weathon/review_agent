@@ -1,5 +1,6 @@
 # Visual Perceptual to Conceptual First-Order Rule Learning Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

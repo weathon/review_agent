@@ -1,5 +1,6 @@
 # DSML: Dual Semi-Supervised Meta-Learning for Multi-Lingual Text Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Time-Series Causal Discovery via Differentiable Permutations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Hallucination Begins Where Saliency Drops
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 4
 

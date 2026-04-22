@@ -1,5 +1,6 @@
 # Spatial Forcing: Implicit Spatial Representation Alignment for Vision-language-action Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

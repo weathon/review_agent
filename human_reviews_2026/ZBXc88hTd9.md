@@ -1,5 +1,6 @@
 # From Coarse to Fine: Recursive Audio-Visual Semantic Enhancement for Speech Separation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

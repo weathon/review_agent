@@ -1,5 +1,6 @@
 # Learning Massively Multitask World Models for Continuous Control
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

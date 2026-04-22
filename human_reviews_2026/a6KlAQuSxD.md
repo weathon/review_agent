@@ -1,5 +1,6 @@
 # Incentivizing Truthfulness in Fully Decentralized Learning with Guaranteed Accurate Convergence
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

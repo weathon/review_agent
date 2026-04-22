@@ -1,5 +1,6 @@
 # Rethinking Supervised Fine-Tuning: Emphasizing Key Answer Tokens for Improved LLM Accuracy
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

@@ -1,5 +1,6 @@
 # Federated Active Learning via Class-adaptive Local–Global Balancing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

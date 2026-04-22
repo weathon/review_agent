@@ -1,5 +1,6 @@
 # MineTheGap: Automatic Mining of Biases in Text-to-Image Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

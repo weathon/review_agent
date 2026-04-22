@@ -1,5 +1,6 @@
 # Refined Mixed-Strategy Multi-modal Representation Learning for Recommendation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

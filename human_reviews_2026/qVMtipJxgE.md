@@ -1,5 +1,6 @@
 # Jailbreaking Multimodal Large Language Models Through Video Prompts
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

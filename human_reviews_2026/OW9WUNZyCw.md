@@ -1,5 +1,6 @@
 # Universal Learning of Distribution Flow using Ensemble Control Systems
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

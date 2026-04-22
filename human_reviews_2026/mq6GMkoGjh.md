@@ -1,5 +1,6 @@
 # EchoBench: Benchmarking Sycophancy in Medical Large Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 10, 4, 4
 

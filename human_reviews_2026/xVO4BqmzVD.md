@@ -1,5 +1,6 @@
 # SpecRA: Monitor Degenerative Repetition in LLM Agents using Randomized FFT
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

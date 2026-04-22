@@ -1,5 +1,6 @@
 # FedSDR: Federated Graph Learning with Structural Noise Detection and Reconstruction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

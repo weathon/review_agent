@@ -1,5 +1,6 @@
 # Divergence-Free Neural Networks with Application to Image Denoising
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

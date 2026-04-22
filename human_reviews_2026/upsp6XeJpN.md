@@ -1,5 +1,6 @@
 # Testing Fourier Sparsity via Implicit Sensing
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8, 8
 

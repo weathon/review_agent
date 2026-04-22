@@ -1,5 +1,6 @@
 # Efficient Submodular Maximization for Sums of Concave over Modular Functions
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

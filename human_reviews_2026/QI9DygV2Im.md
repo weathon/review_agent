@@ -1,5 +1,6 @@
 # Old but Gold: Adaptive Coreset Selection for Robust Dataset Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

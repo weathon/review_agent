@@ -1,5 +1,6 @@
 # Presenting a Paper is an Art: Self-Improvement Aesthetic Agents for Academic Presentations
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

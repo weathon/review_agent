@@ -1,5 +1,6 @@
 # Multimodal Dataset Distillation Made Simple by Prototype-Guided Data Synthesis
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 6
 

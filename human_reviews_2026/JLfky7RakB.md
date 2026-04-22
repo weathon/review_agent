@@ -1,5 +1,6 @@
 # OBCache: Optimal Brain KV Cache Pruning for Efficient Long-Context LLM Inference
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

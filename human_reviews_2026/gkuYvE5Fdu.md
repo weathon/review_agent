@@ -1,5 +1,6 @@
 # Neural Synchrony Between Socially Interacting Language Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

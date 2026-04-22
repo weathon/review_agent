@@ -1,5 +1,6 @@
 # Aya Vision: Advancing the Frontier of Multilingual Multimodality
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Expert Merging in Sparse Mixture of Experts with Nash Bargaining
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 10, 8, 4
 

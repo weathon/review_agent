@@ -1,5 +1,6 @@
 # SD-MAD: Sign-Driven Few-shot Multi-Anomaly Detection in Medical Images
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

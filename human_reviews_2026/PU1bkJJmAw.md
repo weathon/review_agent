@@ -1,5 +1,6 @@
 # RippleNet: Learning Causal Maritime Dynamics for Forecasting Warning-Induced Ripple Effects
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

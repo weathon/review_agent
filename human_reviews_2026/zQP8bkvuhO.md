@@ -1,5 +1,6 @@
 # EllipWeather: Gaussian Ellipsoid Representation for Weather Modeling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

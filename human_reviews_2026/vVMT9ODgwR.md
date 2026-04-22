@@ -1,5 +1,6 @@
 # Oh-A-DINO: Understanding and Enhancing Attribute-Level Information in Self-Supervised Object-Centric Representations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

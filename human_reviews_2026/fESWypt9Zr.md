@@ -1,5 +1,6 @@
 # Phase-guided Perceptual Alignment for Multi-source Multi-modal Domain Adaptation
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

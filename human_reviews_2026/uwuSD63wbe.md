@@ -1,5 +1,6 @@
 # The Potential of CoT for Reasoning: A Closer Look at Trace Dynamics
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

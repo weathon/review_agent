@@ -1,5 +1,6 @@
 # EGH-Net: Energy-Guided Hypergraph for Two-View Correspondence Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6
 

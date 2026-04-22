@@ -1,5 +1,6 @@
 # TopoCore: Unifying Topology Manifolds and Persistent Homology for Data Pruning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

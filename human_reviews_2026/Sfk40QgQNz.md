@@ -1,5 +1,6 @@
 # Learning Beyond Proximity: Causal Reasoning with LLMs for Robust POI Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

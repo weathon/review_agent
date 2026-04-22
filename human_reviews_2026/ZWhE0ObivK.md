@@ -1,5 +1,6 @@
 # MSAFlow: a Unified Approach for MSA Representation, Augmentation, and Family-based Protein Design
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

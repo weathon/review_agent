@@ -1,5 +1,6 @@
 # Noise reduction in BERT NER SLM models for clinical entity extraction in clinical trials
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

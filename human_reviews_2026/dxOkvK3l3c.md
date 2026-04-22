@@ -1,5 +1,6 @@
 # DMID:Dynamic Mask Attention for High-Fidelity Identity Preservation under Limited Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # BLISS: A Lightweight Bilevel Influence Scoring Method for Data Selection in Language Model Pretraining
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Optimal Control Meets Flow Matching: A Principled Route to Multi-Subject Fidelity
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 

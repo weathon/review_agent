@@ -1,5 +1,6 @@
 # LEMON - a foundation model for single-cell nuclear morphologies for digital pathology
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

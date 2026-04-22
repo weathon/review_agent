@@ -1,5 +1,6 @@
 # HI2M: Hard Inter- and Intra-Sample Masking for Dynamic Facial Expression Recognition
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # OT Score: An OT based Confidence Score for Source Free Unsupervised Domain Adaptation
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

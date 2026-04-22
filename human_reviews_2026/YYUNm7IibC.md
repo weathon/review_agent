@@ -1,5 +1,6 @@
 # GradShield: Alignment Preserving Finetuning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

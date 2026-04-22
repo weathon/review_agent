@@ -1,5 +1,6 @@
 # From Harm to Help: Turning Reasoning In-Context Demos into Assets for Reasoning LMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

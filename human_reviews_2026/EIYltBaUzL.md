@@ -1,5 +1,6 @@
 # Robustify Spiking Neural Networks via Dominant Singular Deflation under Heterogeneous Training Vulnerability
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

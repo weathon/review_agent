@@ -1,5 +1,6 @@
 # DTP: Delta-Guided Two Stage Pruning for Mamba-based Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Predict Overcharging: Auditing LLM APIs via Reasoning Length Estimation
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 2, 6
 

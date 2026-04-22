@@ -1,5 +1,6 @@
 # DeTaCH: Decoupling Tasks and Control via a Meta-Gradient Hypernetwork
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 8, 2, 2
 

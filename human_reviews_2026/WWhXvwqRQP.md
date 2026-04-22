@@ -1,5 +1,6 @@
 # Cognitive-Awakening Chain-of-Surgery for Compositional Zero-Shot Surgical Triplet Recognition
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

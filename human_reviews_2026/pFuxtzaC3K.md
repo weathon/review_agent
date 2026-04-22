@@ -1,5 +1,6 @@
 # Self-Guided Process Reward Optimization with Redefined Step-wise Advantage for Process Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Theoretical Modeling of Large Language Model Self-Improvement Training Dynamics Through Solver-Verifier Gap
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

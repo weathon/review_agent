@@ -1,5 +1,6 @@
 # Global optimization of graph acquisition functions for neural architecture search
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

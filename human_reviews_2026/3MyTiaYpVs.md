@@ -1,5 +1,6 @@
 # Randomized Feature Squeezing against  Unseen  $ {l_p} $ Attacks without Adversarial Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

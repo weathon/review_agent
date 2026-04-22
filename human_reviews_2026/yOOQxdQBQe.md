@@ -1,5 +1,6 @@
 # Lipschitz-Guided Monte Carlo Tree Search with Knowledge Transfer across Sequential Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

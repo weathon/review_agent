@@ -1,5 +1,6 @@
 # Frequency-Domain Better than Time-Domain for Causal Structure Recovery in Dynamical Systems on Networks
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4
 

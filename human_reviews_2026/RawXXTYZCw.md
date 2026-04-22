@@ -1,5 +1,6 @@
 # Bridging Constraints and Stochasticity: A Fully First-Order Method for Stochastic Bilevel Optimization with Linear Constraints
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

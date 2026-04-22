@@ -1,5 +1,6 @@
 # Locally Subspace-Informed Neural Operators for Efficient Multiscale PDE Solving
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # TyphoonMLA: A Mixed Naive-Absorb MLA Kernel For Shared Prefix
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

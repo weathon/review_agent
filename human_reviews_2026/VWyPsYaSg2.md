@@ -1,5 +1,6 @@
 # Does Generative Retrieval Break through the Limitations of Dense Retrieval?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

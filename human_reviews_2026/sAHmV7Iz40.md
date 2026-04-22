@@ -1,5 +1,6 @@
 # Topology Explains Loss Barriers: Quotient Homology of Neural Loss Landscapes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 0, 4, 6
 

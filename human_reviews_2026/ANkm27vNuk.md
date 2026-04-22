@@ -1,5 +1,6 @@
 # Brain-Semantoks: Learning Semantic Tokens of Brain Dynamics with a Self-Distilled Foundation Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 

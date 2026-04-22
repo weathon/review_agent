@@ -1,5 +1,6 @@
 # You Don't Have to Be the One Doing Evil! Locate a Scapegoat within Multi-Agent Systems for Executing Covert Attacks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

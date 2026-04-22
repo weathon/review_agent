@@ -1,5 +1,6 @@
 # DFA-VLA: Enhancing Robotic Manipulation via Embodied Intelligence
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

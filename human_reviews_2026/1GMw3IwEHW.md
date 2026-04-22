@@ -1,5 +1,6 @@
 # Protection against Source Inference Attacks in Federated Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

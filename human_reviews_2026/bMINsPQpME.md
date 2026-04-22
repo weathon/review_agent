@@ -1,5 +1,6 @@
 # Spatial-DISE: A Unified Benchmark for Evaluating Spatial Reasoning in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

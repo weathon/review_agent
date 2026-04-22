@@ -1,5 +1,6 @@
 # VisCoder2: Building Multi-Language Visualization Coding Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 8
 

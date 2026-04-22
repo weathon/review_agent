@@ -1,5 +1,6 @@
 # FuseGPT: Prune-and-Fuse Knowledge Redistribution for Efficient Transformers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

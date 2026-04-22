@@ -1,5 +1,6 @@
 # Building Social World Model with Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

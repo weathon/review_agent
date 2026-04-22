@@ -1,5 +1,6 @@
 # A Multimodal LLM Approach for Visual Question Answering on Multiparametric 3D Brain MRI
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 0, 6, 6
 

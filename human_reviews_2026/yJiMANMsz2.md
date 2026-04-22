@@ -1,5 +1,6 @@
 # DRESS: Disentangled Representation-based Self-Supervised Meta-Learning for Diverse Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

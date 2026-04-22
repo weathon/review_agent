@@ -1,5 +1,6 @@
 # PhyCAGE: Physically Constrained Compositional 3D Asset Generation from a Single Image
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

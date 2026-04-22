@@ -1,5 +1,6 @@
 # FastFace: Training-Free Identity Preservation Tuning in Distilled Diffusion via Guidance and Attention
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

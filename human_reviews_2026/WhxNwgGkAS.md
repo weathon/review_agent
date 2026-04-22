@@ -1,5 +1,6 @@
 # Libra: Effective yet Efficient Load Balancing for Large-scale MoE Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

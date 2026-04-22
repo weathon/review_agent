@@ -1,5 +1,6 @@
 # The Cell Must Go On: Agar.io for Continual Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

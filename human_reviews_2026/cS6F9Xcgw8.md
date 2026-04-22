@@ -1,5 +1,6 @@
 # Advancing Physiological Time Series Reconstruction and Imputation via Mixture of Receptive Fields and Experts Fusion
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

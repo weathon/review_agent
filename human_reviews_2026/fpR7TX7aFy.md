@@ -1,5 +1,6 @@
 # Not All Instances Are Equally Valuable: Towards Influence-Weighted Dataset Distillation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

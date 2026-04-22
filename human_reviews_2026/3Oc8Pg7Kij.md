@@ -1,5 +1,6 @@
 # HT-Sparse: Training-Free Query-Guided Head–Token Sparsification for Long-Video Multimodal Inference
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

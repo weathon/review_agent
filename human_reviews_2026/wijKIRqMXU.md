@@ -1,5 +1,6 @@
 # Decomposition-based Neural Multi-objective Combinatorial Optimization with Graph-Filter based Multi-Head Attention
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4, 4
 

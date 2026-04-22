@@ -1,5 +1,6 @@
 # Satisfying Complex User Needs: M^3 Agent for Conversational Multi-Item Recommendation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Potentially Optimal Joint Actions Recognition for Cooperative Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

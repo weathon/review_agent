@@ -1,5 +1,6 @@
 # FedVLMBench: Benchmarking Federated Fine-Tuning of Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

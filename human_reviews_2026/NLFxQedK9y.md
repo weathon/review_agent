@@ -1,5 +1,6 @@
 # ChronoPlay: A Framework for Modeling Dual Dynamics and Authenticity in Game RAG Benchmarks
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

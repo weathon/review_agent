@@ -1,5 +1,6 @@
 # Unifying Counterfactual Data Augmentation and Architectural Inductive Biases in Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

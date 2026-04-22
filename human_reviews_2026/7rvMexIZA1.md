@@ -1,5 +1,6 @@
 # GradPCA: Leveraging NTK Alignment for Reliable Out-of-Distribution Detection
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8, 6
 

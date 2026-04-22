@@ -1,5 +1,6 @@
 # EX-NVS: EXtreme Novel View Synthesis via Depth Watertight Mesh
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

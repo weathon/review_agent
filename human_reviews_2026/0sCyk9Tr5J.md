@@ -1,5 +1,6 @@
 # Trained on Tokens, Calibrated on Concepts: The Emergence of Semantic Calibration in LLMs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

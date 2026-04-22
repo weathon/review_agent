@@ -1,5 +1,6 @@
 # Segment-Level Attribution for Selective Learning of Long Reasoning Traces
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # MicroVerse: A Preliminary Exploration Toward a Micro-World Simulation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 0
 

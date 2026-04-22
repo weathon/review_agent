@@ -1,5 +1,6 @@
 # ReportBench: Evaluating Deep Research Agents via Academic Survey Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 6, 4
 

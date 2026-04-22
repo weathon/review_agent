@@ -1,5 +1,6 @@
 # Dynamic Causal Influence Learning in Cooperative Multi-Agent Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

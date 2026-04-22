@@ -1,5 +1,6 @@
 # TimeSqueeze: Dynamic Patching for Efficient Time Series Forecasting
 
+- Avg Score: 4.29
 - Decision: Reject
 - Scores: 4, 2, 8, 2, 4, 4, 6
 

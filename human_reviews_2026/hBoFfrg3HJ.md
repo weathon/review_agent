@@ -1,5 +1,6 @@
 # Automating modeling in mechanics: LLMs as designers of physics-constrained neural networks for constitutive modeling of materials
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 8, 2, 0
 

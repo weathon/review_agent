@@ -1,5 +1,6 @@
 # RecSpy: Cognition-Driven PIN Inference on Randomized Soft Keyboards
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

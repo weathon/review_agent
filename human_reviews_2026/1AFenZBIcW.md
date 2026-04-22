@@ -1,5 +1,6 @@
 # No More DeLuLu: A Kernel-Based Activation-Free Neural Networks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 8
 

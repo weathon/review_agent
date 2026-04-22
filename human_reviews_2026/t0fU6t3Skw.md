@@ -1,5 +1,6 @@
 # Starjob: Dataset for LLM-Driven Job Shop Scheduling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

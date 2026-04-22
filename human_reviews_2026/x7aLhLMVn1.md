@@ -1,5 +1,6 @@
 # Multiplayer Nash Preference Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Efficient Best-of-Both-Worlds Algorithms for Contextual Combinatorial Semi-Bandits
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

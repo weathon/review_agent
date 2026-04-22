@@ -1,5 +1,6 @@
 # Bayesian Ensemble for Sequential Decision-Making
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # MMChat: A Multi-turn Multi-Modal Conversational Benchmark Grounded in Real World User Behaviors
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

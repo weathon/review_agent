@@ -1,5 +1,6 @@
 # Fourier Features Let Agents Learn High Precision Policies with Imitation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

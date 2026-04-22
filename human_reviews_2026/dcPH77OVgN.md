@@ -1,5 +1,6 @@
 # Scaling Law for Quantization-Aware Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

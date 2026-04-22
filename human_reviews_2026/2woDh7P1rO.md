@@ -1,5 +1,6 @@
 # Adaptive Multi-Scale Attention-Based LSTM Coupling for Early Detection
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 6, 2
 

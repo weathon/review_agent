@@ -1,5 +1,6 @@
 # Extreme Weather Nowcasting via Local Precipitation Pattern Prediction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

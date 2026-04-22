@@ -1,5 +1,6 @@
 # LUSB: Formalizing and Benchmarking Unlearning Attacks and Defenses against Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 8, 6, 2
 

@@ -1,5 +1,6 @@
 # Best-of-N through the Smoothing Lens: KL Divergence and Regret Analysis
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Personalized Federated Adaptation via Prototype–Text Contrastive Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 4, 0
 

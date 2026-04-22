@@ -1,5 +1,6 @@
 # P-GSPO: Parameterized Group Sequence Policy Optimization for Length-Sensitive Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

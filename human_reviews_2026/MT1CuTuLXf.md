@@ -1,5 +1,6 @@
 # ReconstructionNet: A Neural Network Architecture for Uncertainty-Aware Predictions with Explainability
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

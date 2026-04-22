@@ -1,5 +1,6 @@
 # Efficient On-Device Agents via Adaptive Context Management
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

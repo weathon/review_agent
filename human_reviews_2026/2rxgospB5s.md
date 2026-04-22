@@ -1,5 +1,6 @@
 # dVLA: Diffusion Vision-Language-Action Model with Multimodal Chain-of-Thought
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

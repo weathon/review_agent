@@ -1,5 +1,6 @@
 # Be Consistent! Enhancing Robust Visual Reasoning in LVLMs with Consistency Constraints
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

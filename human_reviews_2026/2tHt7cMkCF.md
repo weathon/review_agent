@@ -1,5 +1,6 @@
 # KEIC: A Framework and Dataset to Self-Correcting Large Language Models in Conversations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

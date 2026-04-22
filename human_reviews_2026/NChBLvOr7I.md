@@ -1,5 +1,6 @@
 # VERIFY: A Novel Multi-Domain Dataset Grounding LTL in Contextual Natural Language via Provable Intermediate Logic
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

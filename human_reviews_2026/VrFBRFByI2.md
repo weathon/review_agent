@@ -1,5 +1,6 @@
 # AInstein: Assessing the Feasibility of AI-Generated Approaches to Research Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Differentially Private Two-Stage Gradient Descent for Instrumental Variable Regression
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

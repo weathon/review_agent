@@ -1,5 +1,6 @@
 # A Constrained Bi-level Optimization Framework for Constrained Reinforcement Learning from Human Feedback
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

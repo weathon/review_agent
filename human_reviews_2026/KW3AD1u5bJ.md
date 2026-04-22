@@ -1,5 +1,6 @@
 # Non-Clashing Teaching in Graphs: Algorithms, Complexity, and Bounds
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

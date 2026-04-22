@@ -1,5 +1,6 @@
 # MusiXQA: Advancing Visual Music Understanding in Multimodal LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 6, 4
 

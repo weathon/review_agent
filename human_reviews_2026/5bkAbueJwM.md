@@ -1,5 +1,6 @@
 # Diffusion Language Models are Provably Optimal Parallel Samplers
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # To Guide or Not to Guide: Sparse Transductive Guidance in Program Synthesis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

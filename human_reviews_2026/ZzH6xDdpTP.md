@@ -1,5 +1,6 @@
 # Learning on the Job: An Experience-Driven Self-Evolving Agent for Long-Horizon Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

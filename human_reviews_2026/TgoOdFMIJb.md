@@ -1,5 +1,6 @@
 # SIRI: Scaling Iterative Reinforcement Learning with Interleaved Compression
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Animating the Uncaptured: Humanoid Mesh Animation with Video Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 10, 8, 2
 

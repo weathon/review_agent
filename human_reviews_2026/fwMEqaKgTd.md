@@ -1,5 +1,6 @@
 # Unlabeled Data vs. Pre-trained Knowledge: Rethinking SSL in the Era of Large Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

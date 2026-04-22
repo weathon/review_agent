@@ -1,5 +1,6 @@
 # Credit-Budgeted ICPC-Style Coding: When Agents Must Pay for Every Decision
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

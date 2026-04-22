@@ -1,5 +1,6 @@
 # Quantifying Information Flow in Diffusion Models: Entropy-Guided Noise Scheduling and Mutual Information Evaluation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 0
 

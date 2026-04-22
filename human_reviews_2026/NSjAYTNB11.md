@@ -1,5 +1,6 @@
 # PlotCraft: Pushing the Limits of LLMs for Complex and Interactive Data Visualization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

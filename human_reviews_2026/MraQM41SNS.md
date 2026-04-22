@@ -1,5 +1,6 @@
 # One for Two: A Unified Framework for Imbalanced Graph Classification via Dynamic Balanced Prototype
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 4
 

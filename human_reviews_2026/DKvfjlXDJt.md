@@ -1,5 +1,6 @@
 # BenchName: a Set of Benchmarks for Long-Context Code Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

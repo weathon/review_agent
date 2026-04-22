@@ -1,5 +1,6 @@
 # Advancing Equitable AI: A Comprehensive Framework for Individual Fairness Assessment
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 0, 2, 2
 

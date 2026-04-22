@@ -1,5 +1,6 @@
 # Revisiting Mixout: An Overlooked Path to Robust Finetuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4, 4
 

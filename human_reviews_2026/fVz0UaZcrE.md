@@ -1,5 +1,6 @@
 # Not All Code Helps: Disentangling the Impact of Code Data on Mathematical Reasoning in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

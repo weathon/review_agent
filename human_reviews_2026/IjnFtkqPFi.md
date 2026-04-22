@@ -1,5 +1,6 @@
 # Efficient Simple Regret Algorithms for Stochastic Contextual Bandits
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 6, 4
 

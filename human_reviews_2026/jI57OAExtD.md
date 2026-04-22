@@ -1,5 +1,6 @@
 # Reinforcement Learning Agents in Quantum Code Discovery with Argmax-Preserving Quantization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

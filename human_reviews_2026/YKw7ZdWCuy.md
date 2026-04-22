@@ -1,5 +1,6 @@
 # Generalizable and Consistent Granular Edge Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

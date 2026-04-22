@@ -1,5 +1,6 @@
 # Think First, Then Select and Verify with Query–Key Alignment
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4
 

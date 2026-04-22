@@ -1,5 +1,6 @@
 # B-XAIC Dataset: Benchmarking Explainable AI for Graph Neural Networks Using Chemical Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

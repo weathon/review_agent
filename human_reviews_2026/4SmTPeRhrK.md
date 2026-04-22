@@ -1,5 +1,6 @@
 # Positive and unlabeled learning incorporating additional posterior probabilities
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

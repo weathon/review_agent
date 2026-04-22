@@ -1,5 +1,6 @@
 # Conv-CoA: Open-domain Question Answering via Conversational Chain-of-Action with Hopfield Retriever
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

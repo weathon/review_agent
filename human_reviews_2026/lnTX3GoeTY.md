@@ -1,5 +1,6 @@
 # Feature segregation by signed weights in artificial vision systems and biological models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

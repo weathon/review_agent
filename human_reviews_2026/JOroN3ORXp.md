@@ -1,5 +1,6 @@
 # AutoMixer: A Lightweight and Scalable Industrial 5.0 Safety Assurance Model with Multi-Scale Adaptive Dual-Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

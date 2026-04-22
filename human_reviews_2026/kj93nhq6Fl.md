@@ -1,5 +1,6 @@
 # PICACO: Pluralistic In-Context Value Alignment via Total Correlation Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

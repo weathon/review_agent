@@ -1,5 +1,6 @@
 # Efficient Turing Machine Simulation with Transformers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 10, 4, 8, 4
 

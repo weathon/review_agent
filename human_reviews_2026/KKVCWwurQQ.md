@@ -1,5 +1,6 @@
 # Why Should the Server Do It All?: A Scalable, Versatile, and Model-Agnostic Framework for Server-Light DNN Inference over Massively Distributed Clients via Training-Free Intermediate Feature Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Exploring the Frontiers of Softmax: Provable Optimization, Applications in Diffusion Model, and Beyond
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

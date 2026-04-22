@@ -1,5 +1,6 @@
 # Atlas Matters: Edge Quadratics for Consistent Brain Connectivity Prediction
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 6
 

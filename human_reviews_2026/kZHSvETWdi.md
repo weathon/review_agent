@@ -1,5 +1,6 @@
 # Towards Multimodal Data-Driven Scientific Discovery Powered by LLM Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

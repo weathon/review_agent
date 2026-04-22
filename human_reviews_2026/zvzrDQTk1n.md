@@ -1,5 +1,6 @@
 # AtomWorld: Benchmarking Spatial Reasoning in Large Language Models on Crystalline Materials
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 0, 4
 

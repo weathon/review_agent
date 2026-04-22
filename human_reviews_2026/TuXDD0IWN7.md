@@ -1,5 +1,6 @@
 # Graphlets as Building Blocks for Structural Vocabulary in Graph Foundation Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

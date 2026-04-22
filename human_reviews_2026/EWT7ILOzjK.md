@@ -1,5 +1,6 @@
 # MAS-SAT: Synergizing ML-Assisted and Standalone Solvers for SAT Solving
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

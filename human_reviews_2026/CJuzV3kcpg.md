@@ -1,5 +1,6 @@
 # PQ-Net: Periodic Quantum Networks for Multivariate Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

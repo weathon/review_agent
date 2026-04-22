@@ -1,5 +1,6 @@
 # Computing Exact Shapley Values in Polynomial Time for Product-Kernel Methods
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

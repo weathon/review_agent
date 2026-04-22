@@ -1,5 +1,6 @@
 # LLM-OAP: LLM-based Data Augmentation Framework for Enhancing Order Acceptance Prediction in Mobility-on-Demand Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

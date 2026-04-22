@@ -1,5 +1,6 @@
 # Interactive Multi-event Video Retrieval with Context Integration and Position Constraint
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

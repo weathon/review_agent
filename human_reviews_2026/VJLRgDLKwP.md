@@ -1,5 +1,6 @@
 # DHEvo: Data-Algorithm Based Heuristic Evolution for Generalizable MILP Solving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

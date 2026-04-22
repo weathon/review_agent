@@ -1,5 +1,6 @@
 # When Sketches Diverge, Language Converges: A Universal Feature Anchor for Domain-Agnostic Human Reconstruction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

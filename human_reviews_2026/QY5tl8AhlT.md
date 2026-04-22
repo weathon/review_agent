@@ -1,5 +1,6 @@
 # Just Enough Thinking: Efficient Reasoning with Adaptive Length Penalties Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

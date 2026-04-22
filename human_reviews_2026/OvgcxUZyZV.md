@@ -1,5 +1,6 @@
 # BRIDGE: A Risk-Aware Framework for Evaluating Behavioral Fidelity in LLM Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

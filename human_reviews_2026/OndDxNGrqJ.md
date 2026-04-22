@@ -1,5 +1,6 @@
 # Modeling Student Learning with 3.8 Million Program Traces
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

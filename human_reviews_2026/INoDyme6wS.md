@@ -1,5 +1,6 @@
 # Generalization in Online Reinforcement Learning for Mobile Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

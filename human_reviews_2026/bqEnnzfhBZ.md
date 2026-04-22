@@ -1,5 +1,6 @@
 # Unlearning Isn't Invisible: Detecting Unlearning Traces in LLMs from Model Outputs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

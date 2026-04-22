@@ -1,5 +1,6 @@
 # LoRa-Over: A Matrix Decomposition-Based Over-Parameterization for Efficient LLM Fine-Tuning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 0
 

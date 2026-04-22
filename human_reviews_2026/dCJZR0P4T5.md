@@ -1,5 +1,6 @@
 # Stop Tracking Me! Proactive Defense Against Attribute Inference Attack in LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

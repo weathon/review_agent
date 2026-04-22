@@ -1,5 +1,6 @@
 # MAC-AMP: A Closed-Loop Multi-Agent Collaboration System for Multi-Objective Antimicrobial Peptide Design
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

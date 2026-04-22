@@ -1,5 +1,6 @@
 # Bi-level Heterogeneous Learning for Time Series Foundation Models: A Federated Learning Approach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

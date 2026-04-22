@@ -1,5 +1,6 @@
 # ALPS: Adaptive LLM Pruning via Gradient Search in Learned Representation Space
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

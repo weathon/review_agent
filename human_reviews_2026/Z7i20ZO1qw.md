@@ -1,5 +1,6 @@
 # Beyond Re-Training from Scratch: Exploiting the Pre-Trained Classifier for Long-Tailed Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

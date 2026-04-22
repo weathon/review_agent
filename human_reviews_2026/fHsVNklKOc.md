@@ -1,5 +1,6 @@
 # Talk, Evaluate, Diagnose: User-aware Agent Evaluation with Automated Error Analysis
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 2, 10
 

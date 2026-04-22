@@ -1,5 +1,6 @@
 # Reasoning on a Spectrum: Aligning LLMs to System 1 and System 2 Thinking
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 2, 4, 6
 

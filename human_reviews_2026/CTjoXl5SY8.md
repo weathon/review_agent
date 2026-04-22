@@ -1,5 +1,6 @@
 # Getting to the CRUX: Graph-Based Data Generation for Advancing Multi-Hop Cross-Modal Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

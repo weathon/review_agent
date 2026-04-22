@@ -1,5 +1,6 @@
 # From Transformer to Transponder: Introducing Contextual Modulation Training for Residual Learning  in LLMs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 6
 

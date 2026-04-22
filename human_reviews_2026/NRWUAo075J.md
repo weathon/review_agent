@@ -1,5 +1,6 @@
 # GneissWeb: Preparing High Quality Data for LLMs at Scale
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

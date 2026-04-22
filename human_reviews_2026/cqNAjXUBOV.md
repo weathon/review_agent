@@ -1,5 +1,6 @@
 # Tables2Traces: Distilling Tabular Data to Improve LLM Reasoning in Healthcare
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

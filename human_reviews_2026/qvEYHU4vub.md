@@ -1,5 +1,6 @@
 # SPARK: Spatio-temporal Part-based Attention for Retargeting Cross-skeleton Motion
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 0
 

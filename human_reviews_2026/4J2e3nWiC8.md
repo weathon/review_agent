@@ -1,5 +1,6 @@
 # Priors in time: Missing inductive biases for language model interpretability
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

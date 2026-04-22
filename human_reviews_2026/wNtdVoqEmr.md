@@ -1,5 +1,6 @@
 # Neural Force Field: Few-shot Learning of Generalized Physical Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

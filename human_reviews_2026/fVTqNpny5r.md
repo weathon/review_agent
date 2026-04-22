@@ -1,5 +1,6 @@
 # On the Shelf Life of Fine-Tuned LLM-Judges: Future-Proofing, Backward-Compatibility, and Question Generalization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Self-Jailbreaking: Language Models Can Reason Themselves Out of Safety Alignment After Benign Reasoning Training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

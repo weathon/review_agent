@@ -1,5 +1,6 @@
 # SCUBA: Salesforce Computer Use Benchmark
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6, 6
 

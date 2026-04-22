@@ -1,5 +1,6 @@
 # Tool-use Refiner: A Lightweight Plug-and-Play Module for Enhancing LLM Tool-Use
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # AD-NODE: Adaptive Dynamics Learning with Neural ODEs for Mobile Robots Control
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 6, 0
 

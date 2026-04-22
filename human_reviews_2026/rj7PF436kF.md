@@ -1,5 +1,6 @@
 # Towards High-Order Mean Flow Generative Models: Feasibility, Expressivity, and Provably Efficient Criteria
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

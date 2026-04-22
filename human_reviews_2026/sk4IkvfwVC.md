@@ -1,5 +1,6 @@
 # Lipschitz-aware Linearity Grafting for Certified Robustness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

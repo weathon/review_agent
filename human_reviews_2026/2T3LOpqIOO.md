@@ -1,5 +1,6 @@
 # Distributionally Robust Cooperative Multi-agent Reinforcement Learning with Value Factorization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

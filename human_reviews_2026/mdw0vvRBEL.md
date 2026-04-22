@@ -1,5 +1,6 @@
 # Truthfulness Despite Weak Supervision: Evaluating and Training LLMs Using Peer Prediction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

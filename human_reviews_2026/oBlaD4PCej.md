@@ -1,5 +1,6 @@
 # Are Vision Language Models Blind Thinkers on Zero-Shot Multimodal Planning Tasks?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

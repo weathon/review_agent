@@ -1,5 +1,6 @@
 # Sculpting Subspaces: Constrained Full Fine-Tuning in LLMs for Continual Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

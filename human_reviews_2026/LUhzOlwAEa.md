@@ -1,5 +1,6 @@
 # TIR-Bench: A Comprehensive Benchmark for Agentic Thinking-with-Images Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

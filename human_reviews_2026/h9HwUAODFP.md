@@ -1,5 +1,6 @@
 # In-Context Learning of Temporal Point Processes with Foundation Inference Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

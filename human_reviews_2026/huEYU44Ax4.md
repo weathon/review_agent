@@ -1,5 +1,6 @@
 # Decomposition of Concept-Level Rules in Visual Scenes
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

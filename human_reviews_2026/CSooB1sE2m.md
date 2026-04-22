@@ -1,5 +1,6 @@
 # xKV: Cross-Layer KV-Cache Compression via Aligned Singular Vector Extraction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # MAGO: Beyond Fixed Hyperparameters with Multi-Objective Pareto Optimization for Hybrid LLM Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

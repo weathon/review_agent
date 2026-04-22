@@ -1,5 +1,6 @@
 # $\text{S}^{3}$Mamba: Arbitrary-Scale Super-Resolution via Scaleable State Space Model
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

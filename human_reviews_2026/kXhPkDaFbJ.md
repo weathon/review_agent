@@ -1,5 +1,6 @@
 # ProtoKV: Long-context Knowledges Are Already Well-Organized Before Your Query
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

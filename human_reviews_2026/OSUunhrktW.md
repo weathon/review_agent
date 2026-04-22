@@ -1,5 +1,6 @@
 # THE-Tree: Can Tracing Historical Evolution Enhance Scientific Verification and Reasoning?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

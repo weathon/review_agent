@@ -1,5 +1,6 @@
 # DUET: Optimizing LLM Training Data Mixtures via Noisy Feedback from Unseen, Downstream Evaluation Tasks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

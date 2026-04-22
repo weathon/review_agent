@@ -1,5 +1,6 @@
 # CAPR: Coherent Alignment of Constrained Reasoning Chains with Checklist-Driven Preference Refinement
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

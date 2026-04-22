@@ -1,5 +1,6 @@
 # On the Scaling Flaws of Verifier-Guided Beam Search
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 8, 2, 2, 4
 

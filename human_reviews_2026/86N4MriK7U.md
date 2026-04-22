@@ -1,5 +1,6 @@
 # SAMG: Offline-to-Online Reinforcement Learning via State-Action-Conditional Offline Model Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4
 

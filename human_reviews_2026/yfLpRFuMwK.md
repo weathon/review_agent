@@ -1,5 +1,6 @@
 # Non-Replacement Function Space Sampling for Bayesian Optimization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

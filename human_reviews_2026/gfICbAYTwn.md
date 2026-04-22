@@ -1,5 +1,6 @@
 # RefAM: Attention Magnets for Zero-Shot Referral Segmentation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

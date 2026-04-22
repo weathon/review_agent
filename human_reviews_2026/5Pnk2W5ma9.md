@@ -1,5 +1,6 @@
 # ONNX-Net: Towards Universal Representations and Instant Performance Prediction for Neural Architectures
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 4, 2, 0
 

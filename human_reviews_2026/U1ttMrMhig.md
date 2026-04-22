@@ -1,5 +1,6 @@
 # Reward-Focused Fine-tuning of Pocket-aware Diffusion Models via Direct Preference Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Scalable Multimodal Fine-tuning for Foundation Models via Mixture-of-LoRA
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

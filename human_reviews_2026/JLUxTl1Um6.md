@@ -1,5 +1,6 @@
 # AIRE-Prune: Asymptotic Impulse-Response Energy for State Pruning in State Space Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

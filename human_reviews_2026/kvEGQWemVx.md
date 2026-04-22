@@ -1,5 +1,6 @@
 # PANICL: Mitigating Over-Reliance on Single Prompt in Visual In-Context Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

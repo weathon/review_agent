@@ -1,5 +1,6 @@
 # Training Large Language Models To Reason In Parallel With Global Forking Tokens
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

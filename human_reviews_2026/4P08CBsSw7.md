@@ -1,5 +1,6 @@
 # Intervening to learn and compose causally disentangled representations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # $\mu$LO: Compute-Efficient Meta-Generalization of Learned Optimizers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

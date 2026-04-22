@@ -1,5 +1,6 @@
 # EQUALS: An Audio-Visual LLM with One-Stage Question-Guided Alignment and Flexible Fusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Accelerated Methods with Complexity Separation Under Data Similarity for Federated Learning Problems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 0, 4
 

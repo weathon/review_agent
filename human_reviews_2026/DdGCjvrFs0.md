@@ -1,5 +1,6 @@
 # BioSensGraph: Predicting Biopolymer Interactions via Knowledge Graph Embedding on a Property Graph of Molecular Entities
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 4
 
@@ -27,9 +28,15 @@ This paper suggests an edit to a molecular graph dataset, to include new type of
 Encoding new types of edges into molecular graphs seems interesting and possibly has potential, with aduiqete motivation and empirical validation.
 
 ### Weaknesses
-1. The paper lacks novelty other than proposing one new dataset that is a variation on an existing one. It does not provide any insights to motivate this dataset, e.g., by demonstrating how using it over other datasets improves insights or detection. Providing one dataset is not sufficient for ICLR, as the contribution is limited. 
-2. The paper is biology-heavy and focused, and does not provide any ML insights.  The paper is full with biological terms and names that assume domain-specific knowledge, and this narrow to potential contribution of this work to the community which is ML-focused. Most terms are not defined for readers, e.g., IW  in the abstract.  As this work does not provide any novelty or insights into the ML aspect, I believe it can fit better in other biological-oriented venues instead of ICLR 
-3. The paper is poorly organized, tables and figures are poorly organized throughout the paper, and seem to be spread to fill the pages of the work, which does not reach nine pages.  
+1. The paper lacks novelty other than proposing one new dataset that is a variation on an existing one. It does not provide any insights to motivate this dataset, e.g., by demonstrating how using it over other datasets improves insights or detection. Providing one dataset is not sufficient for ICLR, as the contribution is limited.
+
+2. The paper is biology-heavy and focused, and does not provide any ML insights. 
+The paper is full with biological terms and names that assume domain-specific knowledge, and this narrow to potential contribution of this work to the community which is ML-focused. Most terms are not defined for readers, e.g., IW  in the abstract. 
+As this work does not provide any novelty or insights into the ML aspect, I believe it can fit better in other biological-oriented venues instead of ICLR
+
+3. The paper is poorly organized, tables and figures are poorly organized throughout the paper, and seem to be spread to fill the pages of the work, which does not reach nine pages.
+
+
 4. The paper does not provide evaluation over the proposed datasets, over diverse methods, to demonstrate the advantage of this dataset. As this dataset is a variation of an existing one, as the author mentions, this makes the contribution limited.
 
 ### Questions

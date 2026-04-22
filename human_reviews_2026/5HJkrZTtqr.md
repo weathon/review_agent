@@ -1,5 +1,6 @@
 # LiveNewsBench: Evaluating LLM Web Search Capabilities with Freshly Curated News
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Asymmetric Effects of Self-Corrective Learning on Chain-of-Thought Reasoning for Efficient Policy Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

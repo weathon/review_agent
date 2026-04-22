@@ -1,5 +1,6 @@
 # From Weak Data to Strong Policy: Q-Targets Enable Provable In-Context Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

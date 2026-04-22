@@ -1,5 +1,6 @@
 # UltraMemV2: Memory Networks Scaling to 120B Parameters with Superior Long-Context Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

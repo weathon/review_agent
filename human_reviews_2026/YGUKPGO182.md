@@ -1,5 +1,6 @@
 # Speech World Model: Causal State–Action Planning with Explicit Reasoning for Speech
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

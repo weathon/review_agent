@@ -1,5 +1,6 @@
 # ARROW: An Adaptive Rollout and Routing Method for Global Weather Forecasting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

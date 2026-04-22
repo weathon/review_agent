@@ -1,5 +1,6 @@
 # DoVer: Intervention-Driven Auto Debugging for LLM Multi-Agent Systems
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

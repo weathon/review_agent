@@ -1,5 +1,6 @@
 # On the Generalization Bounds of Spiking Neural Networks via Rademacher Complexity
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Beyond the Final Answer: Evaluating the Reasoning Trajectories of Tool-Augmented Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

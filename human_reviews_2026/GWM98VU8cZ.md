@@ -1,5 +1,6 @@
 # Zero in on Faithful Anchors: High-Fidelity Visual Token Condensation for Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

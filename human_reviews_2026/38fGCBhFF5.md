@@ -1,5 +1,6 @@
 # Diffusion & Adversarial Schrödinger Bridges via Iterative Proportional Markovian Fitting
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # OptPipe: Memory- and Scheduling-Optimized Pipeline Parallelism for LLM Training
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

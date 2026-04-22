@@ -1,5 +1,6 @@
 # Multi-Objective Bandits with Hierarchical Preferences: A Thompson Sampling Approach
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

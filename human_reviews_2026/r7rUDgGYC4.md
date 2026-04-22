@@ -1,5 +1,6 @@
 # SpinBench: Perspective and Rotation as a Lens on Spatial Reasoning in VLMs
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6, 2
 

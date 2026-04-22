@@ -1,5 +1,6 @@
 # scCMIA: Self-supervised Dual Model for Mitigating Information Loss in Single-cell Cross-Modal Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

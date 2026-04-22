@@ -1,5 +1,6 @@
 # Beyond Redundancy: Diverse and Specialized Multi-Expert Sparse Autoencoder
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

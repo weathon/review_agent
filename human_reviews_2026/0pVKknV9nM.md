@@ -1,5 +1,6 @@
 # SaFT: Spotting Style Imitation and Filtering Content Interference for Zero-Shot LLM-Generated Text Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

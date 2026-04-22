@@ -1,5 +1,6 @@
 # OCR-Reasoning Benchmark: Unveiling the True Capabilities of MLLMs in Complex Text-Rich Image Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

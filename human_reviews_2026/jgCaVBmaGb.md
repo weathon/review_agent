@@ -1,5 +1,6 @@
 # Forging Image Watermarks by Reversing Watermark Removal Attacks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

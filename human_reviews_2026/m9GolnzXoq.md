@@ -1,5 +1,6 @@
 # From sequences to schemas: How recurrent neural networks learn temporal abstractions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 
@@ -148,7 +149,8 @@ The authors found that that RNNs trained on this end-of-sequence categorization 
 ### Weaknesses
 The observations are intriguing and thought-provoking, yet the theoretical grounding and causal interpretation remain underdeveloped. It also remains unclear how the findings on this particular form of schema generalize to many other forms of abstract patterns in sequential data. 
 
-* Scattered Presentation. The paper reads as a collection of interesting but loosely connected observations rather than a unified theoretical account. One wonders about the causal link between low-rank geometry and generalization.
+* Scattered Presentation.
+The paper reads as a collection of interesting but loosely connected observations rather than a unified theoretical account. One wonders about the causal link between low-rank geometry and generalization.
 
 * Lack of causal analysis: Section 2.2, I found the tree-like measure, and the correlation insufficient to justify the causal claim as the title for this subsection. As it is unclear whether a interference on the low rank recurrent activities will distroy/enhance RNN's representation of sequence relational structure. 
 
@@ -161,11 +163,15 @@ Additiona comments:
 Moreover, the focus on RNNs constrains the broader relevance of the work, as the audience of this conference would be curious on other architecture types... i.e. the scope is quite narrow.
 
 ### Questions
-1.  What level of processing in the RNN reflects more abstract structure? Do later recurrent layers encode higher-level schema abstractions, while earlier ones capture more local bindings (e.g., abb = CDD/CFF/ACC)? 
-2. How the low rank recurrent activities drvies relational structure of sequences, what would happen if artificially induce low rank activities in these RNNs?  The singular value decomposition (SVD) is used descriptively but its causal or interpretive value is unclear. Does it reveal meaningful components that contribute to generalization or interpretability? 
+1. 
+What level of processing in the RNN reflects more abstract structure? Do later recurrent layers encode higher-level schema abstractions, while earlier ones capture more local bindings (e.g., abb = CDD/CFF/ACC)? 
+2. How the low rank recurrent activities drvies relational structure of sequences, what would happen if artificially induce low rank activities in these RNNs? 
+The singular value decomposition (SVD) is used descriptively but its causal or interpretive value is unclear. Does it reveal meaningful components that contribute to generalization or interpretability? 
 3. I am a bit surprised that the next-token-prediction RNNs do not form hierarchical representations. I suspect it has something to do with the way sequences are introduced to the RNNs, and a meta-learning type of set up may encourage the hierarchical representation to emerge in character predicting RNNs. 
-4.  Figure 3E suggests a weak correlation between UC scores and generalization ability. However, from the figure it is not obvious to see the correlation. And the relationship is not statistically tested—please include hypothesis testing or correlation significance analysis to support the claim.
-5. Transfer. The final section suggests that networks trained for next-token prediction benefit from weights learned in schema classification networks. What is the role of low rank components in transfer? 
+4. 
+Figure 3E suggests a weak correlation between UC scores and generalization ability. However, from the figure it is not obvious to see the correlation. And the relationship is not statistically tested—please include hypothesis testing or correlation significance analysis to support the claim.
+5. Transfer.
+The final section suggests that networks trained for next-token prediction benefit from weights learned in schema classification networks. What is the role of low rank components in transfer? 
 
 
 Reference: 

@@ -1,5 +1,6 @@
 # Steering Back-Propagation with Prior Information in Natural Language
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

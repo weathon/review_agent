@@ -1,5 +1,6 @@
 # HypoSpace: Evaluating LLM Creativity as Set-Valued Hypothesis Generators under Underdetermination
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 
@@ -127,7 +128,9 @@ There are some aspects the work can improve upon:
 ### Questions
 1. It would be interesting to see in how many cases the subset of hypothesis identified by the model were the most optimal solutions, or in how many cases the subset of defined hypothesis did not contain the top 3 or top 5 optimal solutions? In causal graph example, an optimal solution could potentially be given the nodes, which graphs require the smallest connections to justify the given observations?
 
-2. I’m curious about why certain hypotheses are favored more frequently than others. It might be interesting to analyze which samples are easier for models to estimate and which are harder, and then compare their coverage. Such an analysis could guide targeted training to improve how LLMs explore hypothesis spaces. For instance, in the causal inference task, some graphs might only require adding a single edge to satisfy the interventional observations, while others may need multiple structural changes. If models consistently prefer these “easier” hypotheses, it would point to a deeper limitation in their ability to explore more complex or less accessible regions of the hypothesis space.  
+2. I’m curious about why certain hypotheses are favored more frequently than others. It might be interesting to analyze which samples are easier for models to estimate and which are harder, and then compare their coverage. Such an analysis could guide targeted training to improve how LLMs explore hypothesis spaces. For instance, in the causal inference task, some graphs might only require adding a single edge to satisfy the interventional observations, while others may need multiple structural changes. If models consistently prefer these “easier” hypotheses, it would point to a deeper limitation in their ability to explore more complex or less accessible regions of the hypothesis space.
+
+
 
 3. I am also curious if there is a way to identify if the model is actually equipped enough in identifying all possible hypothesis, or is it not good at this task. For example this is the first work I have seen where LLM is evaluated on 3D pixel reconstruction, is it possible that the model is just bad at this task, and therefore evaluating its ability to generate all possible hypothesis will be limited? It would be impactful to find simple cases where the model tends to have a high performance in getting the correct answer, but fails on uniqueness and recovery metrics.
 

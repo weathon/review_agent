@@ -1,5 +1,6 @@
 # When Is Diversity Rewarded in Cooperative Multi-Agent Learning?
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 10
 

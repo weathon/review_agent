@@ -1,5 +1,6 @@
 # Opal: An Operator-Algebra View of RLHF Objectives
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 0, 0, 6
 

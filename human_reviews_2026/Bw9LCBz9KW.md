@@ -1,5 +1,6 @@
 # ModelBench: A Benchmark for Extracting Executable, Physics-Based Models from Scientific Literature
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

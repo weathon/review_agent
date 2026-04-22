@@ -1,5 +1,6 @@
 # ProteinZero: Self-Improving Protein Generation via Online Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

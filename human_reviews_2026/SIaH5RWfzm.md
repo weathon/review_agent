@@ -1,5 +1,6 @@
 # Acoustic-based Gender Differentiation in Speech-aware Language Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 8
 

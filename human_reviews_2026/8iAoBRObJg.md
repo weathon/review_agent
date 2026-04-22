@@ -1,5 +1,6 @@
 # STAPS : Training-Free Zero-Shot Anomaly Detection via Semantic-Temporal Scoring and Prototype Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

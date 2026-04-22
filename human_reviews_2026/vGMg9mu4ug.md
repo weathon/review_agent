@@ -1,5 +1,6 @@
 # Shape2Gcode: Direct G-code Generation from 3D Shape Data for Automated Manufacturing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

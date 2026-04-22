@@ -1,5 +1,6 @@
 # Unleashing SNNs in Object Detection with Time-Evolving Neuron and Dual-Stream Spiking Attention
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

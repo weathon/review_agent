@@ -1,5 +1,6 @@
 # Zero-shot Forecasting by Simulation Alone
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Turning Bias into Bugs: Bandit-Guided Style Manipulation Attacks on LLM Judges
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

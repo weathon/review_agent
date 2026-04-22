@@ -1,5 +1,6 @@
 # MMTS-Bench: A Comprehensive Benchmark for Multimodal Time Series Understanding and Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

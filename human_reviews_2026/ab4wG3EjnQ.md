@@ -1,5 +1,6 @@
 # ALS-LoRA: Improved Low-Rank Matrix Compesation Method for Low Bit Quantization
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

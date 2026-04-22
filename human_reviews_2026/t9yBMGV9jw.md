@@ -1,5 +1,6 @@
 # Artificial Phantasia: Evidence for Propositional Reasoning-Based Mental Imagery in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 2, 8
 

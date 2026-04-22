@@ -1,5 +1,6 @@
 # AutoDrive-R²: Incentivizing Reasoning and Self-Reflection Capacity for VLA Model in Autonomous Driving
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

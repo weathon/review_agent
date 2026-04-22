@@ -1,5 +1,6 @@
 # Efficient Quantization-Aware Adaptation for Visual Foundation Models
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 8, 4, 4
 

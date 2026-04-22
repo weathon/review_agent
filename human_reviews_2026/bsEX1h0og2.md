@@ -1,5 +1,6 @@
 # UniARM: Towards a Unified Autoregressive Reward Model for Multi-Objective Test-Time Alignment
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Map the Flow: Revealing Hidden Pathways of Information in VideoLLMs
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

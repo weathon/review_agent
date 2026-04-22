@@ -1,5 +1,6 @@
 # TPDiff: Temporal Pyramid Video Diffusion Model
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # SubZeroCore: A Submodular Approach with Zero Training for Coreset Selection
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

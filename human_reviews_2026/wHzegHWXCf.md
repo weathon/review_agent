@@ -1,5 +1,6 @@
 # Riemannian Stochastic Weakly Convex Optimization Under Heavy-Tailed Noises
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

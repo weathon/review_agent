@@ -1,5 +1,6 @@
 # Decide When Ready: Stepwise Incremental Inference with Early-Exit in Spiking Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

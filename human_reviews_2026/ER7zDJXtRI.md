@@ -1,5 +1,6 @@
 # ComPhy: Composing Physical Models with end-to-end Alignment
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

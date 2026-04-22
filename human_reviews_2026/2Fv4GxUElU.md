@@ -1,5 +1,6 @@
 # Mechanistic Interpretability of In-Context Learning Generalization through Structured Task Curriculum
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

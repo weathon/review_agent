@@ -1,5 +1,6 @@
 # Monitoring LLM-based Multi-Agent Systems Against Corruption Attacks via Node Evaluation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 4
 

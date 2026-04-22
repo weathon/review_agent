@@ -1,5 +1,6 @@
 # Local Autoregression with Finite-Support Random Variables for Image Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

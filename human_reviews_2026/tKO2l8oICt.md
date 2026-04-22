@@ -1,5 +1,6 @@
 # Improving Visual Discriminability of CLIP for Training-Free Open-Vocabulary Semantic Segmentation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

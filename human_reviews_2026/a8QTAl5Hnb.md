@@ -1,5 +1,6 @@
 # When Style Breaks Safety: Defending LLMs Against Superficial Style Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

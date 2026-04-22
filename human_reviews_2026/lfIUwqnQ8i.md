@@ -1,5 +1,6 @@
 # HydroGen: Hydrological Report Generation with Two-Stage Instruction-Tuned Multimodal Models, Temporal Prompts, & Knowledge-Guided Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

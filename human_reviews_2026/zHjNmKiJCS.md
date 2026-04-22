@@ -1,5 +1,6 @@
 # Mind the Gap... or Not? How Translation Errors and Evaluation Details Skew Multilingual Results
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 0, 4
 

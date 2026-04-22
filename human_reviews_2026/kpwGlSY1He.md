@@ -1,5 +1,6 @@
 # A Diffusive Classification Loss for Learning Energy-based Generative Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

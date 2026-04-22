@@ -1,5 +1,6 @@
 # Be Affective, Not Just Cognitive - Towards Imparting Pertinent Empathy in Dialogue Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

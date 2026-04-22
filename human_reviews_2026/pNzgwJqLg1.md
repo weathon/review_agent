@@ -1,5 +1,6 @@
 # MIP-Bench: Can LLMs Implicitly Personalize Responses Using Long-Term Memory?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

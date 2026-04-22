@@ -1,5 +1,6 @@
 # LouisKV: Efficient KV Cache Retrieval for Long Input-Output Sequences
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

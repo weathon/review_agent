@@ -1,5 +1,6 @@
 # Are Large Language Models Good XAI Annotators?
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

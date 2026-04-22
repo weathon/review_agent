@@ -1,5 +1,6 @@
 # Next-Scale Autoregressive Forecasting for Time Series via Modular Multi-Scale Decoupling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

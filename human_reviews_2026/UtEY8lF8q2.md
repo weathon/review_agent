@@ -1,5 +1,6 @@
 # Process-Supervised Reinforcement Learning for Interactive Multimodal Tool-Use Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

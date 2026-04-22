@@ -1,5 +1,6 @@
 # SNOV: A Scalable Near-global Optimal Verifier for   Neural Networks under Large Perturbations
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

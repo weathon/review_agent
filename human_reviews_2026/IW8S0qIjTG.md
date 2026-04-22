@@ -1,5 +1,6 @@
 # MAGTrack: MLLM-Augmented Grounding and Text Refinement for Language-Guided Tracking
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

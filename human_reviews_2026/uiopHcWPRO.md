@@ -1,5 +1,6 @@
 # Agentic 3D Scene Generation with Spatially Contextualized VLMs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 4
 

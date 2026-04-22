@@ -1,5 +1,6 @@
 # On the Fragility of Latent Knowledge: Layer-wise Influence under Unlearning in Large Language Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Guiding Explanatory Inference through Inference Types
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

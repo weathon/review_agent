@@ -1,5 +1,6 @@
 # Safe Multi-Objective Reinforcement Learning via Multi-Party Pareto Negotiation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 4
 

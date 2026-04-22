@@ -1,5 +1,6 @@
 # Reliability Scheduling for Robust Domain Adaptation under Label Noise
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

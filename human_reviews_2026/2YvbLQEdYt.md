@@ -1,5 +1,6 @@
 # CyberGym: Evaluating AI Agents' Real-World Cybersecurity Capabilities at Scale
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 8
 

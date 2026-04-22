@@ -1,5 +1,6 @@
 # ParaScopes: What do Language Models Activations Encode About Future Text?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 0, 4
 

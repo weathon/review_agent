@@ -1,5 +1,6 @@
 # Forget Many, Forget Right: Scalable and Precise Concept Unlearning in Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

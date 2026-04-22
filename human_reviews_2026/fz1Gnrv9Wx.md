@@ -1,5 +1,6 @@
 # Drug-ProGO: A Gene Ontology-Enhanced Contrastive Learning Framework for Drug Virtual Screening with Multi-modality Whole-Protein Input
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

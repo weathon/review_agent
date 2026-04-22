@@ -1,5 +1,6 @@
 # VCode: a Multimodal Coding Benchmark with SVG as Symbolic Visual Representation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 

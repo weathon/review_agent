@@ -1,5 +1,6 @@
 # TriSpec: Ternary Speculative Decoding via Lightweight Proxy Verification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

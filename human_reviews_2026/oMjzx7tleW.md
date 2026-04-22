@@ -1,5 +1,6 @@
 # AutoStat: DSL-based Automated Statistical Modeling from Natural Language
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # RL from Physical Feedback: Aligning Large Motion Models with Humanoid Control
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

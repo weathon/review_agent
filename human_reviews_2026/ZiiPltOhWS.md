@@ -1,5 +1,6 @@
 # Stable and Diverse Strategy Learning via Diffusion-Based Co-Evolution in StarCraft II Combat
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

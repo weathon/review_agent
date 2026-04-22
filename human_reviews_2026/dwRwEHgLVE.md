@@ -1,5 +1,6 @@
 # PQP: A one-shot collaborative method for post-quantization pruning of LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

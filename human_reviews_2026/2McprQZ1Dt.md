@@ -1,5 +1,6 @@
 # Adversarial Arena: Crowdsourcing Data Generation through Interactive Competition
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

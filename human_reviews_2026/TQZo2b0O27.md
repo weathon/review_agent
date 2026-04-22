@@ -1,5 +1,6 @@
 # Can LLM Event Prediction Be Reliable? Closing Gaps in Causal Quantification and Probabilistic Consistency
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 
@@ -38,10 +39,12 @@ The paper tackles a critical challenge in causal reasoning—the gap between sem
 ### Weaknesses
 Unfortunately, the second half of the paper is highly problematic in terms of both the methodology and the presentation. I summarize the key points here and detail them with questions in the next section. 
 
-**1. Ambiguous Problem Definition:** 
+**1. Ambiguous Problem Definition:**
+
 * The notion of an “event” is not rigorously defined. Without clear semantics for what constitutes an event, it’s unclear how variables, state values, or factor relationships are instantiated, which makes the entire pipeline hard to evaluate or reproduce. The paper should provide a running example that demonstrates how variables of interests are defined from text data and a graphical method illustrating how the data-generative model is defined over these variables. 
 
-**2. Lack of Theoretical Rigor:** 
+**2. Lack of Theoretical Rigor:**
+
 * The proposed method is theoretically shallow. The probabilistic model connecting LLM-generated scores to latent states lacks formal justification. There is no discussion of identifiability or theoretical guarantees of the recovery of the true variables involved: the factors, their states and the other model parameters. 
 
 **3. Overly Simplistic Modelling Assumptions:**

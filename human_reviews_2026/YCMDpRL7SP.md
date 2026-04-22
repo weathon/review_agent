@@ -1,5 +1,6 @@
 # Language Models Optimized to Fool Detectors Still Have a Distinct Style (And How to Change It)
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 2, 8
 

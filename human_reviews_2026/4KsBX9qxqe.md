@@ -1,5 +1,6 @@
 # Neural Low-Discrepancy Sequences
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 6, 2, 4, 2, 4
 

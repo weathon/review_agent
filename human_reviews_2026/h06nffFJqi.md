@@ -1,5 +1,6 @@
 # What Exactly Does Guidance Do in Masked Discrete Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

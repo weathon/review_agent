@@ -1,5 +1,6 @@
 # Random Projection Against Gradient Leakage: Privacy-Preserving in Federated Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # F6-Net: Algorithmic Reasoning through Gated Pathways and Min-Reduction
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4
 

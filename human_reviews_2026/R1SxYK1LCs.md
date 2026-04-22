@@ -1,5 +1,6 @@
 # AgentMisalignment: Measuring the Propensity for Misaligned Behaviour in LLM-Based Agents
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # MakeupAnyone: Self-Supervised Identity-Preserving MakeUp Transfer with Region-Aware Multi-Scale Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

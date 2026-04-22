@@ -1,5 +1,6 @@
 # EfficientLLM: Unified Pruning-Aware Pretraining for Auto-Designed Edge Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

@@ -1,5 +1,6 @@
 # UniMedVL: Unifying Medical Multimodal Understanding and Generation through Observation-Knowledge-Analysis
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

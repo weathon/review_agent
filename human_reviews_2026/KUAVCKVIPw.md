@@ -1,5 +1,6 @@
 # Ensuring Life-long Forgetting in Sequential Unlearning via Source-free Optimization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

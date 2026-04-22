@@ -1,5 +1,6 @@
 # Beyond Edge Deletion: A Comprehensive Approach to Counterfactual Explanation in Graph Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 6, 8
 

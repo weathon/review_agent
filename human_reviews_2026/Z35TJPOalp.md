@@ -1,5 +1,6 @@
 # Enhance-A-Video: Better Generated Video for Free
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 8
 

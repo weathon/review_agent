@@ -1,5 +1,6 @@
 # Every Step Counts: Decoding Trajectories as Authorship Fingerprints of dLLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

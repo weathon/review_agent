@@ -1,5 +1,6 @@
 # PhysLLM: Harnessing Large Language Models for Cross-Modal Remote Physiological Sensing
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

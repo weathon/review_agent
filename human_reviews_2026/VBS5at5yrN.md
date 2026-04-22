@@ -1,5 +1,6 @@
 # MSC-180: A Benchmark for Automated Formal Theorem Proving from Mathematical Subject Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

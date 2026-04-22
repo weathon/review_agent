@@ -1,5 +1,6 @@
 # CortexVLA: Bridging the Gap between Cognition and Action via Function Calling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

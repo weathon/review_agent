@@ -1,5 +1,6 @@
 # WebWatcher: Breaking New Frontiers of Vision-Language Deep Research Agent
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

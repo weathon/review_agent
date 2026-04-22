@@ -1,5 +1,6 @@
 # Master Skill Learning with Policy-Grounded Synergy of LLM-based Reward Shaping and Exploring
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 6
 

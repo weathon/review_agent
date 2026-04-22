@@ -1,5 +1,6 @@
 # FlexibleLLM: Making Low-Bit Quantization for Large Language Models More Flexible and Efficient
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 6, 4
 

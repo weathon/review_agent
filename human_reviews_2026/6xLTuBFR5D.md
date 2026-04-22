@@ -1,5 +1,6 @@
 # DELM: a Python toolkit for Data Extraction with Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 2
 

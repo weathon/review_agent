@@ -1,5 +1,6 @@
 # CLASP: An online learning algorithm for Convex Losses And Squared Penalties
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

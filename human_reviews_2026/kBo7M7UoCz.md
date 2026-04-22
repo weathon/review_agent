@@ -1,5 +1,6 @@
 # Difference-Based Graph Attention Networks: A Dual Attention Mechanism for Similarity and Dissimilarity in Graph Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

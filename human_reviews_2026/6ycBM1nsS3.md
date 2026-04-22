@@ -1,5 +1,6 @@
 # CoDA: From Text-to-Image Diffusion Models to Training-Free Dataset Distillation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

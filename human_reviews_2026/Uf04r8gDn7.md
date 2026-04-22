@@ -1,5 +1,6 @@
 # Paraphrase-Robust Conformal Prediction for Reliable LLM Uncertainty Quantification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

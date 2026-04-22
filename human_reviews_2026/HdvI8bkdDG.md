@@ -1,5 +1,6 @@
 # GREmLN: A Cellular Graph Structure Aware Transcriptomics Foundation Model
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

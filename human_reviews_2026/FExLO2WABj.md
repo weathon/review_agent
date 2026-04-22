@@ -1,5 +1,6 @@
 # FedEM: A Privacy-Preserving Framework for Concurrent Utility Preservation in Federated Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Bridging ML and algorithms: comparison of hyperbolic embeddings
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 2
 

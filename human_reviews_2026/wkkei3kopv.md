@@ -1,5 +1,6 @@
 # Train, Freeze or Exit: Dynamic Module-wise Fine-Tuning under Memory Constraints
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

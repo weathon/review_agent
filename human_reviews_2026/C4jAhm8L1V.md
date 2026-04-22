@@ -1,5 +1,6 @@
 # Beyond Membership: Limitations of Add/Remove Adjacency in Differential Privacy
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

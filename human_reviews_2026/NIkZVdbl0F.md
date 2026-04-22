@@ -1,5 +1,6 @@
 # Minimalist Softmax Attention Provably Learns Constrained Boolean Functions
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4, 8
 

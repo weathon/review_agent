@@ -1,5 +1,6 @@
 # Text2GraphBench: A Comprehensive Benchmark for Evaluating Text-Instructed Graph Generation with Large Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

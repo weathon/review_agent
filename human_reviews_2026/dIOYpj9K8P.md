@@ -1,5 +1,6 @@
 # Reformulation for Pretraining Data Augmentation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

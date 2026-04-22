@@ -1,5 +1,6 @@
 # From Many Imperfect to One Trusted: Imitation Learning from Heterogeneous Demonstrators with Unknown Expertise
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

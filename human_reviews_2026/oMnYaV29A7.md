@@ -1,5 +1,6 @@
 # TFGNet: Target Face Generation from Low-Quality Images via Textual Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Efficient Similarity-Based Fast Unlearning via Pearson Correlation Detection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

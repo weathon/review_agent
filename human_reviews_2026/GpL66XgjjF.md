@@ -1,5 +1,6 @@
 # When Thinking Backfires: Mechanistic Insights into Reason-induced Misalignment
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

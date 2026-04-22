@@ -1,5 +1,6 @@
 # MedGuards: Multi-Agent System for Reliable Medical Error Detection and Correction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

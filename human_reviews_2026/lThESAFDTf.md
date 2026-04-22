@@ -1,5 +1,6 @@
 # IPGO: Indirect Prompt Gradient Optimization for Text-to-Image Model Prompt Finetuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

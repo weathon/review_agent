@@ -1,5 +1,6 @@
 # Scalable Cooperative Multi-Agent Reinforcement Learning with Adaptive Communication Range
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

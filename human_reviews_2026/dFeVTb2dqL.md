@@ -1,5 +1,6 @@
 # Image Embeddings from Social Media: Computer Vision and Human in the Loop Applications for Social Movement Messaging
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

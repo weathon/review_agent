@@ -1,5 +1,6 @@
 # MM-PRM: Enhancing Multimodal Mathematical Reasoning with Scalable Step-Level Supervision
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

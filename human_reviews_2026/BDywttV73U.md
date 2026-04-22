@@ -1,5 +1,6 @@
 # KORE: Enhancing Knowledge Injection for Large Multimodal Models via Knowledge-Oriented Augmentations and Constraints
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

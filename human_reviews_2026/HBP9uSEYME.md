@@ -1,5 +1,6 @@
 # Exploiting Low-Dimensional Manifold of Features for Few-Shot Whole Slide Image Classification
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 10, 2, 4
 

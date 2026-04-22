@@ -1,5 +1,6 @@
 # Out of the Memory Barrier: A Highly Memory-Efficient Training System for LLMs with Million-Token Contexts
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Atomic HINs: Entity-Attribute Duality for Heterogeneous Graph Modeling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

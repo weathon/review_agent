@@ -1,5 +1,6 @@
 # Rethinking LLM Evaluation: Can We Evaluate LLMs with 200× Less Data?
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

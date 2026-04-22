@@ -1,5 +1,6 @@
 # Off-Policy Safe Reinforcement Learning with Cost-Constrained Optimistic Exploration
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 0, 6, 4
 

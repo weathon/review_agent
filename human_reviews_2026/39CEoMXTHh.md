@@ -1,5 +1,6 @@
 # $\texttt{LLINBO}$: Trustworthy LLM-in-the-Loop Bayesian Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

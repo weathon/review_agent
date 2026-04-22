@@ -1,5 +1,6 @@
 # Online Pseudo-average Shifting Attention(PASA) for Robust Low-precision LLM Inference: Algorithms, Numerical Analysis and Performance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

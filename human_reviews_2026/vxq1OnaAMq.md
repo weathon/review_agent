@@ -1,5 +1,6 @@
 # Gauge Flow Matching: Efficient Constrained Generative Modeling over General Convex Set and Beyond
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

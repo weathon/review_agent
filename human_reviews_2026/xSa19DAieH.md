@@ -1,5 +1,6 @@
 # Stable-LoRA: Stabilizing Feature Learning of Low-Rank Adaptation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 4
 

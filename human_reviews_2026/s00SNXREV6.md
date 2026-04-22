@@ -1,5 +1,6 @@
 # Vision-Zero: Scalable VLM Self-Evolution via Multi-Agent Self-Play
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

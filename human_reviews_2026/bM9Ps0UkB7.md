@@ -1,5 +1,6 @@
 # Making the Subspace Assumption Work: Low-Dimensional Exploration for High-Dimensional Bayesian Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

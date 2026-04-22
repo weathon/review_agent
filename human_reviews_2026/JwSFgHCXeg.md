@@ -1,5 +1,6 @@
 # Learning Multi-granularity Visual-textual Alignment for Zero-shot Anomaly Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

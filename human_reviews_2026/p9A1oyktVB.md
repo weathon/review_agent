@@ -1,5 +1,6 @@
 # Pseudo-Non-Linear Data Augmentation: A Constrained Energy Minimization Viewpoint
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

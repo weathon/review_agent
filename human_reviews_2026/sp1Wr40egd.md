@@ -1,5 +1,6 @@
 # To Trust Or Not To Trust Your Vision-Language Model's Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

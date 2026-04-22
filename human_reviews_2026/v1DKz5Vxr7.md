@@ -1,5 +1,6 @@
 # MotionStream: Real-Time Video Generation with Interactive Motion Controls
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 4
 

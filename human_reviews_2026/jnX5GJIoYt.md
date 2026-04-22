@@ -1,5 +1,6 @@
 # EIP: Weighted Ranking of LLMs by Quantifying Question Difficulty
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

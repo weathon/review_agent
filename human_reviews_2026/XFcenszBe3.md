@@ -1,5 +1,6 @@
 # Interpreting and Steering LLMs with Mutual Information-based Explanations on Sparse Autoencoders
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

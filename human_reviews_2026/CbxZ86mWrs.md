@@ -1,5 +1,6 @@
 # CASIAL: Geometric Distortion Robust Image Watermarking
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

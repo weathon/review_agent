@@ -1,5 +1,6 @@
 # DynamicRank LoRA: Real-Time Adaptive Fine-Tuning \\ for Code Models via Token-Level Importance and Loss Landscape Awareness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Traceable Black-Box Watermarks For Federated Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

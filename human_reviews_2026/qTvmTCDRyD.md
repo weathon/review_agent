@@ -1,5 +1,6 @@
 # DRIFT-Net: A Spectral-Coupled Neural Operator for PDEs Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

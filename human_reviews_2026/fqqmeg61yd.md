@@ -1,5 +1,6 @@
 # RAS: Retrieval-And-Structuring for Knowledge-Intensive LLM Generation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

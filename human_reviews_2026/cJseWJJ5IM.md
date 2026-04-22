@@ -1,5 +1,6 @@
 # Efficient Reasoning with Balanced Thinking
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 10, 4
 
@@ -80,15 +81,24 @@ Experimental results demonstrate that the proposed method improves performance w
 No major weaknesses are observed, but clarification on the following questions would strengthen the paper and may affect my final score.
 
 ### Questions
-**[Q1] Extraction of the Steering Vector** 
-As I understand, the authors extract the steering vector using confidence-defined sets in Eq. (5). However, directly using the definition in Eq. (3) appears simpler. Could the authors report the performance gap between these two methods?
+**[Q1] Extraction of the Steering Vector**
 
-**[Q2] Observation Across Models** 
-What type of model is used in Figure 2 (b)? I am curious whether confidence values and variances serve as general indicators across different models.
+As I understand, the authors extract the steering vector using confidence-defined sets in Eq. (5).
+However, directly using the definition in Eq. (3) appears simpler.
+Could the authors report the performance gap between these two methods?
 
-**[Q3] Inference Overheads** Appendix I provides only a brief latency analysis. Could the authors include a quantitative throughput evaluation (e.g., tokens per second) comparing their method with the original model?
+**[Q2] Observation Across Models**
 
-**[Q4] Number of Samplings** How many samplings are used per test sample? Since challenge datasets such as AIME and AMC contain relatively few examples (< 100), multiple samplings may be required for more reliable evaluation.
+What type of model is used in Figure 2 (b)?
+I am curious whether confidence values and variances serve as general indicators across different models.
+
+**[Q3] Inference Overheads**
+Appendix I provides only a brief latency analysis.
+Could the authors include a quantitative throughput evaluation (e.g., tokens per second) comparing their method with the original model?
+
+**[Q4] Number of Samplings**
+How many samplings are used per test sample?
+Since challenge datasets such as AIME and AMC contain relatively few examples (< 100), multiple samplings may be required for more reliable evaluation.
 
 ### Soundness
 3

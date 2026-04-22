@@ -1,5 +1,6 @@
 # Thinking with Camera: A Unified Multimodal Model for Camera-Centric Understanding and Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

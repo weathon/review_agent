@@ -1,5 +1,6 @@
 # High-Fidelity and Long-Duration Human Image Animation with Diffusion Transformer
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

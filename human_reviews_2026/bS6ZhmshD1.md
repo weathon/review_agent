@@ -1,5 +1,6 @@
 # Learning from Synthetic Labs: Language Models as Auction Participants
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2
 

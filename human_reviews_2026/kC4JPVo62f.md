@@ -1,5 +1,6 @@
 # DriveRX: A Vision-Language Reasoning Model for Cross-Task Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Zero-shot Synthetic Video Realism Enhancement via Structure-aware Denoising
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

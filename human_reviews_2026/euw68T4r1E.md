@@ -1,5 +1,6 @@
 # BigCodeArena: Unveiling More Reliable Human Preferences in Code Generation via Execution
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Elo-Evolve: A Co-evolutionary Framework for Language Model Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

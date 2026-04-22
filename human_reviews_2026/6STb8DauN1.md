@@ -1,5 +1,6 @@
 # TASTE: Text-Aligned Speech Tokenization and Embedding for Spoken Language Modeling
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 6
 

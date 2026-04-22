@@ -1,5 +1,6 @@
 # Optimal Trade-offs between Regret and Estimation in Capacitated Multinomial Logit Bandits
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # RLAC: Reinforcement Learning with Adversarial Critic for Free-Form Generation Tasks
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4
 

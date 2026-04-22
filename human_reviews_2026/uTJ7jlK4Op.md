@@ -1,5 +1,6 @@
 # Disentangling Shared and Private Neural Dynamics with SPIRE: A Latent Modeling Framework for Deep Brain Stimulation
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 2
 

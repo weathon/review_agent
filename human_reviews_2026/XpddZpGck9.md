@@ -1,5 +1,6 @@
 # UniTrack: Differentiable Graph Representation Learning for Multi-Object Tracking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

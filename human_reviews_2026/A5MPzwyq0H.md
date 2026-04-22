@@ -1,5 +1,6 @@
 # Pep2Prob Benchmark: Predicting Fragment Ion Probability for MS$^2$-based Proteomics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

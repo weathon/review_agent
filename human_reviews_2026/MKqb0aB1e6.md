@@ -1,5 +1,6 @@
 # Assessing Large Language Models in Updating Their Forecasts with New Information
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

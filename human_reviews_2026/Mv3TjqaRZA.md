@@ -1,5 +1,6 @@
 # Analytical Restructuring of Feed-Forward Networks for Accelerated LLM Inference
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

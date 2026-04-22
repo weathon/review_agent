@@ -1,5 +1,6 @@
 # NDAD: Negative-Direction Aware Decoding for Large Language Models via Controllable Hallucination Signal Injection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

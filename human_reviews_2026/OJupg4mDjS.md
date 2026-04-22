@@ -1,5 +1,6 @@
 # On the Wasserstein Geodesic Principal Component Analysis of probability measures
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 10
 

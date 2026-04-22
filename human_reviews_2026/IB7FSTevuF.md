@@ -1,5 +1,6 @@
 # Visually-grounded Humanoid Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 6, 2
 

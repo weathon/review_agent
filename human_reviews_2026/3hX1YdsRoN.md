@@ -1,5 +1,6 @@
 # Graph-Based Multi-Modal Light-weight Network for Adaptive Edge MRI Tumor Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

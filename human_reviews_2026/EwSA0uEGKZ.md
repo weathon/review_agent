@@ -1,5 +1,6 @@
 # GSDistill: A Unified Paradigm for Geometry- and Semantics-Aware Document Pretraining
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

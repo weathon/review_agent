@@ -1,5 +1,6 @@
 # Multi-Modal Spiking Neural Network for Efficient and Robust Underwater Object Detection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

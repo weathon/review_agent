@@ -1,5 +1,6 @@
 # Free-View Robot Manipulation: Visuomotor Policy by Calibration Diffusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

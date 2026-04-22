@@ -1,5 +1,6 @@
 # Dual-Phase Whitening for Test-Time Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

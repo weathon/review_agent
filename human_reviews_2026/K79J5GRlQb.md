@@ -1,5 +1,6 @@
 # Expectation Curvature: Beyond the Hessian in Non-Smooth Loss Landscapes
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 6, 2
 

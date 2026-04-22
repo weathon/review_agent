@@ -1,5 +1,6 @@
 # Negative Sampling From the Ground Up: A Redesign for Graph-based Recommendations
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 8, 6
 

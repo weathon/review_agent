@@ -1,5 +1,6 @@
 # Capturing Uncertainty in Regression via Conditional Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

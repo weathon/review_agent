@@ -1,5 +1,6 @@
 # Measurement-Aligned Sampling for Inverse Problem
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

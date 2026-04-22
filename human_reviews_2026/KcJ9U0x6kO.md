@@ -1,5 +1,6 @@
 # HAMLET: Switch Your Vision-Language-Action Model into a History-Aware Policy
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

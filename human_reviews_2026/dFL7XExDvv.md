@@ -1,5 +1,6 @@
 # SeeDNorm: Self-Rescaled Dynamic Normalization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

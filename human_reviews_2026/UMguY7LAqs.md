@@ -1,5 +1,6 @@
 # EcomEval: Towards Reliable Evaluation of Large Language Models for Multilingual and Multimodal E-Commerce Applications
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

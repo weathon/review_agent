@@ -1,5 +1,6 @@
 # LLM Pretraining with Continuous Concepts
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

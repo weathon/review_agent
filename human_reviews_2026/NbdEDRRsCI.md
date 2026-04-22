@@ -1,5 +1,6 @@
 # Many Eyes, One Mind: Temporal Multi-Perspective and Progressive Distillation for Spiking Neural Networks
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # UniCode: A Framework for Generating High-Quality Competitive Coding Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

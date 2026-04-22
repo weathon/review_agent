@@ -1,5 +1,6 @@
 # FROST: Filtering Reasoning Outliers with Attention for Efficient Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 
@@ -29,11 +30,15 @@ Experimental results demonstrate that the proposed approach outperforms existing
 - Reproducibility is high — the authors provide full code and detailed implementation information.
 
 ### Weaknesses
-**[W1] Restricted experimental scope.** Despite the interesting ideas, both the analyses and experiments are conducted on a limited number of models. In particular, the observations are primarily focused on the Phi-reasoning model, making the study somewhat specialized and reducing the general applicability of the findings.
+**[W1] Restricted experimental scope.**
+Despite the interesting ideas, both the analyses and experiments are conducted on a limited number of models. In particular, the observations are primarily focused on the Phi-reasoning model, making the study somewhat specialized and reducing the general applicability of the findings.
 
-**[W2] Limited discussion of related work.** There are already recent studies [1, 2] analyzing internal attention patterns in reasoning models. A deeper discussion comparing this work with those, and clarifying its novelty relative to them, would strengthen the contribution. Notably, the analysis of the attention distribution around the end of thinking token (Figure 3) appears similar to [1].
+**[W2] Limited discussion of related work.**
+There are already recent studies [1, 2] analyzing internal attention patterns in reasoning models.
+A deeper discussion comparing this work with those, and clarifying its novelty relative to them, would strengthen the contribution. Notably, the analysis of the attention distribution around the end of thinking token (Figure 3) appears similar to [1].
 
-[1] Choi et al., Think Clearly: Improving Reasoning via Redundant Token Pruning, EMNLP 2025 (Findings) 
+[1] Choi et al., Think Clearly: Improving Reasoning via Redundant Token Pruning, EMNLP 2025 (Findings)
+
 
 [2] Cai et al., R-KV: Redundancy-aware KV Cache Compression for Reasoning Models, NeurIPS 2025
 

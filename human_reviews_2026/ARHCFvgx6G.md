@@ -1,5 +1,6 @@
 # VideoZoomer: Reinforcement-Learned Temporal Focusing for Long Video Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

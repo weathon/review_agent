@@ -1,5 +1,6 @@
 # Biologically Plausible Online Hebbian Meta‐Learning: Two‐Timescale Local Rules for Spiking Neural Brain Interfaces
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

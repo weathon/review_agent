@@ -1,5 +1,6 @@
 # AutoPR: Let's Automate Your Academic Promotion!
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

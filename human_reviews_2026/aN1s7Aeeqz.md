@@ -1,5 +1,6 @@
 # RPP: A Certified Poisoned-Sample Detection Framework for Backdoor Attacks under Dataset Imbalance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

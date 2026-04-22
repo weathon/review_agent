@@ -1,5 +1,6 @@
 # Surgical Safety Repair: A Parameter-Isolated Approach to Correcting Harmful Fine-tuning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

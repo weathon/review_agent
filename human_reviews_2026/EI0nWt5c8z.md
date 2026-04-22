@@ -1,5 +1,6 @@
 # A Random Matrix Analysis of In-context Memorization for Nonlinear Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

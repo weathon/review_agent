@@ -1,5 +1,6 @@
 # SHADE: Spectral Hallucination Detection via Dual Spectral Decompositions
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

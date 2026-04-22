@@ -1,5 +1,6 @@
 # Let it Calm: Exploratory Annealed Decoding for Verifiable Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

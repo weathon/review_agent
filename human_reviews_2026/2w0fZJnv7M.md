@@ -1,5 +1,6 @@
 # HOW TO TRAIN YOUR DIFFUSION MODELS FOR FEW- SHOT CLASSIFICATION
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

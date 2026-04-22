@@ -1,5 +1,6 @@
 # OneTrackerV2: Unified Multimodal Visual Object Tracking with Mixture of Experts
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Common Corpus: The Largest Collection of Ethical Data for LLM Pre-Training
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 8
 

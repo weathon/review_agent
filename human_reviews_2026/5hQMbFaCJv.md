@@ -1,5 +1,6 @@
 # Enhancing Logical Reasoning of Large Language Models via Phased Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

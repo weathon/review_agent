@@ -1,5 +1,6 @@
 # K-Sort Eval: Efficient Preference Evaluation for Visual Generation via Corrected VLM-as-a-Judge
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

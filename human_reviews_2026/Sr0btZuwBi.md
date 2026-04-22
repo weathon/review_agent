@@ -1,5 +1,6 @@
 # VeriTrail: Closed-Domain Hallucination Detection with Traceability
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # GAMBIT: A Graph-structured and Decision-Aware Benchmark for MoBile GUI Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

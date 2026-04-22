@@ -1,5 +1,6 @@
 # Towards the Dynamics of Representation Changes during Parameter Pruning for Network Compression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

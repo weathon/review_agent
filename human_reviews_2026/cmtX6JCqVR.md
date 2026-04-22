@@ -1,5 +1,6 @@
 # FLAT-Bench: A Federated Learning Benchmark for Adaptation and Trust Evaluation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 6
 

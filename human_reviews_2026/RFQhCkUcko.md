@@ -1,5 +1,6 @@
 # Robust Adversarial Policy Optimization Under Dynamics Uncertainty
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

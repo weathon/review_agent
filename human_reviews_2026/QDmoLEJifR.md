@@ -1,5 +1,6 @@
 # Behavioral Embeddings of Programs: A Quasi-Dynamic Approach for Optimization Prediction
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

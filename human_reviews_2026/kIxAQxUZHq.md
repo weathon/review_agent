@@ -1,5 +1,6 @@
 # Bento: Benchmarking Classical and AI Docking on Drug Design–Relevant Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

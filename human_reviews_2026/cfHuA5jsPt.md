@@ -1,5 +1,6 @@
 # Fine-tuning Done Right in Model Editing
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

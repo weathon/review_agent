@@ -1,5 +1,6 @@
 # DreamCS: Geometry-Aware Text-to-3D Generation with Unpaired 3D Reward Supervision
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

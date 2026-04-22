@@ -1,5 +1,6 @@
 # LLM-Driven Policy Diffusion: Enhancing Generalization in Offline Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

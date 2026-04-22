@@ -1,5 +1,6 @@
 # A Neuroscience-inspired Framework for Tri-modality Alignment of Brain Signals, Vision, and Language
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

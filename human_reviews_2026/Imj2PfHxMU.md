@@ -1,5 +1,6 @@
 # Compositional Token Modeling for Occlusion-Robust Human Pose Estimation​
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 0
 
@@ -72,7 +73,8 @@ This paper proposes CM-PCT for occlusion-robust human pose estimation. The metho
 1. This paper is easy to follow.
 
 ### Weaknesses
-1. The core idea of this paper is almost identical to the PCT[1] framework. The main technical additions (e.g., Gaussian keypoint completion, position-aware embedding, and SE fusion) appear to be incremental modifications rather than a fundamentally new perspective. More importantly, The paper does not provide any direct comparison with the original PCT baseline. A side-by-side quantitative and qualitative analysis with PCT is essential for evaluating novelty and merit. The author should report the model performance on COCO test-dev, MPII, H36M, and test PCT on OCHuman.
+1. The core idea of this paper is almost identical to the PCT[1] framework. The main technical additions (e.g., Gaussian keypoint completion, position-aware embedding, and SE fusion) appear to be incremental modifications rather than a fundamentally new perspective.
+More importantly, The paper does not provide any direct comparison with the original PCT baseline. A side-by-side quantitative and qualitative analysis with PCT is essential for evaluating novelty and merit. The author should report the model performance on COCO test-dev, MPII, H36M, and test PCT on OCHuman.
 2. As shown in the PCT paper, the performance on COCO val2017 is higher than this paper. So the effectiveness of technical additions is questionable.
 3. The paper reports quantitative metrics but completely lacks visualizations or qualitative analysis. Given the claim of “occlusion robustness,” visual comparisons of predicted poses under partial occlusion, as well as attention or token activation maps, are necessary to substantiate the claim. Without such evidence, the method’s claimed interpretability and structural reasoning advantages remain speculative.
 

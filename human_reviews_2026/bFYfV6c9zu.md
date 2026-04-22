@@ -1,5 +1,6 @@
 # Differentiable Model Predictive Control on the GPU
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Accelerating Newton-Schulz Iteration for Orthogonalization via Chebyshev-type Polynomials
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

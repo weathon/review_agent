@@ -1,5 +1,6 @@
 # Enjoy Your Layer Normalization with the Computation Efficiency of RMSNorm
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

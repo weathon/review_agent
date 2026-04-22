@@ -1,5 +1,6 @@
 # Sharp Generalization for Nonparametric Regression in Interpolation Space by Shallow Neural Networks with Channel Attention
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 6, 4, 2
 

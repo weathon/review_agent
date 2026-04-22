@@ -1,5 +1,6 @@
 # D2C-HRHR: Discrete Actions with Double Distributional Critics for High-Risk-High-Return Tasks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

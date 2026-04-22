@@ -1,5 +1,6 @@
 # Multi-Grained Policy Optimization for Multimodal Reasoning: From An Uncertainty Perspective
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

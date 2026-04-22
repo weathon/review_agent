@@ -1,5 +1,6 @@
 # Percept Activation Graph (PAG): Decomposing LLM Computation into Perceptual Entities and Their Interactions
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 6, 2
 

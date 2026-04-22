@@ -1,5 +1,6 @@
 # Privacy \textit{Déjà Vu} Effect: Resurfacing Sensitive Samples in Continual Fine-tuning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

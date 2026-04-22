@@ -1,5 +1,6 @@
 # Brain-inspired Representation Transfer through Invariant Input-driven Continuous Attractors in a Modular RNN Framework
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

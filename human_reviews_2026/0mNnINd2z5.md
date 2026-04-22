@@ -1,5 +1,6 @@
 # Strategic Scaling of Test-Time Compute: A Bandit Learning Approach
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4
 

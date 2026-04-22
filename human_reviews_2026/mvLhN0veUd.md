@@ -1,5 +1,6 @@
 # Breaking Barriers: Do Reinforcement Post Training Gains Transfer To Unseen Domains?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

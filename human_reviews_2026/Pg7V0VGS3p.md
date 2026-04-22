@@ -1,5 +1,6 @@
 # Target-Driven Policy Optimization for Sequential Counterfactual Outcome Control
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

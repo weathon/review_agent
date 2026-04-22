@@ -1,5 +1,6 @@
 # How Do Language Models Speak Languages? A Case Study on Unintended Code-Switching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

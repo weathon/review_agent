@@ -1,5 +1,6 @@
 # Stabilizing Policy Gradients for Sample-Efficient Reinforcement Learning in LLM Reasoning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Progressive Reverse Understanding Improves Text-to-SQL Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

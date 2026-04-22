@@ -1,5 +1,6 @@
 # UniCMs: A Unified Consistency Model For Efficient Multimodal Generation and Understanding
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

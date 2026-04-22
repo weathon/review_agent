@@ -1,5 +1,6 @@
 # Query-Specific Causal Graph Pruning Under Tiered Knowledge
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

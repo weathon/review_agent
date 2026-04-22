@@ -1,5 +1,6 @@
 # ZipperQuant: Bit-Based Inlier–Outlier Disaggregation for 4-Bit LLMs on GPU–CPU
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 4
 

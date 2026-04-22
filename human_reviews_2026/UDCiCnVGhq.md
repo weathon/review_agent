@@ -1,5 +1,6 @@
 # LaCo: Efficient Layer-wise Compression of Visual Tokens for Multimodal Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

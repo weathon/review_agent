@@ -1,5 +1,6 @@
 # FaithfulFaces: Pose-Faithful Facial Identity Preservation for Text-to-Video Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

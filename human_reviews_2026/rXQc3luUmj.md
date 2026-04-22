@@ -1,5 +1,6 @@
 # PathXfer: Few-Shot Visual Fidelity Transfer for Compressed Multi-to-Few Step Sampling
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 0
 

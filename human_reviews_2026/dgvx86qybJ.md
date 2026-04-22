@@ -1,5 +1,6 @@
 # Hierarchical Representations for Cross-task Automated Heuristic Design using LLMs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 4, 6, 2
 

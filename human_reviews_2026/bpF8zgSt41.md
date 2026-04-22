@@ -1,5 +1,6 @@
 # How Transformers Learn Causal Structures In-Context: Explainable Mechanism Meets Theoretical Guarantee
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 2
 

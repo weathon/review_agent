@@ -1,5 +1,6 @@
 # Reconstruction Alignment Improves Unified Multimodal Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

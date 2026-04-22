@@ -1,5 +1,6 @@
 # Disagreements in Reasoning: How a Model's Thinking Process Dictates Persuasion in Multi-Agent Systems
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

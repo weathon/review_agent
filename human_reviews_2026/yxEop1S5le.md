@@ -1,5 +1,6 @@
 # The Potential of Second-Order Optimization for LLMs: A Study with Full Gauss-Newton
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

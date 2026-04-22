@@ -1,5 +1,6 @@
 # TROLL: Trust Regions Improve Reinforcement Learning for Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 10
 

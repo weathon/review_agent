@@ -1,5 +1,6 @@
 # WebSailor-V2: Bridging the Chasm to Proprietary Agents via Synthetic Data and Scalable Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

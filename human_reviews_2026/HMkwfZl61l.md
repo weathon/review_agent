@@ -1,5 +1,6 @@
 # Data Selection for Fine-tuning Vision Language Models via Cross Modal Alignment Trajectories
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

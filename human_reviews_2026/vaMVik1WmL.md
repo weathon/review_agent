@@ -1,5 +1,6 @@
 # A Fast Kernel-based Conditional Independence Test with Application to Causal Discovery
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Rethinking Entropy Regularization in Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

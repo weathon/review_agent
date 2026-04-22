@@ -1,5 +1,6 @@
 # Identifying Truthful Inheritance in Family Models and Enhancing Truthfulness
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

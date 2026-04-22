@@ -1,5 +1,6 @@
 # Catch-22: Pareto Frontier for Detectability and Robustness in LLM Watermarking
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 0, 6
 

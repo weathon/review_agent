@@ -1,5 +1,6 @@
 # Reinforcement Learning Fine-Tuning Enhances Activation Intensity and Diversity in the Internal Circuitry of LLMs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

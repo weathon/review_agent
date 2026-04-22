@@ -1,5 +1,6 @@
 # CELAD: Compositional Evaluation for Logical Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

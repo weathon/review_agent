@@ -1,5 +1,6 @@
 # Memory Forgetting Adapter Sculpting for Selective Multimodal Large Language Model Unlearning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6
 

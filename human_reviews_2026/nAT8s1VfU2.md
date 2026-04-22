@@ -1,5 +1,6 @@
 # XRPO: Pushing the Limits of GRPO with Targeted Exploration and Exploitation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

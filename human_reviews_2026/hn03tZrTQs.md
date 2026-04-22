@@ -1,5 +1,6 @@
 # Domain Generalization in-the-Wild: Disentangling Classification from Domain-Aware Representations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

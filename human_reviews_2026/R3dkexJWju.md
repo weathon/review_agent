@@ -1,5 +1,6 @@
 # Accurate Evaluation of Quickest Changepoint Detectors via Non-parametric Survival Analysis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

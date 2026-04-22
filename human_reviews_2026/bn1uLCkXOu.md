@@ -1,5 +1,6 @@
 # Don’t Forget the Context: A Multitask Transformer for Intracortical Speech Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # GFMate: Empowering Graph Foundation Models with Pre-training-agnostic Test-time Prompt Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

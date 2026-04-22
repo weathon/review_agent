@@ -1,5 +1,6 @@
 # Formal Mechanistic Interpretability: Automated Circuit Discovery with Provable Guarantees
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8
 

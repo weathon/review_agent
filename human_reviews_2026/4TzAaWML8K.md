@@ -1,5 +1,6 @@
 # Towards Enhanced Image Generation via Multi-Modal Chain of Thought in Unified Generative Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

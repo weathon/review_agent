@@ -1,5 +1,6 @@
 # A Bio-Inspired Sound Localization Spiking Neural Network with Unsupervised Local Plasticity and Proximity Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

@@ -1,5 +1,6 @@
 # RegMean++: Enhancing Effectiveness and Generalization of Regression Mean for Model Merging
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 0, 6
 

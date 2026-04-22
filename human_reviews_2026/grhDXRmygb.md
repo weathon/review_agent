@@ -1,5 +1,6 @@
 # Truncated Conformal Prediction:  A Sparsity-Aware Framework for Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 
@@ -114,7 +115,9 @@ The core idea of the paper is simple, effective, and easy to apply to a wide ran
 ### Weaknesses
 The main weakness of the paper lies in its presentation. The notation is often heavy and difficult to follow, which makes some of the theoretical results hard to interpret. For example, I was unable to fully understand Theorem 7 (see questions below). Since the theoretical contributions are a key part of the paper, my score reflects the need for clearer exposition. However, I am open to increasing it if the authors clarify the results and improve the overall presentation.
 
-### Minor issues  
+### Minor issues
+
+
 - $\psi$ is never properly defined in the main text and the discussion in Remark 6 is a bit confusing because of that.
 - At the end of page 19, it says “The results indicate that truncation preserves the relative ranking of class probabilities for most samples”. I believe the intended meaning is that the ranking of the correct class scores across calibration points remains largely unchanged. However, the current phrasing could be misread as referring to the ranking over classes within a single sample, which wouldn’t be affected by truncation. I’d suggest rewording to make it clear that you’re referring to the first case.
 
@@ -123,7 +126,8 @@ The main weakness of the paper lies in its presentation. The notation is often h
 2. In Remark 6, since the number of classes $K$ plays an important role in Theorem 4, shouldn’t it also be taken into account when choosing $\lambda$ without a validation set?
 3. Figure 2. What exactly does the orange line represent? I’d suggest adding more detail to the caption to clarify the curves. I assume it refers to the coverage of a specific group, since the text later mentions: “As shown in Fig. 2, both size and coverage curves exhibit elbow points as the truncation level increases.” Since truncation essentially defines a new score function, I’d expect coverage to remain constant, as seen in the blue line. However, it’s unclear why truncation would affect specific groups in such a monotonic way. Could you explain?
 4. Theorem 7. To be honest, I could not understand what this theorem is trying to show in the first place. I would appreciate if the authors could elaborate on that further. The proof was not clear either, especially the third step. The notation there is a bit confusing. Also, why is it reasonable to assume that $\hat \pi(x)$ approaches $\pi(x)$ as the calibration size increases? If the estimator is fixed during calibration, why would it converge to the true probability asymptotically in $n$? Or is $n$ here referring to the training set size rather than the calibration set?
-5. Extensions. The paper seems to be written with split conformal prediction in mind, but could it generalize to full conformal prediction too? Would the results also hold for regression under a regression-as-classification framework [1]?  
+5. Extensions. The paper seems to be written with split conformal prediction in mind, but could it generalize to full conformal prediction too? Would the results also hold for regression under a regression-as-classification framework [1]?
+ 
 
 ### References
 

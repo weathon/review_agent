@@ -1,5 +1,6 @@
 # To Memorize or Not to Memorize: An Analysis of Supervised Fine-Tuning in Large Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4
 

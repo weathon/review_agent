@@ -1,5 +1,6 @@
 # Reward Inflation Paradigm Through the Lens of Monetary Economics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 4, 0
 

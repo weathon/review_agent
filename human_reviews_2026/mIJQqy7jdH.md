@@ -1,5 +1,6 @@
 # Attention Localization Through Separator Tokens: Unlocking Long Numerical Sequence Processing in LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # BdSL-SPOTER: A Transformer-Based Framework for Bengali Sign Language Recognition with Cultural Adaptation
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

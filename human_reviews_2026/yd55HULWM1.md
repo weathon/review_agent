@@ -1,5 +1,6 @@
 # Structuring Reasoning for Complex Rules Beyond Flat Representations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

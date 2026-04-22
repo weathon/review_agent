@@ -1,5 +1,6 @@
 # PinTok: Tokenizers Deserve Dedicated Pinned CPU-Compute and Memory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

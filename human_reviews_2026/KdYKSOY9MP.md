@@ -1,5 +1,6 @@
 # Cosmos-Eval: Towards Explainable Evaluation of Physics and Semantics in Text-to-Video Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Riemannian Fuzzy K-Means on Product Manifolds
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

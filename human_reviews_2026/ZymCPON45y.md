@@ -1,5 +1,6 @@
 # Through the Lens of Contrast: Self-Improving Visual Reasoning in VLMs
 
+- Avg Score: 6.40
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # NIC-RobustBench: A Comprehensive Open-Source Toolkit for Neural Image Compression and Robustness Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

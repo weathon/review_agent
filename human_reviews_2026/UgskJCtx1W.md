@@ -1,5 +1,6 @@
 # Many Can Beat One: MoE-Linear Attention for Full MLP Image Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

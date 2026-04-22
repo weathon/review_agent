@@ -1,5 +1,6 @@
 # LoRaQ: Optimized Low Rank Approximated Quantization Error for 4-bit Quantization
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 4, 6, 10, 6
 

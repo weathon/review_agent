@@ -1,5 +1,6 @@
 # CoCoDiff: Correspondence-Consistent Diffusion Model for Fine-grained Style Transfer
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

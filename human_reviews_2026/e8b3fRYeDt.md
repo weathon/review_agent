@@ -1,5 +1,6 @@
 # Reprogramming LLM Semantics: A Symbolic Attack Using Emoji-Based Context Mutation
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 0, 2, 0
 

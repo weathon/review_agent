@@ -1,5 +1,6 @@
 # C2AL: Cohort-Contrastive Auxiliary Learning For Large-Scale Recommendation Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

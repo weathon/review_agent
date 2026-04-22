@@ -1,5 +1,6 @@
 # Plug-and-Play Compositionality for Boosting Continual Learning with Foundation Models
 
+- Avg Score: 5.33
 - Decision: Accept (Oral)
 - Scores: 4, 6, 6
 

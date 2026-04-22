@@ -1,5 +1,6 @@
 # PointARSim: Point-cloud–enhanced Generative Auto-Regressive Simulation for Closed-loop End-to-end Autonomous Driving Evaluation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # QueryStream: Advancing Streaming Video Understanding with Query-Aware Pruning and Proactive Response
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Locality-aware Parallel Decoding for Efficient Autoregressive Image Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 6
 

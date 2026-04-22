@@ -1,5 +1,6 @@
 # FLoRA-NA: Nearly Accurate Aggregation for Federated Low-Rank Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

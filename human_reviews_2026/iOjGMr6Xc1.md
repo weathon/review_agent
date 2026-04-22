@@ -1,5 +1,6 @@
 # Learning Instruction-Following Policies through Open-Ended Instruction Relabeling with Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Inducing Uncertainty on Open-Weight Models for Test-Time Privacy in Image Recognition
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

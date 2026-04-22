@@ -1,5 +1,6 @@
 # Towards Robust Graph Unlearning via Gradient Consistency Control
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

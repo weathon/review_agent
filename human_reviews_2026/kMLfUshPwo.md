@@ -1,5 +1,6 @@
 # TAKE: Task-Aware Chunked KV Cache Eviction for Efficient Long-Context LLM Prefill
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

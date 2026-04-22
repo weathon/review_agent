@@ -1,5 +1,6 @@
 # Gold Panning: Turning Positional Bias into Signal for Multi-Document LLM Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

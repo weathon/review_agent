@@ -1,5 +1,6 @@
 # Real-Aware Residual Model Merging for Deepfake Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

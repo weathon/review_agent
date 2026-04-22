@@ -1,5 +1,6 @@
 # A Fano-Style Accuracy Upper Bound for LLM Single-Pass Reasoning in Multi-Hop QA
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

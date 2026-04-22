@@ -1,5 +1,6 @@
 # Double/Debiased Machine Learning for Time-to-Event Outcomes Under Poor Overlap
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

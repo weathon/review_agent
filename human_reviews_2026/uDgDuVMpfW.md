@@ -1,5 +1,6 @@
 # MultiHal: MultiLingual Dataset for Knowledge-Graph Grounded Evaluation of LLM Hallucinations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

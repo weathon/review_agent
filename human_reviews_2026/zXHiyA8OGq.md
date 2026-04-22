@@ -1,5 +1,6 @@
 # Looking beyond the next token
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

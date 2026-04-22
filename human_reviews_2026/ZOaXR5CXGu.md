@@ -1,5 +1,6 @@
 # LLMs Are Too Smart to Be Average: Controlling LLM Proficiency via Guided Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

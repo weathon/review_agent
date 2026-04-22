@@ -1,5 +1,6 @@
 # MeshMoment: A Moment-Based Loss Function for 3D Learning on Meshes
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

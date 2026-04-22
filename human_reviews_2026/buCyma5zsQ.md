@@ -1,5 +1,6 @@
 # ParaRater: Enhancing Cross-Lingual Transfer in Large Langauge Models with Meta-Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 4
 

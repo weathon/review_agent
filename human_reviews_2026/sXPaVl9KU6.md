@@ -1,5 +1,6 @@
 # Heterogeneous Federated Fine-Tuning with Parallel One-Rank Adaptation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

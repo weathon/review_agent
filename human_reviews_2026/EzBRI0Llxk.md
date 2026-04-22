@@ -1,5 +1,6 @@
 # MCA: Modality Composition Awareness for Robust Composed Multimodal Retrieval
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

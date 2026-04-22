@@ -1,5 +1,6 @@
 # Regularity and Stability Properties of Selective SSMs with Discontinuous Gating
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Interpretable Hypergraph Neural Additive Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

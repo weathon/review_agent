@@ -1,5 +1,6 @@
 # GNN-as-Judge: Unleashing the Power of LLMs for Graph Learning with GNN Feedback
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

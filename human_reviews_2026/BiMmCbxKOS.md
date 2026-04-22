@@ -1,5 +1,6 @@
 # On the Necessity of Step-Specific Representation Learning for Multi-Step Forecasting
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 2
 

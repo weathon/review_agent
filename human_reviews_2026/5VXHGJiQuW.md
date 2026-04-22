@@ -1,5 +1,6 @@
 # Learning Personalized Driving Styles via Reinforcement Learning from Human Feedback
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

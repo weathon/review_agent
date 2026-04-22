@@ -1,5 +1,6 @@
 # Q-NeRF: Neural Radiance Fields on a Simulated Gate-based Quantum Computer
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

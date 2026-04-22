@@ -1,5 +1,6 @@
 # Refining Hybrid Genetic Search for CVRP via Reinforcement Learning-Finetuned LLM
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

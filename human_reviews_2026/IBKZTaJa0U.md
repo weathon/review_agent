@@ -1,5 +1,6 @@
 # Transfer-Controllable Policy for Model Protection in Deep Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

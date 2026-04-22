@@ -1,5 +1,6 @@
 # Advancing Spatiotemporal Representations in Spiking Neural Networks via Parametric Invertible Transformation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

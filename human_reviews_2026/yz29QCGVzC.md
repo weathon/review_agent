@@ -1,5 +1,6 @@
 # Latent Geometry-Driven Network Automata for Complex Network Dismantling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

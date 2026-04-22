@@ -1,5 +1,6 @@
 # Learning Large-Scale Competitive Team Behaviors with Mean-Field Interactions and Online Opponent Modeling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

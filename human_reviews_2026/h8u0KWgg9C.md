@@ -1,5 +1,6 @@
 # Offline Equilibrium Finding in Extensive-form Games: Datasets, Methods, and Analysis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

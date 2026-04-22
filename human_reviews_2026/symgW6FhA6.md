@@ -1,5 +1,6 @@
 # Triple-BERT: Do We Really Need MARL for Order Dispatch on Ride-Sharing Platforms?
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6
 

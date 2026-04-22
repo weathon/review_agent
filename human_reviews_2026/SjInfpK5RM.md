@@ -1,5 +1,6 @@
 # d$^2$Cache: Accelerating Diffusion-Based LLMs via Dual Adaptive Caching
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Fully Differentiable Temporal FO Rule Learning
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6, 2
 

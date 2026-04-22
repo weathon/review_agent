@@ -1,5 +1,6 @@
 # BARE: Leveraging Base Language Models for Few-Shot Synthetic Data Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

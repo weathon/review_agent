@@ -1,5 +1,6 @@
 # What Scales in Cross-Entropy Scaling Law?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

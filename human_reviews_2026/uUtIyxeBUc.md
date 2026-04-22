@@ -1,5 +1,6 @@
 # LaVi: Efficient Large Vision-Language Models via Internal Feature Modulation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 6
 

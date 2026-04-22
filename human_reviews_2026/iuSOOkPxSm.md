@@ -1,5 +1,6 @@
 # Work Zones challenge VLM Trajectory Planning: Toward Mitigation and Robust Autonomous Driving
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

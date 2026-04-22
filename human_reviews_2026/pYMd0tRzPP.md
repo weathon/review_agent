@@ -1,5 +1,6 @@
 # Memory Forcing: Spatio-Temporal Memory for Consistent Scene Generation on Minecraft
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

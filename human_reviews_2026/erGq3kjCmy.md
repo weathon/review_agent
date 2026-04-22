@@ -1,5 +1,6 @@
 # Layer-wise Sensitivity-aware Sparsity Allocation for Efficient LLM Inference
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # TalkToAgent: A Human-centric Explanation of Reinforcement Learning Agents with Large Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

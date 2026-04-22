@@ -1,5 +1,6 @@
 # Cognitive Structure Generation via Diffusion Models with Policy Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 8, 2
 

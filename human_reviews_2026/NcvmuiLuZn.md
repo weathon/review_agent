@@ -1,5 +1,6 @@
 # Noise-to-Process Transformation: A Weak-Prior Paradigm for Single-Trajectory Stochastic Process Modeling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

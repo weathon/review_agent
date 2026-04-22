@@ -1,5 +1,6 @@
 # SelectLLM – Calibrating LLMs for Selective Prediction: Balancing Coverage and Risk
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

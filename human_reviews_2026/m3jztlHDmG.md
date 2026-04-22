@@ -1,5 +1,6 @@
 # Mixture of Cognitive Reasoners: Modular Reasoning with Brain-Like Specialization
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4, 8
 

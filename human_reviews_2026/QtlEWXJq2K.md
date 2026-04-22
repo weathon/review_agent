@@ -1,5 +1,6 @@
 # Cube Kernel: Enabling Local Gradient Flow Across Channels in CNNs for Robust and Efficient Building Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

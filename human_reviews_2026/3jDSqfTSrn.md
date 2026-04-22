@@ -1,5 +1,6 @@
 # Is Finer Better? The Limits of Microscaling Formats in Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

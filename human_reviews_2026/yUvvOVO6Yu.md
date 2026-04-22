@@ -1,5 +1,6 @@
 # The Kinetics of Reasoning: How Chain-of-Thought Shapes Learning in Transformers?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

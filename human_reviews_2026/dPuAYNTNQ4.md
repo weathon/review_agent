@@ -1,5 +1,6 @@
 # Cognitive Loop: Reversible Hierarchical Markov Chain for Bidirectional Self-Verifying Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

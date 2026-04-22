@@ -1,5 +1,6 @@
 # Impute-MACFM: Imputation based on Mask-Aware Flow Matching
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

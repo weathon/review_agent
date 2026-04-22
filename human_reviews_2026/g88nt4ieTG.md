@@ -1,5 +1,6 @@
 # Diffusion Language Model Knows the Answer Before It Decodes
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 4, 6, 8
 

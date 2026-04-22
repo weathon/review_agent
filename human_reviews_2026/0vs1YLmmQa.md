@@ -1,5 +1,6 @@
 # Principled and Tractable RL for Reasoning with Diffusion Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 2, 0
 

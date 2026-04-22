@@ -1,5 +1,6 @@
 # Seeing Like Humans: Task-Driven Token Reduction for Accelerated ViT in Robotic Navigation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

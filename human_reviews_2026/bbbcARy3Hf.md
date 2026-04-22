@@ -1,5 +1,6 @@
 # PETRA: Pretrained Evolutionary Transformer for SARS-CoV-2 Mutation Prediction
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 2, 6
 

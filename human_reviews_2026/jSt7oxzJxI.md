@@ -1,5 +1,6 @@
 # Benchmarking and Enhancing Rational Preference Utilization for Personalized Assistants: A Pragmatic View
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6
 

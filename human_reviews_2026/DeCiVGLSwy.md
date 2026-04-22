@@ -1,5 +1,6 @@
 # Rex: Reversible Solvers for Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

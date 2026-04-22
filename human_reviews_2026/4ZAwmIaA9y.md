@@ -1,5 +1,6 @@
 # GARLIC: Graph Attention-based Relational Learning of Multivariate Time Series in Intensive Care
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Bridging Interpretability and Optimization: Provably Attribution-Weighted Actor–Critic in Reproducing-Kernel Hilbert Spaces
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Spatial-Frequency Synergy for Remote Sensing Image Super-Resolution with Holistic Feature Enhancement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

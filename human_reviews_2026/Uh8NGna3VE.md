@@ -1,5 +1,6 @@
 # Background Matters: Robust 3D Human Pose Estimation via Controllable Video Generation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

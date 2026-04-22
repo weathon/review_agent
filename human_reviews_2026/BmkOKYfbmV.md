@@ -1,5 +1,6 @@
 # The Best of N Worlds: Aligning Reinforcement Learning with Best-of-N Sampling via max@k Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

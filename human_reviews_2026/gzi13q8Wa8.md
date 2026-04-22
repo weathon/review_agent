@@ -1,5 +1,6 @@
 # Understanding Memory in Neural Networks through Fisher Information Diffusion
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

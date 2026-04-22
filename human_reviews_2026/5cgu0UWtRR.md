@@ -1,5 +1,6 @@
 # Steering Out-of-Distribution Generalization with Concept Ablation Fine-Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

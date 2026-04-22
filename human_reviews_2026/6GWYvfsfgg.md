@@ -1,5 +1,6 @@
 # LLaSO: A Reproducible Foundation for Large Speech-Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

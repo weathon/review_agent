@@ -1,5 +1,6 @@
 # A Universal Source-Free Class Unlearning Framework via Synthetic Embeddings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

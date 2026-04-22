@@ -1,5 +1,6 @@
 # JARA: Joint Alignment and Reconstruction Architecture for Region-Aware Vision-Language Pretraining
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

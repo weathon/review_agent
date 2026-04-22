@@ -1,5 +1,6 @@
 # One Model, Many Morals: Uncovering Cross-Linguistic Misalignments in Computational Moral Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

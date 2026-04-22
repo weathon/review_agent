@@ -1,5 +1,6 @@
 # Task-Level Insights from Eigenvalues across Sequence Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

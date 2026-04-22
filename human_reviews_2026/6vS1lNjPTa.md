@@ -1,5 +1,6 @@
 # ToolOrchestra: Elevating Intelligence via Efficient Model and Tool Orchestration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

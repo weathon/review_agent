@@ -1,5 +1,6 @@
 # Autonomous Urban Region Representation with LLM-informed Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

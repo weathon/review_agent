@@ -1,5 +1,6 @@
 # Audio-FLAN: An Instruction-Following Dataset for Unified Understanding and Generation of Speech, Music, and Sound
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 2, 6, 4
 

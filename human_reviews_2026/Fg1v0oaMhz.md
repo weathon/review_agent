@@ -1,5 +1,6 @@
 # CO-PFL: Contribution-Oriented Personalized Federated Learning for Heterogeneous Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

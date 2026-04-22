@@ -1,5 +1,6 @@
 # H$^3$DP: Triply‑Hierarchical Diffusion Policy for Visuomotor Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6, 8
 

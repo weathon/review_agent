@@ -1,5 +1,6 @@
 # A Unifying View of Vector, Product and Scalar Quantization: An Information-Theoretic Perspective
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # VC-VAE: Enhancing Video VAE with Video Codec Standard for Latent Video Diffusion Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

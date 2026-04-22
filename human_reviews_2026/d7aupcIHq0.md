@@ -1,5 +1,6 @@
 # Data-Augmented Few-Shot Neural Emulator for Computer-Model System Identification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

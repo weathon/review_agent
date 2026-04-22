@@ -1,5 +1,6 @@
 # VAE-CycleGAN: Variational Latent Representation for Unpaired Image-to-Image Translation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4, 2
 

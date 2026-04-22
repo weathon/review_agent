@@ -1,5 +1,6 @@
 # Masks Can Be Distracting: On Context Comprehension in Diffusion Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

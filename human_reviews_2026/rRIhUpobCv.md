@@ -1,5 +1,6 @@
 # Rényi Sharpness: A Novel Sharpness that Strongly Correlates with Generalization
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 2
 

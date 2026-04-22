@@ -1,5 +1,6 @@
 # FACT: a first-principles alternative to the Neural Feature Ansatz for how networks learn representations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4
 

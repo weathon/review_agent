@@ -1,5 +1,6 @@
 # Detecting Unknown Objects via Energy-based Separation for Open World Object Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

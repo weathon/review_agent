@@ -1,5 +1,6 @@
 # Examining relational reasoning and inductive bias in transformers trained on a transitive inference task
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

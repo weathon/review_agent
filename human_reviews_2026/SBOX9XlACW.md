@@ -1,5 +1,6 @@
 # TACLer: Tailored Curriculum Reinforcement Learning for Efficient Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

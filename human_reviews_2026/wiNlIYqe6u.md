@@ -1,5 +1,6 @@
 # FedPAC: Consistent Representation Learning for Federated Unsupervised Learning under Data Heterogeneity
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

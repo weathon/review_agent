@@ -1,5 +1,6 @@
 # LoLA: Low-Rank Linear Attention With Sparse Caching
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

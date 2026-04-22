@@ -1,5 +1,6 @@
 # Towards Seed-Invariant Safety Alignment in Text-to-Image Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

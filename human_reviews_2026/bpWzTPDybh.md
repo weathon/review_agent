@@ -1,5 +1,6 @@
 # RECON: Robust symmetry discovery via Explicit Canonical Orientation Normalization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

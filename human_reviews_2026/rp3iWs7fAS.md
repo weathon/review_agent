@@ -1,5 +1,6 @@
 # CoreCodeBench: A Configurable Multi-Scenario Repository-Level Benchmark
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

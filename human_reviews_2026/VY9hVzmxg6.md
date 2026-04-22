@@ -1,5 +1,6 @@
 # Can't hide behind the frame:  Disentangling goal & framing for detecting LLM jailbreaks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

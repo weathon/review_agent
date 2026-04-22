@@ -1,5 +1,6 @@
 # Continuous Diffusion Models with Explicit Score Matching for Highly Efficient Anomaly Detection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 8, 0
 

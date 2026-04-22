@@ -1,5 +1,6 @@
 # VideoAgentTrek: Computer-Use Pretraining from Unlabeled Videos
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

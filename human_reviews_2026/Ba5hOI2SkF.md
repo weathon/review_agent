@@ -1,5 +1,6 @@
 # Learning Deep Modality-Shared Self-Expressiveness for Image Clustering with Textual Information
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

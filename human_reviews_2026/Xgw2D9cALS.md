@@ -1,5 +1,6 @@
 # Rank-GRPO: Training LLM-based Conversational Recommender Systems with Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

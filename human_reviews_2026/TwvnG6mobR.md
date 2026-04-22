@@ -1,5 +1,6 @@
 # WienerFlow: Wiener-Adaptive Flow Matching for Perception and Fidelity Trade-off in Low-light Image Enhancement
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

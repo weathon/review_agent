@@ -1,5 +1,6 @@
 # Beyond Nash Equilibrium: Bounded Rationality of LLMs and humans in Strategic Decision-making
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 6, 2
 

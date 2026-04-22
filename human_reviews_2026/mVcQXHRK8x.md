@@ -1,5 +1,6 @@
 # Test-Time Alignment of LLMs via Sampling-Based Optimal Control in pre-logit space
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

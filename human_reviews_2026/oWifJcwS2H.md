@@ -1,5 +1,6 @@
 # Bagel-World: Towards High-Quality Visual Question-Visual Answering
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6
 

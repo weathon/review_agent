@@ -1,5 +1,6 @@
 # Benchmarking Multimodal LLMs on Recognition and Understanding over Chemical Tables
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

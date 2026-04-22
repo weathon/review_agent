@@ -1,5 +1,6 @@
 # MaRS: Memory-Adaptive Routing for Reliable Capacity Expansion and Knowledge Retention
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # PureCover: Bridging the Gap in Re-ranking for Retrieval-Augmented Generation via Balancing Coverage and Noise
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Towards Unsupervised Speech Recognition at the Syllable-Level
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Improved denoising diffusion probabilistic models with efficient non-diagonal covariance modeling
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Efficient and Sharp Off-Policy Learning under Unobserved Confounding
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

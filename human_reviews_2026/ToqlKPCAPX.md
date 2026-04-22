@@ -1,5 +1,6 @@
 # Learning To Make MISTAKEs: Modeling Incorrect Student Thinking And Key Errors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 8, 2
 

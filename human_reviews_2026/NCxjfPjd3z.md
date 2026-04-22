@@ -1,5 +1,6 @@
 # NoiseSDF2NoiseSDF: Learning Clean Neural Fields from Noisy Supervision
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

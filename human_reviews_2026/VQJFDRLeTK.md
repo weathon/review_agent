@@ -1,5 +1,6 @@
 # Efficient Edge Test-Time Adaptation via Latent Feature Coordinate Correction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # WebDevJudge: Evaluating (M)LLMs as Critiques for Web Development Quality
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Tricks or Traps? A Deep Dive into RL for LLM Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

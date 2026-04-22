@@ -1,5 +1,6 @@
 # ActDR: Action Difference Reasoning via Keypoint Guided Tree Search
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

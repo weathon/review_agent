@@ -1,5 +1,6 @@
 # Fighter: Unveiling the Graph Convolutional Nature of Transformers in Time Series Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

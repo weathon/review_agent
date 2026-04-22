@@ -1,5 +1,6 @@
 # Visual Autoregressive Transformers Must Use $\Omega(n^2 d)$ Memory
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

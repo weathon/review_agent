@@ -1,5 +1,6 @@
 # Architect of the Bits World: Masked Autoregressive Modeling for Circuit Generation Guided by Truth Table
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

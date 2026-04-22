@@ -1,5 +1,6 @@
 # Learning Data-Efficient and Generalizable Neural Operators via Fundamental Physics Knowledge
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

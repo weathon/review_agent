@@ -1,5 +1,6 @@
 # Prompt-Guided Low-Level Recovery and High-Level Fusion for Incomplete Multimodal Sentiment Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

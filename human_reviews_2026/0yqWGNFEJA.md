@@ -1,5 +1,6 @@
 # DMIL-Net: A Multi-View Fusion and Region Decoupling Network For Diffusion-Based Generative Image Forgery Localization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

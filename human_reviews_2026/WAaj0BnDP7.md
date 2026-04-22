@@ -1,5 +1,6 @@
 # MVG-CRPS: A Robust Loss Function for Multivariate Probabilistic Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

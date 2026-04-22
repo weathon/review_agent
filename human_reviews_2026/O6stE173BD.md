@@ -1,5 +1,6 @@
 # BOAD: Discovering Hierarchical Software Engineering Agents via Bandit Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # COSA: Context-aware Output-Space Adapter for Test-Time Adaptation in Time Series Forecasting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

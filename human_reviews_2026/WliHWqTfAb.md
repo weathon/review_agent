@@ -1,5 +1,6 @@
 # GeoDiv: Framework for Measuring Geographical Diversity in Text-to-Image Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

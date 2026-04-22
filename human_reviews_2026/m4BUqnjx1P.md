@@ -1,5 +1,6 @@
 # Revoking Amnesia: RL-based Trajectory Optimization to Resurrect Erased Concepts in Diffusion Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

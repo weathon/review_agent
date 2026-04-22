@@ -1,5 +1,6 @@
 # Speak-to-Structure: Evaluating LLMs in Open-domain Natural Language-Driven Molecule Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

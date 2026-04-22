@@ -1,5 +1,6 @@
 # DimPO: Dimensionality Reduction for Attention using Preference Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2, 4
 

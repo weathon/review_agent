@@ -1,5 +1,6 @@
 # Generalizable Active Learning: Boosting Out-of-Distribution Generalization in Active Learning with Simulated Generalization via Augmentation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

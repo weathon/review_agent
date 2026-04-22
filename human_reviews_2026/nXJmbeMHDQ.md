@@ -1,5 +1,6 @@
 # Star-Corrector: A Multi-Turn Interactive Reinforcement Learning Framework for Lean4 Theorem Correction
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 4, 0
 

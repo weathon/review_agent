@@ -1,5 +1,6 @@
 # LeIn-PINN: Learned Initialization to Alleviate Convergence Failures in Physics Informed Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Back to Square Roots: An Optimal Bound on the Matrix Factorization Error for Multi-Epoch Differentially Private SGD
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 10
 

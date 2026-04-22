@@ -1,5 +1,6 @@
 # Abstractive Red-Teaming of Language Model Character
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

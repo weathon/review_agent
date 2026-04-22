@@ -1,5 +1,6 @@
 # GAT++: Adaptive Relation-Aware Graph Attention Networks
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

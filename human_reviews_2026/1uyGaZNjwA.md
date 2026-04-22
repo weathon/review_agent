@@ -1,5 +1,6 @@
 # Graph-driven Autonomous Adaptation for Multi-stream Concept Drift
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

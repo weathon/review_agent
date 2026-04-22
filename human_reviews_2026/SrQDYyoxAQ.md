@@ -1,5 +1,6 @@
 # ReasonGen-R1: Cot for Autoregressive Image Generation Models Through SFT and RL
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

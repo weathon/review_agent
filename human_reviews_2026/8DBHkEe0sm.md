@@ -1,5 +1,6 @@
 # Rethinking Cross-lingual Alignment: Balancing Transfer and Cultural Erasure in Multilingual LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

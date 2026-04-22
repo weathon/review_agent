@@ -1,5 +1,6 @@
 # Geometric Uncertainty for Detecting and Correcting Hallucinations in LLMs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

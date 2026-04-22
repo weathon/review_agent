@@ -1,5 +1,6 @@
 # Routesplain: Towards Faithful and Intervenable Routing for Software-related Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2
 

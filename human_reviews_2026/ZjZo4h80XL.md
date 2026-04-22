@@ -1,5 +1,6 @@
 # Poisson-Algebraic Parallel Scan: A fast symplectic framework for neural Hamiltonians
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 2
 

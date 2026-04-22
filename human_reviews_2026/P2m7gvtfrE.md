@@ -1,5 +1,6 @@
 # How Does Preconditioning Guide Feature Learning in Deep Neural Networks?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

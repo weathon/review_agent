@@ -1,5 +1,6 @@
 # The Telephone Game: Evaluating Semantic Drift in Unified Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

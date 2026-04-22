@@ -1,5 +1,6 @@
 # Concept-Based Local Unified Explanations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # Learning from Algorithm Feedback: One-Shot SAT Solver Guidance with GNNs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

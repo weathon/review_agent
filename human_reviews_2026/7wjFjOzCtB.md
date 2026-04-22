@@ -1,5 +1,6 @@
 # No Prior, No Leakage: Revisiting Reconstruction Attacks in Trained Neural Networks
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6, 4
 

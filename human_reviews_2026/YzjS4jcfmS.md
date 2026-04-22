@@ -1,5 +1,6 @@
 # How Muon’s Spectral Design Benefits Generalization: A Study on Imbalanced Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 8
 

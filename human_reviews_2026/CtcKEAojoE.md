@@ -1,5 +1,6 @@
 # Leveraging Shared Prototypes for a Multimodal Pulse Motion Foundation Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

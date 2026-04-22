@@ -1,5 +1,6 @@
 # The Human Brain as a Dynamic Mixture of Expert Models in Video Understanding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

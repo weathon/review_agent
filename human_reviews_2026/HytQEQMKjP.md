@@ -1,5 +1,6 @@
 # Attribute-Relation Guided Compositional Alignment for Weakly Supervised Referring Expression Comprehension
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2, 2
 

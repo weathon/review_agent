@@ -1,5 +1,6 @@
 # Conformal Non-Coverage Risk Control (CNCRC): Risk-Centric Guarantees for Predictive Safety in High-Stakes Settings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

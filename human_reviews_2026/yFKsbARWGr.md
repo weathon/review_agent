@@ -1,5 +1,6 @@
 # Read Before Imputing: Injecting PubMed-Informed Semantic Priors for Multi-Tissue Gene Expression Imputation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

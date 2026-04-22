@@ -1,5 +1,6 @@
 # Attribution Guided Distillation for Matryoshka Sparse Autoencoders
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

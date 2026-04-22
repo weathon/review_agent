@@ -1,5 +1,6 @@
 # Analysis of an Idealized Stochastic Polyak Method and its Application to Black-Box Model Distillation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

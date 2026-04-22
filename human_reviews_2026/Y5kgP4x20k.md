@@ -1,5 +1,6 @@
 # SparseSkeleton: Prefill sparse attention by decomposition
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

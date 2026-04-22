@@ -1,5 +1,6 @@
 # Scaling Laws of SignSGD in Linear Regression: When Does It Outperform SGD?
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 6
 

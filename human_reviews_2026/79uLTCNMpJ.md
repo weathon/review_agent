@@ -1,5 +1,6 @@
 # From Emergence to Control: Probing and Modulating Self-Reflection in Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

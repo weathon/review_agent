@@ -1,5 +1,6 @@
 # Harnessing Hyperbolic Geometry for Harmful Prompt Detection and Sanitization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

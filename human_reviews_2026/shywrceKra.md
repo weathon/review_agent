@@ -1,5 +1,6 @@
 # SeBA: Semi-supervised few-shot learning via Separated-at-Birth Alignment for tabular data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

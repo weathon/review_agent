@@ -1,5 +1,6 @@
 # DepthSense+DP: Adaptive Learning for Robust and Differential Private Silent Speech Recognition
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

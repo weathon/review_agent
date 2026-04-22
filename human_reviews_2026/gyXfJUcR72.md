@@ -1,5 +1,6 @@
 # Memory-Efficient LLM Pretraining via Minimalist Optimizer Design
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

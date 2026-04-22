@@ -1,5 +1,6 @@
 # DeLeaker: Dynamic Inference-Time Reweighting For Semantic Leakage Mitigation in Text-to-Image Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

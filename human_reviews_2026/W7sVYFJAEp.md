@@ -1,5 +1,6 @@
 # Long-Context Attention Benchmark: From Kernel Efficiency to Distributed Context Parallelism
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

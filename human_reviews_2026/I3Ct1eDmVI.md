@@ -1,5 +1,6 @@
 # PHyCLIP: $\ell_1$-Product of Hyperbolic Factors Unifies Hierarchy and Compositionality in Vision-Language Representation Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4
 

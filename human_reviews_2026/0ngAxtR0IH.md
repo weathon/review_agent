@@ -1,5 +1,6 @@
 # HMFusion: Hierarchical Multi-Modality Fusion for CAD Representation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Noise and anatomy-guided diffusion model for realistic CT image synthesis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

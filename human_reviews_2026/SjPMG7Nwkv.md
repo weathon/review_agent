@@ -1,5 +1,6 @@
 # TimesMR: Unlocking the Potential of MLP and RNNs for Multivariate Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

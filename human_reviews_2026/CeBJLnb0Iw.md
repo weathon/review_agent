@@ -1,5 +1,6 @@
 # Long CoT In-Context Learning Can Empower Pre-trained LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

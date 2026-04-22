@@ -1,5 +1,6 @@
 # GeoReasoning: Structured Semantic Reasoning for Image-to-Map Localization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

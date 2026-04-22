@@ -1,5 +1,6 @@
 # Fair Reinforcement Learning for Just AI
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 
@@ -180,7 +181,9 @@ They further show that redefining the set of alternative policies from prior wor
 This paper gives efficient, provable algorithms for a reasonable fairness notion for preference aggregation. They cleverly set up the comparison class of policies such that their sampling algorithm for estimating quantiles is efficient and their main algorithm for aggregation is a simple application of multiplicative weights.
 
 ### Weaknesses
-The paper claims only $O(n)$ calls to a policy optimizer are required, but it appears that Algorithm 3 makes $T = \log(n+1)/\varepsilon^2$ calls to an optimization oracle, in addition to the $O(n)$ calls required to define the polytope.   
+The paper claims only $O(n)$ calls to a policy optimizer are required, but it appears that Algorithm 3 makes $T = \log(n+1)/\varepsilon^2$ calls to an optimization oracle, in addition to the $O(n)$ calls required to define the polytope. 
+
+
 
 “The key insight of Alamdari et al. (2024) is that one can still compute a continuous analogue of a “ranking” for each agent, by assigning to each policy a score of q if the agent receives a higher score than an q-fraction of all possible alternative policies” -- I think the second "score" here should be "reward".
 

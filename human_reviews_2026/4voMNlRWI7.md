@@ -1,5 +1,6 @@
 # 3DGEER: 3D Gaussian Rendering Made Exact and Efficient for Generic Cameras
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 6, 6, 6
 

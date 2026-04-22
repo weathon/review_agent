@@ -1,5 +1,6 @@
 # Accelerating Regression Tasks with Quantum Algorithms
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

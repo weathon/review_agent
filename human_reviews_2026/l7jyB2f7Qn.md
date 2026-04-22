@@ -1,5 +1,6 @@
 # Learning Language-grounded Concepts for Self-explainable Graph Neural Networks
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

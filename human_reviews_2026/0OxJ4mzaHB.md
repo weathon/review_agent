@@ -1,5 +1,6 @@
 # Can Interpretation Predict Behavior on Unseen Data?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 6
 

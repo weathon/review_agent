@@ -1,5 +1,6 @@
 # Merge to Remember: Sharpness-Aware Isotropic Merging for Continual Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

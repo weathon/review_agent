@@ -1,5 +1,6 @@
 # Geometry Forcing: Marrying Video Diffusion and 3D Representation for Consistent World Modeling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

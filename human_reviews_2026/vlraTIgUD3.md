@@ -1,5 +1,6 @@
 # InSight-o3: Empowering Multimodal Foundation Models with Generalized Visual Search
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

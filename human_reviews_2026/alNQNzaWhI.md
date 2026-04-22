@@ -1,5 +1,6 @@
 # From Evidence to Trajectory: Abductive Reasoning Path Synthesis for Training Retrieval-Augmented Generation Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

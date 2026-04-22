@@ -1,5 +1,6 @@
 # Enhancing Geometric Perception in VLMs via Translator-Guided Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Label-Free Attribution for Interpretability
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 2, 2, 8, 6
 

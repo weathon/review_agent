@@ -1,5 +1,6 @@
 # Plug-and-Fold: Weight-Preserving Structured Compression for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

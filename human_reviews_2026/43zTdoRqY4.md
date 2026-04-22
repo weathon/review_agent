@@ -1,5 +1,6 @@
 # SparseCache: Extreme Sparse Coding for KV Cache Compression
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 8, 2, 2, 2
 

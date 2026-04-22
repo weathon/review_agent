@@ -1,5 +1,6 @@
 # Guardrail-Agnostic Societal Bias Evaluation in Large Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 8, 4
 

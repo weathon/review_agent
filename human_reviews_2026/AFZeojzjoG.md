@@ -1,5 +1,6 @@
 # PatchDNA: A Flexible and Biologically-Informed Alternative to Tokenization for DNA
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Revolutionizing Reinforcement Learning Framework for Diffusion Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 2
 

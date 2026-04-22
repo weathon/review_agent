@@ -1,5 +1,6 @@
 # Inverse Reinforcement Learning of Interactive Scenarios
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

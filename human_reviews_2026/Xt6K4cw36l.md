@@ -1,5 +1,6 @@
 # Prompt reinforcing for long-term planning of large language models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

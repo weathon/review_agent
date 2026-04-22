@@ -1,5 +1,6 @@
 # SG-Tailor: Inter-Object Commonsense Relationship Reasoning for Scene Graph Manipulation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

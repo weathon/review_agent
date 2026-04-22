@@ -1,5 +1,6 @@
 # DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

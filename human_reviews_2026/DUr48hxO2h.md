@@ -1,5 +1,6 @@
 # Incentivizing Consistent, Effective and Scalable Reasoning Capability in Audio LLMs via Reasoning Process Rewards
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

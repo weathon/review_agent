@@ -1,5 +1,6 @@
 # Dynamics of learning when learning dynamics using neural networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

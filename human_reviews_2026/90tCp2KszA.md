@@ -1,5 +1,6 @@
 # RECAST: Expanding the Boundaries of LLMs' Complex Instruction Following with Multi-Constraint Data
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

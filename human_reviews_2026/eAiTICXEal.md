@@ -1,5 +1,6 @@
 # Fuzzy-Gated Training for Transformers: Length-Aware Priors and Gain-Aware Control
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 4, 4
 

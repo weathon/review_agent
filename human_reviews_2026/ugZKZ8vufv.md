@@ -1,5 +1,6 @@
 # The CoT Encyclopedia: Analyzing, Predicting, and Controlling how a Reasoning Model will Think
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2
 

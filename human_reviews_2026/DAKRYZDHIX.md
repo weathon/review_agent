@@ -1,5 +1,6 @@
 # Rethinking Federated Aggregation Under Heterogeneity: Scalabe Ensembles With Open-Set Recognition
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 6, 2
 

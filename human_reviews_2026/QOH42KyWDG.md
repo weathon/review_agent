@@ -1,5 +1,6 @@
 # Decoupling Reasoning and Perception: An LLM-LMM Framework for Faithful Visual Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

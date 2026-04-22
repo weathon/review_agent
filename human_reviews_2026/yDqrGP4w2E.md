@@ -1,5 +1,6 @@
 # AdaFusionNet: Disentangling and Fusing Asynchronous Patterns for Long-Range Time Series Forecasting
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 6
 

@@ -1,5 +1,6 @@
 # Towards Agents That Know When They Don't Know: Uncertainty as a Control Signal for Structured Reasoning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # TableMaster: A Recipe to Advance Table Understanding with Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

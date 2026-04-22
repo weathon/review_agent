@@ -1,5 +1,6 @@
 # FlowMM: Cross-Modal Information Flow Guided KV Cache Merging for Efficient Multimodal Context Inference
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

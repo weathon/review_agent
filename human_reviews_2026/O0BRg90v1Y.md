@@ -1,5 +1,6 @@
 # From Compression to Specialization: An Information-Preserving Approach for Dense to Mixture-of-Experts Construction
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

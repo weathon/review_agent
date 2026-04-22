@@ -1,5 +1,6 @@
 # Rethinking Policy Diversity in Ensemble Policy Gradient in Large-Scale Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

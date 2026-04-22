@@ -1,5 +1,6 @@
 # Leveraging Generative Trajectory Mismatch for Cross-Domain Policy Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

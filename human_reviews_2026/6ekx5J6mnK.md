@@ -1,5 +1,6 @@
 # DC-VideoGen: Efficient Video Generation with Deep Compression Video Autoencoder
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # ELVES: Extraction of Latent Variables with Enhanced Specificity for High-Dimensional Few-Sample Feature Selection
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 4, 2, 4
 

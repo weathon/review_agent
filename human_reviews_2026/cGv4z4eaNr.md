@@ -1,5 +1,6 @@
 # PIKA: Expert-Level Synthetic Datasets for Post-Training Alignment from Scratch
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

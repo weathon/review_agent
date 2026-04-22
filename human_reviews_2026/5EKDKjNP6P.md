@@ -1,5 +1,6 @@
 # Beyond Taylor Expansion: Intermediate Activation Perspectives in Structured Pruning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

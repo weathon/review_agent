@@ -1,5 +1,6 @@
 # The Emergence of Complex Behavior in Large-Scale Ecological Environments
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 4, 6, 2, 2
 

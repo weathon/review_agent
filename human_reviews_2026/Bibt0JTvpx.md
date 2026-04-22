@@ -1,5 +1,6 @@
 # EPiC: Towards Lossless Speedup for Reasoning Training through Edge-Preserving CoT Condensation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 
@@ -120,7 +121,9 @@ Q1: What method is used to partition CoT into three distinct sections?
 3
 
 ### Summary
-The paper proposes EPiC, an edge-preserving condensation method that prunes the middle portion of chain-of-thought (CoT) traces while retaining the initial and final reasoning segments to reduce training cost. Based on empirical analyses (e.g., mutual-information metrics), the authors show that these “edge” segments preserve logical coherence and supervision quality. Experiments across multiple model families demonstrate notable training-time reduction with only mild loss in reasoning accuracy.
+The paper proposes EPiC, an edge-preserving condensation method that prunes the middle portion of chain-of-thought (CoT) traces while retaining the initial and final reasoning segments to reduce training cost.
+Based on empirical analyses (e.g., mutual-information metrics), the authors show that these “edge” segments preserve logical coherence and supervision quality.
+Experiments across multiple model families demonstrate notable training-time reduction with only mild loss in reasoning accuracy.
 
 ### Strengths
 - The topic and motivation, resource-efficient reasoning training are important and timely.

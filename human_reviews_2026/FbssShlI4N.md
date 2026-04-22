@@ -1,5 +1,6 @@
 # FALCON: Few-step Accurate Likelihoods for Continuous Flows
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 10, 8, 4
 

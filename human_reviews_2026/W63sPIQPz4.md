@@ -1,5 +1,6 @@
 # Learn to change the world: Multi-level reinforcement learning with model-changing actions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

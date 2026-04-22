@@ -1,5 +1,6 @@
 # Improve LLM Pre-training with RL-Guided Annealing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

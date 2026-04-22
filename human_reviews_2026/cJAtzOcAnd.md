@@ -1,5 +1,6 @@
 # Comparing the learning dynamics of in-context learning and fine-tuning in language models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

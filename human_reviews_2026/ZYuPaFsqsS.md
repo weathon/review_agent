@@ -1,5 +1,6 @@
 # Accelerating Denoising Generative Models is as Easy as Predicting Second-Order Difference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

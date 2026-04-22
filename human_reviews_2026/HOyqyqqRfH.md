@@ -1,5 +1,6 @@
 # UniPINNs: A Unified PINNs framework for Multi-task learning of diverse Navier-Stokes equations
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

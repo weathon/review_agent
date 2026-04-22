@@ -1,5 +1,6 @@
 # Memento: Toward an All-Day Proactive Assistant for Ultra-Long Streaming Video
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

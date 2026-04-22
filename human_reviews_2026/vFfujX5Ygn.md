@@ -1,5 +1,6 @@
 # Revisiting Nonstationary Kernel Design for Multi-Output Gaussian Processes
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 8, 4, 6
 

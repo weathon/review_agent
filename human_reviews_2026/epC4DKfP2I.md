@@ -1,5 +1,6 @@
 # SENTINEL: StagewisE iNtegriTy verification for pIpeliNe parallEL decentralized training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

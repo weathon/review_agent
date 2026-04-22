@@ -1,5 +1,6 @@
 # Aligning Task-Rank Preferences: Subspace Coverage and Anisotropy in LoRA Merging
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

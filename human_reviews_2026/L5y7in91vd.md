@@ -1,5 +1,6 @@
 # TEST-TIME SCALING IN DIFFUSION LLMS VIA HIDDEN SEMI-AUTOREGRESSIVE EXPERTS
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

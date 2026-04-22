@@ -1,5 +1,6 @@
 # Improving Diffusion Models for Class-imbalanced Training Data via Capacity Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 6
 

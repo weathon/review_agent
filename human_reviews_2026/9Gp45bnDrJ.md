@@ -1,5 +1,6 @@
 # RLP: Reinforcement as a Pretraining Objective
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6, 8
 

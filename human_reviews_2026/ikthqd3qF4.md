@@ -1,5 +1,6 @@
 # Precision Without Labels: Detecting Cross-Applicants in Mortgage Data Using Unsupervised Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

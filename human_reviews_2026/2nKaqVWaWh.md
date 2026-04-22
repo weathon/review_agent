@@ -1,5 +1,6 @@
 # IntDiff: Mitigating Reward Hacking via Intrinsic rewards for Diffusion Model Fine-Tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

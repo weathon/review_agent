@@ -1,5 +1,6 @@
 # Capturing Opinion Shifts in Deliberative Discourse through Frequency-based Quantum deep learning methods
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

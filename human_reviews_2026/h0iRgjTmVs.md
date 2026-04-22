@@ -1,5 +1,6 @@
 # SiMO: Single-Modality-Operable Multimodal Collaborative Perception
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

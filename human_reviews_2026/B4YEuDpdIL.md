@@ -1,5 +1,6 @@
 # Iter-AHMCL: Alleviate Hallucination for Large Language Model via Iterative Model-level Contrastive Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

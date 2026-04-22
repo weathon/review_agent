@@ -1,5 +1,6 @@
 # LoRA Meets Second-Order Optimization: Towards Optimal Low-Rank Updates
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

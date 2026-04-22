@@ -1,5 +1,6 @@
 # ShapeMatch: Shapelet-Guided Semi-Supervised Learning for Multivariate Time Series Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # SatDreamer360: Multiview-Consistent Generation of Ground-Level Scenes from Satellite Imagery
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8
 

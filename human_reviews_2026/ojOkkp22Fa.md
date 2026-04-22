@@ -1,5 +1,6 @@
 # Video Parallel Scaling: Aggregating Diverse Frame Subsets for VideoLLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

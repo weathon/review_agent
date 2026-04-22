@@ -1,5 +1,6 @@
 # Multimodal Chain of Continuous Thought for Latent-Space Reasoning in Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

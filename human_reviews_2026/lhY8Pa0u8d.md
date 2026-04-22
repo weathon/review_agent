@@ -1,5 +1,6 @@
 # Online Change Point Detection for Multivariate Poisson Point Processes
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

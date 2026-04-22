@@ -1,5 +1,6 @@
 # Learning Music Style For Piano Arrangement Through Cross-Modal Bootstrapping
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # VALM: Variational Autoencoder Language Models for Highly Parallel Text Generation
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

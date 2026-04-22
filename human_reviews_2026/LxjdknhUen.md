@@ -1,5 +1,6 @@
 # DualFusion: Dual Adaptive Fusion for Multi-View Pedestrian Detection via View Reliability Modeling and Channel Reweighting
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

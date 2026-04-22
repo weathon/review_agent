@@ -1,5 +1,6 @@
 # Structure-Aware Bipartite Representations for Efficient MILP Branching
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 2
 

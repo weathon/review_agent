@@ -1,5 +1,6 @@
 # Scaling up Multi-Turn Off-Policy RL and Multi-Agent Tree Search for LLM Step-Provers
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

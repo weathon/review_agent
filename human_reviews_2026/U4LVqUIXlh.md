@@ -1,5 +1,6 @@
 # FedSal: Enhancing Federated Graph Classification Through Saliency Aware Client Clustering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # EvalRes: Evaluating VLMs' Sensitivity to Image Resolution and Relative Detail Size
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

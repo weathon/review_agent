@@ -1,5 +1,6 @@
 # Learning to Reduce Search Space for Generalizable Neural Routing Solver
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

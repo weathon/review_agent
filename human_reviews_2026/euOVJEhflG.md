@@ -1,5 +1,6 @@
 # Online Rounding and Learning Augmented Algorithms for Facility Location
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

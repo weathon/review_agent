@@ -1,5 +1,6 @@
 # a1: Steep Test-time Scaling Law via Environment Augmented Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

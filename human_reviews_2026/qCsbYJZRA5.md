@@ -1,5 +1,6 @@
 # The Spacetime of Diffusion Models: An Information Geometry Perspective
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 8
 

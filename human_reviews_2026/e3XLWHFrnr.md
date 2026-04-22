@@ -1,5 +1,6 @@
 # From Text to Talk: Audio-Language Model Needs Non-Autoregressive Joint Training
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6, 4
 

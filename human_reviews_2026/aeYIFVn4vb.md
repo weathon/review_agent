@@ -1,5 +1,6 @@
 # Beyond Multi-Token Prediction: Pretraining LLMs with Future Summaries
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 8
 

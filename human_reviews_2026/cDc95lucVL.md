@@ -1,5 +1,6 @@
 # Modality-free Graph In-context Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 6, 8, 6
 

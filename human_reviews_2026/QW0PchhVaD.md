@@ -1,5 +1,6 @@
 # Contextual Causal Bayesian Optimisation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 
@@ -170,12 +171,15 @@ The paper presents an extensive theoretical analysis of the proposed method. In 
 Although the paper provides thorough theoretical results on the regret bounds, several important aspects require further clarification and experimental validation:
 
 (1) Missing Baselines.
- The experimental evaluation lacks comparisons with several relevant baselines, such as existing causal Bayesian optimization (CaBO) methods — e.g., CBO (Aglietti et al., 2020) and MCBO (Sussex et al., 2023). Even though the proposed framework targets a specific problem setting, existing CBO methods could potentially be applied and should therefore be included for a fair comparison. Moreover, standard Bayesian optimization (BO) baselines such as UCB-based methods should be evaluated as well, since in some scenarios UCB can outperform CBO approaches.
 
-(2) Limited Discussion of Related Work. 
+The experimental evaluation lacks comparisons with several relevant baselines, such as existing causal Bayesian optimization (CaBO) methods — e.g., CBO (Aglietti et al., 2020) and MCBO (Sussex et al., 2023). Even though the proposed framework targets a specific problem setting, existing CBO methods could potentially be applied and should therefore be included for a fair comparison. Moreover, standard Bayesian optimization (BO) baselines such as UCB-based methods should be evaluated as well, since in some scenarios UCB can outperform CBO approaches.
+
+(2) Limited Discussion of Related Work.
+
 The paper should provide a more comprehensive discussion of prior work on Contextual Bayesian Optimization (CoBO) and include corresponding experimental comparisons. While the authors compare CoCa-BO against CoBO, they do not discuss other existing CoBO methods in depth, leaving the relationship between these approaches unclear.
 
-(3) Unclear Distinction from Existing CBO Frameworks. 
+(3) Unclear Distinction from Existing CBO Frameworks.
+
 
 The conceptual and methodological differences between existing CaBO and the proposed CoCa-BO remain insufficiently discussed. If existing CaBO methods are capable of incorporating contextual variables, the motivation for introducing CoBO and CoCa-BO becomes less convincing. For instance, in the illustrative example shown in Figure 1, the context variable C could also be integrated within most CaBO frameworks. 
 To strengthen the paper’s contribution, the authors should include additional experiments comparing CoCa-BO with CaBO models that explicitly incorporate contextual variables.

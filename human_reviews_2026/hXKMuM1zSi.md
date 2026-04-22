@@ -1,5 +1,6 @@
 # It takes two for security: A Verifiable Co-Aggregation Protocol for Heterogeneous Federated Distillation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

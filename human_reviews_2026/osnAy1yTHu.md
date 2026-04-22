@@ -1,5 +1,6 @@
 # OneReward: Unified Mask-Guided Image Generation via Multi-Task Human Preference Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

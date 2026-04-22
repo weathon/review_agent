@@ -1,5 +1,6 @@
 # AVA-Bench: Atomic Visual Ability Benchmark for Vision Foundation Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

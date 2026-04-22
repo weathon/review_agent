@@ -1,5 +1,6 @@
 # Rate-Distortion Optimization for Transformer Inference
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 6, 2, 0
 

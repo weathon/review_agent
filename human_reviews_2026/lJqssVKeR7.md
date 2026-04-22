@@ -1,5 +1,6 @@
 # Converge Faster, Talk Less: Hessian-Informed Federated Zeroth-Order Optimization
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4, 6
 

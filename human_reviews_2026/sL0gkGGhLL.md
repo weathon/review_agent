@@ -1,5 +1,6 @@
 # Inferring Attribute Subspaces from Visual Contexts
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 
@@ -82,9 +83,12 @@ This paper introduces a form of visual in-context learning where the generator i
 - **Training data dependency:** The method’s reliance on auxiliary grouping (e.g., WordNet hierarchy) introduces a structural prior that effectively defines the learned “attribute space.” As acknowledged in the appendix, the approach’s success depends heavily on how these groupings are curated, which may limit scalability to unstructured or open-domain settings.
 
 ### Questions
-1. **Context inference ambiguity**: In several examples, the generated output includes features (colors, poses) not present in the context set. Is the model extrapolating based on priors from the pretraining data? How does it understand the allowable levels of changes along certain dimensions? Could you quantify how much the generation is influenced by dataset priors versus inferred context?
-2. **Hierarchy supervision:**  Since the attribute hierarchy (e.g., mammal → dog → breed) is built from WordNet during training, does the model rely on this structure during inference as well, or can it infer hierarchical relations from unseen sets without such scaffolding?
-3. **OOD task analysis**:  You report results on sketches and ImageNet21k classes. Could you provide qualitative examples or a failure analysis for these OOD cases to better illustrate the limits of semantic generalization?
+1. **Context inference ambiguity**:
+In several examples, the generated output includes features (colors, poses) not present in the context set. Is the model extrapolating based on priors from the pretraining data? How does it understand the allowable levels of changes along certain dimensions? Could you quantify how much the generation is influenced by dataset priors versus inferred context?
+2. **Hierarchy supervision:** 
+Since the attribute hierarchy (e.g., mammal → dog → breed) is built from WordNet during training, does the model rely on this structure during inference as well, or can it infer hierarchical relations from unseen sets without such scaffolding?
+3. **OOD task analysis**:
+ You report results on sketches and ImageNet21k classes. Could you provide qualitative examples or a failure analysis for these OOD cases to better illustrate the limits of semantic generalization?
 
 ### Soundness
 2

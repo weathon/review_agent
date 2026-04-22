@@ -1,5 +1,6 @@
 # Constrained Probabilistic Diffusion Model for Seismic Data Reconstruction Using a Restoration Operator Based on a Deep Image Prior
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

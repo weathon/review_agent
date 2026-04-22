@@ -1,5 +1,6 @@
 # Fostering Video Reasoning via Next-Event Prediction
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

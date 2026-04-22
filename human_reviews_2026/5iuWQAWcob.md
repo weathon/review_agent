@@ -1,5 +1,6 @@
 # Self-Guided Thinking: Enabling LLMs to Decide When to Think
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # DurMI: Duration Loss as a Membership Signal in TTS Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

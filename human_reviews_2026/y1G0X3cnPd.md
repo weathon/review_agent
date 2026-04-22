@@ -1,5 +1,6 @@
 # CHyLL: Learning Continuous Neural Representations of Hybrid Systems
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6
 

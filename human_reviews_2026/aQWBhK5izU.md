@@ -1,5 +1,6 @@
 # Credal Graph Neural Networks for Robust Uncertainty Quantification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

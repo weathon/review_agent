@@ -1,5 +1,6 @@
 # Leaner Transformers: More Heads, Less Depth
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 2, 6
 

@@ -1,5 +1,6 @@
 # Cross-Domain Offline Policy Adaptation via Selective Transition Correction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

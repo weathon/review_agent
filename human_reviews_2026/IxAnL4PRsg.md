@@ -1,5 +1,6 @@
 # Operator Learning with Domain Decomposition for Geometry Generalization in PDE Solving
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

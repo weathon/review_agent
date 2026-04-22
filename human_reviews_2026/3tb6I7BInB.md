@@ -1,5 +1,6 @@
 # Debugging Tabular Log as Dynamic Graphs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 2
 

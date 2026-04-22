@@ -1,5 +1,6 @@
 # M3DOnline: Foundation-Prior Guided Monocular 3D Motion Learning for Autonomous Driving in Novel Scenes
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # DirMoE: Dirichlet-Routed Mixture of Experts
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

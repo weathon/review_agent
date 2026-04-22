@@ -1,5 +1,6 @@
 # Robust Non-negative Proximal Gradient Algorithm: Theory and Applications
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 0, 4
 

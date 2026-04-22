@@ -1,5 +1,6 @@
 # From Diffusion to Rectified Flow: Rethinking Text-Based Segmentation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 2, 2
 

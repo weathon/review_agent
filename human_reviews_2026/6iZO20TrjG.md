@@ -1,5 +1,6 @@
 # FaithThinker: Dialectical Reasoning for Noise-Robust LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Euclid-Omni: A Unified Neuro-Symbolic Framework for Geometry Problem Solving
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 6, 4, 10
 

@@ -1,5 +1,6 @@
 # Causal-GNN SupplyNets Enabling Resilient Semiconductor Supply Chains with Causal World Models and Lyapunov-Safe Control
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

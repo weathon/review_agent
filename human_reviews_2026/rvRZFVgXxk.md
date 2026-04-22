@@ -1,5 +1,6 @@
 # DBMSolver: Fast Diffusion Bridge Sampling for High-Quality Image-to-Image Translation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

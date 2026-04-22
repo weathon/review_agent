@@ -1,5 +1,6 @@
 # Adaptive Gray: Reducing Color Dependency to Improve Generalization in Deepfake Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

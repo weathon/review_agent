@@ -1,5 +1,6 @@
 # Mitigating Multimodal Hallucinations via Gradient-based Self-Reflection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

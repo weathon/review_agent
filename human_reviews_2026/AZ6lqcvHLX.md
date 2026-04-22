@@ -1,5 +1,6 @@
 # Half-order Fine-Tuning for Diffusion Model: A Recursive Likelihood Ratio Optimizer
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6
 

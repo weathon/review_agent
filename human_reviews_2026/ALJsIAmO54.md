@@ -1,5 +1,6 @@
 # HypRQ-VAE: Long-Tail-Aware Item Indexing for Generative Recommender Systems
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

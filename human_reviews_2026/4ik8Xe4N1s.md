@@ -1,5 +1,6 @@
 # Uncertainty Preservation in Generative Visual Autoregression
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

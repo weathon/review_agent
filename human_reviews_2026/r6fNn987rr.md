@@ -1,5 +1,6 @@
 # SpikingLLM: Spiking Large Language Models with Causal Spiking Self-Attention and Spike-Form Knowledge Distillation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Inpainting-Guided Policy Optimization for Diffusion Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

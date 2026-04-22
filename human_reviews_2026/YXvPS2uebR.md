@@ -1,5 +1,6 @@
 # Rank-efficient Mixture of Experts for LLM Finetuning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

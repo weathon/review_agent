@@ -1,5 +1,6 @@
 # TuneShift-KD: Knowledge Distillation and Transfer for Fine-tuned Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

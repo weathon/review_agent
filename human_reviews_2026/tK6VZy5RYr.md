@@ -1,5 +1,6 @@
 # Distill Not Only Data but Also Rewards: Can Smaller Language Models Surpass Larger Ones?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

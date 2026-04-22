@@ -1,5 +1,6 @@
 # Unified Vision–Language Modeling via Concept Space Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

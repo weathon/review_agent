@@ -1,5 +1,6 @@
 # Feedback to Reasoning: LLM-Assisted Molecular Optimization with Domain Feedback and Historical Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

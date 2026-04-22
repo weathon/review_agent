@@ -1,5 +1,6 @@
 # A Hierarchical Probabilistic Framework for Incremental Knowledge Tracing in Classroom Settings
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

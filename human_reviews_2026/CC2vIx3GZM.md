@@ -1,5 +1,6 @@
 # Towards Coordinate- and Dimension-Agnostic Machine Learning for Partial Differential Equations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

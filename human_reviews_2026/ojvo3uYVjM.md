@@ -1,5 +1,6 @@
 # HealMQA: A Healthcare Multimodal Question Answering Dataset for Benchmarking Large Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

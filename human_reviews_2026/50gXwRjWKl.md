@@ -1,5 +1,6 @@
 # TEL: A Thermodynamics-Inspired Layer for Adaptive, and Efficient Neural Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 6, 8, 6
 

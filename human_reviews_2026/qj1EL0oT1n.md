@@ -1,5 +1,6 @@
 # Inference-Time Search using Side Information for Diffusion-based Image Reconstruction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

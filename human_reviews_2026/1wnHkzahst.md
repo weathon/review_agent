@@ -1,5 +1,6 @@
 # Torch Geometric Pool: the Pytorch library for pooling in Graph Neural Networks
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

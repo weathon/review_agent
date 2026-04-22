@@ -1,5 +1,6 @@
 # Fed-Energy: Federated Reinforcement Learning for Scalable and Energy-Efficient Large-Scale Code Optimization
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

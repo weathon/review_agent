@@ -1,5 +1,6 @@
 # The Reasoning Boundary Paradox: How Reinforcement Learning Constrains Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

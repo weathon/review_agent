@@ -1,5 +1,6 @@
 # Oversmoothing, "Oversquashing'', Heterophily, Long-Range, and more: Demystifying Common Beliefs in Graph Machine Learning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # HiFi-Foley: Multimodal Diffusion with Representation Alignment for High-Fidelity Foley Audio Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

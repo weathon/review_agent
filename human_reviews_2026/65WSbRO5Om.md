@@ -1,5 +1,6 @@
 # DotMatch: Simplified Semi-Supervised Learning with the Log Dot Product Loss
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 6, 4, 4, 2
 

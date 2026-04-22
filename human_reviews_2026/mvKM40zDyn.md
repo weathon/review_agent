@@ -1,5 +1,6 @@
 # Articulation in Motion: Prior-free Part Mobility Analysis for Articulated Objects By Dynamic-Static Disentanglement
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

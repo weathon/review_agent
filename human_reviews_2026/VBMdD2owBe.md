@@ -1,5 +1,6 @@
 # HeLoM: Progressive Disease Detection with Heterogeneous and Longitudinal EHRs via Memory-Augmented LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

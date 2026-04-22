@@ -1,5 +1,6 @@
 # MeGA-MP: Metric Graph Advection Message Passing - Solving Dynamical Processes on Metric Graphs with Graph Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

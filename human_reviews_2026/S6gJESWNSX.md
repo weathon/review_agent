@@ -1,5 +1,6 @@
 # Sci2Pol: Evaluating and Fine-tuning LLMs on Scientific-to-Policy Brief Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

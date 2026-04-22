@@ -1,5 +1,6 @@
 # Your Agent May Misevolve: Emergent Risks in Self-evolving LLM Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 8
 

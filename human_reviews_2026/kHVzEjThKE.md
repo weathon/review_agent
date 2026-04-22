@@ -1,5 +1,6 @@
 # What Do Large Language Models Know About Opinions?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

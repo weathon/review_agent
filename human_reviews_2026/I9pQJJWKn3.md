@@ -1,5 +1,6 @@
 # Dreamland: Hybrid World Creation with Simulator and Generative Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

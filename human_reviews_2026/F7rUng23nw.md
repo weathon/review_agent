@@ -1,5 +1,6 @@
 # KVComm: Enabling Efficient LLM Communication through Selective KV Sharing
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

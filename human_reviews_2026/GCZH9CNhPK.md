@@ -1,5 +1,6 @@
 # PlugGuard: A Streaming Safeguard for Large Models via Latent Dynamics-Guided Risk Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

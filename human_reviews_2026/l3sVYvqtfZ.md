@@ -1,5 +1,6 @@
 # From Spatial Transcriptomics to Tokens: Generative Pre-Training with Byte-Pair Encoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

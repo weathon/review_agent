@@ -1,5 +1,6 @@
 # Soft Non-Diagonality Penalty Enables Latent Space-Level Interpretability of pLM at No Performance Cost
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

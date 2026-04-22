@@ -1,5 +1,6 @@
 # HOI-PAGE: Zero-Shot Human-Object Interaction Generation with Part Affordance Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

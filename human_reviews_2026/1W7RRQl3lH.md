@@ -1,5 +1,6 @@
 # Disco: Densely-overlapping Cell Instance Segmentation via Adjacency-aware Collaborative Coloring
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 2
 

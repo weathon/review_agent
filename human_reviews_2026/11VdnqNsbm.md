@@ -1,5 +1,6 @@
 # LEO-VL: Efficient Scene Representation for Scalable 3D Vision-Language Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

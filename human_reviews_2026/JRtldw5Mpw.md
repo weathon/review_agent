@@ -1,5 +1,6 @@
 # Sparse Models, Sparse Safety: Unsafe Routes in Mixture-of-Experts LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

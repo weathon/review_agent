@@ -1,5 +1,6 @@
 # Kevin: Multi-Turn RL for Generating CUDA Kernels
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

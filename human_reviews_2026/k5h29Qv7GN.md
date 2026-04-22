@@ -1,5 +1,6 @@
 # ForesightKV: Optimizing KV Cache Eviction for Reasoning Models by Learning Long-Term Contribution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

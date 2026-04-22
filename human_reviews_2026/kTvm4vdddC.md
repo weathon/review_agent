@@ -1,5 +1,6 @@
 # QuAC: Quality-Adaptive Activation for Degraded Image Understanding
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

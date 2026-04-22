@@ -1,5 +1,6 @@
 # Large-Scale Pretraining Offers Modest Benefits for Tabular Transfer Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

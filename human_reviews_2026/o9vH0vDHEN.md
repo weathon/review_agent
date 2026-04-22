@@ -1,5 +1,6 @@
 # Multi-step Predictive Coding Leads To Simplicity Bias
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

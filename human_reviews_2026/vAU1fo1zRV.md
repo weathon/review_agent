@@ -1,5 +1,6 @@
 # Dimension-Free Decision Calibration for Nonlinear Loss Functions
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8, 4
 

@@ -1,5 +1,6 @@
 # Ada-Search: Balancing Parametric Knowledge and Search in Large Language Models via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

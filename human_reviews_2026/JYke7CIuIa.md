@@ -1,5 +1,6 @@
 # SVL: Empowering Spiking Neural Networks for Efficient 3D Open-World Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

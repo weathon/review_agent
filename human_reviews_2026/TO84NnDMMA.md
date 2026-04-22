@@ -1,5 +1,6 @@
 # An Efficient Variational Method for Fitting Log-Gaussian Cox Processes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

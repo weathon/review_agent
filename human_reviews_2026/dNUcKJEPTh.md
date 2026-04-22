@@ -1,5 +1,6 @@
 # Kanade: Compact Linguistically Rich Speech Tokens for Spoken Language Models
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Learn All You Need in One Hypernetwork
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 4, 4, 8
 

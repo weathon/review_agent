@@ -1,5 +1,6 @@
 # FastGHA: Generalized Few-Shot 3D Gaussian Head Avatars with Real-Time Animation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

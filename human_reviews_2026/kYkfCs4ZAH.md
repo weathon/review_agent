@@ -1,5 +1,6 @@
 # FlexiCodec: A Dynamic Neural Audio Codec for Low Frame Rates
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2, 8, 6
 

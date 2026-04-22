@@ -1,5 +1,6 @@
 # Simultaneously Perturbed Optimistic Gradient Methods for Payoff-Based Learning in Games
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 4, 6
 

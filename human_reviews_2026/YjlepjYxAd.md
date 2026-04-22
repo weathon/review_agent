@@ -1,5 +1,6 @@
 # LGR2: Language Guided Reward Relabeling for Accelerating Hierarchical Reinforcement Learning
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 4, 4
 

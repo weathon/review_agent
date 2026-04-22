@@ -1,5 +1,6 @@
 # LaMbDA: Local Latent Embedding Alignment for Cross-modal Time-Series Diffusion
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Best Arm Identification with Knapsacks: Minimax Policies
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 2
 

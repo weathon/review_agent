@@ -1,5 +1,6 @@
 # EditTrack: Detecting and Attributing AI-assisted Image Editing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # ALMC: Adaptive LLM-based Multi-Agent Collaboration Across Diverse Task Domains
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

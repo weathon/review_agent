@@ -1,5 +1,6 @@
 # TerraGen: A Unified Multi-Task Layout Generation Framework for Remote Sensing Data Augmentation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

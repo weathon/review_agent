@@ -1,5 +1,6 @@
 # TRACE: Theoretical Risk Attribution under Covariate-shift Effects
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

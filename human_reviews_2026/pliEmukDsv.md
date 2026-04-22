@@ -1,5 +1,6 @@
 # Column Thresholding: Bridging the Computational-Statistical Gap in the Sparse Spiked Wigner Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

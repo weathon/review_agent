@@ -1,5 +1,6 @@
 # Don't Overthink it. Preferring Shorter Thinking Chains for Improved LLM Reasoning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 8, 4
 

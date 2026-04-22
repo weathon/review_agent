@@ -1,5 +1,6 @@
 # QuantAgent: Price-Driven Multi-Agent LLMs for High-Frequency Trading
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

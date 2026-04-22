@@ -1,5 +1,6 @@
 # Leveraging Physics-Based Models for Rapid Adaptation in Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 8, 2
 

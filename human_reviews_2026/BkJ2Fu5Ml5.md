@@ -1,5 +1,6 @@
 # Brain-Mimetic Staged Representation Learning with Disentangled Coarse and Fine Semantic for EEG Visual Decoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

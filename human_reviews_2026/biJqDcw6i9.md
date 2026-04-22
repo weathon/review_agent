@@ -1,5 +1,6 @@
 # PCEval: A Benchmark for Evaluating Physical Computing Capabilities of Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 4, 8, 8
 

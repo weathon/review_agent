@@ -1,5 +1,6 @@
 # Tracking the Feature Dynamics in LLM Training: A Mechanistic Study
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

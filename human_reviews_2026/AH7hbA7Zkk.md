@@ -1,5 +1,6 @@
 # Q&C: When Quantization Meets Cache in Efficient Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

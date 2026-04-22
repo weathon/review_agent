@@ -1,5 +1,6 @@
 # Just Leaf It: Accelerating Diffusion Classifiers with Hierarchical Class Pruning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

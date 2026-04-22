@@ -1,5 +1,6 @@
 # Mind the Gap: Transferring Labels Across Datasets with Divergent Annotation Protocols
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 6
 

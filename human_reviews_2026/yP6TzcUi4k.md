@@ -1,5 +1,6 @@
 # Goal-driven Bayesian Optimal Experimental Design for Robust Decision-Making Under Model Uncertainty
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Salience Aware Mark-Steered Prompting For LLMs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

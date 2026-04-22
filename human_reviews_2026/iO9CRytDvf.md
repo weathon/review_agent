@@ -1,5 +1,6 @@
 # DPNR: ADual-Prototype Noise Repository based on Prototype Learning for  Anomaly Detection
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

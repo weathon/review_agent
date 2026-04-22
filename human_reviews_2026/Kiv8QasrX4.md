@@ -1,5 +1,6 @@
 # Geo-Refine: Geometry–Appearance Synergy for Robust Single-Image 3D Scene Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

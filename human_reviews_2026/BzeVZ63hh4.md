@@ -1,5 +1,6 @@
 # Overton Pluralistic Reinforcement Learning for Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

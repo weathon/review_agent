@@ -1,5 +1,6 @@
 # CTIArena: Benchmarking LLM Knowledge and Reasoning across Heterogeneous Cyber Threat Intelligence
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

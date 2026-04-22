@@ -1,5 +1,6 @@
 # U-Cast: Learning Hierarchical Structures for High-Dimensional Time Series Forecasting
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 6, 6, 2
 

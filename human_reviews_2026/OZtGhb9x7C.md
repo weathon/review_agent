@@ -1,5 +1,6 @@
 # CaReBench: A Fine-grained Benchmark for Video Captioning and Retrieval
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10, 6
 

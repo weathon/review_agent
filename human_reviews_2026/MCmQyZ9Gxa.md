@@ -1,5 +1,6 @@
 # CubeBench: Diagnosing Interactive, Long-Horizon Physical Intelligence under Partial Observations
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4, 6
 

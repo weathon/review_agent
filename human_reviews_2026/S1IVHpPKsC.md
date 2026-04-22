@@ -1,5 +1,6 @@
 # IGeoCAD: Unlocking Intrinsic Geometric Awareness for CAD Command Sequence Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

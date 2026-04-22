@@ -1,5 +1,6 @@
 # Semantic Regexes: Auto-Interpreting LLM Features with a Structured Language
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

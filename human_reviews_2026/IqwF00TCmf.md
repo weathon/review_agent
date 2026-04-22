@@ -1,5 +1,6 @@
 # I2Mole: Interaction-aware Invariant Molecular Learning For Generalizable Property Prediction
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

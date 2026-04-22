@@ -1,5 +1,6 @@
 # LaRI: Layered Ray Intersections for Single-view 3D Geometric Reasoning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 6
 

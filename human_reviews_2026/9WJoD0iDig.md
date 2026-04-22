@@ -1,5 +1,6 @@
 # Foresight Diffusion: Improving Sampling Consistency in Predictive Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 4
 

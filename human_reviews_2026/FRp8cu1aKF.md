@@ -1,5 +1,6 @@
 # On the (In)Significance of Feature Selection in High-Dimensional Datasets
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 2, 10
 

@@ -1,5 +1,6 @@
 # MM-PoisonRAG: Disrupting Multimodal RAG with Local and Global Knowledge Poisoning Attacks
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # ClarifyVC: Clarifying Ambiguous Commands in Vehicle Control with a Hybrid Data Augmentation Pipeline
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 10
 

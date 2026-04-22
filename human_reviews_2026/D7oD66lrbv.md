@@ -1,5 +1,6 @@
 # OmniDFA: A Unified Framework for Open Set Synthesis Image Detection and Few-Shot Attribution
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

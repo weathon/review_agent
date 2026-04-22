@@ -1,5 +1,6 @@
 # O-Mem: Omni Memory System for Personalized, Long Horizon, Self-Evolving Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

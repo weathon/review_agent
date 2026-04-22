@@ -1,5 +1,6 @@
 # GSCV: Compressing Gaussian Splatting Sequence with Video Codec
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

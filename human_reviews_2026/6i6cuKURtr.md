@@ -1,5 +1,6 @@
 # Self-Disguise Attack: Induce the LLM to disguise itself for AIGT detection evasion
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # The Ethics of Privacy-Preserving Deep Learning: the Good, the Bad, and the Ugly
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

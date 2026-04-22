@@ -1,5 +1,6 @@
 # ChessArena: A Chess Testbed for Evaluating Strategic Reasoning Capabilities of Large Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

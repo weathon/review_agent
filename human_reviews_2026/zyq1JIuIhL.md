@@ -1,5 +1,6 @@
 # DoMiNO: Down-scaling Molecular Dynamics with Neural Graph Ordinary Differential Equations
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

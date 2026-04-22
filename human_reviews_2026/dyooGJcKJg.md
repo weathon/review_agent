@@ -1,5 +1,6 @@
 # PerSpectra: A Scalable and Configurable Pluralist Benchmark of Perspectives from Arguments
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

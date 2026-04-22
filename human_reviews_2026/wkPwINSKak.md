@@ -1,5 +1,6 @@
 # Dynamic Information Sub-Selection for Decision Support
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2
 

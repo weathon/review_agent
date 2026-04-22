@@ -1,5 +1,6 @@
 # Log-To-Leak: Prompt Injection Attacks on Tool-Using LLM Agents via Model Context Protocol
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

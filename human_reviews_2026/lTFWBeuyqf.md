@@ -1,5 +1,6 @@
 # OSCAgent: Closing the Loop in Organic Solar Cell Discovery with LLM Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

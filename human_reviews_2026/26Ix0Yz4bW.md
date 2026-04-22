@@ -1,5 +1,6 @@
 # Multiway Information Interaction Measures Reveal Redundant Coding in Biological and Artificial Neural Networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 0
 

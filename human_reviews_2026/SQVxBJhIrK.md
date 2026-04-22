@@ -1,5 +1,6 @@
 # DESIGNER: Design-Logic-Guided Multidisciplinary Data Synthesis for LLM Reasoning
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8, 4
 

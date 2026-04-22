@@ -1,5 +1,6 @@
 # PRISON: Unmasking the Criminal Potential of Large Language Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

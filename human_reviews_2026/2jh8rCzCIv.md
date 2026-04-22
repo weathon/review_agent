@@ -1,5 +1,6 @@
 # Primal Optimism in Online Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

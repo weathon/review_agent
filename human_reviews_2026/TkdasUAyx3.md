@@ -1,5 +1,6 @@
 # A Spatial-Sign based Direct Approach for High Dimensional Sparse Quadratic Discriminant Analysis
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

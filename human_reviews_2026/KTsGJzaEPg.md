@@ -1,5 +1,6 @@
 # BanglaGuard: Benchmarking and Defending Large Language Models for Safety in Low-Resource Languages
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 6
 

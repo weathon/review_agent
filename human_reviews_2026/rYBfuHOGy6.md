@@ -1,5 +1,6 @@
 # Inferring Capabilities from Task Performance with Bayesian Triangulation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

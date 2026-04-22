@@ -1,5 +1,6 @@
 # Layered Contextual Alignment: Multi-Agent Coordination for Web Automation Through Hierarchical Preference Learning
 
+- Avg Score: 0.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 0
 

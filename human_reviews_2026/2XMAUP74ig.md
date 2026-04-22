@@ -1,5 +1,6 @@
 # Not All Models Suit Expert Offloading: On Local Routing Consistency of Mixture-of-Expert Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

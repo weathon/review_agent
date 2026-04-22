@@ -1,5 +1,6 @@
 # Video-MTR: Reinforced Multi-Turn Reasoning for Long Video Understanding
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

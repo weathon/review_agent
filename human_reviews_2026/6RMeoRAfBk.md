@@ -1,5 +1,6 @@
 # KDPRA: A Dual-Molecule Knowledge Distillation model with Cross-Attention Fusion for Protein–RNA Binding Affinity Prediction
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4, 4
 

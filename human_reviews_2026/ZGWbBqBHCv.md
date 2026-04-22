@@ -1,5 +1,6 @@
 # DNAMotifTokenizer: Towards Biologically Informed Tokenization of Genomic Sequences
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

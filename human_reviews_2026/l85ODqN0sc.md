@@ -1,5 +1,6 @@
 # V2P-Bench: Evaluating Video-Language Understanding with Visual Prompts for Better Human-Model Interaction
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

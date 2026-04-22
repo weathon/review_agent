@@ -1,5 +1,6 @@
 # High-Dimensional Online Change Point Detection with Adaptive Thresholding and Interpretability
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

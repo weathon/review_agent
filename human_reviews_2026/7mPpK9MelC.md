@@ -1,5 +1,6 @@
 # F2: Let Large Language Models Think like Aristotle
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

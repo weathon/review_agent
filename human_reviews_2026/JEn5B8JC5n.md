@@ -1,5 +1,6 @@
 # Flow Matching Generalizes Through Discretization Bias
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 0, 4, 4
 

@@ -1,5 +1,6 @@
 # Reinforcement Learning for Better Verbalized Confidence in Long-Form Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

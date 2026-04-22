@@ -1,5 +1,6 @@
 # CellPainTR: Generalizable Representation Learning for Cross-Dataset Cell Painting Analysis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 4, 4
 

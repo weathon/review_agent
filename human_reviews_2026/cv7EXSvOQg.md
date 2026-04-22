@@ -1,5 +1,6 @@
 # VAFL: Vector-field Assisted Functional Layer for Equal-Compute Multi-modal Learning
 
+- Avg Score: 0.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 0, 0
 

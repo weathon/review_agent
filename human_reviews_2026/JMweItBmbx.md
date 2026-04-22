@@ -1,5 +1,6 @@
 # Error Notebook-Guided, Training-Free Part Retrieval in 3D CAD Assemblies via Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

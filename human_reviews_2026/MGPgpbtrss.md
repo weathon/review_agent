@@ -1,5 +1,6 @@
 # Unsupervised discovery of symmetries and symmetry-based domains from raw data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

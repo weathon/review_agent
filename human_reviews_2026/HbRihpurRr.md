@@ -1,5 +1,6 @@
 # Bidirectional Predictive Coding
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 10, 2, 6
 

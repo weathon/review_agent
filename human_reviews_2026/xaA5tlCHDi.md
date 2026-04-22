@@ -1,5 +1,6 @@
 # PosS: Position Specialist Generates Better Draft for Speculative Decoding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # DARE‑Agent: Domain‑Aware, Resource‑Efficient, Evidence‑grounded Agentic RAG
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 8, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Existing Adversarial LLM Unlearning Evaluations Are Inconclusive
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # RESpecBench: How reliable is LLM-as-a-judge? Rigorous Evaluation of Specification Generation with Automated Verification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

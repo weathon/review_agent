@@ -1,5 +1,6 @@
 # Latent Diffusion-based 3D Molecular Recovery from Vibrational Spectra
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

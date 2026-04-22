@@ -1,5 +1,6 @@
 # Collision- and Reachability-Aware Multi-Robot Control with Grounded LLM Planners
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

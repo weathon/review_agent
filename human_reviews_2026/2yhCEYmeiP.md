@@ -1,5 +1,6 @@
 # Polynomial-Time Reasoning at the Edge of NP
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

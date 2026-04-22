@@ -1,5 +1,6 @@
 # ModalMix: Optimizing Multimodal Data Mixtures with Compute-Dependent Regression
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Are EEG Foundation Models Worth It? Comparative Evaluation with Traditional Decoders in Diverse BCI Tasks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 8
 

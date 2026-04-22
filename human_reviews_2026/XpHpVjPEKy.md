@@ -1,5 +1,6 @@
 # Comp-LTL: Temporal Logic Planning via Zero-Shot Policy Composition
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # FUSE: Fast Semi-Supervised Node Embedding Learning via Structural and Label-Aware Optimization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

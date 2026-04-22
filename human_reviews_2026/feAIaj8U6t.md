@@ -1,5 +1,6 @@
 # Real Deep Research from Foundation Model to Robotics
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

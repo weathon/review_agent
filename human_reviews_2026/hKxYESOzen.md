@@ -1,5 +1,6 @@
 # Disentangling Length Bias in Preference Learning via Response-Conditioned Modeling
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

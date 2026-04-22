@@ -1,5 +1,6 @@
 # RAG Makes Guardrails Unsafe? Investigating Robustness of Guardrails under RAG-style Contexts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

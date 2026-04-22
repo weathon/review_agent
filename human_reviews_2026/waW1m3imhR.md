@@ -1,5 +1,6 @@
 # Value-Anchored Group Policy Optimization for Flow Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

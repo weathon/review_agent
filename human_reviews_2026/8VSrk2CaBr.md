@@ -1,5 +1,6 @@
 # Unveiling the Cognitive Compass: Theory-of-Mind–Guided Multimodal Emotion Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

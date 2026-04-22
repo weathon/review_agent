@@ -1,5 +1,6 @@
 # Integer-Centric Neural Video Compression
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 2
 

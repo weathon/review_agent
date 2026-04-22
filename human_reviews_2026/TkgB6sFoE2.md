@@ -1,5 +1,6 @@
 # TNCME: Tensor's Norm Constraints for Unsupervised Contrastive Learning of Multimodal Embeddings
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Atoms to Events: Categorical Evidence Composition for Video Anomaly Detection
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Geometric Moment Alignment for Domain Adaptation via Siegel Embeddings
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # DTR: Towards optimal token compression with data-driven token ranking for efficient visual-language model inference
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

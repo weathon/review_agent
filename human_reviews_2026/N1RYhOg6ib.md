@@ -1,5 +1,6 @@
 # Discrete Guidance Matching: Exact Guidance for Discrete Flow Matching
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

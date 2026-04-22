@@ -1,5 +1,6 @@
 # Incorruptible Neural Networks: Training Models that can Generalize to Large Internal Perturbations
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

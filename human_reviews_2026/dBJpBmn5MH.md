@@ -1,5 +1,6 @@
 # Building Neural Networks that are Robust to Adversarial Examples Using Probabilistic Loss Function
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 2, 0, 0
 

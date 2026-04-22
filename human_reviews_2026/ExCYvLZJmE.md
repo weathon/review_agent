@@ -1,5 +1,6 @@
 # When Case Gets Rare: A Retrieval Benchmark for Off-Guideline Medical Question Answering
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

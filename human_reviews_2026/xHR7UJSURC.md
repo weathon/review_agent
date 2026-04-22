@@ -1,5 +1,6 @@
 # SEQR: Secure and Efficient QR-based LoRA Routing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

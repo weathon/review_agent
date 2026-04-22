@@ -1,5 +1,6 @@
 # Mitigating Catastrophic Forgetting with Context-aware Continual Pretraining for LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

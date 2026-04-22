@@ -1,5 +1,6 @@
 # Multi-LLM Adaptive Conformal Inference for Reliable LLM Response
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

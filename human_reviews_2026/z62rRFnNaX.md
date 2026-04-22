@@ -1,5 +1,6 @@
 # Efficient Parallel Samplers for Recurrent-Depth Models and Their Connection to Diffusion Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

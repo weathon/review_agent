@@ -1,5 +1,6 @@
 # BEYOND IMITATION: RECOVERING DENSE REWARDS FROM DEMONSTRATIONS
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

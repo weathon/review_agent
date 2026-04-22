@@ -1,5 +1,6 @@
 # Beyond Scattered Acceptance: Fast and Coherent Inference for DLMs via Longest Stable Prefixes
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 10, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Interpretable Transformers by Condition Guided Self-Attention
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 2, 0, 2
 

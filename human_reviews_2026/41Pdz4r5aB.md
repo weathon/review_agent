@@ -1,5 +1,6 @@
 # LinearSR: Unlocking Linear Attention for Stable and Efficient Image Super-Resolution
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

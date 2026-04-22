@@ -1,5 +1,6 @@
 # Omni-Thinker: Scaling Multi-Task RL in LLMs with Hybrid Reward and Task Scheduling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

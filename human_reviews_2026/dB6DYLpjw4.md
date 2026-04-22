@@ -1,5 +1,6 @@
 # Neural Mutual Information Estimation in Real Time via Pre-trained Hypernetworks
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

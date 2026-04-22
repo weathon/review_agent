@@ -1,5 +1,6 @@
 # ID-Composer: Multi-Subject Video Synthesis with Hierarchical Identity Preservation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

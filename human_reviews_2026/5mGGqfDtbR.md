@@ -1,5 +1,6 @@
 # Multi-path reasoning on a budget: towards theoretically optimal hyperparameter-free adaptive self-consistency
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

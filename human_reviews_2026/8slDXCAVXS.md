@@ -1,5 +1,6 @@
 # Sublinear Time Quantum Sensitivity Sampling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 6, 2
 

@@ -1,5 +1,6 @@
 # Deep Progressive Training: scaling up depth capacity of zero-layer model
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

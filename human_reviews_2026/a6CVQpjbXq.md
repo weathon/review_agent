@@ -1,5 +1,6 @@
 # Best-of-Majority: Minimax-Optimal Strategy for Pass@k Inference Scaling
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2, 4
 

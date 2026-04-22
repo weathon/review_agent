@@ -1,5 +1,6 @@
 # Channel-Imposed Fusion: A Simple yet Effective Method for Medical Time Series Classification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

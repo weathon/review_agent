@@ -1,5 +1,6 @@
 # Part-X-MLLM: Part-aware 3D Multimodal Large Language Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # ALM-MTA: Front-Door Causal Multi-Touch Attribution Method for Creator-Ecosystem Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

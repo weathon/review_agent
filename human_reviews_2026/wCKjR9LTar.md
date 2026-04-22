@@ -1,5 +1,6 @@
 # GDLNN: Marriage of Programming Language and Neural Networks for Accurate and Easy-to-Explain Graph Classification
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 4
 

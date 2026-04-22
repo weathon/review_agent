@@ -1,5 +1,6 @@
 # Optimizing What Matters: AUC-Driven Learning for Robust Neural Retrieval
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

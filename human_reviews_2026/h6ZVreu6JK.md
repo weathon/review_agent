@@ -1,5 +1,6 @@
 # Crossing the Separation Point: Stabilizing Decision-Focused Learning with Variational Free-Energy
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

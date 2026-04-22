@@ -1,5 +1,6 @@
 # GoR: A Unified and Extensible Generative Framework for Ordinal Regression
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4
 

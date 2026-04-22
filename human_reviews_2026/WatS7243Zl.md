@@ -1,5 +1,6 @@
 # ReDiG: Reinforced Diffusion on Graphs for Decentralized Coordinated Multi-Robot Navigation with Smooth Formation Adaptation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

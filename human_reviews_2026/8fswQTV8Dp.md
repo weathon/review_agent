@@ -1,5 +1,6 @@
 # SaFeR-VLM: Toward Safety-aware Fine-grained Reasoning in Multimodal Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

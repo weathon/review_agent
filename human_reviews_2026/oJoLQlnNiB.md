@@ -1,5 +1,6 @@
 # ALERT: Adaptive Learning with Embeddings and Reinforcement for Transparent Few-Shot Learning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 4, 4, 2
 

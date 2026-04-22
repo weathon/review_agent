@@ -1,5 +1,6 @@
 # Semantic Energy: Detecting LLM Hallucination Beyond Entropy
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

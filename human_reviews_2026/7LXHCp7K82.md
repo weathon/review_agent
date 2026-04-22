@@ -1,5 +1,6 @@
 # EWMV: An algorithm to improve the efficiency of conformal methods
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # COOPERTRIM: Adaptive Data Selection for Uncertainty-Aware Cooperative Perception
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

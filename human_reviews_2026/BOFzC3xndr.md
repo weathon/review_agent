@@ -1,5 +1,6 @@
 # Video-in-the-Loop: Span-Grounded Long Video QA with Interleaved Reasoning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

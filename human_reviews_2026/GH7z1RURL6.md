@@ -1,5 +1,6 @@
 # SelvaBox: A high‑resolution dataset for tropical tree crown detection
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Plug-and-Play 1.x-Bit KV Cache Quantization for Video Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

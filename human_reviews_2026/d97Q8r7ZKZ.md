@@ -1,5 +1,6 @@
 # AlphaBench: Benchmarking Large Language Models in Formulaic Alpha Factor Mining
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

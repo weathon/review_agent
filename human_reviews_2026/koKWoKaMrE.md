@@ -1,5 +1,6 @@
 # Tversky Neural Networks: Psychologically Plausible Deep Learning with Differentiable Tversky Similarity
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

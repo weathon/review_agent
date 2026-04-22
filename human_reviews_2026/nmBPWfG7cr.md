@@ -1,5 +1,6 @@
 # Ego-R1: Chain-of-Tool-Thought for Ultra-Long Egocentric Video Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

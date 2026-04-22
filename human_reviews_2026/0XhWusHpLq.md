@@ -1,5 +1,6 @@
 # Finding Symmetry in Neural Network Parameter Spaces
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 4, 4, 6
 

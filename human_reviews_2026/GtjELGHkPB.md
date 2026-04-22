@@ -1,5 +1,6 @@
 # Weak-to-Strong GraphRAG: Aligning Weak Retrievers with Large Language Models for Graph-based Retrieval Augmented Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 2, 8
 

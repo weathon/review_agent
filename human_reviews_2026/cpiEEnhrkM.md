@@ -1,5 +1,6 @@
 # SynDoc: A Hybrid Discriminative-Generative Framework for Synthetic Domain-Adaptive Document Key Information Extraction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

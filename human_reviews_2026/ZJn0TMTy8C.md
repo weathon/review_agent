@@ -1,5 +1,6 @@
 # LOGOS: LLM-Driven End-to-End Grounded Theory Development and Schema Induction For Qualitative Reseach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

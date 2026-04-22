@@ -1,5 +1,6 @@
 # EVA-Flow: Environment-Aware Flow Matching for Unified 3D Molecular Conformation Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

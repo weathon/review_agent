@@ -1,5 +1,6 @@
 # Abstracting Robot Manipulation Skills via Mixture-of-Experts Diffusion Policies
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

@@ -1,5 +1,6 @@
 # VideoPhy-2: A Challenging Action-Centric Physical Commonsense Evaluation in Video Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

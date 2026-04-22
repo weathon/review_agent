@@ -1,5 +1,6 @@
 # Self-Supervised Dynamical System Representations for Physiological Time-Series
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

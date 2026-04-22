@@ -1,5 +1,6 @@
 # AdaCache: Adaptive Caching and Context Augmentation for Efficient LLM Serving
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # PDE Solvers Should Be Local: Fast, Stable Rollouts with Learned Local Stencils
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

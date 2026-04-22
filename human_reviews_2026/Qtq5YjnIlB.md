@@ -1,5 +1,6 @@
 # Reasoning Self-Evaluation via Trajectory Dynamics Modeling
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

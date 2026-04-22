@@ -1,5 +1,6 @@
 # Title: HypoGeneAgent: Hypothesis Language Agent for Gene-set Cluster Resolution Selection Using Perturb-seq Datasets
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 0, 2
 

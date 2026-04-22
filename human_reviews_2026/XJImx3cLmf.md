@@ -1,5 +1,6 @@
 # ATRD: A Comprehensive Framework to Implement Debiasing and Calibration Simultaneously in Recommender Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 4, 2, 2
 

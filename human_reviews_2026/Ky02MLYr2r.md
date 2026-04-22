@@ -1,5 +1,6 @@
 # MLBF-PRS: A MACHINE LEARNING MODEL DE- VELOPMENT AND BENCHMARKING FRAMEWORK FOR POLYGENIC RISK SCORES
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 0
 

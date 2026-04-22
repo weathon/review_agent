@@ -1,5 +1,6 @@
 # What's the plan? Metrics for implicit planning in LLMs and their application to rhyme generation and question answering
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

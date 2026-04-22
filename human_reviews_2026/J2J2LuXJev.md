@@ -1,5 +1,6 @@
 # Closing the Data-Efficiency Gap Between Autoregressive and Masked Diffusion LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

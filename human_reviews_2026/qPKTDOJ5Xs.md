@@ -1,5 +1,6 @@
 # Closed-form $\ell_r$ norm scaling with data for overparameterized linear regression and diagonal linear networks under $\ell_p$ bias
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

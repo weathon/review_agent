@@ -1,5 +1,6 @@
 # Introducing Multimodal Paradigm for Learning Sleep Staging PSG via General-purpose Model
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 8, 4, 2, 6
 

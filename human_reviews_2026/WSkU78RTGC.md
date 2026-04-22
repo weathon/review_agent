@@ -1,5 +1,6 @@
 # EvoAgent: Self-evolving Agent with Continual World Model for Long-Horizon Tasks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

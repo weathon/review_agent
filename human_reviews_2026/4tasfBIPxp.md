@@ -1,5 +1,6 @@
 # DistMLIP: A Distributed Inference Platform for Machine Learning Interatomic Potentials
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # Beyond Model Ranking: Predictability-Aligned Evaluation for Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 8, 4, 4, 2, 4
 

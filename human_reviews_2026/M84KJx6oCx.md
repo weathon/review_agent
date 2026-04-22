@@ -1,5 +1,6 @@
 # SPARK: Synergistic Policy And Reward Co-Evolving Framework
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # STADE: Standard Deviation as a Pruning Metric
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

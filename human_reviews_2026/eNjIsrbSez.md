@@ -1,5 +1,6 @@
 # FeatHawkes: Scalable Feature-Based Attribution for Temporal Event Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 0, 2, 6
 

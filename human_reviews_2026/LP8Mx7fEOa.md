@@ -1,5 +1,6 @@
 # AutoHete: An Automatic and Efficient Heterogeneous Training System for LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

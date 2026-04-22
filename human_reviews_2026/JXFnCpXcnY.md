@@ -1,5 +1,6 @@
 # From Five Dimensions to Many: Large Language Models as Precise and Interpretable Psychological Profilers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

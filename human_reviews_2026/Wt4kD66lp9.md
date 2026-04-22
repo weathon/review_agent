@@ -1,5 +1,6 @@
 # On Improving Neurosymbolic Learning by Exploiting the Representation Space
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # What Do LLM Agents Do When Left Alone? Evidence of Spontaneous Meta-Cognitive Patterns
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

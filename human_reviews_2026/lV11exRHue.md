@@ -1,5 +1,6 @@
 # StructLens: A Structural Lens for Language Models via Maximum Spanning Trees
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

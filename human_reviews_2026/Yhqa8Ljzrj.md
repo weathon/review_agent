@@ -1,5 +1,6 @@
 # Quantifying Human-AI Synergy
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Towards Interference-Free One-Shot Federated Learning via Frequency Domain Aggregation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

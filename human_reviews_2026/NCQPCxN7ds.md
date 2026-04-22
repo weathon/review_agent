@@ -1,5 +1,6 @@
 # Local Geometry Attention for Time Series Forecasting under Realistic Corruptions
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

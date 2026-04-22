@@ -1,5 +1,6 @@
 # SAFD: A Style-Agnostic Framework for Detecting LLM-Generated Text
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Condition Matters in Full-head 3D GANs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 
@@ -177,7 +178,9 @@ The method produces a training procedure for better training of GANs for generat
 - Do I understand correctly that all the experiments are done for HyPlaneHead only? What happens if the trick is applied to other generators? For instance, does the semantic conditioning fix the PanoHead's issue of symmetry breaking in the back of the head, or is SphereHead's ViCiCo loss still crucial to achieve that? 
 - L269: "Nvidia A10 GPU" -- just to confirm: was A10 or A100 meant?
 - Will the dataset be released publicly?
-- L315: "frontal views capture rich facial features but lack hair details, while rear views emphasize hair but miss facial features." And then, L320: "Among all possible views, the front view contains the most comprehensive global information, because it includes not only the facial region, which is most sensitive to human perception, but also reflects overall appearance, clothing, and hairstyle." Isn't it illogical? Basically, first, the authors are saying that the back view is essential, and then they are saying that the frontal view contains enough info. I understand that the back view does not contain info (it's evident from the visuals), but the writing seems a bit misleading. 
+- L315: "frontal views capture rich facial features but lack hair details, while rear views emphasize hair but miss facial features."
+And then, L320: "Among all possible views, the front view contains the most comprehensive global information, because it includes not only the facial region, which is most sensitive to human perception, but also reflects overall appearance, clothing, and hairstyle."
+Isn't it illogical? Basically, first, the authors are saying that the back view is essential, and then they are saying that the frontal view contains enough info. I understand that the back view does not contain info (it's evident from the visuals), but the writing seems a bit misleading. 
 - Why not stack the semantic info from several (predefined) views then? Is it because we don't have those in inference?
 
 ### Soundness

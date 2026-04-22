@@ -1,5 +1,6 @@
 # Multi-Personalities Guided Deep Monte Carlo Search for Complex Card Games: A Guandan Case Study
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

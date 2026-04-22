@@ -1,5 +1,6 @@
 # PPTArena: A Benchmark for Computer-Use Agents on PowerPoint Tasks
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 2, 8, 8, 2
 

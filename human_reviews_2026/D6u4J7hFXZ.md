@@ -1,5 +1,6 @@
 # Synergizing Dynamic Score Aggregation with Contrastive Regularization for Open-Set Semi-Supervised Out-of-Distribution Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

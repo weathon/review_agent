@@ -1,5 +1,6 @@
 # R1-Code-Interpreter: LLMs Reason with Code via Supervised and Multi-stage Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

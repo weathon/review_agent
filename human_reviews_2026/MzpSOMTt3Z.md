@@ -1,5 +1,6 @@
 # Audio Turing Test: Benchmarking the Human-likeness of Large Language Model-based Text-to-Speech Systems in Chinese
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

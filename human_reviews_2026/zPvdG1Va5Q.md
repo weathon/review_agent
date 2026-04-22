@@ -1,5 +1,6 @@
 # MathNet: A Global Multimodal Benchmark for Mathematical Reasoning and Retrieval
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

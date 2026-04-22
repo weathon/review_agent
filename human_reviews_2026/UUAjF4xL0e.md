@@ -1,5 +1,6 @@
 # Distributional Vision-Language Alignment by Cauchy-Schwarz Divergence
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 10
 

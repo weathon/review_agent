@@ -1,5 +1,6 @@
 # Accumulating Context Changes the Beliefs of Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

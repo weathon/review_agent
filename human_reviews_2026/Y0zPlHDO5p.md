@@ -1,5 +1,6 @@
 # AntigenLM: Structure-Aware DNA Language Modeling for Influenza
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

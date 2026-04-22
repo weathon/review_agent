@@ -1,5 +1,6 @@
 # Benefits and Pitfalls of Reinforcement Learning for Language Model Planning: A Theoretical Perspective
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2
 

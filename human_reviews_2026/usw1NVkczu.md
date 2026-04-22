@@ -1,5 +1,6 @@
 # What Matters for Batch Online Reinforcement Learning in Robotics?
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

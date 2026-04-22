@@ -1,5 +1,6 @@
 # HiT-JEPA: A Hierarchical Self-supervised Trajectory Embedding Framework for Similarity Computation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

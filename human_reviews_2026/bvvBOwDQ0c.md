@@ -1,5 +1,6 @@
 # A Revisit of Total Correlation in Disentangled Variational Auto-Encoder with Partial Disentanglement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

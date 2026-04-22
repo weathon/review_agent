@@ -1,5 +1,6 @@
 # Video-ToC: Video Tree-of-Cue Reasoning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

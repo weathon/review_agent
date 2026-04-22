@@ -1,5 +1,6 @@
 # Structure-Aware Graph Hypernetworks for Neural Program Synthesis
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

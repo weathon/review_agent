@@ -1,5 +1,6 @@
 # See, Think, Hallucinate: Interpreting Reasoning and Hallucinations Beyond the First Hop in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

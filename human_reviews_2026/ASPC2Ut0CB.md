@@ -1,5 +1,6 @@
 # Spatiotemporal Forecasting as Planning: A Model-Based Reinforcement Learning Approach with Generative World Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 4, 6
 

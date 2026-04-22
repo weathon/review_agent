@@ -1,5 +1,6 @@
 # Formalizing Audits of ML Models as a Sequential Decision-Making Problem
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

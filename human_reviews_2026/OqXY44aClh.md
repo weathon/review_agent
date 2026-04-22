@@ -1,5 +1,6 @@
 # Efficient Unified Multimodal Understanding and Generation with Gated Hybrid Attention
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

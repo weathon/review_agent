@@ -1,5 +1,6 @@
 # Exploring Synthesizable Chemical Space with Iterative Pathway Refinements
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 4, 4
 

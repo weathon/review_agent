@@ -1,5 +1,6 @@
 # VARIABLE COUPLING-ENHANCED LARGE NEIGHBORHOOD SEARCH FOR SOLVING INTEGER LINEAR PROGRAMS
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

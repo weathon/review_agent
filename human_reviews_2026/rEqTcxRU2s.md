@@ -1,5 +1,6 @@
 # Phase-Preserving Analytical Features from Solid Harmonic Wavelet Bispectrum Simplify Decision Boundaries
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

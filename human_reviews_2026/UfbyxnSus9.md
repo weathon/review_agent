@@ -1,5 +1,6 @@
 # Follow the MEP: Scalable Neural Representations for Minimum-Energy Path Discovery in Molecular Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

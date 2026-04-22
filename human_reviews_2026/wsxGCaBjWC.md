@@ -1,5 +1,6 @@
 # Gradient Descent with Large Step Sizes: Chaos and Fractal Convergence Region
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

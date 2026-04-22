@@ -1,5 +1,6 @@
 # FrePhys: Frequency-aware Diffusion Model for Remote Physiological Measurement
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 8, 2
 

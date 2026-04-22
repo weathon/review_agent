@@ -1,5 +1,6 @@
 # End-to-end topographic auditory models replicate signatures of human auditory cortex
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

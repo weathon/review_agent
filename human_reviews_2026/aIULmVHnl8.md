@@ -1,5 +1,6 @@
 # FaithShield: Defending Vision–Language Models Against Explanation Manipulation via X-Shift Attacks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # LLM Unlearning Under the Microscope: A Full-Stack View on Methods and Metrics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

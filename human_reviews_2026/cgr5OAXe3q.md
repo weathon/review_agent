@@ -1,5 +1,6 @@
 # Towards Robust Referring Expression Segmentation for Complex Reasoning in the Wild
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

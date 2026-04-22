@@ -1,5 +1,6 @@
 # CoIn: Coverage and Informativeness-Guided Token Reduction for Efficient Large Multimodal Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

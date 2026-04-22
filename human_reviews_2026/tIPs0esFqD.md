@@ -1,5 +1,6 @@
 # Modular Fine-Tuning of Clustering:Directional Updating of Weight Parameters for PLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

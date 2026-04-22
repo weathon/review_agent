@@ -1,5 +1,6 @@
 # Training-free Guidance in Text-to-Video Generation via Multimodal Planning and Structured Noise Initialization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

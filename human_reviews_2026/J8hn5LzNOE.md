@@ -1,5 +1,6 @@
 # Online Decision Making with Generative Action Sets
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 8
 

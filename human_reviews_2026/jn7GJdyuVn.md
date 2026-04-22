@@ -1,5 +1,6 @@
 # MATE: Multimodal Time Series Forecasting via Adaptive Modality Fusion and Timestamp-Augmented Expert Modeling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # GRPO-CARE: Consistency-Aware Reinforcement Learning for Multimodal Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Generative Image Compression by Estimating Gradients of the Rate-variable Feature Distribution
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

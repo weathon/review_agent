@@ -1,5 +1,6 @@
 # Smoothie: Smoothing Diffusion on Token Embeddings for Text Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

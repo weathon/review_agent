@@ -1,5 +1,6 @@
 # KLAS: Using Similarity to Stitch Neural Networks for Improved Accuracy-Efficiency Tradeoffs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

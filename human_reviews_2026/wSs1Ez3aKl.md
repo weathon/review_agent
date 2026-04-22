@@ -1,5 +1,6 @@
 # Adaptive Attacks on Trusted Monitors Subvert AI Control Protocols
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4
 

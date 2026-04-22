@@ -1,5 +1,6 @@
 # WARP: Weight Teleportation for Attack-Resilient Unlearning Protocols
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

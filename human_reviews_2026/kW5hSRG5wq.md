@@ -1,5 +1,6 @@
 # The Curious Case of AdamW
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 10, 2
 

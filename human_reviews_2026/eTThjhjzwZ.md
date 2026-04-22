@@ -1,5 +1,6 @@
 # Trajectory Generation with Conservative Value Guidance for Offline Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

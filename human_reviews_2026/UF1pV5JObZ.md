@@ -1,5 +1,6 @@
 # Unlocking Universal Graph Knowledge in the View Space
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

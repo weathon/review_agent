@@ -1,5 +1,6 @@
 # Concept Concentration for Faithful Representation Intervention
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

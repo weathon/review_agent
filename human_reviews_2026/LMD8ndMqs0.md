@@ -1,5 +1,6 @@
 # Is Temporal Difference Learning the Gold Standard for Stitching in RL?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

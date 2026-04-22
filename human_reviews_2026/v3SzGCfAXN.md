@@ -1,5 +1,6 @@
 # HARDTESTGEN: A High-Quality RL Verifier Generation Pipeline for LLM Algorithimic Coding
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

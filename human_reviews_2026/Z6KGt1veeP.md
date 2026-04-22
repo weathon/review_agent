@@ -1,5 +1,6 @@
 # Dual-Kernel Adapter: Expanding Spatial Horizons for Data-Constrained Medical Image Analysis
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

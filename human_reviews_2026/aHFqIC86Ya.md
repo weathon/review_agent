@@ -1,5 +1,6 @@
 # CortiLife: A Unified Framework for Cortical Representation Learning across the Lifespan
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

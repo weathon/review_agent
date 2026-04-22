@@ -1,5 +1,6 @@
 # Emergent Coordination in Multi-Agent Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

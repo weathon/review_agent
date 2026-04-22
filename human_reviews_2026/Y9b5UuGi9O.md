@@ -1,5 +1,6 @@
 # CAI: Caption-Sensitive Attention Intervention for Mitigating Object Hallucination in Large Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

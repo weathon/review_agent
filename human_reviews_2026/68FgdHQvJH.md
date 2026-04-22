@@ -1,5 +1,6 @@
 # MUIQD: Benchmarking and Facilitating Multimodal LLMs for Underwater Image Quality Perception
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # LOSI: Improving Multi-agent Reinforcement Learning via Latent Opponent Strategy Identification
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2, 2, 2
 

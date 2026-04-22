@@ -1,5 +1,6 @@
 # GLOSE: Understanding and Mitigating Toxicity in LLMs via Global Toxic Subspace
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

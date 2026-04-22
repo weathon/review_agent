@@ -1,5 +1,6 @@
 # Toward Principled Flexible Scaling for Self-Gated Neural Activation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

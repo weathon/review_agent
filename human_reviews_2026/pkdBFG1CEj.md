@@ -1,5 +1,6 @@
 # Aligning Multilingual Reasoning With Verifiable Semantics From A High-Resource Expert Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

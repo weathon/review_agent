@@ -1,5 +1,6 @@
 # Conformal Prediction Adaptive to Unknown Subpopulation Shifts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

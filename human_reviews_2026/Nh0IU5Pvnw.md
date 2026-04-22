@@ -1,5 +1,6 @@
 # FinEvo: From Isolated Backtests to Ecological Market Games for Multi-Agent Financial Strategy Evolution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

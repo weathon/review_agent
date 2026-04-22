@@ -1,5 +1,6 @@
 # Decoding Open-Ended Information Seeking Goals from Eye Movements in Reading
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

@@ -1,5 +1,6 @@
 # From Traits to Circuits: Toward Mechanistic Interpretability of Personality in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

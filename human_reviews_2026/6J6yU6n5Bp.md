@@ -1,5 +1,6 @@
 # SEED-GRPO: Semantic Entropy Enhanced GRPO for Uncertainty-Aware Policy Optimization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

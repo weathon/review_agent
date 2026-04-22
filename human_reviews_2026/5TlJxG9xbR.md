@@ -1,5 +1,6 @@
 # SoC-DT: Standard-of-Care Aligned Digital Twins for Patient-Specific Tumor Dynamics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

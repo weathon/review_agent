@@ -1,5 +1,6 @@
 # KeyWorld: Key Frame Reasoning Enables Effective and Efficient World Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

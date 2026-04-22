@@ -1,5 +1,6 @@
 # Mitigating Hallucinations in Large Language Models via Hybrid Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

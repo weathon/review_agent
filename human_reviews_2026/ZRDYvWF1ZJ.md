@@ -1,5 +1,6 @@
 # GIM: Improved Interpretability for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 
@@ -29,7 +30,8 @@ The paper claims improved faithfulness over prior gradient-based feature attribu
 
 2. **Clear motivation and simple, insightful remedy:** The motivation around self-repair is well-grounded, and the proposed gradient modification (TSG) provides a simple yet insightful approach that could inspire follow-up research on faithful attention attribution.
 
-3. **Lightweight and easily reproducible implementation:** Despite its conceptual simplicity, GIM can be applied as a small backward-pass modification without retraining, making it readily testable in other interpretability pipelines and future model analyses.
+3. 
+**Lightweight and easily reproducible implementation:** Despite its conceptual simplicity, GIM can be applied as a small backward-pass modification without retraining, making it readily testable in other interpretability pipelines and future model analyses.
 
 ### Weaknesses
 1. **Local-only correction:** GIM modifies gradients within each layer but ignores inter-layer coupling through residual and normalization paths. The method remains a local fix rather than a globally consistent gradient correction.

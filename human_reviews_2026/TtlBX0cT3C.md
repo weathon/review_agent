@@ -1,5 +1,6 @@
 # Single-Cell Spatial Proteomics Clustering by Decoupling Spatiality and Expression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

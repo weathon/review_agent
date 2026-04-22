@@ -1,5 +1,6 @@
 # Low-rank Interpretable Cell–Cell Hidden Interactions from Embeddings
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 2, 8, 8
 

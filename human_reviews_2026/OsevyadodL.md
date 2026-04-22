@@ -1,5 +1,6 @@
 # Einstein Fields: A Neural Perspective To Computational General Relativity
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4
 

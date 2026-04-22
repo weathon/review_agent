@@ -1,5 +1,6 @@
 # Towards Adaptive ML Benchmarks: Web-Agent-Driven Construction, Domain Expansion, and Metric Optimization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

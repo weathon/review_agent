@@ -1,5 +1,6 @@
 # From Parameters to Behaviors: Unsupervised Compression of the Policy Space
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

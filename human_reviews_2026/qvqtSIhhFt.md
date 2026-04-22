@@ -1,5 +1,6 @@
 # OpenDataBench: Real-World Benchmark for Table Insight Generation and Question Answering Over Open Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

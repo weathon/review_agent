@@ -1,5 +1,6 @@
 # Human-in-the-Loop Targeted Molecule Design Informed by Transcriptomes
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

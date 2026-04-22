@@ -1,5 +1,6 @@
 # Energy-Efficient Random Variate Generation via Compressed Lookup Tables
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

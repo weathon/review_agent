@@ -1,5 +1,6 @@
 # HVCR: Causal Evaluation of Large Multimodal Models in Human-like Video Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

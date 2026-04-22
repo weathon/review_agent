@@ -1,5 +1,6 @@
 # BlenderFusion: 3D-Grounded Visual Editing and Generative Compositing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # An Improved Model-free Decision-estimation Coefficient with Applications in Adversarial MDPs
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 8
 

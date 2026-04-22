@@ -1,5 +1,6 @@
 # Socratic-Zero : Bootstrapping Reasoning via Data-Free Agent Co-evolution
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 6, 4, 4
 

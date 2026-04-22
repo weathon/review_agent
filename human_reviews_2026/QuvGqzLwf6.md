@@ -1,5 +1,6 @@
 # EventFlash: Towards Efficient MLLMs for Event-Based Vision
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

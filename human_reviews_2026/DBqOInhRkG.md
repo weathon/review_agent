@@ -1,5 +1,6 @@
 # RARE: Retrieval-Aware Robustness Evaluation for Retrieval-Augmented Generation Systems
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

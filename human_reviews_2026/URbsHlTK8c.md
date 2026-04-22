@@ -1,5 +1,6 @@
 # Let Features Decide Their Own Solvers: Hybrid Feature Caching for Diffusion Transformers
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 10
 

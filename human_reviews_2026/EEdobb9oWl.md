@@ -1,5 +1,6 @@
 # Grid-Based Evolutionary Algorithm for Multi-Objective Molecule Generation Enhanced by Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

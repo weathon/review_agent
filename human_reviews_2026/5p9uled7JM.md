@@ -1,5 +1,6 @@
 # Flow Autoencoders are Effective Protein Tokenizers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 10
 

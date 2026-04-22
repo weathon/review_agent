@@ -1,5 +1,6 @@
 # Efficient Metric for Distinguishing Memorization from Generalization in Large Language Models
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 0, 6, 2, 2, 2
 

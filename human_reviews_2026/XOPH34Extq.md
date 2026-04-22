@@ -1,5 +1,6 @@
 # TabStruct: Measuring Structural Fidelity of Tabular Data
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 10, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # CamPilot: Improving Camera Control in Video Diffusion Model with Efficient Camera Reward Feedback
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # CoRGI: GNNs with Convolutional Residual Global Interaction for Lagrangian Simulation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

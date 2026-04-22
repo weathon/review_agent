@@ -1,5 +1,6 @@
 # Trade-off in Estimating the Number of Byzantine Clients in Federated Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

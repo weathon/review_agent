@@ -1,5 +1,6 @@
 # CTA-Flux: Integrating Chinese Cultural Semantics into High-Quality English Text-to-Image Communities
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

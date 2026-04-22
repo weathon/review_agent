@@ -1,5 +1,6 @@
 # CNB: A Bayesian Nonparametric Approach to Optimal Conformal Prediction
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

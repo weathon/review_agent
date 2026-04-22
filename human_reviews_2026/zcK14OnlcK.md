@@ -1,5 +1,6 @@
 # Compensate, Don't Reconstruct: Parameter- and Data-Efficient 2-bit LLM Quantization
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4, 2
 

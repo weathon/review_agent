@@ -1,5 +1,6 @@
 # SALSA-V: Shortcut-Augmented Long-form Synchronized Audio from Videos
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

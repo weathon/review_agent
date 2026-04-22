@@ -1,5 +1,6 @@
 # OVSeg3R: Learn Open-vocabulary Instance Segmentation from 2D via 3D Reconstruction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

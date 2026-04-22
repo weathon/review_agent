@@ -1,5 +1,6 @@
 # LogicEvolve: Advancing Logical Reasoning Toward Self-Evolution
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

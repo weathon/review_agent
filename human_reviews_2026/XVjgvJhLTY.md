@@ -1,5 +1,6 @@
 # OjaKV: Context-Aware Online Low-Rank KV Cache Compression with Oja’s Rule
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

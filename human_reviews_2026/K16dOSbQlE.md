@@ -1,5 +1,6 @@
 # Sample-efficient diffusion-based control of complex nonlinear systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Landmark-Guided Policy Optimization for Multi-Objective Language Model Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

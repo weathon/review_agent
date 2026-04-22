@@ -1,5 +1,6 @@
 # Ultra-Fast Language Generation via Discrete Diffusion Divergence Instruct
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

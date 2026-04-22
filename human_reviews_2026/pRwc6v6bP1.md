@@ -1,5 +1,6 @@
 # AI-Assisted Authoring for Transparent, Data-Driven Documents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

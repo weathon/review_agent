@@ -1,5 +1,6 @@
 # LS-CLIP: Autoencoder-Based Mining of CLIP's Inherent Local Semantics in Cross-Domain Image Retrieval
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2
 

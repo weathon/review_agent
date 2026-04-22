@@ -1,5 +1,6 @@
 # Chain-of-Goals Hierarchical Policy for Long-Horizon Offline Goal-Conditioned RL
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Multi-branch of Attention Yields Accurate Results for Tabular Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

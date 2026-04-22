@@ -1,5 +1,6 @@
 # Universal Approximation with Softmax Attention
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 2, 8
 

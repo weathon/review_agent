@@ -1,5 +1,6 @@
 # NAIPv2: Debiased Pairwise Learning for Efficient Paper Quality Estimation
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4, 2
 

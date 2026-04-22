@@ -1,5 +1,6 @@
 # Beyond Mean Scores: Factor Models for  Reliable and Efficient AI Evaluation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

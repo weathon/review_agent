@@ -1,5 +1,6 @@
 # MRAG-Corrupter: Knowledge Poisoning Attacks to Multimodal Retrieval Augmented Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Beyond Pass@k: Breadth-Depth Metrics for Reasoning Boundaries
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 4, 4
 

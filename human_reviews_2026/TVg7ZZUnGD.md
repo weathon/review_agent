@@ -1,5 +1,6 @@
 # MixGRPO: Unlocking Flow-based GRPO Efficiency with Mixed ODE-SDE
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

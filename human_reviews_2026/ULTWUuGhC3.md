@@ -1,5 +1,6 @@
 # Interleave-VLA: Enhancing Robot Manipulation with Image-Text Interleaved Instructions
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

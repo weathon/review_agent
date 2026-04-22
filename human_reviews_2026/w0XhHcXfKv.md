@@ -1,5 +1,6 @@
 # Graph Signal Processing Meets Mamba2: Adaptive Filter Bank via Delta Modulation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

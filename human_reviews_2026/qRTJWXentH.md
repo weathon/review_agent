@@ -1,5 +1,6 @@
 # t-BEN: A Temporal Logic Guided Approach for Temporal Reasoning Benchmark Generation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

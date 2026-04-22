@@ -1,5 +1,6 @@
 # Harmonic-Percussive Disentangled Neural Audio Codec for Bandwidth Extension
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

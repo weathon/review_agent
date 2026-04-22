@@ -1,5 +1,6 @@
 # A Neuro-symbolic Approach to Epistemic Deep Learning for Hierarchical Image Classification
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

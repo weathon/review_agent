@@ -1,5 +1,6 @@
 # Meta-Learning Theory-Informed Inductive Biases using Deep Kernel Gaussian Processes
 
+- Avg Score: 7.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 8, 6
 
@@ -171,7 +172,8 @@ Notation:
 In this work the authors present a novel framework to capture normative theoreies as deep kernels for a Gaussian Process by framing the extraction process as meta-learning framework. Based on simulation results generated from a theoretical model, the inductive-bias of the theory is sought to be captured by learning a feature extractor that works across distinct instances of tasks, thereby serving as basis of GP kernel that in turn can be used to model and assess real experimental data. The Bayesian model nature of this approach (via the GP) allows for assessment typically difficult in theoretically-motivated models such as the degree of epistemic uncertainty and fidelity of the theory in capturing the experimental data.
 
 ### Strengths
-Clarity: The work is clearly written with easy to follow structure. All necessary background materials were described suffiicently allowing for readers who may not be deeply familiar with the topic to follow and appreciate the contribution.
+Clarity:
+The work is clearly written with easy to follow structure. All necessary background materials were described suffiicently allowing for readers who may not be deeply familiar with the topic to follow and appreciate the contribution.
 
 Quality: All derivations and mathematical motivations are clearly presented and accurate. 
 

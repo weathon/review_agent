@@ -1,5 +1,6 @@
 # Rethinking Reward Models for Multi-Domain Test-Time Scaling
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 4, 8
 

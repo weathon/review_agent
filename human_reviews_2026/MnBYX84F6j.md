@@ -1,5 +1,6 @@
 # Empirical Evaluation of Knowledge Distillation from Transformers to Subquadratic Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

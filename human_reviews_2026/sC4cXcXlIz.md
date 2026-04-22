@@ -1,5 +1,6 @@
 # AT-Drive: Exploiting Adversarial Transfer for End-to-end Autonomous Driving
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

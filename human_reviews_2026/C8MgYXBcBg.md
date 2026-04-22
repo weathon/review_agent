@@ -1,5 +1,6 @@
 # Towards Understanding Continual Factual Knowledge Acquisition of Language Models: From Theory to Algorithm
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

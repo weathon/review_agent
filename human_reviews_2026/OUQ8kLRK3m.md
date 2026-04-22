@@ -1,5 +1,6 @@
 # Truly Assessing Fluid Intelligence of Large Language Models through Dynamic Reasoning Evaluation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

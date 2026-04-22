@@ -1,5 +1,6 @@
 # Intention-Conditioned Flow Occupancy Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Comparative analysis of black box methods for detecting evaluation awareness in LLMs
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # From Muon to Gluon: Bridging Theory and Practice of LMO-based Optimizers for LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

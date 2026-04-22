@@ -1,5 +1,6 @@
 # Reasoning Like Humans: Enhancing Multi-Image Reasoning Via Cognition-Inspired Meta-Action Framework
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

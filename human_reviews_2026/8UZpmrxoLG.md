@@ -1,5 +1,6 @@
 # Astra: General Interactive World Model with Autoregressive Denoising
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

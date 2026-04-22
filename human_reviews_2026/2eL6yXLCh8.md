@@ -1,5 +1,6 @@
 # Hyden: A Hybrid Dual-Path Encoder for Monocular Geometry of High-resolution Images
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 2
 

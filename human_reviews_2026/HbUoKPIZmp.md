@@ -1,5 +1,6 @@
 # There is No VAE: End-to-End Pixel-Space Generative Modeling via Self-Supervised Pre-Training
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

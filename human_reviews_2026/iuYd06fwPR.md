@@ -1,5 +1,6 @@
 # SelfCAD: Protecting Your Efficient Reasoning Capabilities via Self Cautious Insertion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Composition of Pretrained Diffusion Models: A Logic-Based Calculus
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

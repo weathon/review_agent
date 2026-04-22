@@ -1,5 +1,6 @@
 # Measuring LLM Novelty As The Frontier Of Original And High-Quality Output
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

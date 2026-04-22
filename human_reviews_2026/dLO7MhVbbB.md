@@ -1,5 +1,6 @@
 # SafeDec: Constrained Decoding for Safe Autoregressive Generalist Robot Policies
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

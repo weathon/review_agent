@@ -1,5 +1,6 @@
 # Expectation–Evidence Prompting: Structuring Verification by Comparing Expected and Observed Evidence
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

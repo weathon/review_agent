@@ -1,5 +1,6 @@
 # Metacognitive Self-Correction for Multi-Agent System via Prototype-Guided Next-Execution Reconstruction
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 
@@ -141,10 +142,12 @@ This paper introduces MASC, a metacognitive framework for real-time, unsupervise
 3
 
 ### Summary
-This paper presents MASC, a metacognitive framework designed for LLM-based Multi-Agent Systems. MASC enables real-time, unsupervised, step-level error detection and self-correction through two complementary mechanisms:
+This paper presents MASC, a metacognitive framework designed for LLM-based Multi-Agent Systems.
+MASC enables real-time, unsupervised, step-level error detection and self-correction through two complementary mechanisms:
 1. Next-Execution Reconstruction  — models causal consistency by predicting the embedding of the next execution step based on interaction history;
 2. Prototype-Guided Enhancement — introduces a learnable prototype prior that provides a stable normality reference under sparse or noisy contexts .
-When an anomalous step is detected, MASC triggers a dedicated Correction Agent to revise the output before it propagates downstream. Empirical results on the Who&When benchmark and six MAS frameworks show that MASC, trained entirely on normal trajectories, achieves up to +8.47% AUC-ROC improvement in step-level error detection and 1–3% accuracy gains in end-to-end task performance, all without requiring step-level error labels.
+When an anomalous step is detected, MASC triggers a dedicated Correction Agent to revise the output before it propagates downstream.
+Empirical results on the Who&When benchmark and six MAS frameworks show that MASC, trained entirely on normal trajectories, achieves up to +8.47% AUC-ROC improvement in step-level error detection and 1–3% accuracy gains in end-to-end task performance, all without requiring step-level error labels.
 
 ### Strengths
 1. MASC learns from normal trajectories only, avoiding expensive step-level annotation.

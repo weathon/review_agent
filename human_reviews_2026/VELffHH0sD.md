@@ -1,5 +1,6 @@
 # SOPRANO: Synergistic Optimization with Progressive Replay and Adaptive Network Orchestration for Continual Learning
 
+- Avg Score: 1.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2, 2
 

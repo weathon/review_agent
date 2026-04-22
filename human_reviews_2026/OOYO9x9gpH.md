@@ -1,5 +1,6 @@
 # LU-500: A Logo Benchmark for Concept Unlearning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

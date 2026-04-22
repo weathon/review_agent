@@ -1,5 +1,6 @@
 # Disentangled Robot Learning via Separate Forward and Inverse Dynamics Pretraining
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

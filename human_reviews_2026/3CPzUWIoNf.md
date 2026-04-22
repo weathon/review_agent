@@ -1,5 +1,6 @@
 # A$^2$Search: Ambiguity-Aware Question Answering with Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

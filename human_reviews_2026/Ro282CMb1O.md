@@ -1,5 +1,6 @@
 # U-Bench: A Comprehensive Understanding of U-Net through 100-Variant Benchmarking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

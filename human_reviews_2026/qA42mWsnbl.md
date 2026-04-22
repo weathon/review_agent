@@ -1,5 +1,6 @@
 # Theory of Scaling Laws for In-Context Regression: Depth, Width, Context and Time
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

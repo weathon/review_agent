@@ -1,5 +1,6 @@
 # Social Human Robot Embodied Conversation (SHREC) Dataset: Benchmarking Foundational Models’ Social Reasoning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 6, 4, 6
 

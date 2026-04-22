@@ -1,5 +1,6 @@
 # Double-Bounded Nonlinear Optimal Transport for Size Constrained Min Cut Clustering
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

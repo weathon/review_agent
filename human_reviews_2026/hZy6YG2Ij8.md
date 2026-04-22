@@ -1,5 +1,6 @@
 # YuE: Scaling Open Foundation Models for Long-Form Music Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 2
 

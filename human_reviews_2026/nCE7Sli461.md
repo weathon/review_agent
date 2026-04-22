@@ -1,5 +1,6 @@
 # Why High-rank Neural Networks Generalize?: An Algebraic Framework with RKHSs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

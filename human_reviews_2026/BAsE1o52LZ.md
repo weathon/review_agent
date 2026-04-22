@@ -1,5 +1,6 @@
 # The World is Not Mono: Enabling Spatial Understanding in Large Audio-Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Uncertainty quantification in clinical settings: A retinal fundus screening study and benchmarking
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 8, 4
 

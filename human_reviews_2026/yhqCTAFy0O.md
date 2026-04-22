@@ -1,5 +1,6 @@
 # Teacher-Student Multi-Agent Reinforcement Learning Framework for AutoML Pipeline Construction
 
+- Avg Score: 1.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2, 0
 

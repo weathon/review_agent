@@ -1,5 +1,6 @@
 # Mixed Channel Dependency Diffusion Model with Retrieval Guidance for Time Series Forecasting
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6, 2
 

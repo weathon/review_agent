@@ -1,5 +1,6 @@
 # Allusive Adversarial Examples via Latent Space in Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # GASDU: Gauss--Southwell Dynamic Update for Efficient LLM Fine-Tuning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 2, 8
 

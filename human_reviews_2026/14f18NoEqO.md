@@ -1,5 +1,6 @@
 # KnowProxy: Adapting Large Language Models by Knowledge-guided Proxy
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

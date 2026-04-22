@@ -1,5 +1,6 @@
 # How Reasoning Evolves from Post-Training Data in Sequential Decision-Making Domains
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

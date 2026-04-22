@@ -1,5 +1,6 @@
 # A Dendritic-Inspired Network Science Generative Model for Topological Initialization of Connectivity in Sparse Artificial Neural Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 6, 0, 2
 

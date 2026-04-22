@@ -1,5 +1,6 @@
 # ReinforceGen: Hybrid Skill Policies with Automated Data Generation and Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

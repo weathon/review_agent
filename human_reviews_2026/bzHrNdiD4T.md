@@ -1,5 +1,6 @@
 # Centroid Approximation for Byzantine-Tolerant Federated Learning
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 4
 

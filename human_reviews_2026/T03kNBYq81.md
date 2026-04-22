@@ -1,5 +1,6 @@
 # RLPR: Extrapolating RLVR to General Domains without Verifiers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Dimension Domain Co-decomposition: Solving PDEs with Interpretability
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

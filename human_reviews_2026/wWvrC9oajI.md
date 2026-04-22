@@ -1,5 +1,6 @@
 # Video-Based Optimal Transport for Feedback-Efficient Offline Preference-Based Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

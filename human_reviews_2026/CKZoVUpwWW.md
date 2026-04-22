@@ -1,5 +1,6 @@
 # Feed-Forward 3D Gaussian Splatting Compression with Long-Context Modeling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

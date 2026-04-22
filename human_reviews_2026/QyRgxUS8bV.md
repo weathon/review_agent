@@ -1,5 +1,6 @@
 # Avatar Concept Slider: Controllable Editing of Concepts in 3D Human Avatars
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 6
 

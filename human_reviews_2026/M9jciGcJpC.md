@@ -1,5 +1,6 @@
 # AVSU-Bench and VSpeech-R1: A Dataset and MLLM for Audio-Visual Speech Understanding
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

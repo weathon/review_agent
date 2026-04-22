@@ -1,5 +1,6 @@
 # Quan-dorcet: Tournament-Based One-vs-One Quantum Classification for Robust Single-Shot Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

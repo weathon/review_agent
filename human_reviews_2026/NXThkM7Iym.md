@@ -1,5 +1,6 @@
 # PaAno: Patch-Based Representation Learning for Time-Series Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

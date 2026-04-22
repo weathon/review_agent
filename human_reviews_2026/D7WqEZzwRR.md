@@ -1,5 +1,6 @@
 # ENGRAM: Effective, Lightweight Memory Orchestration for Conversational Agents
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

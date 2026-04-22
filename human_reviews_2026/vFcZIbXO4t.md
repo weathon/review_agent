@@ -1,5 +1,6 @@
 # PDFormer: Progressive Dual-Head Transformer for Behavioral Choice Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

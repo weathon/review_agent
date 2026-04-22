@@ -1,5 +1,6 @@
 # Decoupling The "What" and "Where" With Polar Coordinate Positional Embedding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

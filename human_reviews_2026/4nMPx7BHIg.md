@@ -1,5 +1,6 @@
 # Learning Based on Neurovectors for Tabular Data: A New Neural Network Approach
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

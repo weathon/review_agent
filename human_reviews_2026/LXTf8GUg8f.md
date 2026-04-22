@@ -1,5 +1,6 @@
 # SPEAR: A Unified SSL Framework for Learning Speech and Audio Representations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

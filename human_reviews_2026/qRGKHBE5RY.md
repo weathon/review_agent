@@ -1,5 +1,6 @@
 # PSG-Agent: Personality-Aware Safety Guardrail for LLM-based Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

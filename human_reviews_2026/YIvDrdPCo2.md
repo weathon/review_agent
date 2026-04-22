@@ -1,5 +1,6 @@
 # Separating signal from noise: a self-distillation approach for amortized heterogeneous cryo-EM reconstruction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

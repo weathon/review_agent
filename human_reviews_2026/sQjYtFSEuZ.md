@@ -1,5 +1,6 @@
 # Training-Free Native Sparse Attention for KV Cache Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

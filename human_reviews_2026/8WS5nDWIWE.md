@@ -1,5 +1,6 @@
 # SteinsGate: Adding Causality to Diffusions for Long Video Generation via Path Integral
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

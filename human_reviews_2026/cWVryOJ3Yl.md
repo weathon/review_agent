@@ -1,5 +1,6 @@
 # Static, Initialization-based Layer-wise Learning Rates
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

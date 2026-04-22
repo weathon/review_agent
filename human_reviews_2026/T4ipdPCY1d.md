@@ -1,5 +1,6 @@
 # UniFlow: Zero-Shot LiDAR Scene Flow via Cross-Domain Generalization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

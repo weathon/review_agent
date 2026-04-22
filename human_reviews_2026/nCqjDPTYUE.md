@@ -1,5 +1,6 @@
 # Med3D-JADE: 3D Joint Attentive Diffusion Engine for Volumetric Medical CT and Mask Co-generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

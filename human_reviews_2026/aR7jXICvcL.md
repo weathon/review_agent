@@ -1,5 +1,6 @@
 # SA-PEF: Step-Ahead Partial Error Feedback for Efficient Federated Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

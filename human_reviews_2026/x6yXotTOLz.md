@@ -1,5 +1,6 @@
 # Star-DS: Step-level Uncertainty-Aware Reasoning Data Selection in Reinforcement Learning for LLM Multi-step Reasoning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 2
 

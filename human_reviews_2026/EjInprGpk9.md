@@ -1,5 +1,6 @@
 # Sparse Autoencoders Trained on the Same Data Learn Different Features
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 2
 

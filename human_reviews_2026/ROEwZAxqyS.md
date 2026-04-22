@@ -1,5 +1,6 @@
 # Trade in Minutes! Rationality-Driven Agentic System for Quantitative Financial Trading
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

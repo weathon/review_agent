@@ -1,5 +1,6 @@
 # On Fine-Grained I/O Complexity of Attention Backward Passes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # ASMIL: Attention-Stabilized Multiple Instance Learning for Whole-Slide Imaging
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

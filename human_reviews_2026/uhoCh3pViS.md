@@ -1,5 +1,6 @@
 # Dream-MPC: Gradient-Based Model Predictive Control with Latent Imagination
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

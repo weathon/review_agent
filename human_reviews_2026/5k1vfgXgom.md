@@ -1,5 +1,6 @@
 # Anchor–MoE: A Mean-Anchored Mixture of Experts for Probabilistic Regression
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 

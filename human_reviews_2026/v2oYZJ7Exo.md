@@ -1,5 +1,6 @@
 # From atom to space: A region-based readout function for spatial properties of materials
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

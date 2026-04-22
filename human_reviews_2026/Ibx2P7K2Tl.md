@@ -1,5 +1,6 @@
 # Think Deep, Think Fast: Investigating Efficiency of Trained-verifier-free Inference-time-scaling Methods
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

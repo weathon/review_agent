@@ -1,5 +1,6 @@
 # Polyglot-R1: Reinforcement Learning for Multilingual Multi-Perspective Reasoning in LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

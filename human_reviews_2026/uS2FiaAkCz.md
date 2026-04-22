@@ -1,5 +1,6 @@
 # Towards Monotonic Improvement in In-Context Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 0, 4, 6
 

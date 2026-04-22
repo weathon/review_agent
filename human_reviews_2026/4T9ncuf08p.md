@@ -1,5 +1,6 @@
 # Dataset Regeneration for Cross Domain Recommendation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 6
 

@@ -1,5 +1,6 @@
 # LLM as a Classifier: Leveraging Large Language Models for Text and Vision Classification
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 2, 0
 

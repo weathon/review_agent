@@ -1,5 +1,6 @@
 # Beyond Pairwise: Empowering LLM Alignment With (Ranked) Choice Modeling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2
 

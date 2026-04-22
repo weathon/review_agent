@@ -1,5 +1,6 @@
 # Black-Box Privacy Attacks on Shared Representations in Multitask Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

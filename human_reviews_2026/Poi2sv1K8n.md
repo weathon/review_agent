@@ -1,5 +1,6 @@
 # UniVid: The Open-Source Unified Video Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

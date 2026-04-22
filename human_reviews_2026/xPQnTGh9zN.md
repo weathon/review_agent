@@ -1,5 +1,6 @@
 # SCVO: Addressing Sparse But Critical Variable Overwhelm In VLMs For Advertising Image Preference Prediction Across Multi-Country Markets
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

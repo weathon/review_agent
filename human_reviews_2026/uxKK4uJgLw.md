@@ -1,5 +1,6 @@
 # ToTRL: Unlock LLM Tree-of-Thoughts Reasoning Potential through Puzzles Solving
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 8
 

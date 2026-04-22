@@ -1,5 +1,6 @@
 # When Embeddings Models Meet: Procrustes Bounds and Applications
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 2, 4, 4
 

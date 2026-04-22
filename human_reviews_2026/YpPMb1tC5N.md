@@ -1,5 +1,6 @@
 # S-ATM: Self-Boosting Visual Reasoning via Adaptive Token Merging
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # MASLab: A Unified and Comprehensive Codebase for LLM-based Multi-Agent Systems
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

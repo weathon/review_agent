@@ -1,5 +1,6 @@
 # ssToken: Self-modulated and Semantic-aware Token Selection for LLM Fine-tuning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6, 4
 

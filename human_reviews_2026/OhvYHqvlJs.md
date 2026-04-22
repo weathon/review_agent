@@ -1,5 +1,6 @@
 # Learning Fair Graph Representations with Multi-view Information Bottleneck
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

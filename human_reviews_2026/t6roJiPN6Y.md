@@ -1,5 +1,6 @@
 # Vintix II: Decision Pre-Trained Transformer is a Scalable In-Context Reinforcement Learner
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

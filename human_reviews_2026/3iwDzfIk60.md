@@ -1,5 +1,6 @@
 # Less Is More: Fast and Accurate Reasoning with Cross-Head Unified Sparse Attention
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

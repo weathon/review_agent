@@ -1,5 +1,6 @@
 # Transformers as Measure-Theoretic Associative Memory: A Statistical Perspective and Minimax Optimality
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2
 

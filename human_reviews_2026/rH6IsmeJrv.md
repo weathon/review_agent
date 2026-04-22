@@ -1,5 +1,6 @@
 # PRISM: Festina Lente Proactivity—Risk-Sensitive, Uncertainty-Aware Deliberation for Proactive Agents
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 10, 6
 

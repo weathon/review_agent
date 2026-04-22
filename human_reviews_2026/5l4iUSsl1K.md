@@ -1,5 +1,6 @@
 # Beyond the limitation of a single query: Train your LLM for query expansion with Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 6, 0
 

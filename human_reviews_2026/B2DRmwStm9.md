@@ -1,5 +1,6 @@
 # QuS: Towards High-Performance EfficientViT on FPGA by  Quantization and Streamline Co-Design
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

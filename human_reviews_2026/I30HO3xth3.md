@@ -1,5 +1,6 @@
 # Degree-Corrected Ricci Curvature for Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 0
 

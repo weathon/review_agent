@@ -1,5 +1,6 @@
 # Guided Star-Shaped Masked Diffusion
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

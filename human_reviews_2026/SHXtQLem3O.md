@@ -1,5 +1,6 @@
 # ComboBench: Can LLMs Manipulate Physical Devices to Play Virtual Reality Games?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

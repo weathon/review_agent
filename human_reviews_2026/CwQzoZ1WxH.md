@@ -1,5 +1,6 @@
 # Breaking the MoE LLM Trilemma: Dynamic Expert Clustering with Structured Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2, 4
 

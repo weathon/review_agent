@@ -1,5 +1,6 @@
 # CO-COME: A Contrastive Label Disambiguation Framework with Combined MTS Feature Encoder for Partial-Label Multivariate Time Series Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

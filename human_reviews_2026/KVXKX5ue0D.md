@@ -1,5 +1,6 @@
 # Variational Inference based Probabilistic Prompt for Rehearsal-Free Continual Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

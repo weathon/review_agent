@@ -1,5 +1,6 @@
 # Parametric SDF for Dynamic Surface Reconstruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Beyond 'Templates': Category-Agnostic Object Pose, Size, and Shape Estimation from a Single View
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 4, 10
 

@@ -1,5 +1,6 @@
 # Revisiting Coarse-to-fine Paradigm in Nighttime Flare Removal via Visual Prompt
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 
@@ -104,27 +105,38 @@ This paper tackles limitations in nighttime flare removal—artifacts in restore
 4
 
 ### Summary
-This paper addresses the problem of image flare removal. The authors propose a two-stage framework called the Prompt Inpainting Pipeline (PIP). The pipeline first performs coarse flare removal and predicts a flare mask, then uses a refinement stage called the Prompt Inpainting Network (PIN) that leverages decoder features from the coarse stage as visual prompts to guide structural restoration. The method is presented as a model-agnostic, plug-and-play enhancement applicable to existing flare removal architectures. Experiments on Flare7K++ demonstrate improved quantitative and qualitative results, with minimal parameter overhead.
+This paper addresses the problem of image flare removal. The authors propose a two-stage framework called the Prompt Inpainting Pipeline (PIP). The pipeline first performs coarse flare removal and predicts a flare mask, then uses a refinement stage called the Prompt Inpainting Network (PIN) that leverages decoder features from the coarse stage as visual prompts to guide structural restoration.
+The method is presented as a model-agnostic, plug-and-play enhancement applicable to existing flare removal architectures. Experiments on Flare7K++ demonstrate improved quantitative and qualitative results, with minimal parameter overhead.
 
 ### Strengths
-1. Interesting conceptual reframing: The idea of using prompt-guided inpainting for flare removal is conceptually interesting and bridges prompting concepts with low-level image restoration.
-2. Plug-and-play modularity: The proposed pipeline can be integrated into arbitrary flare removal architectures with minimal modification, making it practically useful for applied restoration research.
-3. Improved qualitative realism and cross-model effectiveness: The proposed PIP framework enhances the performance of diverse backbone architectures, including U-Net, UFormer, and FF-Former. Also, visual results on real-world flare images demonstrate cleaner recovery of specular regions and fewer color artifacts. showing that the approach generalizes well across different model families and flare patterns. 
-4. Clarity and readability: The paper is generally well-written and easy to follow, with a clear description of the two-stage pipeline and its motivation.
+1. Interesting conceptual reframing:
+The idea of using prompt-guided inpainting for flare removal is conceptually interesting and bridges prompting concepts with low-level image restoration.
+2. Plug-and-play modularity:
+The proposed pipeline can be integrated into arbitrary flare removal architectures with minimal modification, making it practically useful for applied restoration research.
+3. Improved qualitative realism and cross-model effectiveness:
+The proposed PIP framework enhances the performance of diverse backbone architectures, including U-Net, UFormer, and FF-Former. Also, visual results on real-world flare images demonstrate cleaner recovery of specular regions and fewer color artifacts. showing that the approach generalizes well across different model families and flare patterns. 
+4. Clarity and readability:
+The paper is generally well-written and easy to follow, with a clear description of the two-stage pipeline and its motivation.
 
 ### Weaknesses
-1. Incremental improvement: Despite the appealing terminology, the technical novelty is limited. The approach largely reuses existing architectures with a feature-conditioning mechanism that resembles conventional refinement or modulation blocks rather than a fundamentally new learning strategy.
-2. Ambiguity in the claimed prompting mechanism: The “prompt” concept here functions more as feature-level refinement or feature modulation than as genuine prompt-based learning. The naming may therefore be somewhat misleading compared to established prompt-driven paradigms such as PromptIR (NeurIPS'23), which provides a more general and theoretically grounded treatment of similar ideas.
-3. Task-specific focus: Although the framework is described as model-agnostic, its core mechanism—relying on predicted flare masks and light-source information—is tightly coupled to the flare removal setting and datasets. This dependence limits the framework’s applicability to other degradation types such as rain streaks, lens blur, or motion blur.
-4. Need for deeper analysis: The paper lacks detailed ablations or visualizations analyzing what the prompts encode, how they affect feature propagation, and why they improve artifact suppression. Also, There’s no deep analysis or theoretical insight into why prompt-based inpainting helps beyond empirical results.
-5. Limited evaluation and generalization evidence: The experiments are confined to the Flare7K++ dataset. To substantiate claims of model-agnostic design and broad applicability, the paper should include evaluations on other datasets, and demonstrate robustness under different lighting, sensor, and noise settings.
+1. Incremental improvement:
+Despite the appealing terminology, the technical novelty is limited. The approach largely reuses existing architectures with a feature-conditioning mechanism that resembles conventional refinement or modulation blocks rather than a fundamentally new learning strategy.
+2. Ambiguity in the claimed prompting mechanism:
+The “prompt” concept here functions more as feature-level refinement or feature modulation than as genuine prompt-based learning. The naming may therefore be somewhat misleading compared to established prompt-driven paradigms such as PromptIR (NeurIPS'23), which provides a more general and theoretically grounded treatment of similar ideas.
+3. Task-specific focus:
+Although the framework is described as model-agnostic, its core mechanism—relying on predicted flare masks and light-source information—is tightly coupled to the flare removal setting and datasets. This dependence limits the framework’s applicability to other degradation types such as rain streaks, lens blur, or motion blur.
+4. Need for deeper analysis:
+The paper lacks detailed ablations or visualizations analyzing what the prompts encode, how they affect feature propagation, and why they improve artifact suppression. Also, There’s no deep analysis or theoretical insight into why prompt-based inpainting helps beyond empirical results.
+5. Limited evaluation and generalization evidence:
+The experiments are confined to the Flare7K++ dataset. To substantiate claims of model-agnostic design and broad applicability, the paper should include evaluations on other datasets, and demonstrate robustness under different lighting, sensor, and noise settings.
 
 ### Questions
 1.Clarification on “prompt” mechanism:
 Can you clarify in more detail how your “visual prompts” differ from conventional feature modulation or feature modulation? Specifically, what makes this prompting mechanism conceptually aligned with prompt-based learning rather than standard feature reuse?
 2.Applicability to other flare datasets:
 The proposed PIP framework depends on the availability of light source annotations to generate the flare mask in the coarse stage. How would the method perform on flare datasets that lack such annotations or masks (e.g., datasets other than Flare7K++)? Can the pipeline operate without explicit light source supervision, or is this dependency fundamental to its design? 
-3.Generalization to other degradations: Given that the proposed PIP framework relies on a predicted flare mask derived from light source information, its current formulation appears tightly coupled to the flare removal task. Could the authors clarify whether the same coarse-to-fine prompting principle could be extended to other degradation types (e.g., rain streaks, lens blur, dirt), and if so, how the notion of “corruption mask” and “visual prompts” would be adapted in those cases? Demonstrating or discussing this would strengthen the claim of model-agnostic generality.
+3.Generalization to other degradations:
+Given that the proposed PIP framework relies on a predicted flare mask derived from light source information, its current formulation appears tightly coupled to the flare removal task. Could the authors clarify whether the same coarse-to-fine prompting principle could be extended to other degradation types (e.g., rain streaks, lens blur, dirt), and if so, how the notion of “corruption mask” and “visual prompts” would be adapted in those cases? Demonstrating or discussing this would strengthen the claim of model-agnostic generality.
 
 ### Soundness
 2

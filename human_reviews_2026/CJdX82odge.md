@@ -1,5 +1,6 @@
 # Mathesis: Towards Formal Theorem Proving from Natural Languages
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8, 2
 

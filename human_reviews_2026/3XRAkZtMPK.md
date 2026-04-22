@@ -1,5 +1,6 @@
 # Temporally Detailed Hypergraph Neural ODE for Disease Progression Modeling
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6, 4
 

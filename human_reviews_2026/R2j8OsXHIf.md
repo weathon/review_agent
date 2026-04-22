@@ -1,5 +1,6 @@
 # SG2Loc: Sequential Visual Localization on 3D Scene Graphs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

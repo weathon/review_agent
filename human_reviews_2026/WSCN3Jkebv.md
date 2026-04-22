@@ -1,5 +1,6 @@
 # Causal Imitation Learning under Expert-Observable and Expert-Unobservable Confounding
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

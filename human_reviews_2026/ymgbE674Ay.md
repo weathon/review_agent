@@ -1,5 +1,6 @@
 # MSTformer: Multiscale Spatiotemporal Motion-aware Transformer Network for Effective AI-Generated Video Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

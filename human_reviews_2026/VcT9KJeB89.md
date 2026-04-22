@@ -1,5 +1,6 @@
 # Chain-of-Agents: End-to-End Agent Foundation Models via Multi-Agent Distillation and Agentic RL
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

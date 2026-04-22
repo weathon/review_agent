@@ -1,5 +1,6 @@
 # d2: Improved Techniques for Training Reasoning Diffusion Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

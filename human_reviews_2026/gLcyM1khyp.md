@@ -1,5 +1,6 @@
 # Antislop: A Comprehensive Framework for Identifying and Eliminating Repetitive Patterns in Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Enabling Fine-Tuning of Direct Feedback Alignment via Feedback-Weight Matching
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

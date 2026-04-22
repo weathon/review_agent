@@ -1,5 +1,6 @@
 # HeliCon: Dual-Level Contrastive Alignment for Robust Medical VQA under Long-Tailed Distribution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

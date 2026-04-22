@@ -1,5 +1,6 @@
 # AnyTouch 2: General Optical Tactile Representation Learning For Dynamic Tactile Perception
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 8
 

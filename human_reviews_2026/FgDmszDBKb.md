@@ -1,5 +1,6 @@
 # StaQ: a Finite Memory Approach to Discrete Action Policy Mirror Descent
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

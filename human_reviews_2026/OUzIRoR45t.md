@@ -1,5 +1,6 @@
 # SHAKE-GNN: Scalable Hierarchical Kirchhoff-Forest Graph Neural Network
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

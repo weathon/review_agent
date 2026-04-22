@@ -1,5 +1,6 @@
 # CLIP-FMoE: Scalable CLIP via Fused Mixture-of-Experts with Enforced Specialization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

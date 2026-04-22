@@ -1,5 +1,6 @@
 # DGNet: Discrete Green Networks for Data-Efficient Learning of Spatiotemporal PDEs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

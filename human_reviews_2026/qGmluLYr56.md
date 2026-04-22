@@ -1,5 +1,6 @@
 # SenSE: Semantic-Aware High-Fidelity Universal Speech Enhancement
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # A Benchmark for Self-Evolving Agents via Experience-Driven Lifelong Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Hierarchical Bandits for Adversarial Online Configuration Optimization
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 2
 

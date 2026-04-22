@@ -1,5 +1,6 @@
 # Consistent Region-Informed Self-supervised Pretraining
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4, 4
 

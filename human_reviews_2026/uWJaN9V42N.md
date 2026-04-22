@@ -1,5 +1,6 @@
 # GeoFunFlow: Geometric Function Flow Matching for Inverse Operator Learning over Complex Geometries
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

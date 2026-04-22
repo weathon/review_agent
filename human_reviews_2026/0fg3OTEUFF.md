@@ -1,5 +1,6 @@
 # Self-Correction via Task Distillation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 
@@ -73,7 +74,8 @@ This paper introduces SELF-THOUGHT, a novel self-correction framework that impro
 ### Weaknesses
 1. Overreliance on prompt engineering without fundamental innovation. The proposed method primarily relies on prompt engineering rather than introducing a principled algorithmic or architectural improvement. The “task abstraction” stage is essentially another prompted generation step, which can be error-prone and propagate mistakes into subsequent reasoning. Moreover, the paper lacks rigorous analysis of abstraction failures and their impact on final task performance, leaving the method’s robustness and reliability unclear.
 
-2. Lack of principled guidance for constructing task abstractions.The paper provides no systematic methodology for designing effective task abstractions, instead relying on task-specific prompt templates. There are no formal criteria or independent metrics to assess abstraction quality, making it impossible to separate abstraction effectiveness from overall task performance. Moreover, the paper does not compare alternative abstraction strategies, leaving unclear whether the reported gains stem from the abstraction concept itself or from ad-hoc template choices. 
+2. Lack of principled guidance for constructing task abstractions.The paper provides no systematic methodology for designing effective task abstractions, instead relying on task-specific prompt templates. There are no formal criteria or independent metrics to assess abstraction quality, making it impossible to separate abstraction effectiveness from overall task performance. Moreover, the paper does not compare alternative abstraction strategies, leaving unclear whether the reported gains stem from the abstraction concept itself or from ad-hoc template choices.
+
 
 3. Although the paper includes several prompt-based self-correction baselines in the main text and training-based methods in the appendix, it omits comparisons and discussion with the most conceptually related work, such as [1]. Without evaluating against these closely aligned works, it is difficult to assess the true novelty and relative advantage of the proposed method.
 

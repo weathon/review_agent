@@ -1,5 +1,6 @@
 # NarrLV: Towards a Comprehensive Narrative-Centric Evaluation for Long Video Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

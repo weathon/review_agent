@@ -1,5 +1,6 @@
 # Cross-Domain Adaptive Multi-Scale Representation Learning for Unified Time Series Anomaly Detection
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

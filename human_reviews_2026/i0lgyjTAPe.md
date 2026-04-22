@@ -1,5 +1,6 @@
 # ReasonMap: Fine-Grained Annotation of Mathematical Definition and Theorems in Long CoT Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

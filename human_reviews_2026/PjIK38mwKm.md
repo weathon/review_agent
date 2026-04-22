@@ -1,5 +1,6 @@
 # ReSum: Unlocking Long-Horizon Search Intelligence via Context Summarization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

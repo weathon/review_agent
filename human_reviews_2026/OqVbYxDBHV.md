@@ -1,5 +1,6 @@
 # Where do Large Vision-Language Models Look at when Answering Questions?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

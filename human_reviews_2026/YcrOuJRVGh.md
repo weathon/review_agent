@@ -1,5 +1,6 @@
 # ReSyn: Autonomously Scaling Synthetic Environments for Reasoning Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

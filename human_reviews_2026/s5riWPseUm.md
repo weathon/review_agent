@@ -1,5 +1,6 @@
 # Refining Bias and Reward in LLM Recommender Agents through Meta-Controlled Tool Invocation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

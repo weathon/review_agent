@@ -1,5 +1,6 @@
 # NFPO: Stabilized Policy Optimization of Normalizing Flow for Robotic Policy Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 
@@ -36,9 +37,12 @@ The paper proposes NFPO, an on-policy RL method that replaces the standard Gauss
 
 ---
 
-**Minor Errors:**    
-- “the $\exp(s_\theta (x_d))$ used in RealNVP apply …” → “the $\exp(s_\theta (x_d))$ used in RealNVP applies …” in Line 171.   
-- “overfiting” → "overfitting"; appears in Lines 162-174.   
+**Minor Errors:** 
+  
+- “the $\exp(s_\theta (x_d))$ used in RealNVP apply …” → “the $\exp(s_\theta (x_d))$ used in RealNVP applies …” in Line 171.
+  
+- “overfiting” → "overfitting"; appears in Lines 162-174.
+  
 - “logprobability” → "log-probability" (hyphen) in Line 177.
 
 ### Questions
@@ -60,9 +64,12 @@ The paper proposes NFPO, an on-policy RL method that replaces the standard Gauss
 
 **References:**
 
-[1] Haarnoja et al. Latent space policies for hierarchical reinforcement learning. ICML 2018. \
-[2] Mazoure et al. Leveraging Exploration in Off-policy Algorithms via Normalizing Flows. CoRL 2019. \
-[3] Chao et al. Maximum Entropy Reinforcement Learning via Energy-Based Normalizing Flow. NeurIPS 2023. \
+[1] Haarnoja et al. Latent space policies for hierarchical reinforcement learning. ICML 2018.
+\
+[2] Mazoure et al. Leveraging Exploration in Off-policy Algorithms via Normalizing Flows. CoRL 2019.
+\
+[3] Chao et al. Maximum Entropy Reinforcement Learning via Energy-Based Normalizing Flow. NeurIPS 2023.
+\
 [4] Song et al. Consistency Models. ICML 2023.\
 [5] Ding et al. Consistency Models as a Rich and Efficient Policy Class for Reinforcement Learning. ICLR 2024.
 

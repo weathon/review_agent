@@ -1,5 +1,6 @@
 # Rethinking Radiology Report Generation: From Narrative Flow to Topic-Guided Findings
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

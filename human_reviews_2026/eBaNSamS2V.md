@@ -1,5 +1,6 @@
 # Evidence-R1: Fine-Grained Evidence-Driven Explicit Reasoning and Implicit Reflection for Enhancing RAG Explainability via Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

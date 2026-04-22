@@ -1,5 +1,6 @@
 # Benchmarking the Robustness of Agentic Systems to Adversarially-Induced Harms
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

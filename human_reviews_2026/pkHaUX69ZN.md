@@ -1,5 +1,6 @@
 # LLMs Can Generate a Better Answer by Aggregating Their Own Responses
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

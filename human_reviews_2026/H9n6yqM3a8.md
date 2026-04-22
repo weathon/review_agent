@@ -1,5 +1,6 @@
 # LLM Output Homogenization is Task Dependent
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 8, 6
 

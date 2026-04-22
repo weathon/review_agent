@@ -1,5 +1,6 @@
 # Metric-Normalized Posterior Leakage (mPL): Attacker-Aligned Privacy for Joint Consumption
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

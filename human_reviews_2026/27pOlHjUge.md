@@ -1,5 +1,6 @@
 # LLM Prompting for Localization: English or Native Language in Multilingual Text Understanding
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

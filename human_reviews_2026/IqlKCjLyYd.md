@@ -1,5 +1,6 @@
 # Learning What to Do and What Not To Do: Offline Imitation from Expert and Undesirable Demonstrations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

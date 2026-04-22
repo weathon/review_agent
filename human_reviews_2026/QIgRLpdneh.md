@@ -1,5 +1,6 @@
 # GRAM: Spatial general-purpose audio representations for real-world applications
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Preventing Privacy Leakage in Vision-Language Models: A Secure Framework for Large-Scale Image Classification
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

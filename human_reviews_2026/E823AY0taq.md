@@ -1,5 +1,6 @@
 # AudioTrust: Benchmarking The Multifaceted Trustworthiness of Audio Large Language Models
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 8, 6
 

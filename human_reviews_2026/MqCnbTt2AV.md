@@ -1,5 +1,6 @@
 # Humanoid-LLA: Open-Vocabulary Humanoid Whole-Body Control with Large Language Action Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

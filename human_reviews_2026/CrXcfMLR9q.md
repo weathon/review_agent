@@ -1,5 +1,6 @@
 # Triangle Multiplication is All You Need for Biomolecular Structure Representations
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Why and When Deep is Better than Shallow: An Implementation-Agnostic State-Transition View of Depth Supremacy
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

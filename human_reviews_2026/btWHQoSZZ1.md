@@ -1,5 +1,6 @@
 # Rex-Thinker: Grounded Object Referring via Chain-of-Thought Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Beyond Markovian: Reflective Exploration via Bayes-Adaptive RL for LLM Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 0
 

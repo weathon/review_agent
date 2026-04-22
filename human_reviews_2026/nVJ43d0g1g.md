@@ -1,5 +1,6 @@
 # Adaptive Test-Time Reasoning via Reward-Guided Dual-Phase Search
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

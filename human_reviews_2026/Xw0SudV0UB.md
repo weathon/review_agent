@@ -1,5 +1,6 @@
 # Aligning Signal Leakage Matters for Synthetic Data Generation of Satellite Imagery
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

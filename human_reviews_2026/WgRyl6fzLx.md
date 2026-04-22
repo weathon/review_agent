@@ -1,5 +1,6 @@
 # SSRL: Self-Search Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

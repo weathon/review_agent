@@ -1,5 +1,6 @@
 # Towards One-step Causal Video Generation via Adversarial Self-Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

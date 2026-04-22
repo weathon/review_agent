@@ -1,5 +1,6 @@
 # HIERARCHICAL ADAPTIVE SAMPLING FOR VIDEO UNDERSTANDING
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

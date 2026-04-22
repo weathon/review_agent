@@ -1,5 +1,6 @@
 # Approximate Equivariance via Projection-Based Regularisation
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 6, 8, 6
 

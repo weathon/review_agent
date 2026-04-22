@@ -1,5 +1,6 @@
 # AI’s Visual Blind Spot: Benchmarking MLLMs on Visually Smuggled Threats
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 2
 

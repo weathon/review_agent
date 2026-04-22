@@ -1,5 +1,6 @@
 # BONSAI: Depth-Constrained Decision Tree Induction via Approximation Optimization
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

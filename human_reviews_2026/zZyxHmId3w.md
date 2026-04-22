@@ -1,5 +1,6 @@
 # MIRACLE: Model-free Imitation and Reinforcement Learning for Adaptive Cut-Selection
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # DiceFormer: Spiking Audio Transformer with Density-Aware Dice Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

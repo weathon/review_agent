@@ -1,5 +1,6 @@
 # LLM-assisted Semantic Reasoning for Open-Set Active Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

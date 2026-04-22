@@ -1,5 +1,6 @@
 # AMiD: Knowledge Distillation for LLMs with $\alpha$-mixture Assistant Distribution
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # SpRePE: A Spherical Geometry-Aware Position Embedding for Vision Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

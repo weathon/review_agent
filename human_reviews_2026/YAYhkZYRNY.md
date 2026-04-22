@@ -1,5 +1,6 @@
 # My Answer Is NOT 'Fair': Mitigating Gender and Race Bias in Vision-Language Models via Fair and Biased Residuals
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 0, 0, 2
 

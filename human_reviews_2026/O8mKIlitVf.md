@@ -1,5 +1,6 @@
 # CROME: Covariate-Balanced Causal Representation Learning for Composite Outcomes via Multi-Task Estimation in Electronic Health Records
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

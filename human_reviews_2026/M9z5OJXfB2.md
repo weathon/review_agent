@@ -1,5 +1,6 @@
 # Unveiling the Power of Shared Spaces: A Gating-Driven Mechanism for Semi-Supervised Domain Adaptation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

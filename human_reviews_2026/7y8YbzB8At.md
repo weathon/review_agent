@@ -1,5 +1,6 @@
 # Enhancing Conditional Risk Control in Image Segmentation with Adaptive Conformal Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

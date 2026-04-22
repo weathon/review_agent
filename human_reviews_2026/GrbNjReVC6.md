@@ -1,5 +1,6 @@
 # RTL-OPT: Rethinking the Generation of PPA-Optimized RTL Code and A New Benchmark
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

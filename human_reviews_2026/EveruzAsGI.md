@@ -1,5 +1,6 @@
 # Bias Similarity Measurement: A Black-Box Audit of Fairness Across LLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

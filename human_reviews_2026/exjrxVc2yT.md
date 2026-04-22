@@ -1,5 +1,6 @@
 # SiNGER: A Clearer Voice Distills Vision Transformers Further
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

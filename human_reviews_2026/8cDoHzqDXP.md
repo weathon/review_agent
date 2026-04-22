@@ -1,5 +1,6 @@
 # On the Recall Scaling Laws in Mamba: A Theoretical and Mechanistic Study via Hashing
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

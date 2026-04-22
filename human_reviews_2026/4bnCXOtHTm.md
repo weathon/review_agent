@@ -1,5 +1,6 @@
 # Learning Dynamic Causal Graphs Under Parametric Uncertainty via Polynomial Chaos Expansions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 2
 

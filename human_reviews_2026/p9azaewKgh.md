@@ -1,5 +1,6 @@
 # From Images to Signals: Are Large Vision Models Useful for Time Series Analysis?
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

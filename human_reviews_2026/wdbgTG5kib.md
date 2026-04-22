@@ -1,5 +1,6 @@
 # RL for Reasoning by Adaptively Revealing Rationales
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

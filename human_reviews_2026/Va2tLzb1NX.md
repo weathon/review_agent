@@ -1,5 +1,6 @@
 # From Concepts to Components: Concept-Agnostic Attention Module Discovery in Transformers
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

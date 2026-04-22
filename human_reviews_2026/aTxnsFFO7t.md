@@ -1,5 +1,6 @@
 # Privacy-Protected Causal Survival Analysis Under Distribution Shift
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

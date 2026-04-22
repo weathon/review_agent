@@ -1,5 +1,6 @@
 # Text summarization via global structure awareness
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 8, 6
 

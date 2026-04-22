@@ -1,5 +1,6 @@
 # FlashOmni: A Unified Sparse Attention Engine for Diffusion Transformers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 4
 

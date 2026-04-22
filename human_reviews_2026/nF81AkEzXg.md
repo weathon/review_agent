@@ -1,5 +1,6 @@
 # CUPID: A Plug-in Framework for Joint Aleatoric and Epistemic Uncertainty Estimation with a Single Model
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Camellia: Benchmarking Cultural Biases in LLMs for Asian Languages
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

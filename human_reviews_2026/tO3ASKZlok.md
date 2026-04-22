@@ -1,5 +1,6 @@
 # TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 10, 6
 

@@ -1,5 +1,6 @@
 # RePlan: Reasoning-Guided Region Planning for Complex Instruction-Based Image Editing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

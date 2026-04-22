@@ -1,5 +1,6 @@
 # Deforming Videos to Masks: Flow Matching for Referring Video Segmentation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

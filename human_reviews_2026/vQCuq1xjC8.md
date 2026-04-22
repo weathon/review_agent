@@ -1,5 +1,6 @@
 # Towards Subject-Consistent and Text-Aligned Personalized Image Generation via Precise Attribute Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

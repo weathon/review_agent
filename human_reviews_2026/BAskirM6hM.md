@@ -1,5 +1,6 @@
 # BachVid: Training-Free Video Generation with Consistent Background and Character
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

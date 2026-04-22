@@ -1,5 +1,6 @@
 # TiViT: Time Series Representations Lie Hidden in Pretrained Vision Transformers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Speculative Actions: A Lossless Framework for Faster AI Agents
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 10, 8
 

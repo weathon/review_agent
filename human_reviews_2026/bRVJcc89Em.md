@@ -1,5 +1,6 @@
 # How Confident are Video Models? Empowering Video Models to Express their Uncertainty
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 8, 6, 6
 

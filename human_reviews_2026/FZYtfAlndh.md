@@ -1,5 +1,6 @@
 # You only need 4 extra tokens: Synergistic Test-time Adaptation for LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 4, 8
 

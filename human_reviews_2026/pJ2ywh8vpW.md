@@ -1,5 +1,6 @@
 # A Comprehensive Fine-Grained Evaluation of LLMs in Data Race Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

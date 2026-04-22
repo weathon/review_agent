@@ -1,5 +1,6 @@
 # KG-MoE: Multimodal Knowledge Graph Grounded Mixture of Experts for Fair Visual Question Answering
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 6, 4
 

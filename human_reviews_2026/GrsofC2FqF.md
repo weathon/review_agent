@@ -1,5 +1,6 @@
 # Detection of unknown unknowns in autonomous systems
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

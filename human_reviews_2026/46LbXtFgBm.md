@@ -1,5 +1,6 @@
 # IVC-Prune: Revealing the Implicit Visual Coordinates in LVLMs for Vision Token Pruning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

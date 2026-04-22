@@ -1,5 +1,6 @@
 # FEDAKD: Federated Edge-Assisted Anomaly-Aware Knowledge Distillation for 5G Intrusion Detection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

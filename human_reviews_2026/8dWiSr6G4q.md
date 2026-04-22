@@ -1,5 +1,6 @@
 # One-Shot Weighted Ensemble Estimation for Federated Quantile Regression: Optimal Statistical Guarantees under Heterogeneous Structured Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

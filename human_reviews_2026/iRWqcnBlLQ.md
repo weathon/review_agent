@@ -1,5 +1,6 @@
 # GRPO-$\lambda$: Credit Assignment improves LLM Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 4
 

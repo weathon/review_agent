@@ -1,5 +1,6 @@
 # Mixture of Masters: Sparse Chess Language Models with Player Routing
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 8, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Hom-PGD+: Fast Reparameterized Optimization over Non-convex Ball-Homeomorphic Set
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 4, 6, 4, 8
 

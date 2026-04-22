@@ -1,5 +1,6 @@
 # Does Flatness imply Generalization for Logistic Loss in Univariate Two-Layer ReLU Network?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Topology of Reasoning: Retrieved Cell Complex-Augmented Generation for Textual Graph Question Answering
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

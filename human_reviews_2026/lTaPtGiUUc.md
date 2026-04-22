@@ -1,5 +1,6 @@
 # Latent Particle World Models: Self-supervised Object-centric Stochastic Dynamics Modeling
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8
 

@@ -1,5 +1,6 @@
 # RealPDEBench: A Benchmark for Complex Physical Systems with Real-World Data
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 10, 10, 6, 4
 

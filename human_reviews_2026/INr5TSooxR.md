@@ -1,5 +1,6 @@
 # SUSD: Structured Unsupervised Skill Discovery through State Factorization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

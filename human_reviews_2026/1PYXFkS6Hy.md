@@ -1,5 +1,6 @@
 # TaCo:  A Benchmark for Lossless and Lossy Codecs of Heterogeneous Tactile Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

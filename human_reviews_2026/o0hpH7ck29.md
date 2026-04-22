@@ -1,5 +1,6 @@
 # LangSAM: Language-Guided Expert Routing on SAM2 for Dense Scene Understanding
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

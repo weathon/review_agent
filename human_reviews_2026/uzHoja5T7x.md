@@ -1,5 +1,6 @@
 # Learning Equivariant Models by Discovering Symmetries with Learnable Augmentations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

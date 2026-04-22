@@ -1,5 +1,6 @@
 # A Hyperparameter Benchmark of VAE-Based Methods for scRNA-seq Batch Integration
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4
 

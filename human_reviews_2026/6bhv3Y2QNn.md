@@ -1,5 +1,6 @@
 # CPRR: A Diagnostic Probe for Measuring 'Confident Uncertainty' in Large Language Model Reasoning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

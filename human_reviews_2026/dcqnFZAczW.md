@@ -1,5 +1,6 @@
 # Disentangled Code Embedding for Multi-Task Reinforcement Learning: A Dual-Encoder Approach with Dynamic Gating
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # SeMa3D: Lifting Vision-Language Models for Unsupervised 3D Semantic Correspondence
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # HumanPCR: Probing MLLM Capabilities in Diverse Human-Centric Scenes
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

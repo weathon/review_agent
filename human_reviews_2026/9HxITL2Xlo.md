@@ -1,5 +1,6 @@
 # Signals of Trust: From Classification to Confidence
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

@@ -1,5 +1,6 @@
 # Segmentation as a Plug-and-Play Capability for Frozen Multimodal LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

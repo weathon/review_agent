@@ -1,5 +1,6 @@
 # Personalized Vision via Visual In-Context Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 6, 4
 

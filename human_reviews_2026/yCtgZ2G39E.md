@@ -1,5 +1,6 @@
 # Youtu-GraphRAG: Vertically Unified Agents for Graph Retrieval-Augmented Complex Reasoning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 4
 

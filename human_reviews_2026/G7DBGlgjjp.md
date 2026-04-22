@@ -1,5 +1,6 @@
 # Uni-DPO: A Unified Paradigm for Dynamic Preference Optimization of LLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

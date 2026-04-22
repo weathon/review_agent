@@ -1,5 +1,6 @@
 # RefAny3D: 3D Asset-Referenced Diffusion Models for Image Generation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

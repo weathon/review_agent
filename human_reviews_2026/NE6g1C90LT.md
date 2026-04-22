@@ -1,5 +1,6 @@
 # Domain-Aware Tensor Network Structure Search
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

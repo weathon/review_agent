@@ -1,5 +1,6 @@
 # GPT4Scene: Understand 3D Scenes from Videos with Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

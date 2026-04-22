@@ -1,5 +1,6 @@
 # Mode-conditioning unlocks superior test-time compute scaling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

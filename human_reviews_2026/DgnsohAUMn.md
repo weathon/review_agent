@@ -1,5 +1,6 @@
 # Panda: A pretrained forecast model for chaotic dynamics
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 10
 

@@ -1,5 +1,6 @@
 # Ready2Unlearn: A Learning-Time Approach for Preparing Models with Future Unlearning Readiness
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2
 

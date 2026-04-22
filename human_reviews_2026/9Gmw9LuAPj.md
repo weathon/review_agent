@@ -1,5 +1,6 @@
 # Aladdin: Joint Placement and Scaling for SLO-Aware LLM Serving
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 4, 8
 

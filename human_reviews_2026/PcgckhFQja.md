@@ -1,5 +1,6 @@
 # STR-Bamba: Multimodal Molecular Textual Representation Encoder-Decoder Foundation Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

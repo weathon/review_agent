@@ -1,5 +1,6 @@
 # MV-RAG: Retrieval Augmented Multiview Diffusion
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

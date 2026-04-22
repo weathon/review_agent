@@ -1,5 +1,6 @@
 # Heterogeneous Transfer Learning with Feature Transformation-Based Adaptation for Modeling Dynamical Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

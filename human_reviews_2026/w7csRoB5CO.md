@@ -1,5 +1,6 @@
 # ConvT3: Structured State Kernels for Convolutional State Space Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # STAR: Spatio-Temporal Attention-guided Recurrence Prediction for Colorectal Cancer Liver Metastasis
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 4
 

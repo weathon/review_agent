@@ -1,5 +1,6 @@
 # Hierarchical W-Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

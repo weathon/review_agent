@@ -1,5 +1,6 @@
 # Beyond Markovian Drifts: Action-Biased Geometric Walks with Memory for Personalized Summarization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

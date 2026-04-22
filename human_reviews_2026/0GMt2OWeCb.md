@@ -1,5 +1,6 @@
 # Memory-Augmented Large Language Model-Based Agent with Cross-Task Experience Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

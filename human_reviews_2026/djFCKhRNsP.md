@@ -1,5 +1,6 @@
 # Representation Invariance and Allocation: When Subgroup Balance Matters
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4
 

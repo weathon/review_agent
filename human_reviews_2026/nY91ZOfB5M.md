@@ -1,5 +1,6 @@
 # Improving MoE Performance and Efficiency with Plug-and-Play Intra-Layer Specialization and Cross-Layer Coupling Losses
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

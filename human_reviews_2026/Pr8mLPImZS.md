@@ -1,5 +1,6 @@
 # Towards the Worst-case Robustness of Large Language Models
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 2, 6
 

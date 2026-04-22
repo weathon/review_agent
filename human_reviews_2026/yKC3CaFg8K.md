@@ -1,5 +1,6 @@
 # Reconciling Visual Perception and Generation in Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

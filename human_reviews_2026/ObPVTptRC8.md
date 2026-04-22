@@ -1,5 +1,6 @@
 # VLN-MME: Diagnosing MLLMs as Language-guided Visual Navigation agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Glance for Context: Learning When to Leverage LLMs for Node-Aware GNN-LLM Fusion
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

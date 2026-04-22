@@ -1,5 +1,6 @@
 # A Scalable Constant-Factor Approximation Algorithm for $W_p$ Optimal Transport
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4, 6
 

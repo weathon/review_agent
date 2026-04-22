@@ -1,5 +1,6 @@
 # Weight Decay may matter more than µP for Learning Rate Transfer in Practice
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

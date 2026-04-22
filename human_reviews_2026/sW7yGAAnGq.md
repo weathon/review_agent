@@ -1,5 +1,6 @@
 # SRUM: Fine-Grained Self-Rewarding for Unified Multimodal Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

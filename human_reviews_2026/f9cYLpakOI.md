@@ -1,5 +1,6 @@
 # Endogenous Communication in Repeated Games with Learning Agents
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

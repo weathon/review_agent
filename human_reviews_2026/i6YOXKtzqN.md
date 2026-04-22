@@ -1,5 +1,6 @@
 # Decoupled Diffusion Models for Efficient Spatio-Temporal Graph Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

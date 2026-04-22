@@ -1,5 +1,6 @@
 # Self-Supervised Diffusion Model Sampling With Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 2, 6
 

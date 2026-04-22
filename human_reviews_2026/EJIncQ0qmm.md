@@ -1,5 +1,6 @@
 # Activation Matters: Adaptive and Activated Negative Labels for OOD Detection with Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Waven-Pull: Wavelet-based Anomaly Detection in Dynamic Graphs via Positive-Unlabeled Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

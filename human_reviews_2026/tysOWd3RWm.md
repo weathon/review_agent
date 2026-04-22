@@ -1,5 +1,6 @@
 # How Effective is Your Rebuttal? Identifying Causal Models from the OpenReview System
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

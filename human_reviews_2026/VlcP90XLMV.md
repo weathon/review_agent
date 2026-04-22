@@ -1,5 +1,6 @@
 # A Hybrid Paradigm for Vision Autoencoders: Unifying CNNs and Transformers for Learning Efficiency and Scalability
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

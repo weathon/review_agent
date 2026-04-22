@@ -1,5 +1,6 @@
 # Wef-GNN: A Generalizable Graph Neural Network for Crystalline Material Property Prediction
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

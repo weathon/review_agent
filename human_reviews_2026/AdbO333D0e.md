@@ -1,5 +1,6 @@
 # Dormant Memories Undermine Safety: Initial Latent Variable Optimization for Attacking Unlearned Diffusion
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Can Large Reasoning Models Self-Train?
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

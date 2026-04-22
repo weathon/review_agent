@@ -1,5 +1,6 @@
 # Reasoning Vectors: Transferring Chain-of-Thought Capabilities via Task Arithmetic
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2, 2
 

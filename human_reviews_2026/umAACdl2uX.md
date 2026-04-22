@@ -1,5 +1,6 @@
 # Factor Graph Optimization for Belief Propagation Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Beyond Instance-Level Alignment: Dual-Level Optimal Transport for Audio-Text Retrieval
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

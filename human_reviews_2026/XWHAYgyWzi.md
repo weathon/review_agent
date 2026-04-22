@@ -1,5 +1,6 @@
 # Asleep at the Wheel: Benchmarking the Inattention of Vision Language Models to Clinical Sleep Signals
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

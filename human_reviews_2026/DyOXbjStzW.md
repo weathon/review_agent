@@ -1,5 +1,6 @@
 # Mechanisms of skill transfer from pretraining to target task in recurrent neural networks
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

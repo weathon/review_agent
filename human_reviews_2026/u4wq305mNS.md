@@ -1,5 +1,6 @@
 # Beyond Parameters: Exploring Virtual Logic Depth for Scaling Laws
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

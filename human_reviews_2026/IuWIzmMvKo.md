@@ -1,5 +1,6 @@
 # ACE: Attribution-Controlled Knowledge Editing for Multi-hop Factual Recall
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Agentic Surrogates: Automating Proxy Models of Simulators with Compute Aware Intelligence
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

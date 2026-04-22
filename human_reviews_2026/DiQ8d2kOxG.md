@@ -1,5 +1,6 @@
 # Modular Refinement of Small Language Models for Physics Reasoning via Localized Error Feedback
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

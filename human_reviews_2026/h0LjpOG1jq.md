@@ -1,5 +1,6 @@
 # Prima.cpp: Fast 30-70B LLM Inference on Heterogeneous and Low-Resource Home Clusters
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

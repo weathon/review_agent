@@ -1,5 +1,6 @@
 # Point2RBox-v3: Self-Bootstrapping from Point Annotations via Integrated Pseudo-Label Refinement and Utilization
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 6, 8, 4
 

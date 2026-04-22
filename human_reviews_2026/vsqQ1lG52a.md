@@ -1,5 +1,6 @@
 # GEM: A Gym for Generalist LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 2
 

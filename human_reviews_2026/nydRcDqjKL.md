@@ -1,5 +1,6 @@
 # UML-CoT: Structured Reasoning and Planning with Unified Modeling Language for Robotic Room Cleaning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

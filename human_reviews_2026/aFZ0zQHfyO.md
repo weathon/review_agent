@@ -1,5 +1,6 @@
 # Think Smart, Not Hard: Difficulty Adaptive Reasoning for Large Audio Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6, 4
 

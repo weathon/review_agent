@@ -1,5 +1,6 @@
 # Multimodal Few-Shot Point Cloud Segmentation via Agent Adaptation and Discriminative Deconfusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

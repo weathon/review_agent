@@ -1,5 +1,6 @@
 # A Dense Subset Index for Collective Query Coverage
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

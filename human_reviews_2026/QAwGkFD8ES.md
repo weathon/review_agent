@@ -1,5 +1,6 @@
 # SpectrumKD: Dynamic Dataset Curation for Distribution-Aware Knowledge Distillation of Large Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # TimeExpert: Boosting Long Time Series Forecasting with Temporal Mix of Experts
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

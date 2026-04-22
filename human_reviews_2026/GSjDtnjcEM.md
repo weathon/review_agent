@@ -1,5 +1,6 @@
 # Modal Aphasia: Can Unified Multimodal Models Describe Images From Memory?
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 8, 6
 

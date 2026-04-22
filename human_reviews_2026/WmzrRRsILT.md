@@ -1,5 +1,6 @@
 # Event-Level Causality: A Framework to Unify Causal modeling and Explainable AI
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 6, 2, 4
 

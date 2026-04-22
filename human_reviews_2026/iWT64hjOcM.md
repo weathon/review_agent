@@ -1,5 +1,6 @@
 # Scale-aware Message Passing for Graph Node Classification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

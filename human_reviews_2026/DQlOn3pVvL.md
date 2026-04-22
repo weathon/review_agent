@@ -1,5 +1,6 @@
 # FocusAgent: Simple Yet Effective Ways of Trimming the Large Context of Web Agents
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 2
 

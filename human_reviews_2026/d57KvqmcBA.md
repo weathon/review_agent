@@ -1,5 +1,6 @@
 # CPQS-Tuning: A Model Self-Perception-Based Data Filtering Algorithm for Efficient Instruction Fine-Tuning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 10
 

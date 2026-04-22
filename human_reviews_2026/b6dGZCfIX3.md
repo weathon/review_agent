@@ -1,5 +1,6 @@
 # Selective sparsity in Fourier Neural Operator Networks to accelerate Partial Differential Equation solving
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

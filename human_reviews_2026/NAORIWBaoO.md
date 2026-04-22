@@ -1,5 +1,6 @@
 # Gradient-Based Program Synthesis with Neurally Interpreted Languages
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 8
 

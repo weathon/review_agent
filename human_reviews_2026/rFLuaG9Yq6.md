@@ -1,5 +1,6 @@
 # Use the Online Network If You Can: Towards Fast and Stable Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 
@@ -91,7 +92,8 @@ This restricts the strength of the empirical claims, especially since the method
 
 ### Questions
 **Q1. Missing comparison with Clipped Q-learning and related baselines**
-* To fully support the claim, the proposed method should be experimentally compared with other bias reduction methods (e.g., methods introduced in DQN experiment). 
+* To fully support the claim, the proposed method should be experimentally compared with other bias reduction methods (e.g., methods introduced in DQN experiment).
+
 * Among those, I think at least **comparison with Clipped Q-learning [1] is necessary**, which is equivalent to MaxMin DQN with N=2 --- the strongest baseline reported for DQN in the paper, and also widely used.
 
 I would like to emphasize that I believe this paper is strong and has substantial potential. However, this point is a critical concern for me. I currently lean toward a weak reject, but if the authors can provide the requested experimental comparisons (e.g., with Clipped Q-learning), I would be inclined to raise my recommendation, even significantly if the results meet the expectations.

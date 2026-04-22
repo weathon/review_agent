@@ -1,5 +1,6 @@
 # Memba: Membrane-driven Parameter-Efficient Fine-Tuning for Mamba
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

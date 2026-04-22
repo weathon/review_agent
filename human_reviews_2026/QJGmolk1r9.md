@@ -1,5 +1,6 @@
 # LLM-based Online Time Series Forecasting with Frequency-driven Pattern Recognition
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

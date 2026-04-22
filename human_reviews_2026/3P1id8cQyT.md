@@ -1,5 +1,6 @@
 # Dress&Dance: Dress up and Dance as You Like It
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

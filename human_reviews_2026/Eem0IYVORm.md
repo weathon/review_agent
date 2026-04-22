@@ -1,5 +1,6 @@
 # Where Did This Sentence Come From? Tracing Provenance in LLM Reasoning Distillation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

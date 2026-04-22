@@ -1,5 +1,6 @@
 # UniSpike: Boosting the Performance of Spiking Neural Network with Hybrid Training
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

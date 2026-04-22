@@ -1,5 +1,6 @@
 # SegRet: An Efficient Design for Semantic Segmentation with Retentive Network
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

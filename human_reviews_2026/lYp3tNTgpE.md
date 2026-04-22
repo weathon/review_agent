@@ -1,5 +1,6 @@
 # RAPTORGraph: Graph-Based Pathway Modeling for Causal Discovery in Single-Cell Perturbations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

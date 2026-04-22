@@ -1,5 +1,6 @@
 # DeCo-DETR: Decoupled Cognition DETR for efficient Open-Vocabulary Object Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

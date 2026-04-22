@@ -1,5 +1,6 @@
 # Efficient Generative Model Training via Embedded Representation Warmup
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

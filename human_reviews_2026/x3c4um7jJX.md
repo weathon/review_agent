@@ -1,5 +1,6 @@
 # Accurate Estimation of Mutual Information in High Dimensional Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

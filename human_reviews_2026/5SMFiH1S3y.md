@@ -1,5 +1,6 @@
 # Target-Oriented Single Domain Generalization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 
@@ -175,7 +176,8 @@ I appreciate the comprehensiveness of the experimental setup on multiple benchma
 [4] Text-driven Zero-shot Domain Adaptation with Cross-modality Graph Motif Matching
 [5] Boosting Object Detection with Zero-Shot Day-Night Domain Adaptation, CVPR 2024
 [6]  UPRE: Zero-Shot Domain Adaptation for Object Detection via Unified Prompt and Representation Enhancement, ICCV 2025
-[7] CLIP the Gap: A Single Domain Generalization Approach for Object Detection, CVPR 2023 
+[7] CLIP the Gap: A Single Domain Generalization Approach for Object Detection, CVPR 2023
+
 [8] PromptStyler: Prompt-driven Style Generation for Source-free Domain Generalization
 
 ### Questions

@@ -1,5 +1,6 @@
 # OlymBio-Bench: A Multimodal Challenge Towards Expert-Level Biological Reasoning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4
 

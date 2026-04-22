@@ -1,5 +1,6 @@
 # video-SALMONN 2: Caption-Enhanced Audio-Visual Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Understanding and improving Shampoo and SOAP via Kullback-Leibler Minimization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

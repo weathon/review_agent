@@ -1,5 +1,6 @@
 # Align Your Tangent: Training Better Consistency Models via Manifold-Aligned Tangents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

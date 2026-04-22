@@ -1,5 +1,6 @@
 # WebDS: An End-to-End Benchmark for Web-based Data Science
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

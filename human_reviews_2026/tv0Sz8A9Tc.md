@@ -1,5 +1,6 @@
 # Robotic Manipulation by Imitating Generated Videos Without Physical Demonstrations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

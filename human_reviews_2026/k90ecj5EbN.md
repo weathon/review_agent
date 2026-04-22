@@ -1,5 +1,6 @@
 # MedTVT-R1: A Multimodal LLM Empowering Medical Reasoning and Diagnosis
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # MoveGPT: Scaling Mobility Foundation Models with Spatially-Aware Mixture of Experts
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

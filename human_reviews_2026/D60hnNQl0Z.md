@@ -1,5 +1,6 @@
 # Panorama: Fast-Track Nearest Neighbors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

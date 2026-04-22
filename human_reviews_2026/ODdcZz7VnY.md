@@ -1,5 +1,6 @@
 # TradeFM: A Generative Foundation Model for Trade-flow and Market Microstructure
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

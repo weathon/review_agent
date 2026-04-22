@@ -1,5 +1,6 @@
 # OmniNav: A Unified Framework for Prospective Exploration and Visual-Language Navigation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

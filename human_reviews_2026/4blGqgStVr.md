@@ -1,5 +1,6 @@
 # PDFBench: A Benchmark for De novo Protein Design from Function
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

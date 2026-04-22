@@ -1,5 +1,6 @@
 # Reinforcing Spatio-Temporal Graph Neural Networks with a Physics Reward Oracle
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 4, 0
 

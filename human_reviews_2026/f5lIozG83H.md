@@ -1,5 +1,6 @@
 # AccidentBench: Benchmarking Multimodal Understanding and Reasoning in Vehicle Accidents and Beyond
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 4, 4, 8, 6, 6
 

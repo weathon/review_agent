@@ -1,5 +1,6 @@
 # Spatially and Temporally Guided Bayesian Optimization for Brain Effective Connectivity Learning from fMRI and EEG Data
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0, 2
 

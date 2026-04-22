@@ -1,5 +1,6 @@
 # SDSC:A Structure-Aware Metric for Semantic Signal Representation Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

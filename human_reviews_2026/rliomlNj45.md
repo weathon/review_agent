@@ -1,5 +1,6 @@
 # Binary-Integer-Programming Based Algorithm for Expert Load Balancing in Mixture-of-Experts Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

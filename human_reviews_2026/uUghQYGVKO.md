@@ -1,5 +1,6 @@
 # Symbal: Detecting Systematic Misalignments in Model-Generated Captions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

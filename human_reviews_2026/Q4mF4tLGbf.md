@@ -1,5 +1,6 @@
 # Why RL Updates Look Sparse: An Implicit Compass Drives Optimization Bias
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

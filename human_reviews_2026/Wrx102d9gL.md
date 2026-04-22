@@ -1,5 +1,6 @@
 # Transformers from Compressed Representations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

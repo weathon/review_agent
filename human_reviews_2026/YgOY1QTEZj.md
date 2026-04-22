@@ -1,5 +1,6 @@
 # Language-Guided 4D Gaussian Splatting for Real-Time Dynamic Scene Rendering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

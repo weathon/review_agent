@@ -1,5 +1,6 @@
 # Almost Bayesian: Dynamics of SGD Through Singular Learning Theory
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

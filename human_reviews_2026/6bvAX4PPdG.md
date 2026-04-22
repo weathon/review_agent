@@ -1,5 +1,6 @@
 # ARTS: Alleviating Hallucinations in Large Vision–Language Models via Redundancy-Aware Token Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

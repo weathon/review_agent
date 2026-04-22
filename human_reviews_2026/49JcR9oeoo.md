@@ -1,5 +1,6 @@
 # PhysERL-Inv: A Physics-Encoded Inverse Modeling Approach for Arctic Snow Depth Prediction
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

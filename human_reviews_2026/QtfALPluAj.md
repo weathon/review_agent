@@ -1,5 +1,6 @@
 # mGRPO: Unlocking LLM Reasoning through Multilingual Thinking
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

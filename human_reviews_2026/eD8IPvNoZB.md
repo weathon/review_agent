@@ -1,5 +1,6 @@
 # SLA: Beyond Sparsity in Diffusion Transformers via Fine-Tunable Sparse–Linear Attention
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

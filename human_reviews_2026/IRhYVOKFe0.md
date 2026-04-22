@@ -1,5 +1,6 @@
 # LogicReward: Incentivizing LLM Reasoning via Step-Wise Logical Supervision
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

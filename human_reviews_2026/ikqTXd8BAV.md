@@ -1,5 +1,6 @@
 # BEDTime: A Unified Benchmark for Automatically Describing Time Series
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

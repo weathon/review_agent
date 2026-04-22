@@ -1,5 +1,6 @@
 # TeLLMate: Trusted Execution for Large Language Models at the Edge
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

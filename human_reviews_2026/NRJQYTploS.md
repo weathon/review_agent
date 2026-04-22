@@ -1,5 +1,6 @@
 # RockTS: Robust Time Series Forecasting based on Information Bottleneck and Optimal Transport
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 6, 4, 4
 

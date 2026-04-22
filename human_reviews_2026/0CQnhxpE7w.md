@@ -1,5 +1,6 @@
 # EVCtrl: Efficient Control Adapter for Visual Generation
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 4, 6
 

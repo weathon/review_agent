@@ -1,5 +1,6 @@
 # The Limits of Fairness Gains Under Scaling in Vision Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

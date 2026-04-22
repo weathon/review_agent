@@ -1,5 +1,6 @@
 # Doubly-Robust LLM-as-a-Judge: Externally Valid Estimation with Imperfect Personas
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

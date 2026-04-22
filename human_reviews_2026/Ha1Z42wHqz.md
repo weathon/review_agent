@@ -1,5 +1,6 @@
 # Uncovering Activation Keys in the Dark: Revealing Learned Concepts in LoRA Text-To-Image Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2, 4
 

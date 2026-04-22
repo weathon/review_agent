@@ -1,5 +1,6 @@
 # Maximizing Incremental Information Entropy for Contrastive Learning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4, 6
 

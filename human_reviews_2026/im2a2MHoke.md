@@ -1,5 +1,6 @@
 # Zero-Shot Non-Autoregressive TTS Beyond Autoregressive Models Using Soft Alignment Generation and Residual Modeling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

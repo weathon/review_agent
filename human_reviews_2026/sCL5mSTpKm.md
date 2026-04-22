@@ -1,5 +1,6 @@
 # All Roads Lead to Likelihood: The Value of Reinforcement Learning in Fine-Tuning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

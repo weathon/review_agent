@@ -1,5 +1,6 @@
 # Unifying Dynamic Tool Creation and Cross-Task Experience Sharing through Cognitive Memory Architecture
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

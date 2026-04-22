@@ -1,5 +1,6 @@
 # Pay Attention to the Triggers: Constructing Backdoors That Survive Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

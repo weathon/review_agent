@@ -1,5 +1,6 @@
 # LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

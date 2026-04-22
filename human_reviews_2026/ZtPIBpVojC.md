@@ -1,5 +1,6 @@
 # Low Rank Transformer for Multivariate Time Series Anomaly Detection and Localization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

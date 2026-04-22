@@ -1,5 +1,6 @@
 # ArtVIP: Articulated Digital Assets of Visual Realism, Modular Interaction, and Physical Fidelity for Robot Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6, 4, 6
 

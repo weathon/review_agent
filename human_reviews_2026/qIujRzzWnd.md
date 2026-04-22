@@ -1,5 +1,6 @@
 # Generation then Reconstruction: Accelerating Masked Autoregressive Models via Two-Stage Sampling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

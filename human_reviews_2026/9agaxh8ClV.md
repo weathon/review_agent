@@ -1,5 +1,6 @@
 # CogniMap3D: Cognitive 3D Mapping and Rapid Retrieval
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # ELAS: Efficient Pre-Training of Low-Rank Large Language Models via 2:4 Activation Sparsity
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

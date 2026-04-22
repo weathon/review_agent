@@ -1,5 +1,6 @@
 # MoE-GS: Mixture of Experts for Dynamic Gaussian Splatting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 10
 

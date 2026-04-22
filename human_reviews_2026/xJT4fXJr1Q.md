@@ -1,5 +1,6 @@
 # Detecting Misbehaviors of Large Vision-Language Models by Evidential Uncertainty Quantification
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # FISHER: A Foundation Model for Multi-Modal Industrial Signal Comprehensive Representation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

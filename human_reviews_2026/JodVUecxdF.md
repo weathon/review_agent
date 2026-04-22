@@ -1,5 +1,6 @@
 # MAFE: Enabling Equitable Algorithm Design in Multi-Agent Multi-Stage Decision-Making Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

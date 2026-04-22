@@ -1,5 +1,6 @@
 # NABench: Large-Scale Benchmarks of Nucleotide Foundation Models for Fitness Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

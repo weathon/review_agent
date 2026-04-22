@@ -1,5 +1,6 @@
 # The Multi-Block DC Function Class: Theory, Algorithms, and Applications
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Spatially Informed Autoencoders for Interpretable Visual Representation Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

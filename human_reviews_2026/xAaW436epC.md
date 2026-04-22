@@ -1,5 +1,6 @@
 # Subject-driven Video Generation Emerges from Experience Replays
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

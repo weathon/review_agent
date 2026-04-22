@@ -1,5 +1,6 @@
 # Your Models Have Thought Enough: Training Large Reasoning Models to Stop Overthinking
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

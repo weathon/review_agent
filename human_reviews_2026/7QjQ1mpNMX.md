@@ -1,5 +1,6 @@
 # Large Pretraining Datasets Don't Guarantee Robustness after Fine-Tuning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Attacking Logic with Logic: Reasoning Injection Attack to Large Reasoning Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

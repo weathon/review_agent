@@ -1,5 +1,6 @@
 # Backdoor Attribution: Elucidating and Controlling Backdoor in Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 4, 0
 

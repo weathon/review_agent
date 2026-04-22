@@ -1,5 +1,6 @@
 # Rate-Adaptive Quantization: A Multi-Rate Codebook Adaptation for Vector Quantized Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 8, 2
 

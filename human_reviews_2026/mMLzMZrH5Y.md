@@ -1,5 +1,6 @@
 # UniTSGAN: A Unified Transformer-based Framework for Imbalanced Time Series Generation and Classification
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 2, 4
 

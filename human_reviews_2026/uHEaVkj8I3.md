@@ -1,5 +1,6 @@
 # LAP: Fast $\textbf{LA}$tent Diffusion $\textbf{P}$lanner with Fine-Grained Feature Distillation for Autonomous Driving
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

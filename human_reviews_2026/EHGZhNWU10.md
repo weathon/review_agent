@@ -1,5 +1,6 @@
 # All in One: Unified Pretraining of GUI Agents via Masked Trajectory Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

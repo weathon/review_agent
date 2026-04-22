@@ -1,5 +1,6 @@
 # FlowBind: Efficient Any-to-Any Generation with Bidirectional Flows
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # MCPMark: A Benchmark for Stress-Testing Realistic and Comprehensive MCP Use
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 10, 6, 6
 

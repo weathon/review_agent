@@ -1,5 +1,6 @@
 # ReTool: Reinforcement Learning for Strategic Tool Use in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Evaluating Cross-Modal Reasoning Ability and Problem Characteristics with Multimodal Item Response Theory
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

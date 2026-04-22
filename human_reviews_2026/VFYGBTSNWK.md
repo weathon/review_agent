@@ -1,5 +1,6 @@
 # Trajectory-Consistent Flows: Enabling Fast Sampling for Flow Matching Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

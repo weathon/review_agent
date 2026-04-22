@@ -1,5 +1,6 @@
 # Non-differentiable Regularization for Heavy-tailed Differentially Private Stochastic Convex Optimization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

@@ -1,5 +1,6 @@
 # GMTRouter: Personalized LLM Router over Multi-turn User Interactions
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

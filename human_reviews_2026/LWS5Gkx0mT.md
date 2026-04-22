@@ -1,5 +1,6 @@
 # PI-Light: Physics-Inspired Diffusion for Full-Image Relighting
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

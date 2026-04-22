@@ -1,5 +1,6 @@
 # Multi-view Latent Diffusion Reconstruction for Vision-enhanced Time Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

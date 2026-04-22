@@ -1,5 +1,6 @@
 # In-Token Learning for High-Fidelity Image Restoration via Diffusion Transformers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

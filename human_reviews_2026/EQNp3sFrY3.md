@@ -1,5 +1,6 @@
 # Enhancing Stability of Physics-Informed Neural Network Training Through Saddle-Point Reformulation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

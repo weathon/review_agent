@@ -1,5 +1,6 @@
 # VITA: Vision-to-Action Flow Matching Policy
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

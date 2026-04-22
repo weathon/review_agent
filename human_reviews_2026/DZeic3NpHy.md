@@ -1,5 +1,6 @@
 # OmniVinci: Enhancing Architecture and Data for Omni-Modal Understanding LLM
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

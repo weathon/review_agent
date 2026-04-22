@@ -1,5 +1,6 @@
 # HSIC Bottleneck for Cross-Generator and Domain-Incremental Synthetic Image Detection
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Unlocking Coherent Reasoning in LLMs with Hierarchical Soft Prompts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # TokenDrop: Efficient Image Editing by Source Token Drop with Consistency Regularization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

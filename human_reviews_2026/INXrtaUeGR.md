@@ -1,5 +1,6 @@
 # Refactoring Codebases Through Library Design
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Deep neural network model of sound localization replicates “what” and “where” representations in auditory cortex
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

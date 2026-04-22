@@ -1,5 +1,6 @@
 # RingLight-GS: A compact and expressive framework for modeling scene color in 3DGS
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

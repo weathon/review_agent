@@ -1,5 +1,6 @@
 # Can visual input Be Compressed? A visual input token compression benchmark for large multimodal models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

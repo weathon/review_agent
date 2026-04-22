@@ -1,5 +1,6 @@
 # Tree Search for LLM Agent Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

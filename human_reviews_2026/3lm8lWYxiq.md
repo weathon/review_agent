@@ -1,5 +1,6 @@
 # The Illusion of Diminishing Returns: Measuring Long Horizon Execution in LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6, 6
 

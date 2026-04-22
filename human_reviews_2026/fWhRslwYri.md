@@ -1,5 +1,6 @@
 # Scalable Random Wavelet Features: Efficient Non-Stationary Kernel Approximation with Convergence Guarantees
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

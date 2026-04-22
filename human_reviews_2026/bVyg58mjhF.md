@@ -1,5 +1,6 @@
 # Robust Latent Neural Operators through Augmented Sparse Observation Encoding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

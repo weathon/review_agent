@@ -1,5 +1,6 @@
 # Beyond Textual CoT: Interleaved Text-Image Chains with Deep Confidence Reasoning for Image Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

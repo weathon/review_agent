@@ -1,5 +1,6 @@
 # IOMM: Fast Pre-training of Unified Multimodal Models without Text-Image Pairs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

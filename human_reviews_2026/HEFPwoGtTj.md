@@ -1,5 +1,6 @@
 # Importance Sampling for Multi-Negative Multimodal Direct Preference Optimization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 
@@ -77,7 +78,8 @@ The authors demonstrate the efficacy of their method on multiple multimodal mode
 * Section 4.2, describing one of the main contributions of the work, is perhaps a bit limited in detail. For example, the training (data, recipe) for the SAE is not described. And while the math presented in the negative selection may be sufficient, some discussion behind the intuition of sampling for reconstruction error and activation may make the paper more accessible, particularly to casual readers less familiar with using SAEs for interpretability.
 * Another recent work [S-VCO] also argues for negative images that are substantially similar to the request image under alignment. In this work, the authors acknowledge this work and argue that this method is expensive (as [S-VCO] relies on image generation method to generate counterfactuals) while the proposed method is more efficient. However, the respective efficacy is not further discussed. An ablation comparing the retrieval + SAE based approach directly to the generative approach proposed by [S-VCO] would further enhance the contributions of this paper. ([S-VCO]’s data (MVC) appears to have been made available.)
 * In table 2, the caption implies that the main difference is how negative samples are chosen, but another difference seems to be the number of negative examples being used as per the description in the text. Perhaps this could be clarified?
-* For the ablations in table 2, “diffusion” and “crop+diffusion” have two or one negative images still selected by the proposed method as described in the text. I believe this may make comparison a bit more difficult? I understand that multiple negatives based on diffusion or cropping may not have enough diversity, but if that is the concern, perhaps an ablation with 1 negative sample for all methods could be made fairly, further separating the improvements achieved from the targeted selection method from the multi-negative proposal?
+* For the ablations in table 2, “diffusion” and “crop+diffusion” have two or one negative images still selected by the proposed method as described in the text. I believe this may make comparison a bit more difficult?
+I understand that multiple negatives based on diffusion or cropping may not have enough diversity, but if that is the concern, perhaps an ablation with 1 negative sample for all methods could be made fairly, further separating the improvements achieved from the targeted selection method from the multi-negative proposal?
 * Minor notes for table 2: typo “mdpo” (instead of “mDPO”); Missing average improvement as in table 1 for easier comparisons.
 
 

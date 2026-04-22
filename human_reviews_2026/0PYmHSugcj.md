@@ -1,5 +1,6 @@
 # MemOracle: Symbolic Reasoning with Associative Retrieval for Harmful Content Detection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

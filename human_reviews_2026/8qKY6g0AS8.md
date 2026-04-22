@@ -1,5 +1,6 @@
 # Exploring Imbalanced Annotations for Effective In-Context Learning
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 4, 2, 6
 

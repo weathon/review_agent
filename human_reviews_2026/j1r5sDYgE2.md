@@ -1,5 +1,6 @@
 # Distributed Knowledge Storage Hypothesis: Evidence from Generalization Failure in Knowledge Editing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

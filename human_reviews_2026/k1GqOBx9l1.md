@@ -1,5 +1,6 @@
 # Multi-Modality Brain Disease Prediction with  Progressive Curriculum Graph Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # HoloGarment: 360$\degree$ Novel View Synthesis of In-the-Wild Garments
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

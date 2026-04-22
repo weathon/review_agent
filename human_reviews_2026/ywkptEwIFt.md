@@ -1,5 +1,6 @@
 # Extending Test-Time Scaling: A 3D Perspective with Context, Batch, and Turn
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

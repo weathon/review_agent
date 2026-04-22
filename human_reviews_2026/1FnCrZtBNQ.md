@@ -1,5 +1,6 @@
 # LAMDA: A Longitudinal Android Malware Benchmark for Concept Drift Analysis
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

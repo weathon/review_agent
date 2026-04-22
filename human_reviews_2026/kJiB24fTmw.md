@@ -1,5 +1,6 @@
 # Leveraging LLM Hidden-State Trajectories for Label-Free Sampler Adaptation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Position: Want Better ML Reviews? Stop Asking Nicely and Start Incentivizing with a Credit System
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 6, 4, 2
 

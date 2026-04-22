@@ -1,5 +1,6 @@
 # RBM-Based Simulated Quantum Annealing for Graph Isomorphism Problems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

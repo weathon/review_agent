@@ -1,5 +1,6 @@
 # GL-Fusion: Rethinking the Combination of Graph Neural Network and Large Language model
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 6, 0, 2
 

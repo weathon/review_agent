@@ -1,5 +1,6 @@
 # PeakNovo: Towards the Robust De Novo Peptide Sequencing for Missing Spectral Peaks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Reinforcement Learning for Evidence-Seeking Diagnostic Reasoning with Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

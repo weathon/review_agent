@@ -1,5 +1,6 @@
 # Grouping Nodes with known Value Differences: A lossless UCT-based Abstraction Algorithm
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

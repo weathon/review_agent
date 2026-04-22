@@ -1,5 +1,6 @@
 # CMRAG: Co-modality-based visual document retrieval and question answering
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

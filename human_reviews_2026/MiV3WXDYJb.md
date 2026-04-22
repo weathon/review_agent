@@ -1,5 +1,6 @@
 # WAVE: Learning Unified & Versatile Audio-Visual Embeddings with Multimodal LLM
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 4
 

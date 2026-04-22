@@ -1,5 +1,6 @@
 # SteinDiff: Resolving the Contractivity Trap via Reference-free Stein Regularization
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 8, 2
 

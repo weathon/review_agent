@@ -1,5 +1,6 @@
 # Event-Adaptive State Transition and Gated Fusion for RGB-Event Object Tracking
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

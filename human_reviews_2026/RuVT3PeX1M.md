@@ -1,5 +1,6 @@
 # Ensemble Prediction of Task Affinity for Efficient Multi-Task Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

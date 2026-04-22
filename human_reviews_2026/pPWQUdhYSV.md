@@ -1,5 +1,6 @@
 # Whatever Remains Must Be True: Filtering Drives Reasoning in LLMs, Shaping Diversity
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

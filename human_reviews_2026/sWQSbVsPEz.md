@@ -1,5 +1,6 @@
 # R4: Nested Reasoning-Retrieval for Reward Modeling in Role-Playing Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

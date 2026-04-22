@@ -1,5 +1,6 @@
 # Goal Reaching with Eikonal-Constrained Hierarchical Quasimetric Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

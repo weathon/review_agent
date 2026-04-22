@@ -1,5 +1,6 @@
 # Plug-and-Play Label Map Diffusion for Universal Goal-Oriented Navigation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 0, 6
 

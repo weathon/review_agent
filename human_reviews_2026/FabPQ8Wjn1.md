@@ -1,5 +1,6 @@
 # Point-and-Click: A Procedural Benchmark for 2D Adventure Puzzle Solving
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 4, 6
 

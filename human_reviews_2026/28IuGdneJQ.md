@@ -1,5 +1,6 @@
 # SFBD-OMNI: Bridge models for lossy measurement restoration with limited clean samples
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Identifying Feedforward and Feedback Controllable Subspaces of Neural Population Dynamics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 8, 4, 2, 2
 

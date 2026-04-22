@@ -1,5 +1,6 @@
 # HybridCoT: Interleaving Latent and Text Chain-of-Thought for Efficient Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

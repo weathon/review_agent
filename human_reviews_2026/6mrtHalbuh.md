@@ -1,5 +1,6 @@
 # Evaluating the use of large language models for post optical character recognition correction in Brazilian Portuguese
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

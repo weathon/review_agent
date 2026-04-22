@@ -1,5 +1,6 @@
 # Navigating the Accuracy-Size Trade-Off with Flexible Model Merging
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Utilizing Evolution Strategies to Train Transformers in Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

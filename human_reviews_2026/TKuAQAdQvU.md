@@ -1,5 +1,6 @@
 # Should Bias be Eliminated? A General Framework to Use Bias for OOD Generalization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 0, 6
 

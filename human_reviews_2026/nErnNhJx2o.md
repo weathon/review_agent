@@ -1,5 +1,6 @@
 # REORIENTING THE FROZEN SPACE: TRAINING-FREE TEST-TIME ADAPTATION BY GEOMETRIC TRANSFORMATION
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6, 2
 
@@ -69,18 +70,27 @@ Specifically, SOBA maintains a dynamic queue of high-confidence test samples to 
 SOBA is computationally efficient (requiring no backpropagation) and demonstrates strong performance under out-of-distribution (OOD) and cross-dataset benchmarks using CLIP models with transformer-based text encoders and either ResNet or ViT visual encoders.
 
 ### Strengths
-* The proposed eigenspace-based prototype transformation is conceptually simple, computationally lightweight, and empirically effective across multiple OOD and cross-dataset benchmarks. 
+* The proposed eigenspace-based prototype transformation is conceptually simple, computationally lightweight, and empirically effective across multiple OOD and cross-dataset benchmarks.
+
 * The method fits within the training-free TTA category, requiring only forward-pass computations (specifically, eigenvalue decomposition), which makes it appealing for large-scale or latency-sensitive applications.
 
 ### Weaknesses
-* Limited analysis of class separability effects: The core motivation of SOBA is to enhance inter-class separability—especially for hard classes with overlapping features—yet no ablation or quantitative analysis is provided to verify this. It remains unclear whether the transformation actually improves accuracy for previously hard-to-classify classes, or whether it introduces trade-offs that harm already well-separated classes. A deeper empirical study is needed to substantiate this motivation. 
-* Lack of justification for transforming only text embeddings: The transformation is applied solely to class prototypes derived from text embeddings, while image embeddings remain unchanged. Under distribution shift, image features may also vary non-uniformly across classes, potentially misaligning the transformed text space. The rationale for limiting the transformation to text embeddings should be clarified, along with possible benefits or drawbacks of extending it to image embeddings. 
-* Missing related work: The paper should cite Forward-Only Adaptation (FOA) (Niu et al., ICML 2024, Oral), which also achieves efficient TTA without backpropagation using forward-only adaptation. A conceptual or empirical comparison with FOA would strengthen the paper’s positioning within the training-free TTA literature.
+* Limited analysis of class separability effects:
+The core motivation of SOBA is to enhance inter-class separability—especially for hard classes with overlapping features—yet no ablation or quantitative analysis is provided to verify this. It remains unclear whether the transformation actually improves accuracy for previously hard-to-classify classes, or whether it introduces trade-offs that harm already well-separated classes. A deeper empirical study is needed to substantiate this motivation.
+
+* Lack of justification for transforming only text embeddings:
+The transformation is applied solely to class prototypes derived from text embeddings, while image embeddings remain unchanged. Under distribution shift, image features may also vary non-uniformly across classes, potentially misaligning the transformed text space. The rationale for limiting the transformation to text embeddings should be clarified, along with possible benefits or drawbacks of extending it to image embeddings.
+
+* Missing related work:
+The paper should cite Forward-Only Adaptation (FOA) (Niu et al., ICML 2024, Oral), which also achieves efficient TTA without backpropagation using forward-only adaptation. A conceptual or empirical comparison with FOA would strengthen the paper’s positioning within the training-free TTA literature.
 
 ### Questions
-1. Can the authors analyze the effect of SOBA on class separability, e.g., by showing per-class accuracy improvements or changes in inter-class distances before and after transformation? 
-2. What is the reasoning behind transforming only the text embeddings rather than both modalities? 
-3. How does SOBA compare conceptually and empirically with FOA (Niu et al., 2024)? 
+1. Can the authors analyze the effect of SOBA on class separability, e.g., by showing per-class accuracy improvements or changes in inter-class distances before and after transformation?
+
+2. What is the reasoning behind transforming only the text embeddings rather than both modalities?
+
+3. How does SOBA compare conceptually and empirically with FOA (Niu et al., 2024)?
+
 4. Can the authors quantify the memory overhead of the dynamic queue? Since it scales linearly with the number of classes, this could be a concern for large-scale datasets like ImageNet.
 
 ### Soundness

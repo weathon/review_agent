@@ -1,5 +1,6 @@
 # Disentangling Locality and Entropy in Ranking Distillation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Mitigating the Curse of Detail: Scaling Arguments for Feature Learning and Sample Complexity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 
@@ -126,11 +127,16 @@ The paper presents an interesting and well-motivated idea, but the core theoreti
 * Clear high-level narrative: The intuition that alignment captures “how well learned features match task structure” is appealing and consistent with empirical trends observed in deep learning.
 
 ### Weaknesses
-* Unclear and inconsistent mathematical exposition: The logic behind the central inequality (around line 98) is confusing. It provides only a lower bound on test MSE in terms of alignment, so high alignment is at best a necessary—but not sufficient—condition for good generalization. The paper does not establish or even discuss whether an upper bound exists, which weakens the claim that alignment close to 1 can reliably indicate low test error.
-* Ambiguity in probabilistic statements: In Section 3, the analysis of “probability of alignment > α” is difficult to interpret because the relevant range of α is not specified and the meaning of O(1)  is unclear—does it denote “around one” or simply “a constant independent of dimension”? This ambiguity propagates through subsequent results.
-* Notation and definition issues: Several key quantities (e.g., H_{p,α}, q, and related expressions around lines 146–152) are either undefined or only referenced indirectly via the appendix. The paper should clearly define each symbol in the main text, especially when these terms appear in central inequalities.
-* Direction of inequalities unclear: In Section 4, it is unclear whether P(A)F(α)) is meant to upper bound or lower bound the probability of alignment exceeding α. The sign and logical direction of several inequalities seem inconsistent, making it hard to reconstruct the intended argument.
-* Difficult to evaluate validity: Because of these ambiguities, it is impossible to judge whether the mathematical derivations are correct or merely stated heuristically. The empirical illustrations in later sections cannot compensate for this lack of clarity in the core theory.
+* Unclear and inconsistent mathematical exposition:
+The logic behind the central inequality (around line 98) is confusing. It provides only a lower bound on test MSE in terms of alignment, so high alignment is at best a necessary—but not sufficient—condition for good generalization. The paper does not establish or even discuss whether an upper bound exists, which weakens the claim that alignment close to 1 can reliably indicate low test error.
+* Ambiguity in probabilistic statements:
+In Section 3, the analysis of “probability of alignment > α” is difficult to interpret because the relevant range of α is not specified and the meaning of O(1)  is unclear—does it denote “around one” or simply “a constant independent of dimension”? This ambiguity propagates through subsequent results.
+* Notation and definition issues:
+Several key quantities (e.g., H_{p,α}, q, and related expressions around lines 146–152) are either undefined or only referenced indirectly via the appendix. The paper should clearly define each symbol in the main text, especially when these terms appear in central inequalities.
+* Direction of inequalities unclear:
+In Section 4, it is unclear whether P(A)F(α)) is meant to upper bound or lower bound the probability of alignment exceeding α. The sign and logical direction of several inequalities seem inconsistent, making it hard to reconstruct the intended argument.
+* Difficult to evaluate validity:
+Because of these ambiguities, it is impossible to judge whether the mathematical derivations are correct or merely stated heuristically. The empirical illustrations in later sections cannot compensate for this lack of clarity in the core theory.
 
 ### Questions
 1. In line 98, how does the lower bound on test MSE justify using alignment as a reliable proxy? Is there also an upper bound, or an argument showing that alignment close to 1 implies low error in practice?

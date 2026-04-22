@@ -1,5 +1,6 @@
 # ImpossibleBench: Measuring LLMs' Propensity of Exploiting Test Cases
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

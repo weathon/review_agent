@@ -1,5 +1,6 @@
 # Veritas: Generalizable Deepfake Detection via Pattern-Aware Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 4, 8, 8, 6
 

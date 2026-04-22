@@ -1,5 +1,6 @@
 # Semantic Parallelism: Redefining Efficient MoE Inference via Model-Data Co-Scheduling
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

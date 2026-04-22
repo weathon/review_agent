@@ -1,5 +1,6 @@
 # Stop Guessing When to Stop Testing: Efficient Model Evaluation with Just Enough Data
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 2
 

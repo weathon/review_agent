@@ -1,5 +1,6 @@
 # Probing the Boundaries of Concepts in Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 
@@ -81,7 +82,8 @@ Have you compared with performance on datasets restricted to biology/chemistry/m
 ### Summary
 The current paper seeks to understand to what extent language models acquire conceptual integrity — the ability to learn the relationship between concept labels, definitions and referents. The authors set out to establish a metric that captures conceptual integrity based on a collection of tasks  — inferring concepts from definitions/ontologies, inferring concepts from the criteria (features) that act as ‘selection criteria’ for that concept, naming n referents of the concept, distinguishing valid members from non-members, and estimating the ‘semantic field size’, i.e., the cardinality of the number of concepts that fall into the conceptual bucket. The authors find variance across a suite of models evaluated on this metric and also find that this metric correlates with some existing LLM benchmarks but not others. They also provide an error analysis of select failure modes.
 
-While the authors emphasize that the main contribution is a framework for understanding conceptual coherence, I find that this core claim is hard to accept for several reasons. In contrast to many domains where there is a structured ground truth in the world, ‘concepts’ are seemingly meaningful insofar as they align with human notions of the same. The current analyses have no human data at all. All model outputs are evaluated using LLM-as-a-judge, which in this particular case feels theoretically muddy, and there is no concrete sense of how these measures might look for human participants. In fact, there is a large literature in the cognitive sciences attempting to do what the authors are attempting here at larger scales in an ecologically valid (using concepts people think about in their day-to-day) manner. I note some examples below - 
+While the authors emphasize that the main contribution is a framework for understanding conceptual coherence, I find that this core claim is hard to accept for several reasons. In contrast to many domains where there is a structured ground truth in the world, ‘concepts’ are seemingly meaningful insofar as they align with human notions of the same. The current analyses have no human data at all. All model outputs are evaluated using LLM-as-a-judge, which in this particular case feels theoretically muddy, and there is no concrete sense of how these measures might look for human participants. In fact, there is a large literature in the cognitive sciences attempting to do what the authors are attempting here at larger scales in an ecologically valid (using concepts people think about in their day-to-day) manner. I note some examples below -
+
 
 McRae, K., Cree, G. S., Seidenberg, M. S., & McNorgan, C. (2005). Semantic feature production norms for a large set of living and nonliving things. Behavior research methods, 37(4), 547-559.
 

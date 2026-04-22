@@ -1,5 +1,6 @@
 # Enhancing Multi-Modal LLMs Reasoning via Difficulty-Aware Group Normalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

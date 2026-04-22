@@ -1,5 +1,6 @@
 # Uncovering Locally-Persistent Bias via Ceteris Paribus Fairness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

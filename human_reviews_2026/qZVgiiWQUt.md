@@ -1,5 +1,6 @@
 # ArchPilot: A Proxy-Guided Multi-Agent Approach for Machine Learning Engineering
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

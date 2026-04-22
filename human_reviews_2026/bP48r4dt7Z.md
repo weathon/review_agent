@@ -1,5 +1,6 @@
 # DevOps-Gym: Benchmarking AI Agents in Software DevOps Cycle
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

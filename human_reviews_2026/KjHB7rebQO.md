@@ -1,5 +1,6 @@
 # RiskPO: Risk-based Policy Optimization with Verifiable Reward for LLM Post-Training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

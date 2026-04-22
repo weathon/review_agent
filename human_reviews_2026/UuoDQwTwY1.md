@@ -1,5 +1,6 @@
 # Theory of Autoregressive Diffusion Model: Inference Complexity and Conditional Dependency Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

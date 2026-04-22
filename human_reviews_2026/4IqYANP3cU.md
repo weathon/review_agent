@@ -1,5 +1,6 @@
 # Conceptual Archetype Decomposition for Interpretable and Generalizable Model Decisions
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # GaussianTrim3R: Controllable 3D Gaussians Pruning for Feedforward models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

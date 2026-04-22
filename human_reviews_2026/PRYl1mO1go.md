@@ -1,5 +1,6 @@
 # Harmonized Cone for Feasible and Non-conflict Directions in Training Physics-Informed Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

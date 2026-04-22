@@ -1,5 +1,6 @@
 # MatEvolve: A Synergistic Symbolic–LLM Agent for Multi-Objective Materials Design
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 0, 4
 

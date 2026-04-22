@@ -1,5 +1,6 @@
 # Oscillators Are All You Need: Irregular Time Series Modelling via Damped Harmonic Oscillators with Closed-form Solutions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Persona Features Control Emergent Misalignment
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 8
 

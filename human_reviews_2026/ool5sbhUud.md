@@ -1,5 +1,6 @@
 # Rethinking ab initio Neural Wave Function: GNNs at Electron Level
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

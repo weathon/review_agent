@@ -1,5 +1,6 @@
 # Unified, Practical, and White-box Seismic Tomography with Automatic Differentiation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

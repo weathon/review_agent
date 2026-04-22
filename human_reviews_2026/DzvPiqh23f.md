@@ -1,5 +1,6 @@
 # Self-Forcing++: Towards Minute-Scale High-Quality Video Generation
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

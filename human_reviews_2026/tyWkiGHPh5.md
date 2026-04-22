@@ -1,5 +1,6 @@
 # Latent PDE Mapping for Shape-Generalizable Physics-Informed Neural Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

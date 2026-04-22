@@ -1,5 +1,6 @@
 # Unlocking Out-of-Distribution Generalization in Transformers via Latent Space Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

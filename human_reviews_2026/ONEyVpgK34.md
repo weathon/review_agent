@@ -1,5 +1,6 @@
 # Lang-PINN: From Language to Physics-Informed Neural Networks via a Multi-Agent Framework
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 0, 4
 

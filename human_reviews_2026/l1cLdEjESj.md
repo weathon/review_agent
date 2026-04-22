@@ -1,5 +1,6 @@
 # Vid-LLM: A Compact Video-based 3D Multimodal LLM with Reconstruction–Reasoning Synergy
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8
 

@@ -1,5 +1,6 @@
 # BTZSC: A Benchmark for Zero-Shot Text Classification Across Cross-Encoders, Embedding Models, and Rerankers
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

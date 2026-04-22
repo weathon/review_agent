@@ -1,5 +1,6 @@
 # Autonomous Source Knowledge Selection in Multi-Domain Adaptation
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4, 2
 

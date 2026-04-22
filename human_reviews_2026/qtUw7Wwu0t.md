@@ -1,5 +1,6 @@
 # The EEG activation maps in recent work are uninterpretable by experts
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

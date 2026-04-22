@@ -1,5 +1,6 @@
 # Taming Polysemanticity in LLMs: Theory-Grounded Feature Recovery via Sparse Autoencoders
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

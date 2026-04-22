@@ -1,5 +1,6 @@
 # Mutation2Text:  A Unified Protein and Text Language Model for Explaining Mutation Effects
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # SCOPE-MIA: Scale-Consistent Partial Differential Equation-Optimized Encoding in 3D Medical Imaging Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

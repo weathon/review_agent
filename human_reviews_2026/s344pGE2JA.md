@@ -1,5 +1,6 @@
 # "What Is The Performance Ceiling of My Classifier?" Utilizing Category-Wise Influence Functions for Pareto Frontier Analysis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

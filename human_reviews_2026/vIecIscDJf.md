@@ -1,5 +1,6 @@
 # HiTeA: Hierarchical Temporal Alignment for Training-Free Long-Video Temporal Grounding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

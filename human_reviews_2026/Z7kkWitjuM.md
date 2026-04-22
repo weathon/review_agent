@@ -1,5 +1,6 @@
 # Rethinking Flat Minima: Seeking $\epsilon$-Maxima Towards Better Generalization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

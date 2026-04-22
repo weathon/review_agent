@@ -1,5 +1,6 @@
 # What is the right direction for time series anomaly detection benchmarking: evidence from evaluation of linear models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

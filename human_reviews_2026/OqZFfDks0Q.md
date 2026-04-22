@@ -1,5 +1,6 @@
 # Efficient High-Resolution Image Editing with Hallucination-Aware Loss and Adaptive Tiling
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 6
 

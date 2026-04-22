@@ -1,5 +1,6 @@
 # MST-SAM: Bridging Multi-View Gaps in SAM2 with Spatiotemporal Bank
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

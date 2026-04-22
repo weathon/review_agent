@@ -1,5 +1,6 @@
 # SinkTrack: Attention Sink based Context Anchoring for Large Language Models
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4, 6
 

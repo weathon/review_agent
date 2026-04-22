@@ -1,5 +1,6 @@
 # Variational Graph Structure Learning for GNNs by Using Marginal Likelihood
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # VFaith: Do Large Multimodal Models Really Reason on Seen Images Rather than Previous Memories?
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

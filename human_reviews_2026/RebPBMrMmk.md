@@ -1,5 +1,6 @@
 # RobustSpring: Benchmarking Robustness to Image Corruptions for Optical Flow, Scene Flow and Stereo
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

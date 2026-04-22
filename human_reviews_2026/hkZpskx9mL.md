@@ -1,5 +1,6 @@
 # Optimization-based Trajectory Deviation Attacks in Agentic LLM Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # How can we assess human-agent interactions? Case studies in software agent design
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 4, 2
 

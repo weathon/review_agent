@@ -1,5 +1,6 @@
 # SSDD: Single-Step Diffusion Decoder for Efficient Image Tokenization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

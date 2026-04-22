@@ -1,5 +1,6 @@
 # MindMix: A Multimodal Foundation Model for Auditory Perception Decoding via Deep Neural-Acoustic Alignment
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

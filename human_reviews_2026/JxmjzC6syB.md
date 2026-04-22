@@ -1,5 +1,6 @@
 # Benchmarking Stochastic Approximation Algorithms for Fairness-Constrained Training of Deep Neural Networks
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 4
 

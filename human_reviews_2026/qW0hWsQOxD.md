@@ -1,5 +1,6 @@
 # Lightweight Image-to-3D Shape Generation via Vitality-Aware Pruning and Quantization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

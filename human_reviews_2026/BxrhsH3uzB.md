@@ -1,5 +1,6 @@
 # Backdoors in RLVR: Jailbreak Backdoors in LLMs From Verifiable Reward
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4, 2
 

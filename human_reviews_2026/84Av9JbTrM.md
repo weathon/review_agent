@@ -1,5 +1,6 @@
 # Story2Screen: Multimodal Story Customization for Long Consistent Visual Sequences
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

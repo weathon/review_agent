@@ -1,5 +1,6 @@
 # Towards Second-Order Optimization in Learned Image Compression: Faster, Better, and More Deployable
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 8, 4, 6, 2, 6
 

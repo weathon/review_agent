@@ -1,5 +1,6 @@
 # ORCaS: Unsupervised Depth Completion via Occluded Region Completion as Supervision
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 
@@ -142,18 +143,25 @@ I am willing to increase the rating if those weaknesses can be addressed in the 
 This paper introduces a novel unsupervised framework that learns dense depth estimation from an RGB image and sparse point cloud by explicitly reasoning about occluded 3D regions. Rather than relying solely on photometric reconstruction of co-visible areas, the paper proposes to learn an inductive 3D bias through the auxiliary task of occluded region completion. ORCAS, a method of the paper, first encodes RGB and sparse depth into 2D features, broadcasts them into a discretized 3D volume, and rigidly warps this volume to an adjacent view using relative pose. The ConteXt block then fills in the empty voxels corresponding to occluded regions using nearby 3D context and positional embeddings, while a new ORCaS loss enforces consistency between predicted and real adjacent-view features. This occlusion-aware training significantly improves the performance of depth predictions in an unsupervised setting. Extensive experiments on VOID1500, NYUv2, and ScanNet show that ORCaS achieves state-of-the-art performance, outperforming previous unsupervised methods by up to 8.9% on average, while maintaining real-time inference speed and demonstrating strong robustness to domain shifts, calibration noise, and extremely sparse depth inputs
 
 ### Strengths
-	ORCaS introduces a simple yet novel idea, using occluded region completion as an auxiliary supervision signal for unsupervised depth completion. This reframes depth completion from a purely visible-surface interpolation problem into a 3D reasoning task that requires understanding unseen geometry. By leveraging occlusion as supervision, the method naturally learns a strong inductive bias that encourages consistent 3D representations. This conceptual clarity and originality make the paper both theoretically appealing and practically impactful.
+	ORCaS introduces a simple yet novel idea, using occluded region completion as an auxiliary supervision signal for unsupervised depth completion.
+This reframes depth completion from a purely visible-surface interpolation problem into a 3D reasoning task that requires understanding unseen geometry.
+By leveraging occlusion as supervision, the method naturally learns a strong inductive bias that encourages consistent 3D representations.
+This conceptual clarity and originality make the paper both theoretically appealing and practically impactful.
 
-	Across multiple benchmarks (VOID1500, NYUv2, ScanNet), the method consistently achieves state-of-the-art performance, outperforming previous unsupervised methods by up to 8.9% on average. 
+	Across multiple benchmarks (VOID1500, NYUv2, ScanNet), the method consistently achieves state-of-the-art performance, outperforming previous unsupervised methods by up to 8.9% on average.
+
 
 	The proposed method learns latent features that encode the 3D shape regularities of indoor scenes, independent of texture or lighting. Even though the model is not directly trained for domain transfer, this implicit shape prior helps it perform well in zero-shot transfer and sparse-input settings. 
 
-	Authors demonstrate strong robustness to variations in calibration, scene dynamics, and input sparsity. It maintains stable performance even with +-30% synthetic calibration noise and when trained on static assumptions in dynamic environments.
+	Authors demonstrate strong robustness to variations in calibration, scene dynamics, and input sparsity.
+It maintains stable performance even with +-30% synthetic calibration noise and when trained on static assumptions in dynamic environments.
 
 ### Weaknesses
 Major weaknesses are as below:
 
-	Most experiments focus on indoor or small-scale environments (VOID1500, NYUv2, ScanNet). The KITTI Depth Completion results are included only in the appendix, where the improvement over prior work is relatively small (≈3%). This suggests that the learned occlusion-based bias may generalize less effectively to outdoor, long-range, or high-depth-variance settings. A broader evaluation would be necessary to confirm the scalability of the approach beyond indoor domains.
+	Most experiments focus on indoor or small-scale environments (VOID1500, NYUv2, ScanNet).
+The KITTI Depth Completion results are included only in the appendix, where the improvement over prior work is relatively small (≈3%). This suggests that the learned occlusion-based bias may generalize less effectively to outdoor, long-range, or high-depth-variance settings.
+A broader evaluation would be necessary to confirm the scalability of the approach beyond indoor domains.
 
 	Although the method is built around the idea of learning from occluded-region completion, the qualitative results do not visually emphasize or analyze regions where occlusion is likely to occur. Figures 2 and 3 mainly show overall depth predictions for relatively frontal or fully visible areas, rather than viewpoints where depth discontinuities, inter-object occlusions, or self-occlusions are pronounced. Without explicitly highlighting or comparing, it is difficult to tell whether the proposed occlusion reasoning truly contributes to the improved depth quality.
 
@@ -167,7 +175,8 @@ Minor comments are as below:
 	A comparison with the baseline model, KBNet, are not presented in table 6. Following the KITTI benchmark performance gap between the proposed method and KBNet is very marginal.
 
 ### Questions
-	Could you elaborate on why the proposed occlusion-completion supervision may generalize less effectively to outdoor environments? Have you tested the method on any additional large-scale or high-depth-variance datasets to evaluate scalability beyond indoor domains? 
+	Could you elaborate on why the proposed occlusion-completion supervision may generalize less effectively to outdoor environments?
+Have you tested the method on any additional large-scale or high-depth-variance datasets to evaluate scalability beyond indoor domains? 
 
 	Please explain how the alternating training process is scheduled (per batch, per epoch, or per iteration), which parameters are frozen in each phase, and why this two-step optimization was preferred over joint training.
 

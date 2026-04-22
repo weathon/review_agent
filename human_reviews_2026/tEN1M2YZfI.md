@@ -1,5 +1,6 @@
 # Learning Non-Gradient Diffusion Systems via Moment-Evolution and Energetic Variational Approaches
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

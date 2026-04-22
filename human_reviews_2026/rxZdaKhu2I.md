@@ -1,5 +1,6 @@
 # Good Allocations from Bad Estimates
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

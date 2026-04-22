@@ -1,5 +1,6 @@
 # Sample-Aware Dual Actions for Prompt Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

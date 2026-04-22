@@ -1,5 +1,6 @@
 # Cost-of-Pass: An Economic Framework for Evaluating Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 10, 8, 4
 

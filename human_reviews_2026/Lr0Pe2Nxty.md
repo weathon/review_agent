@@ -1,5 +1,6 @@
 # Where in the World? A Vision-Language Benchmark for Probing Model Geolocation Skills Across Scales
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

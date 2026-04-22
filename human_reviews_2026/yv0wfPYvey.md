@@ -1,5 +1,6 @@
 # Spatio-Temporal LLM: Reasoning about Environments and Actions
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

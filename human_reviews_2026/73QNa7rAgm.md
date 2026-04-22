@@ -1,5 +1,6 @@
 # Unsupervised Anomaly Detection in Tabular Data with Test-time Contrastive Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 
@@ -113,7 +114,8 @@ TCAD offers a novel and effective strategy for handling distribution shifts in u
 This paper proposes TCAD, an approach for unsupervised anomaly detection in tabular data designed to address distribution shifts where normal patterns in the test set differ from those in the training set. TCAD operates in two  stages: Collaborative Dual-task Training and Test-Time Contrastive Learning. During training, it uses two self-supervised tasks to capture features and model normal patterns. At test time, the model adapts by assigning pseudo-labels (normal or abnormal) to high-confidence samples. It then updates to adapt to these pseudo-normal samples while avoiding overfitting to pseudo-abnormal ones. A KNN-based contrastive strategy then pulls pseudo-normal samples toward the training distribution’s embeddings and pushes pseudo-abnormal samples away.
 
 ### Strengths
-Designing robust anomaly detectors that generalize well to new domains is critical. 
+Designing robust anomaly detectors that generalize well to new domains is critical.
+
 
 The paper states its goals and contributions clearly.
 
@@ -123,15 +125,19 @@ W1) Anomaly detection under distribution shift has been explored in computer vis
 
 W2) The pipeline’s technical novelty is the main issue. Contrastive loss and reconstruction loss are well known and widely used in the literature. Selecting samples with high confidence at test time is also a known technique [D]. Can the authors describe the components that genuinely belong to their method?
 
-W3) I believe anomaly detection under distribution shift is better defined in the vision domain, as foreground and background in images provide a well-defined approach for specifying shifted normal or abnormal data. The authors should evaluate their pipeline on those datasets as well. 
+W3)
+I believe anomaly detection under distribution shift is better defined in the vision domain, as foreground and background in images provide a well-defined approach for specifying shifted normal or abnormal data. The authors should evaluate their pipeline on those datasets as well.
+
 
 
 W4) The code is not available, making it challenging to reproduce the results.
 
 
-[A] Robust Novelty Detection through Style-Conscious Feature Ranking 
+[A] Robust Novelty Detection through Style-Conscious Feature Ranking
 
-[B] A Contrastive Teacher-Student Framework for Novelty Detection under Style Shifts 
+
+[B] A Contrastive Teacher-Student Framework for Novelty Detection under Style Shifts
+
 
 [C] Red PANDA: Disambiguating Anomaly Detection by Removing Nuisance Factors
 

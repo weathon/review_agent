@@ -1,5 +1,6 @@
 # DCFold: Efficient Protein Structure Generation with Single Forward Pass
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 4, 8, 6
 

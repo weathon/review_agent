@@ -1,5 +1,6 @@
 # MCPSecBench: A Systematic Security Benchmark and Playground for Testing Model Context Protocols
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # SimplexLoRA: Dynamic Rank Updating via Alternating Minimization with Simplex Projection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

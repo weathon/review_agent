@@ -1,5 +1,6 @@
 # Few-Shot Idea Auto-Generation: Reasoning Over Idea Representations to Predict New Research Ideas
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

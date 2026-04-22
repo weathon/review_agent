@@ -1,5 +1,6 @@
 # When Flatness Does (Not) Guarantee Adversarial Robustness
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

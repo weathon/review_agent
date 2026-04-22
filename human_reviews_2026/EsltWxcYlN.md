@@ -1,5 +1,6 @@
 # Cross-Attention is Half Explanation in Speech-to-Text Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 0, 4
 

@@ -1,5 +1,6 @@
 # Seq vs Seq: An Open Suite of Paired Encoders and Decoders
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

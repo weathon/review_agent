@@ -1,5 +1,6 @@
 # ReXMoE: Reusing Experts with Minimal Overhead in Mixture-of-Experts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

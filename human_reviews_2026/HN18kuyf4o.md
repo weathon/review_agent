@@ -1,5 +1,6 @@
 # Distilling Knowledge from Caption-Guided Replay for VLM-based Continual Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

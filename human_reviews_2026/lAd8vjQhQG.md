@@ -1,5 +1,6 @@
 # Reasoning Capabilities of Large Language Models in Dynamic Games of Imperfect Information: A Case Study on Dou Dizhu
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # The Softmax Bottleneck Does Not Limit the Probabilities of the Most Likely Tokens
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

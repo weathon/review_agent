@@ -1,5 +1,6 @@
 # Parallel Scaling Law: Unveiling Reasoning Generalization through A Cross-Linguistic Perspective
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

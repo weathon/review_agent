@@ -1,5 +1,6 @@
 # Multi-Human Interactive Talking Dataset
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 4, 0
 

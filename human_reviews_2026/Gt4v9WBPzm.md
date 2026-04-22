@@ -1,5 +1,6 @@
 # HiPRAG: Hierarchical Process Rewards for Efficient Agentic Retrieval Augmented Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

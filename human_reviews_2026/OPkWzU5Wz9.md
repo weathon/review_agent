@@ -1,5 +1,6 @@
 # BlueCodeAgent: A Blue Teaming Agent Enabled by Automated Red Teaming for CodeGen AI
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

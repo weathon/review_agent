@@ -1,5 +1,6 @@
 # LeRobot:  An Open-Source Library for End-to-End Robot Learning
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

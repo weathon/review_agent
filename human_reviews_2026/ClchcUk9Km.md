@@ -1,5 +1,6 @@
 # Generalization of Gibbs and Langevin Monte Carlo Algorithms in the Interpolation Regime
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

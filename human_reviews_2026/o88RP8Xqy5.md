@@ -1,5 +1,6 @@
 # T2VUnlearning: A Concept Erasing Method for Text-to-Video Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

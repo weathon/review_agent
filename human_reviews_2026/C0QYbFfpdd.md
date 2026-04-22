@@ -1,5 +1,6 @@
 # When the Gold Answer Isn't the Only Right One: Evaluating Database QA via LLM-Induced Rule Guidance
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 4
 

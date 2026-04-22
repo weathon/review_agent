@@ -1,5 +1,6 @@
 # Answer matching outperforms multiple choice for LLM evaluations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

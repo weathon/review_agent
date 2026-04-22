@@ -1,5 +1,6 @@
 # Exact Online Learning with Gamma-memory delays for Accurate Feedforward SNNs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

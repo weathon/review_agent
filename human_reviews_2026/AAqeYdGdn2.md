@@ -1,5 +1,6 @@
 # PatchRefiner V2: Fast and Lightweight Real-Domain High-Resolution Metric Depth Estimation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

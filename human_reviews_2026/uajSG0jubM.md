@@ -1,5 +1,6 @@
 # MouseDTB: A Mouse Digital Twin Brain at Single-neuron Resolution
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 6
 

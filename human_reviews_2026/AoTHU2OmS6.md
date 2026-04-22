@@ -1,5 +1,6 @@
 # Temperature as a Meta-Policy: Adaptive Temperature in LLM Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

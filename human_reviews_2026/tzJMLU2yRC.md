@@ -1,5 +1,6 @@
 # Noisy-Pair Robust Representation Alignment for Positive-Unlabeled Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # The Cost of Reproducibility in Artificial Intelligence
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 6, 2, 2
 

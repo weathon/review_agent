@@ -1,5 +1,6 @@
 # Self-Exploring Language Models for Explainable Link Forecasting on Temporal Graphs via Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

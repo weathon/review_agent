@@ -1,5 +1,6 @@
 # Structuring Hidden Features via Clustering of Unit-Level Activation Patterns
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

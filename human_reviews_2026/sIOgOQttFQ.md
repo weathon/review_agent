@@ -1,5 +1,6 @@
 # MegaFlow: Large-Scale Distributed Orchestration System for the Agentic Era
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

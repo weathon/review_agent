@@ -1,5 +1,6 @@
 # A^2TG: Adaptive Anisotropic Textured Gaussians for Efficient 3D Scene Representation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

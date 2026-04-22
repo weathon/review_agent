@@ -1,5 +1,6 @@
 # Stability and Generalization of Split Learning : Sequential or Federated
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

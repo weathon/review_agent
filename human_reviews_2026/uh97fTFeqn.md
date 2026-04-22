@@ -1,5 +1,6 @@
 # CLUE: Fine-Grained Self-Supervised Learning with Multi-Level Regularization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

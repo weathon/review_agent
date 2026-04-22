@@ -1,5 +1,6 @@
 # Data Efficacy for Language Model Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

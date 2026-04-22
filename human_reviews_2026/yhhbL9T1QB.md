@@ -1,5 +1,6 @@
 # FaSTA*: Fast-Slow Toolpath Agent with Subroutine Mining for Efficient Multi-turn Image Editing
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

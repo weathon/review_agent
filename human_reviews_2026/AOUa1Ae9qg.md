@@ -1,5 +1,6 @@
 # Password-Activated Shutdown Protocols for Misaligned Frontier Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 10, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Accelerated Parallel Tempering via Neural Transports
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 2
 

@@ -1,5 +1,6 @@
 # RESCHED: Rethinking Flexible Job Shop Scheduling from a Transformer-based Architecture with Simplified States
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

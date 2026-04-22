@@ -1,5 +1,6 @@
 # Function regression using the forward forward training and inferring paradigm
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

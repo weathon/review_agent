@@ -1,5 +1,6 @@
 # Discovering Architectures via an Evolutionary Agentic Framework
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # EAT: Entropy After $\textlangle \tt /Think \textrangle$ for reasoning model early exiting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

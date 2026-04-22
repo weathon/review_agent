@@ -1,5 +1,6 @@
 # TACO-Net: Topological Signatures Triumph in 3D Object Classification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

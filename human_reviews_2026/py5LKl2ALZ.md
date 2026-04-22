@@ -1,5 +1,6 @@
 # The Power of Order: Fooling LLMs with Adversarial Table Permutation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 
@@ -160,12 +161,14 @@ This paper examines the phenomenon on adversarially prompting LLMs for Tabular q
 ### Weaknesses
 **Experiment on relevant baselines**: Aren’t there any optimization-based baselines to compare against? 
 
-**Additional baselines**: Also, please augment with the previous works the authors have cited [1, 2] for random permutations to make sure the comparison is thoroughly done.  
+**Additional baselines**: Also, please augment with the previous works the authors have cited [1, 2] for random permutations to make sure the comparison is thoroughly done. 
+
 
 **Experiment 1**: It would be interesting to understand the effect of ATP/random perturbations on tabular synthetic data [3, 4]. Questions such as whether LLMs are vulnerable to attacks using synthetic data and if so whether it’s more/less compared with real data (WTQ etc;) and to what extent (maybe random perturbations are enough if it’s synthetic data as it might have something inherently adversarial!) can be answered to an extent. Basically the success of ATP depends on the time spent on the optimization performed and the actual data used. For example, both [3, 4] use a form of randomly shuffling data to train the models for invariant feature, so it will be interesting to understand the consequences of using synthetic data generated from such models.
 
 **Experiment 2**: Can the authors comment on scenarios when there’s data dependency in the rows/columns? Let’s say activity level data such as in healthcare, financial domains. You can consider an experiment around some datasets and report any interesting findings: 
-- For eg: If a table has the following structure, we know that the future price (somehow) depends on past price and we can’t really look at each row as an independent point. There are cases when columns are dependent as well. 
+- For eg: If a table has the following structure, we know that the future price (somehow) depends on past price and we can’t really look at each row as an independent point. There are cases when columns are dependent as well.
+
 | Stock | Date        | Price |
 |--------|-------------|-------|
 | A       |  1 Jan 2025  | 100   |

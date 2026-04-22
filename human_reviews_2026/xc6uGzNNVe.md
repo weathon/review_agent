@@ -1,5 +1,6 @@
 # Principal Spectral Regularization Makes Momentum Surpass Adam for LLM Training
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 2
 

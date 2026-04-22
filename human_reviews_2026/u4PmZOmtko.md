@@ -1,5 +1,6 @@
 # How Well Can General Vision-Language Models Learn Medicine By Watching Public Educational Videos?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

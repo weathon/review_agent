@@ -1,5 +1,6 @@
 # Learning Diverse Textual Contexts for Robust Personalization of Text-to-Image Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # MoLE-GNN: Parameter-Efficient Fine-Tuning of Graph Neural Networks with Mixture-of-Experts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # LLaVA-Critic-R1: Your Critic Model is Secretly a Strong Policy Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

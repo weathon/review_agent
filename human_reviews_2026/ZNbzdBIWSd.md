@@ -1,5 +1,6 @@
 # Refine Synthesized Action-Conditioned 3D Human Motion with Unsupervised Learned Motion Concepts
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

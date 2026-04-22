@@ -1,5 +1,6 @@
 # Logit‑KL Flow Matching: Non‑Autoregressive Text Generation via Sampling‑Hybrid Inference
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

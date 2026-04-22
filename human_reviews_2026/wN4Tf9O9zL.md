@@ -1,5 +1,6 @@
 # Physics-Informed Machine Learning under Climate Domain Shift: PDE-Free Physics Regularisation for Cloud Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

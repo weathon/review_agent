@@ -1,5 +1,6 @@
 # Hyperparameter search on the test set in the wild
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

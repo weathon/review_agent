@@ -1,5 +1,6 @@
 # Hi-Light: A Path to high-fidelity, high-resolution video relighting with a Novel Evaluation Paradigm
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

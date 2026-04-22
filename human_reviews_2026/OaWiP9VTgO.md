@@ -1,5 +1,6 @@
 # BALF: Budgeted Activation-Aware Low-Rank Factorization for Fine-Tuning-Free Model Compression
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 2, 8
 

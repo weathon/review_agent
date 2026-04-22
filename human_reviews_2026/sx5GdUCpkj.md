@@ -1,5 +1,6 @@
 # Evaluating the Evaluators: Investigating LLM Judges for Personalized Writing Style Assessment
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 4, 2
 

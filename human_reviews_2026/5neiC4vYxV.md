@@ -1,5 +1,6 @@
 # Self-Guided Explanation for Graph Neural Networks with Semi-Supervision
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

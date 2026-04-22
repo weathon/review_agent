@@ -1,5 +1,6 @@
 # High-accuracy and dimension-free sampling with diffusions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

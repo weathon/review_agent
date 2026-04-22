@@ -1,5 +1,6 @@
 # Towards Safe Reasoning in Large Reasoning Models via Corrective Intervention
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # PolypDB: A Curated Multi-Center Dataset for Development of AI Algorithms in Colonoscopy
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

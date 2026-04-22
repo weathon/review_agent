@@ -1,5 +1,6 @@
 # Efficient Self-Guided Editing for Text-Driven Image-to-Image Translation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

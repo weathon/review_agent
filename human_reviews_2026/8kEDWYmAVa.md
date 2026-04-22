@@ -1,5 +1,6 @@
 # VISOR++ : VISUAL INPUT BASED STEERING FOR LARGE VISION LANGUAGE MODELS
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

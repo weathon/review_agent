@@ -1,5 +1,6 @@
 # STORM: Benchmarking Visual Rating of MLLMs with a Comprehensive Ordinal Regression Dataset
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

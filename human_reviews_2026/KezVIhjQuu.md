@@ -1,5 +1,6 @@
 # Approaching the Harm of Gradient Attacks While Only Flipping Labels
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

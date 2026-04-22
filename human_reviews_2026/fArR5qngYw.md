@@ -1,5 +1,6 @@
 # From Moments to Models: Graphon Mixture-Aware Mixup and Contrastive Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

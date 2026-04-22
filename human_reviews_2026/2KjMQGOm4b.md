@@ -1,5 +1,6 @@
 # The Differences Between Direct Alignment Algorithms are a Blur
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 10, 2, 2, 6
 

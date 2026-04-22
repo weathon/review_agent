@@ -1,5 +1,6 @@
 # Stream RAG: Instant and Accurate Spoken Dialogue Systems with Streaming Tool Usage
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

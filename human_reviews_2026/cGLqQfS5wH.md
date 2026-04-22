@@ -1,5 +1,6 @@
 # Making Slow Thinking Faster: Compressing LLM Chain-of-Thought via Step Entropy
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

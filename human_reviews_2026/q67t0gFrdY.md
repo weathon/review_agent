@@ -1,5 +1,6 @@
 # Distributionally Robust Optimization via Generative Ambiguity Modeling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2
 

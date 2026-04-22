@@ -1,5 +1,6 @@
 # How do Human Processes AI-generated Hallucination Contents: a Neuroimaging Study
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 6, 0
 

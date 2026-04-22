@@ -1,5 +1,6 @@
 # SyncLipMAE: Contrastive Masked Pretraining for Audio–Visual Talking-Face Representations
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 8, 2
 

@@ -1,5 +1,6 @@
 # Planning with Generative Cognitive Maps
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

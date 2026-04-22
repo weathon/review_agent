@@ -1,5 +1,6 @@
 # Geo-Invariant Scoring Lead with Domain-Adversarial Transformers
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 2, 2, 6
 

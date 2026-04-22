@@ -1,5 +1,6 @@
 # DiffTester: Accelerating Unit Test Generation for Diffusion LLMs via Repetitive Pattern
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

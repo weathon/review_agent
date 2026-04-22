@@ -1,5 +1,6 @@
 # EgoFact: A Benchmark for Multi-Hop Multimodal Retrieval-Augmented Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

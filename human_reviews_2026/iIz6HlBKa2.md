@@ -1,5 +1,6 @@
 # Explaining How Visual, Textual and Multimodal Encoders Share Concepts
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

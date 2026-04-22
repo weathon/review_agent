@@ -1,5 +1,6 @@
 # Unlearning with asymmetric sources: improved unlearning-utility trade-off with public data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

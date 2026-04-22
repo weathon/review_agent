@@ -1,5 +1,6 @@
 # Security-Constrained Fine-tuning: Preventing Knowledge Restoration in Unlearned Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

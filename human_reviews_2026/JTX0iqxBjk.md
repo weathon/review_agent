@@ -1,5 +1,6 @@
 # Output Supervision Can Obfuscate the Chain of Thought
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

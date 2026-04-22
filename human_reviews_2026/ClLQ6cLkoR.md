@@ -1,5 +1,6 @@
 # ECHO: Toward Contextual Seq2Seq Paradigms in Large EEG Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4, 8
 

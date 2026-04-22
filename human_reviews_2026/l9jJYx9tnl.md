@@ -1,5 +1,6 @@
 # Poly-FEVER: A Multilingual Fact Verification Benchmark for Hallucination Detection in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

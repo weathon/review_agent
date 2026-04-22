@@ -1,5 +1,6 @@
 # STARS-FL: Accelerating Federated Learning over Heterogeneous Mobile Devices via Spatial-Temporal Aware Reconfigured Subnetworks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

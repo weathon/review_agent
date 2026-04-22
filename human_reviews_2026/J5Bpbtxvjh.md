@@ -1,5 +1,6 @@
 # RoCA: Robust Cross-Domain End-to-End Autonomous Driving
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

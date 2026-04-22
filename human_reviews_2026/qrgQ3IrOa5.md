@@ -1,5 +1,6 @@
 # Beyond Single Models: Mitigating Multimodal Hallucinations via Adaptive Token Ensemble Decoding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

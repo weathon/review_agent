@@ -1,5 +1,6 @@
 # CardioComposer: Leveraging Differentiable Geometry for Compositional Control of Anatomical Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 

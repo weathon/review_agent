@@ -1,5 +1,6 @@
 # Counterfactual Explanations for Time Series Data via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

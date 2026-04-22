@@ -1,5 +1,6 @@
 # Learning Steadily: Accumulating Relative Point Margin Scores for Face Image Quality Assessment
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2, 4
 

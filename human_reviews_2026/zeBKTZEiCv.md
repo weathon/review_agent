@@ -1,5 +1,6 @@
 # TENet: A Text-Enhanced Network for Few-Shot Semantic Segmentation with Background-Aware Query Refinement
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

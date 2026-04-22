@@ -1,5 +1,6 @@
 # Pretraining LLM with Latent Thoughts in Continuous Space
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # ChinaTravel: An Open-Ended Travel Planning Benchmark with Compositional Constraint Validation for Language Agents
 
+- Avg Score: 5.14
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 8, 2, 6
 

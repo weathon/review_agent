@@ -1,5 +1,6 @@
 # Beyond Solving: A Closer Look at LLMs as Solution Verifiers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

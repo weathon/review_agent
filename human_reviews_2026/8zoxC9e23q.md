@@ -1,5 +1,6 @@
 # Diffusion Fine-Tuning via Reparameterized Policy Gradient of the Soft Q-Function
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

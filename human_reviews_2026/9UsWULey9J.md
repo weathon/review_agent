@@ -1,5 +1,6 @@
 # Hierarchical Speculative Decoding through Training-Free Slim-Verifier
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Are LLM Agents Behaviorally Coherent? Latent Profiles for Social Simulation
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

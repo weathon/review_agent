@@ -1,5 +1,6 @@
 # Layerwise Federated Learning for Heterogeneous Quantum Clients using Quorus
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 
@@ -64,19 +65,22 @@ The paper presents a federated learning framework to train quantum clients with 
 ### Strengths
 The problem formulation and framing are clear, focusing on depth heterogeneity in QFL. The concrete FL procedure with circular angle averaging, parameter slicing by depth, and layerwise loss is an impressive methodology.
 
-Circuit engineering is thoughtful. The designs cover orthogonal resource constraints such as shots, ancillae, and mid-circuit measurement, and they are practical on current hardware. The Funnel variant is particularly pragmatic. 
+Circuit engineering is thoughtful. The designs cover orthogonal resource constraints such as shots, ancillae, and mid-circuit measurement, and they are practical on current hardware. The Funnel variant is particularly pragmatic.
+
 
 Validation on real quantum hardware is a core strength.
 
 ### Weaknesses
-Major Weaknesses: 
+Major Weaknesses:
+
 The evaluation scope is narrow. Only binary classification is used, and only on MNIST and Fashion-MNIST (both grayscale, 28×28 toy image datasets). No multiclass tasks, no quantum-native datasets, and missing diversity (especially in a paper that lacks theoretical proofs) weaken the authors’ claims. These datasets are fairly simple and do not require deep quantum circuits to perform well. Under this narrow experimental setting, a 12 percent improvement over a baseline does not establish general scalability, robustness, or utility of the method.
 
 When a paper offers only empirical support, it is expected to include evaluation across multiple types of problems, including at least multiclass classification and a different dataset, such as CIFAR-10 or CIFAR-100. None are present.
 
 Because the experiments are so limited in difficulty and diversity, the work must instead offer compensation with solid theoretical justification that proves why the method should work beyond toy datasets. However, convergence theory is missing, there is no stationary-point guarantee, and no rigorous mathematical explanation of how KL coupling affects the optimization landscape.
 
-Minor (for maximum information transfer) Issues: 
+Minor (for maximum information transfer) Issues:
+
 The data encoding pipeline is under-specified. Feature preprocessing, feature-to-quantum-state mapping, and the reupload schedule (mentioned briefly in the paper) are extremely important. These affect the number of qubits required as well as circuit depth. Upon checking the appendix and supplementary materials, I found that the authors used PCA to reduce the dimensionality. Overall, reproducibility and completeness of the paper are negatively impacted by the lack of inclusion of these details in the main manuscript. I hope the authors include this.
 
 Baseline selection seems to inflate the claimed gains. Vanilla QFL forces all clients to use the shallowest model, giving predictably weak results. Standalone training is a trivial lower bound. Q-HeteroFL is an extension of HeteroFL, implemented by the authors without external validation. It is not clear whether these baselines are suitable enough to be regarded as “state of the art.”

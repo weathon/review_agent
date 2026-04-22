@@ -1,5 +1,6 @@
 # Aligning Deep Implicit Preferences by Learning to Reason Defensively
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

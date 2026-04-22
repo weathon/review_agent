@@ -1,5 +1,6 @@
 # Euclid: Lessons for Geometric Low-level Visual Perception in Multimodal LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

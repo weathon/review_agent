@@ -1,5 +1,6 @@
 # LogitSpec: Accelerating Retrieval-based Speculative Decoding via Next Next Token Speculation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

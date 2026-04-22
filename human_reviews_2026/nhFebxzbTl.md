@@ -1,5 +1,6 @@
 # metabeta - A fast neural model for Bayesian mixed-effects regression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

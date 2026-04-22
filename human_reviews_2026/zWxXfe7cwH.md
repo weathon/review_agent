@@ -1,5 +1,6 @@
 # Does the Data Processing Inequality Reflect Practice? On the Utility of Low-Level Tasks
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

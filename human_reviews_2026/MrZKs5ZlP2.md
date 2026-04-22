@@ -1,5 +1,6 @@
 # Noise Informed LLM for Zero-shot Time Series Forecasting with Uncertainty Quantification
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 
@@ -31,18 +32,22 @@ The paper addresses the lack of uncertainty quantification in LLM-based time ser
 
 ### Weaknesses
 1. While the paper demonstrates a solid understanding of Large Language Models (LLMs), it shows limited awareness of fundamental concepts, methodologies, and recent advances in the time series forecasting (TSF) domain, despite time series being a primary focus suggested by the title.
-   - For example, the authors claim that (lines 38-40), “By leveraging intricate prompt engineering and tokenization mechanisms (Naveed et al., 2024), the application of LLMs to TS forecasting represents an emerging and surprisingly effective paradigm, capitalizing on their innate ability to discern and extrapolate complex temporal patterns in a zero-shot manner.”  However, this assertion is debatable. Several studies have reported mixed or negative evidence regarding the effectiveness of general-purpose LLMs for time series forecasting. This gap in performance has motivated the development of an entire class of Time Series Foundation Models (TSFMs) specifically designed for such tasks.
+   - For example, the authors claim that (lines 38-40), “By leveraging intricate prompt engineering and tokenization mechanisms (Naveed et al., 2024), the application of LLMs to TS forecasting represents an emerging and surprisingly effective paradigm, capitalizing on their innate ability to discern and extrapolate complex temporal patterns in a zero-shot manner.”
+ However, this assertion is debatable. Several studies have reported mixed or negative evidence regarding the effectiveness of general-purpose LLMs for time series forecasting. This gap in performance has motivated the development of an entire class of Time Series Foundation Models (TSFMs) specifically designed for such tasks.
     - The statement that “A significant limitation of this approach lies in its predominant focus on deterministic point predictions, neglecting a cornerstone of trustworthy forecasting: the quantification of predictive uncertainty.” overlooks a major body of work in probabilistic forecasting, where predictive uncertainty is explicitly modeled through probabilistic loss functions (e.g., CRPS, quantile losses). Many TSFMs already incorporate such approaches. A more grounded discussion within the broader TS forecasting context would strengthen the paper.
     - Regarding lines 154–155: the paper suggests that time series forecasting generally involves decomposing data into structural signal and stochastic noise components. This is not a general property of time series forecasting. While some architectures, such as DLinear, N-BEATS, and Autoformer, aim to extract trend, seasonality, and/or noise components, many modern transformer-based or deep learning models do not rely on explicit decomposition.
     - The authors also claim that (lines 157-159), “The objective of TS forecasting extends beyond point prediction to the probabilistic estimation of future values {xT +1, xT +2, . . . , xT +H } over a horizon H, conditioned on historical observations.” While probabilistic forecasting is indeed an important and growing research direction, it is not the universal objective of TS forecasting. Rather, it represents a recent paradigm shift aimed at improving uncertainty quantification.
 
-2.  The prior work referenced for Uncertainty Quantification (UQ) pertains mainly to text data. The paper does not justify why this approach is not evaluated on text data as well.
+2. 
+The prior work referenced for Uncertainty Quantification (UQ) pertains mainly to text data. The paper does not justify why this approach is not evaluated on text data as well.
 
-3.  The paper does not reference to recent LLM-based forecasting models such as Time-LLM, Chronos, and other LLM-based forecasting frameworks.
+3. 
+The paper does not reference to recent LLM-based forecasting models such as Time-LLM, Chronos, and other LLM-based forecasting frameworks.
 
 4. The UQ methods listed in Table 1 are not consistently evaluated in Table 2, which limits the ability to assess comparative performance. 
 
-5. It is unclear what exactly Table 2 demonstrates regarding the proposed UQ technique.  It would be more informative to present forecasting results with and without the proposed UQ method, to isolate its contribution. Similarly, in the forecasting figures, no baseline model is shown, making it difficult to assess relative performance.
+5. It is unclear what exactly Table 2 demonstrates regarding the proposed UQ technique. 
+It would be more informative to present forecasting results with and without the proposed UQ method, to isolate its contribution. Similarly, in the forecasting figures, no baseline model is shown, making it difficult to assess relative performance.
 
 ### Questions
 1. Lines 262–263: How are time series tokenized for the LLM in this work? Is the tokenization based on discrete binning, quantization, or another encoding scheme?

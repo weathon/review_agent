@@ -1,5 +1,6 @@
 # MoB: Mixture of Block Transformer for Accelerating Video Generation with Dynamic Routing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

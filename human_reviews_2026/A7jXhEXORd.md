@@ -1,5 +1,6 @@
 # Chord-Transformer:Chord-Progression Guided Transformer for Long-Sequence Symbolic Music Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 0, 4, 6
 

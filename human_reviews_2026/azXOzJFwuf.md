@@ -1,5 +1,6 @@
 # FuseNorm: Achieving the Best of Both Worlds from PreNorm and PostNorm
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # PRISM: Diversifying Dataset Distillation by Decoupling Architectural Priors
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # ChunkLLM: A Lightweight Pluggable Framework for Accelerating LLMs Inference
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

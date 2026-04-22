@@ -1,5 +1,6 @@
 # Jacobian Aligned Random Forests
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Reinforcement Learning with Discrete Diffusion Policies for Combinatorial Action Spaces
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

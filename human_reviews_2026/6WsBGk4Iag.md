@@ -1,5 +1,6 @@
 # A Comprehensive Information-Decomposition Analysis of Large Vision-Language Models
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 4, 6
 

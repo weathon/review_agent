@@ -1,5 +1,6 @@
 # It’s Not You, It’s Clipping: A Soft Trust-Region via Probability Smoothing for LLM RL
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2
 

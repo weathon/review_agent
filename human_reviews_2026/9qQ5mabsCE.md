@@ -1,5 +1,6 @@
 # EmboMatrix: A Scalable Training-Ground for Embodied Decision-Making
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

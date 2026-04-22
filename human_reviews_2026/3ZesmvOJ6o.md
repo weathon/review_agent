@@ -1,5 +1,6 @@
 # UnRe: Zero-Shot LLM Unlearning via Dynamic Contextual Retrieval
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

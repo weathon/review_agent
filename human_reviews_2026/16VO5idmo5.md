@@ -1,5 +1,6 @@
 # Enhancing RAG with Active Learning on Conversation Records: Reject Incapables and Answer Capables
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

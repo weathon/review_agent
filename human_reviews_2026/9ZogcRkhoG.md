@@ -1,5 +1,6 @@
 # Representing local protein environments with machine learning force fields
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

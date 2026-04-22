@@ -1,5 +1,6 @@
 # Learning Velocity Prior-Guided Hamiltonian-Jacobi Flows with Unbalanced Optimal Transport
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

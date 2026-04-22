@@ -1,5 +1,6 @@
 # From Invariant Representations to Invariant Data: Provable Robustness to Spurious Correlations via Noisy Counterfactual Matching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

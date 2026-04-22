@@ -1,5 +1,6 @@
 # PLP-NER: Point-Line-Plane Context Fusion for Named Entity Recognition
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0, 2
 

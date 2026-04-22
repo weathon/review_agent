@@ -1,5 +1,6 @@
 # Empirical Robustness of Pixel Diffusion Undermines Adversarial Perturbation as Protection against Diffusion-based Mimicry
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

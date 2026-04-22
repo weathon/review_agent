@@ -1,5 +1,6 @@
 # Difficulty-Aware Reasoning for Mobile GUI Automation via Reinforcement Fine-Tuning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 4
 

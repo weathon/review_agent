@@ -1,5 +1,6 @@
 # Rethinking GNNs and Missing Features: Challenges, Evaluation and a Robust Solution
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 2, 8
 

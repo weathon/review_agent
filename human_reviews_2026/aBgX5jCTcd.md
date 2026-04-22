@@ -1,5 +1,6 @@
 # STEP-VQ: Sequence-model Agnostic Frame-level Inference with VQ-VAE for Model-based Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

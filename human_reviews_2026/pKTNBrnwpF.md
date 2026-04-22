@@ -1,5 +1,6 @@
 # Optimal Stopping in Latent Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

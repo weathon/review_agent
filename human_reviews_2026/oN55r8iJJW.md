@@ -1,5 +1,6 @@
 # SAM-Veteran: An MLLM-Based Human-like SAM Agent for Reasoning Segmentation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

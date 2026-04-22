@@ -1,5 +1,6 @@
 # KVCache-Centric Memory for LLM Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

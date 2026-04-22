@@ -1,5 +1,6 @@
 # INFER: Embedding Integration with Feature Refinement for Few-Shot Learning in VLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

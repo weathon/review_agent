@@ -1,5 +1,6 @@
 # LOMAC: GNN-based Deep Reinforcement Learning with One-Way Markov Chain for Graph Coloring
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

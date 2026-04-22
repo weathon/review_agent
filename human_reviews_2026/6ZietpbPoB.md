@@ -1,5 +1,6 @@
 # Online Pseudo-Zeroth-Order Training of Neuromorphic Spiking Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

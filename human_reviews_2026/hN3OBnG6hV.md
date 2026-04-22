@@ -1,5 +1,6 @@
 # CogniPair: GNWT-inspired cognitive architecture for generative agents for Social Pairing -  Dating & Hiring Applications
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 8, 4
 

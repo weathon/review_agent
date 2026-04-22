@@ -1,5 +1,6 @@
 # Theory-Grounded Evaluation of Human-Like Fallacy Patterns in LLM Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 0, 8, 4, 6
 

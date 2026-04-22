@@ -1,5 +1,6 @@
 # Federated Learning with Unlabeled Clients: Personalization Can Happen in Low Dimensions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

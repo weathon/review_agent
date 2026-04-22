@@ -1,5 +1,6 @@
 # Token-level Data Selection for Safe LLM Fine-tuning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

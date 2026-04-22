@@ -1,5 +1,6 @@
 # Learning linear state-space models with sparse system matrices
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

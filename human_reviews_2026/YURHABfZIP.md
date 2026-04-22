@@ -1,5 +1,6 @@
 # RobustFlow: Towards Robust Agentic Workflow Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

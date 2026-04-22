@@ -1,5 +1,6 @@
 # MCP-SafetyBench: A Benchmark for Safety Evaluation of Large Language Models with Real-World MCP Servers
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

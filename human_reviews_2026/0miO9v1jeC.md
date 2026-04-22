@@ -1,5 +1,6 @@
 # TAR: Token Adaptive Routing Framework for LLMs Token-level Semantic Correction Inspired by Neuro-Linguistic Pathways
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

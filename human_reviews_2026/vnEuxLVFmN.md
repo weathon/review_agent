@@ -1,5 +1,6 @@
 # WebOperator: Action-Aware Tree Search for Autonomous Agents in Web Environment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Pi3DGS: Robust Joint Optimization of Camera Poses and 3DGS from Uncalibrated Images
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 4, 2
 

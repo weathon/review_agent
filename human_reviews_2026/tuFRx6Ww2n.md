@@ -1,5 +1,6 @@
 # Latent Sentinel: Real-Time Jailbreak Detection with Layer-wise Probes
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 6
 

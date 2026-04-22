@@ -1,5 +1,6 @@
 # RePro: Training Language Models to Faithfully Recycle the Web for Pretraining
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8, 6
 

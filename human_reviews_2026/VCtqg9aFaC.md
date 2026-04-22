@@ -1,5 +1,6 @@
 # AsyncSpade: Efficient Test-Time Scaling with Asynchronous Sparse Decoding
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

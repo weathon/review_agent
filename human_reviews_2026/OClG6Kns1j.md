@@ -1,5 +1,6 @@
 # Deciphering Cross-Modal Feature Interactions in Multimodal AIGC Models: A Mechanistic Interpretability Approach
 
+- Avg Score: 0.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 2
 

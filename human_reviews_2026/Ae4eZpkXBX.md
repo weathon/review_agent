@@ -1,5 +1,6 @@
 # Fast Escape, Slow Convergence: Learning Dynamics of Phase Retrieval under Power-Law Data
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Blockwise Hadamard high-Rank Adaptation for Parameter-Efficient LLM Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

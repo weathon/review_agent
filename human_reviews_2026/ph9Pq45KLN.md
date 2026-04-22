@@ -1,5 +1,6 @@
 # Same model, better performance: the impact of shuffling on DNA Language Models benchmarking
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

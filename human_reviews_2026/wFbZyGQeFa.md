@@ -1,5 +1,6 @@
 # A Diffusion Model Induced by MSE Training
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 0, 2
 

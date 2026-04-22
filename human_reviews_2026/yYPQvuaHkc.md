@@ -1,5 +1,6 @@
 # Decomposed Attention FredFormer: Large Time-series Prediction Model for Satellite Orbit Prediction
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 4, 8
 

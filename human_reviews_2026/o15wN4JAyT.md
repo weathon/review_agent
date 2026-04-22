@@ -1,5 +1,6 @@
 # Generalizing Supervised Contrastive learning: A Projection Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

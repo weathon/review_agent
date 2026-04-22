@@ -1,5 +1,6 @@
 # FedAgentBench: Towards Automating Real-world Federated Medical Image Analysis with Server–Client LLM Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

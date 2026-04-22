@@ -1,5 +1,6 @@
 # Distilling SNN Students from ANN Teachers via Spiking Neural Architecture Search
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 6
 

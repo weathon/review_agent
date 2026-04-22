@@ -1,5 +1,6 @@
 # InferSpec: Adaptive Inference-Time Compute with Ensemble Verifier-Guided Speculative Decoding for Efficient Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

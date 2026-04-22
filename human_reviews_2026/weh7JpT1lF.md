@@ -1,5 +1,6 @@
 # RestoRect: Degraded Image Restoration via Latent Rectified Flow & Feature Distillation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

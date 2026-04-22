@@ -1,5 +1,6 @@
 # Balanced Low-Rank Adaptation: Removing Invariance for Fast and Stable Fine-Tuning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

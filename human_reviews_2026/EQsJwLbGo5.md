@@ -1,5 +1,6 @@
 # PROMPTGNN-SIM: DEEP FUSION AND ALIGNMENT OF GNN AND LLMS FOR TEXT-ATTRIBUTED GRAPH LEARNING
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 
@@ -82,10 +83,14 @@ The authors identify that current models fail to create an interactive exchange 
 3. The model achieves state-of-the-art results across all six datasets for both node classification (Table 1) and link prediction (Table 2).
 
 ### Weaknesses
-1. Despite its strong results, the framework's design introduces several significant challenges and potential limitations. The model's success is heavily dependent on its "dynamic prompt construction". This is a "hard-coded" heuristic. The authors had to design specific, complex prompt templates for different datasets (see Table 8). This approach is brittle and raises overfitting concerns: The model may be "overfitting" to the specific keywords and prompt structures (e.g., "Key References," "Common Research Themes")  that the authors engineered. It cannot be deployed on a new dataset out-of-the-box. A human expert would need to manually design, test, and validate new prompt templates, which is a significant practical barrier. The performance difference in Table 9 for different prompts validates this sensitivity. 
+1. Despite its strong results, the framework's design introduces several significant challenges and potential limitations. The model's success is heavily dependent on its "dynamic prompt construction". This is a "hard-coded" heuristic. The authors had to design specific, complex prompt templates for different datasets (see Table 8). This approach is brittle and raises overfitting concerns: The model may be "overfitting" to the specific keywords and prompt structures (e.g., "Key References," "Common Research Themes")  that the authors engineered.
+It cannot be deployed on a new dataset out-of-the-box. A human expert would need to manually design, test, and validate new prompt templates, which is a significant practical barrier. The performance difference in Table 9 for different prompts validates this sensitivity.
 
-2. The method relies on feeding neighborhood information into an LLM prompt. This creates a fundamental bottleneck. LLMs have fixed context windows. While a GNN can aggregate information from thousands of neighbors, this model can only "select the top-k neighbors" to fit into the prompt. In graphs with large, dense "hub" nodes (common in social or e-commerce networks), this "top-k" approach will discard a massive amount of structural information, leading to a poor understanding of the node's true context. 
- 
+
+2. The method relies on feeding neighborhood information into an LLM prompt. This creates a fundamental bottleneck. LLMs have fixed context windows. While a GNN can aggregate information from thousands of neighbors, this model can only "select the top-k neighbors" to fit into the prompt. In graphs with large, dense "hub" nodes (common in social or e-commerce networks), this "top-k" approach will discard a massive amount of structural information, leading to a poor understanding of the node's true context.
+
+
+
 3. The evaluation, while using six datasets, is confined to a very specific type of graph: academic and e-commerce networks. These graphs are ideal for this method because their nodes have rich, long-form, and well-structured text (e.g., abstracts, reviews). The method would likely fail in many other common scenarios:  No Text: Biological (e.g., protein-protein interaction) or molecular graphs, where nodes have numerical/categorical features, not text. The model's premise starts with text attributes. The authors used high-end NVIDIA A100 80GB GPUs. This, combined with a large number of sensitive hyperparameters (e.g., $\lambda$ for fusion , $k$ for neighbors , temperature $\tau$ ), makes the model extremely expensive to train and difficult to tune.
 
 ### Questions

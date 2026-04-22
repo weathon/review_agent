@@ -1,5 +1,6 @@
 # MLOT: Generalizing the Bipartite Structure to a Multi-Layered Framework for Optimal Transport
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

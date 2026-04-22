@@ -1,5 +1,6 @@
 # High Probability Streaming Lower Bounds for $F_2$ Estimation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

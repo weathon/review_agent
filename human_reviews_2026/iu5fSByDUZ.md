@@ -1,5 +1,6 @@
 # GraphPCB: Graph-encoded Printed Circuit Board Datasets for Component Classification with Graph Neural Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

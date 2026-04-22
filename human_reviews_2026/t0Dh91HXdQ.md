@@ -1,5 +1,6 @@
 # CoBiSyn: A Bidirectional Search Framework for Chemical Synthesis Planning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

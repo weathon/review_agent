@@ -1,5 +1,6 @@
 # FM-EAC: Feature Model-based Enhanced Actor-Critic for Multi-Task Control in Dynamic Environments
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

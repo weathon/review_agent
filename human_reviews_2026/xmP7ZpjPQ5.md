@@ -1,5 +1,6 @@
 # OraclePRM: Unlocking the Potential of Each Instance for Multimodal Process Reward Model Training
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

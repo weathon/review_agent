@@ -1,5 +1,6 @@
 # Is it worth it to collect missing values?: The Missing Value Uncertainty Problem
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 
@@ -80,7 +81,8 @@ Experiments on synthetic and image-based datasets compare DMV to sampling (via d
 
 **Evaluation of the MVU estimator**: Estimating MVU is a very challenging task—typically harder than learning the optimal probabilistic prediction under arbitrary missingness—because it requires estimating the full predictive distribution rather than just the conditional expectation. I am therefore wondering how well DMV can approximate this distribution, and the current experiments do not convince me that it is indeed a good estimator.
 
-For example, Table 2 shows that DMV achieves an MVCE roughly comparable to a diffusion-based sampling baseline using only 3 samples (in 2 out of 3 tasks). It is questionable whether 3 samples suffice to accurately approximate the MVU distribution, which raises concerns about whether DMV captures the distribution’s quality well enough. 
+For example, Table 2 shows that DMV achieves an MVCE roughly comparable to a diffusion-based sampling baseline using only 3 samples (in 2 out of 3 tasks). It is questionable whether 3 samples suffice to accurately approximate the MVU distribution, which raises concerns about whether DMV captures the distribution’s quality well enough.
+
 
 Validating DMV on a controlled synthetic setting (e.g., a multivariate Gaussian) would allow comparison against a ground-truth baseline, exploring how performance varies with dimensionality, sample size, and other factors. It would also allow to compare to a sampling baseline in a controlled setting where many samples can be drawn, and see what the estimation quality/computational tradeoffs are more clearly.
 

@@ -1,5 +1,6 @@
 # Self-Anchor: Large Language Model Reasoning via Step-by-step Attention Alignment
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

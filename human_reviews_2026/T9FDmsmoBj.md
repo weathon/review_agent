@@ -1,5 +1,6 @@
 # From Sequential to Parallel: Reformulating Dynamic Programming as GPU Kernels for Large-Scale Stochastic Combinatorial Optimization
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

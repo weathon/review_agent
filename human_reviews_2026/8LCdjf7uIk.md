@@ -1,5 +1,6 @@
 # Large Language Model Guided Dynamic Branching Rule Scheduling in Branch-and-Bound
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # On learning linear dynamical systems in context with attention layers
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 8
 

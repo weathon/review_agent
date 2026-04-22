@@ -1,5 +1,6 @@
 # CLIPin: A Non-contrastive Plug-in to CLIP for Multimodal Semantic Alignment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Hierarchical Multi-Scale Molecular Conformer Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

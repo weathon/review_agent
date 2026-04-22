@@ -1,5 +1,6 @@
 # Neural Multi-Objective Combinatorial Optimization for Flexible Job Shop Scheduling Problems
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

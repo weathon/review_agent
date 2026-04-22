@@ -1,5 +1,6 @@
 # EvolArena: An Evolving Arena for Multi-Turn Reasoning in LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

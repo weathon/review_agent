@@ -1,5 +1,6 @@
 # GDR-learners: Orthogonal Learning of Generative Models for Potential Outcomes
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

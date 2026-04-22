@@ -1,5 +1,6 @@
 # Lagrangian Meets Diffusion: Feasibility-aware Generative Modeling for Mixed Integer Linear Programming
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 4, 6
 

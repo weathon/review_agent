@@ -1,5 +1,6 @@
 # SonicMaster: Towards Controllable All-in-One Music Restoration and Mastering
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

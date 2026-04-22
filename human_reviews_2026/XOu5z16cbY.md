@@ -1,5 +1,6 @@
 # Pretraining with hierarchical memories: separating long-tail and common knowledge
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 2
 

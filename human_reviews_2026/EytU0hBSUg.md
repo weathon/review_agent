@@ -1,5 +1,6 @@
 # COSMOS: Are Performance–Cost Tradeoffs Predictable in Model--Strategy Selection?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

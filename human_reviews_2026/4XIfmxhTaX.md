@@ -1,5 +1,6 @@
 # On the Entropy Dynamics in Reinforcement Fine-Tuning of Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

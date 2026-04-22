@@ -1,5 +1,6 @@
 # Failure makes the agent stronger: Enhancing Accuracy through Structured Reflection for Reliable Tool Interactions
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

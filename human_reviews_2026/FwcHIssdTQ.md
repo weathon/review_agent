@@ -1,5 +1,6 @@
 # Rethinking Multi-Omics LLMs from the Perspective of Omics-Encoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

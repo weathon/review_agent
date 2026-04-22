@@ -1,5 +1,6 @@
 # BALROG: Contextual Bandits meets Active Learning for Online Generative Model Selection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

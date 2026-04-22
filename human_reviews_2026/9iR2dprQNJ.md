@@ -1,5 +1,6 @@
 # Mixture of Heterogeneous Grouped Experts for Language Modeling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

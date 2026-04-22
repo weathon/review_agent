@@ -1,5 +1,6 @@
 # Learnable Spiking Neural P System with Interval Excitation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

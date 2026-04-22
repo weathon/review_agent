@@ -1,5 +1,6 @@
 # Minor First, Major Last: A Depth-Induced Implicit Bias of Sharpness-Aware Minimization
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 2
 

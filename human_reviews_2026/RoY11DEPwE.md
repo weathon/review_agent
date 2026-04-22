@@ -1,5 +1,6 @@
 # MIRO: MultI-Reward cOnditioned pretraining improves T2I quality and efficiency
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # NetArena: Dynamic Benchmarks for AI Agents in Network Automation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # FlexiFlow: decomposable flow matching for generation of flexible molecular ensemble
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

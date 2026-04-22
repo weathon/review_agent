@@ -1,5 +1,6 @@
 # CitySeeker: How Do VLMs Explore Embodied Urban Navigation with Implicit Human Needs?
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

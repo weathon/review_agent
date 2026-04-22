@@ -1,5 +1,6 @@
 # Stochastic Self-Guidance for Training-Free Enhancement of Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Big Data, Leverage Scores, and Minimum Volume Covering Ellipsoids: Bridging Theory With Practice
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4, 2
 

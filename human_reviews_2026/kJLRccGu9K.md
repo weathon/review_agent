@@ -1,5 +1,6 @@
 # 2D Quantization for Ultra‑low‑bit Optimizers
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

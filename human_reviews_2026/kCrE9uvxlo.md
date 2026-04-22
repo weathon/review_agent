@@ -1,5 +1,6 @@
 # DeepThinkVLA: Enhancing Reasoning Capability of Vision-Language-Action Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

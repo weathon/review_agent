@@ -1,5 +1,6 @@
 # Daunce: Data Attribution through Uncertainty Estimation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

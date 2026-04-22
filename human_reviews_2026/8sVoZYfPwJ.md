@@ -1,5 +1,6 @@
 # ERASED OR DORMANT? RETHINKING CONCEPT ERASURE THROUGH REVERSIBILITY
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

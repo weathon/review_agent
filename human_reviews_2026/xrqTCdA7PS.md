@@ -1,5 +1,6 @@
 # ScaleWeaver: Weaving Efficient Controllable T2I Generation with Multi-Scale Reference Attention
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

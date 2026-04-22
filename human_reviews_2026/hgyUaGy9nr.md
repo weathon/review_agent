@@ -1,5 +1,6 @@
 # LAMP: An LLM-based Message Passing Architecture for Text-Rich Graphs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

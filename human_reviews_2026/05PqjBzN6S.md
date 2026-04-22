@@ -1,5 +1,6 @@
 # When to Retrain after Drift: A Data-Only Test of Post-Drift Data Size Sufficiency
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6
 

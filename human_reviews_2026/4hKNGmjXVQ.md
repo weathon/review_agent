@@ -1,5 +1,6 @@
 # Transformers as Unsupervised Learning Algorithms: A study on Gaussian Mixtures
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

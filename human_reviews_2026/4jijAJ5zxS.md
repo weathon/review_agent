@@ -1,5 +1,6 @@
 # VLM-PTA: Exploiting Page Table Attack to Deplete the Intelligence of VLMS
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

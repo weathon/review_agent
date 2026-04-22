@@ -1,5 +1,6 @@
 # Newton Method Revisited: Global Convergence Rates up to $O(1/k^3)$  for Stepsize Schedules and Linesearch Procedures
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 4
 

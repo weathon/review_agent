@@ -1,5 +1,6 @@
 # Designing Observation and Action Models for Efficient Reinforcement Learning with LLMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 6
 

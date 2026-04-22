@@ -1,5 +1,6 @@
 # When Silence Is Golden: Can LLMs Learn to Abstain in Temporal QA and Beyond?
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 2
 

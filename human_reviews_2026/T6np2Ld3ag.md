@@ -1,5 +1,6 @@
 # Fine-grained Token Allocation Via Operation Pruning for Efficient MLLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

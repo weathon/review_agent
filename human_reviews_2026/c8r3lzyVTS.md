@@ -1,5 +1,6 @@
 # Video Scene Segmentation with Genre and Duration Signals
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

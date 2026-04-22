@@ -1,5 +1,6 @@
 # Profile-Aware Maneuvering: A Dynamic Multi-Agent System to Robust Agentic Problem Solving
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 2, 0
 

@@ -1,5 +1,6 @@
 # Identifying Robust Neural Pathways: Few-Shot Adversarial Mask Tuning for Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

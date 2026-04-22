@@ -1,5 +1,6 @@
 # Not Errors but Guardians: Understanding Sink Tokens in Multimodal LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

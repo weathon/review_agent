@@ -1,5 +1,6 @@
 # Learning Multimodal Representations from Partially Paired, Small-Scale Data
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Low-Rank Tensor Encoding Models Decompose Natural Speech Comprehension Processes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

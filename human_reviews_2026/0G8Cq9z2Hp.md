@@ -1,5 +1,6 @@
 # Efficient Prediction of Large Protein Complexes via Subunit-Guided Hierarchical Refinement
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 6
 

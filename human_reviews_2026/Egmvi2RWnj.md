@@ -1,5 +1,6 @@
 # Beyond RLHF and NLHF: Population-Proportional Alignment under an Axiomatic Framework
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 2, 8
 

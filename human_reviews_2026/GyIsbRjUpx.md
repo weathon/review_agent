@@ -1,5 +1,6 @@
 # How to evaluate monocular depth estimation?
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 8
 

@@ -1,5 +1,6 @@
 # Aligning Large Language Model Behavior with Human Citation Preferences
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 4
 

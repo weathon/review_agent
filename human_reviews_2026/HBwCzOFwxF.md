@@ -1,5 +1,6 @@
 # Rare-Label-Oriented Discriminative Driven Feature Construction for Double Incomplete Multi-View Multi-Label Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

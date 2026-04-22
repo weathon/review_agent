@@ -1,5 +1,6 @@
 # Benchmarking Overton Pluralism in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 10, 4, 2
 

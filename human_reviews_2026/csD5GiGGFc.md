@@ -1,5 +1,6 @@
 # Differentially Private Synthetic Data Generation with Diversity via APIs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

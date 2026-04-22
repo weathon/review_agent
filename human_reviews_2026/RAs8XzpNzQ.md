@@ -1,5 +1,6 @@
 # A solvable model of inference-time scaling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

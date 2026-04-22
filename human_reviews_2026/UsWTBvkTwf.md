@@ -1,5 +1,6 @@
 # Forget-It-All: Multi-Concept Machine Unlearning via Concept-Aware Neuron Masking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

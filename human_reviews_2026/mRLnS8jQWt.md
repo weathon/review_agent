@@ -1,5 +1,6 @@
 # Rethinking Layer Relevance in Large Language Models Beyond Cosine Similarity
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

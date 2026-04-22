@@ -1,5 +1,6 @@
 # GenSR: Symbolic regression based on equation generative space
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 0
 

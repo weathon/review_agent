@@ -1,5 +1,6 @@
 # A$^3$-GS: Animate Any Articulated Objects with 3D Gaussian Splatting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

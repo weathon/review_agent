@@ -1,5 +1,6 @@
 # Training-free Uncertainty Guidance for Complex Visual Tasks with MLLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

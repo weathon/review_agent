@@ -1,5 +1,6 @@
 # CausalProfiler: Generating Synthetic Benchmarks for Rigorous and Transparent Evaluation of Causal Machine Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

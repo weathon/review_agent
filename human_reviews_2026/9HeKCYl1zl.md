@@ -1,5 +1,6 @@
 # Auto-Regressive Surface Cutting
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 4, 10, 6
 

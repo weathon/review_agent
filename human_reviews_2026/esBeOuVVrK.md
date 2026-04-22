@@ -1,5 +1,6 @@
 # ReciNet: Reciprocal Space-Aware Long-Range Modeling for Crystalline Property Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

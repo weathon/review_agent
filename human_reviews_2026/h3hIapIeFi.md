@@ -1,5 +1,6 @@
 # K-Gen: Unlocking High-Resolution Data-Free Knowledge Distillation via Key Region Generation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 4
 

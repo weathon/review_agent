@@ -1,5 +1,6 @@
 # DelvePO: Direction-Guided Self-Evolving Framework for Flexible Prompt Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

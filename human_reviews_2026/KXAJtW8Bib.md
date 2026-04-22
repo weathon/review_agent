@@ -1,5 +1,6 @@
 # Imitation Learning for Multi-turn LM Agents via On-policy Expert Corrections
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

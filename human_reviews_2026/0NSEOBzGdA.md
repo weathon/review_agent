@@ -1,5 +1,6 @@
 # Controlling Zero-Shot Agents Via Inverse Inverse Planning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0
 

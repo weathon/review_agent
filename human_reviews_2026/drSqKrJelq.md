@@ -1,5 +1,6 @@
 # MMRN: A Multi-scale Multi-task Residual Network for Seasonal Climate Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

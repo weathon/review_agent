@@ -1,5 +1,6 @@
 # SELECT2REASON: Efficient Instruction-Tuning Data Selection for Long-CoT Reasoning
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2, 6
 

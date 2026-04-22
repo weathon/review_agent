@@ -1,5 +1,6 @@
 # Breaking Information Impedance in Deep Spiking Neural Networks via Multi-Stage Foundation-Model Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

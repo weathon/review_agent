@@ -1,5 +1,6 @@
 # Tensor Power Methods: Faster and Robust for Arbitrary Order
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 
@@ -226,7 +227,9 @@ This line of work develops a power method for CP decomposition that is applicabl
 
 6) Line 433, Theorem 4.9: Is $A^*$ orthogonally decomposable?  Please include this in the theorem statement if so.
 
-7) General comment: The paper and appendices have no numerical experiments.  It would be nice to include some basic ones, for example to illustrate the speed-up brought by the sketching approach or the convergence rates proven by the authors.  
+7) General comment: The paper and appendices have no numerical experiments.  It would be nice to include some basic ones, for example to illustrate the speed-up brought by the sketching approach or the convergence rates proven by the authors.
+
+
 
 8) General comment: The authors should be more explicit that they consider symmetric tensors and symmetric CP tensor decomposition.
 

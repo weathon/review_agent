@@ -1,5 +1,6 @@
 # Large Language Models as Topological Thinkers: A Benchmark on Graph Persistent Homology
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

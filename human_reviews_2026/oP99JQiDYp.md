@@ -1,5 +1,6 @@
 # Robust Reward Modeling via Causal Rubrics
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

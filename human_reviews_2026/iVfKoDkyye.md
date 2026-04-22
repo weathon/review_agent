@@ -1,5 +1,6 @@
 # Domain-adaptive In-context Generation Benefits Composed Image Retrieval
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # SpatiaLab: Can Vision–Language Models Perform Spatial Reasoning in the Wild?
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 2, 4
 

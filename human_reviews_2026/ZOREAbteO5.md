@@ -1,5 +1,6 @@
 # PTNET: A PROPOSAL-CENTRIC TRANSFORMER NET- WORK FOR 3D OBJECT DETECTION
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

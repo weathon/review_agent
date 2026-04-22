@@ -1,5 +1,6 @@
 # Embodied-R1: Reinforced Embodied Reasoning for General Robotic Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8, 6
 

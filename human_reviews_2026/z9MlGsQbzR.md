@@ -1,5 +1,6 @@
 # Evolutionary Caching to Accelerate Your Off-the-Shelf Diffusion Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

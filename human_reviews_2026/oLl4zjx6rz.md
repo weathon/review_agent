@@ -1,5 +1,6 @@
 # Adaptive node feature selection for graph neural networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

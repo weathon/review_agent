@@ -1,5 +1,6 @@
 # INFER : Learning Implicit Neural Frequency Response Fields for Confined Car Cabin
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

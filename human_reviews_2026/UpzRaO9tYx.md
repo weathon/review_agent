@@ -1,5 +1,6 @@
 # Learning fair latent representation with Multi-Task Deep Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

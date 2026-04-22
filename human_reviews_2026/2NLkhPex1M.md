@@ -1,5 +1,6 @@
 # AgilePruner: An Empirical Study of Attention and Diversity for Adaptive Visual Token Pruning in Large Vision-Language Models
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6, 2
 

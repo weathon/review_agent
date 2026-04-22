@@ -1,5 +1,6 @@
 # Sharp Statistical Limits and Algorithm for Attributed Graph Alignment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 0, 8
 
@@ -72,7 +73,8 @@ The main strength of the paper lies in establishing, in a rigorous manner, the i
 4
 
 ### Summary
-This paper studies the graph alignment (or graph matching) problem under a featured correlated Gaussian Wigner model, where the goal is to recover a latent bijective mapping between two correlated graphs. Each graph consists of correlated weighted edges—modeled as correlated standard normals with correlation coefficient
+This paper studies the graph alignment (or graph matching) problem under a featured correlated Gaussian Wigner model, where the goal is to recover a latent bijective mapping between two correlated graphs.
+Each graph consists of correlated weighted edges—modeled as correlated standard normals with correlation coefficient
 $\rho \in (0,1)$—and correlated node features, modeled as multivariate Gaussian vectors with correlation $r \in (0,1)$.
 
 The authors first derive information-theoretic limits for partial and exact recovery using a maximum-likelihood estimation (MLE) framework. Their results show that the combined signal-to-noise ratio (SNR) from both edges and features, given by
@@ -80,17 +82,27 @@ $n \log\frac{1}{1-\rho^2} + d \log\frac{1}{1-r^2},$
 must exceed the threshold
 $(4\pm \epsilon)\log n$ for successful recovery.
 
-Since MLE is computationally infeasible due to its exponential complexity in $n$, the authors propose a polynomial-time algorithm (QPAlign) based on a quadratic programming relaxation of the MLE objective. The relaxation replaces the permutation constraint with the Birkhoff polytope (the set of doubly stochastic matrices) and adds a regularizer to guide the solution. Numerical experiments on both synthetic correlated Gaussian-attributed Erdős–Rényi graphs and real-world datasets (ACM-DBLP and Douban) demonstrate the effectiveness of QPAlign for partial recovery.
+Since MLE is computationally infeasible due to its exponential complexity in $n$, the authors propose a polynomial-time algorithm (QPAlign) based on a quadratic programming relaxation of the MLE objective. The relaxation replaces the permutation constraint with the Birkhoff polytope (the set of doubly stochastic matrices) and adds a regularizer to guide the solution.
+Numerical experiments on both synthetic correlated Gaussian-attributed Erdős–Rényi graphs and real-world datasets (ACM-DBLP and Douban) demonstrate the effectiveness of QPAlign for partial recovery.
 
 ### Strengths
-* The paper extends classical correlated Gaussian Wigner models to include correlated node features, establishing a unified featured correlated Gaussian Wigner model and showing that the joint use of edges and features enhances the effective SNR for alignment. 
+* The paper extends classical correlated Gaussian Wigner models to include correlated node features, establishing a unified featured correlated Gaussian Wigner model and showing that the joint use of edges and features enhances the effective SNR for alignment.
+
 * It proposes a computationally efficient relaxation of the quadratic assignment formulation using the Birkhoff polytope, achieving $O(n^3)$ complexity and demonstrating promising empirical results.
 
 ### Weaknesses
-* Gap in information-theoretic bounds: The achievability and converse results (Theorems 1 & 2) are not tight. In particular, achievability requires $d = \omega(\log n)$, while the converse does not. The paper lacks discussion or intuition for this additional condition, leaving an unexplained theoretical gap. 
-* Limited theoretical novelty: The MLE-based analysis largely follows established techniques from prior works on correlated Gaussian Wigner models (Wu et al., 2022), Gaussian databases (Dai et al., 2019a), and correlated Gaussian-attributed ER models (Yang & Chung, 2024). Since the edge and feature correlations are independent, the overall SNR simply adds, leading to minimal new analytical challenges. The authors should clarify any technical novelty introduced in their proofs. Additionally, a relevant reference—“Exact Matching in Correlated Networks with Node Attributes for Improved Community Recovery” (Yang & Chung, IEEE T-IT 2025)—also derives similar IT limits under correlated SBMs. The relation and any technical differences from these prior works need to be discussed. 
-* No theoretical guarantees for the algorithm: While the QAP relaxation via the Birkhoff polytope has been adopted in the literature (e.g., Vogelstein et al., 2015; Bonmakanti et al., 2024), the paper provides no theoretical connection between the proposed algorithm and the derived IT limits. The lack of recovery or approximation guarantees leaves a gap between theory and computation. 
-* Experimental limitations: The experiments evaluate QPAlign but do not compare its empirical performance against the information-theoretic thresholds derived earlier. Moreover, for real datasets such as ACM-DBLP and Douban, the node and edge distributions are highly non-uniform due to community structure, casting doubt on the practical relevance of the uniform correlated Gaussian Wigner assumption mainly considered in the theoretical derivations of this paper.
+* Gap in information-theoretic bounds:
+The achievability and converse results (Theorems 1 & 2) are not tight. In particular, achievability requires $d = \omega(\log n)$, while the converse does not. The paper lacks discussion or intuition for this additional condition, leaving an unexplained theoretical gap.
+
+* Limited theoretical novelty:
+The MLE-based analysis largely follows established techniques from prior works on correlated Gaussian Wigner models (Wu et al., 2022), Gaussian databases (Dai et al., 2019a), and correlated Gaussian-attributed ER models (Yang & Chung, 2024). Since the edge and feature correlations are independent, the overall SNR simply adds, leading to minimal new analytical challenges. The authors should clarify any technical novelty introduced in their proofs.
+Additionally, a relevant reference—“Exact Matching in Correlated Networks with Node Attributes for Improved Community Recovery” (Yang & Chung, IEEE T-IT 2025)—also derives similar IT limits under correlated SBMs. The relation and any technical differences from these prior works need to be discussed.
+
+* No theoretical guarantees for the algorithm:
+While the QAP relaxation via the Birkhoff polytope has been adopted in the literature (e.g., Vogelstein et al., 2015; Bonmakanti et al., 2024), the paper provides no theoretical connection between the proposed algorithm and the derived IT limits. The lack of recovery or approximation guarantees leaves a gap between theory and computation.
+
+* Experimental limitations:
+The experiments evaluate QPAlign but do not compare its empirical performance against the information-theoretic thresholds derived earlier. Moreover, for real datasets such as ACM-DBLP and Douban, the node and edge distributions are highly non-uniform due to community structure, casting doubt on the practical relevance of the uniform correlated Gaussian Wigner assumption mainly considered in the theoretical derivations of this paper.
 
 ### Questions
 1. What is the intuition behind requiring $d = \omega(\log n)$ for achievability, while the converse result has no such condition? Can this gap be closed, or is it a fundamental limitation of the current proof technique?

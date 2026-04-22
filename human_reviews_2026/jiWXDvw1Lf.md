@@ -1,5 +1,6 @@
 # Action Chunking and Data Augmentation Yield Exponential Improvements in Behavior Cloning for Continuous Spaces
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 0, 6, 6
 

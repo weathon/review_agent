@@ -1,5 +1,6 @@
 # Understanding and Improving Continuous LLM Adversarial Training via In-context Learning Theory
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

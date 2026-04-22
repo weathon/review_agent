@@ -1,5 +1,6 @@
 # AMS-Quant: Adaptive Mantissa Sharing for Floating-Point Quantization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 0, 4
 

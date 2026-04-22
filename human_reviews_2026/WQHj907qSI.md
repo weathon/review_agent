@@ -1,5 +1,6 @@
 # Improved Object-Centric Diffusion Learning with Registers and Contrastive Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

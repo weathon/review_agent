@@ -1,5 +1,6 @@
 # Robotics in Representation Space: Learned Latents Meet Composable Costs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

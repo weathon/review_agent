@@ -1,5 +1,6 @@
 # Plan for Speed: Dilated Scheduling for Masked Diffusion Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

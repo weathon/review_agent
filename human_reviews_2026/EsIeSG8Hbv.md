@@ -1,5 +1,6 @@
 # CareBench: A Comprehensive Benchmark for Accuracy, Robustness, and Fairness in Multimodal Fusion of EHR and Chest X-Rays
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 6, 2, 4, 4, 4, 2
 

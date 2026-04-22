@@ -1,5 +1,6 @@
 # Unitary Convolutions for Message-passing and Positional Encodings on Directed Graphs
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Learning Continuous Morphological Trajectories via Latent Principal Curves
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

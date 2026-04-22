@@ -1,5 +1,6 @@
 # Discovering heterogeneous synaptic plasticity rules via large-scale neural evolution
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

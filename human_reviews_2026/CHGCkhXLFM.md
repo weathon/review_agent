@@ -1,5 +1,6 @@
 # Can I Trust Your Visual Thinking? Measuring and Improving Visual Thinking Faithfulness
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

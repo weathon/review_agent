@@ -1,5 +1,6 @@
 # ABSINT-AI: Agentic Heap Abstractions for Abstract Interpretation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 2, 8, 8
 

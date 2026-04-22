@@ -1,5 +1,6 @@
 # Meaningless Tokens, Meaningful Gains: How Activation Shifts Enhance LLM Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

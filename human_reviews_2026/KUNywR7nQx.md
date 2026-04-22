@@ -1,5 +1,6 @@
 # Learning Shrinks the Hard Tail: Training‑Dependent Inference Scaling in a Solvable Linear Model
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

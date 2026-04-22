@@ -1,5 +1,6 @@
 # CALIBFREE: Self-Supervised Feature Disentanglement for Calibration-Free Multi-Camera Multi-Object Tracking
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 2
 

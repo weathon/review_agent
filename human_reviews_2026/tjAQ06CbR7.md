@@ -1,5 +1,6 @@
 # Fixing Model-Fitting: Compressing Guidance for Better Sampling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

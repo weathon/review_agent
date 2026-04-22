@@ -1,5 +1,6 @@
 # Scalable Chain of Thoughts via Elastic Reasoning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Contact Wasserstein Geodesics for Non-Conservative Schrödinger Bridges
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

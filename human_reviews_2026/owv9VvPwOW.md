@@ -1,5 +1,6 @@
 # OpenFake: An Open Dataset and Platform Toward Real-World Deepfake Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

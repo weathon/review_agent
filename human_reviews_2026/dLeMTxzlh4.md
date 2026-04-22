@@ -1,5 +1,6 @@
 # Attention is Not Always Needed: Attention Sink Forges a Native MoE in Attention Layers
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

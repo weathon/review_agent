@@ -1,5 +1,6 @@
 # MVMP-HMR: Multiview Multi-Person Human Mesh Recovery Under Large Scenes with Occlusions
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

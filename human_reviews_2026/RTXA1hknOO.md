@@ -1,5 +1,6 @@
 # HC-BDC: Human Cognition-Inspired Bayesian Distribution Calibration for Few-Shot Classification
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

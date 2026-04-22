@@ -1,5 +1,6 @@
 # Last Layer Logits to Logic: Empowering LLMs with Logic-Consistent Structured Knowledge Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

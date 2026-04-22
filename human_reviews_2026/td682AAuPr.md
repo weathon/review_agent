@@ -1,5 +1,6 @@
 # AVERE: Improving Audiovisual Emotion Reasoning with Preference Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

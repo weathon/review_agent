@@ -1,5 +1,6 @@
 # SPLIT-VLM: Salience-Guided Partitioning towards Local Coverage for Importance-Aware Token Dropping in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

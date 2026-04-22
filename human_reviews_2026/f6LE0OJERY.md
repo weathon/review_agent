@@ -1,5 +1,6 @@
 # TURTLEAI: Benchmarking Multimodal Models in Turtle Graphics for Visual Programming and Reasoning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

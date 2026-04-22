@@ -1,5 +1,6 @@
 # Negatives-Dominant Contrastive Learning for Generalization in Imbalanced Domains
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

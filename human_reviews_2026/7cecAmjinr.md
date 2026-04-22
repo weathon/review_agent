@@ -1,5 +1,6 @@
 # Refusal Degrades with Token-Form Drift: Limits of Token-Level Alignment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

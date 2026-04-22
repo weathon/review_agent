@@ -1,5 +1,6 @@
 # PROSE: Point Rendering of Sparse-Controlled Edits to Static Scenes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

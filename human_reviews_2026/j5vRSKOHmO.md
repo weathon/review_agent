@@ -1,5 +1,6 @@
 # Dynamic Weight Grafting: Localizing Finetuned Factual Knowledge in Transformers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

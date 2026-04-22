@@ -1,5 +1,6 @@
 # PRISM: A Multi-Dimensional Verification Approach to Mitigate Hallucinations in Chain-of-Thought Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

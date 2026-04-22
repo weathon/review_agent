@@ -1,5 +1,6 @@
 # EvoCF: Multi-agent Collaboration with Memory-guided Evolutionary Counterfactual Planning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 6
 

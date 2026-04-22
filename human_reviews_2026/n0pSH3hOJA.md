@@ -1,5 +1,6 @@
 # Modality-Aware Quantization: Balancing Visual and Textual Fidelity in Multimodal Compression
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

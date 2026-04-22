@@ -1,5 +1,6 @@
 # MedSimSearch: Sim2Real Agentic Learning for Medical Visual Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 0, 4, 6
 

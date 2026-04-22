@@ -1,5 +1,6 @@
 # Value-Alignment via Safe Semantic Manifold-Constrained Latent Diffusion
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

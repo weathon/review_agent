@@ -1,5 +1,6 @@
 # Evaluating LLM In-Context Few-Shot Learning on Legal Entity Annotation Task
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

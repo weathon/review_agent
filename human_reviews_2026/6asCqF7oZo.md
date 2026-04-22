@@ -1,5 +1,6 @@
 # GEP: A GCG-Based method for extracting personally identifiable information from chatbots built on small language models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Controlling Output Rankings in Generative Engines for LLM-based Search
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

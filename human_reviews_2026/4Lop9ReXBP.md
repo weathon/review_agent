@@ -1,5 +1,6 @@
 # Model-agnostic Watermarked Image Restoration without Additional Training
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

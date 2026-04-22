@@ -1,5 +1,6 @@
 # From Translation to Multilinguality: Revisit the Role of Parallel Data in Multilingual LLM Pretraining
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

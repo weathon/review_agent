@@ -1,5 +1,6 @@
 # Dynamic Compression in Distributed Communications for Reduction of Transmission Losses
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 2
 

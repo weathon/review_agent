@@ -1,5 +1,6 @@
 # CodeSense: a Real-World Benchmark and Dataset for Code Semantic Reasoning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

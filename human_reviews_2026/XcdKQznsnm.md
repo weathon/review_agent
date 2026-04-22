@@ -1,5 +1,6 @@
 # Permutation-Invariant Hierarchical Representation Learning for Reinforcement-Guided Feature Transformation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

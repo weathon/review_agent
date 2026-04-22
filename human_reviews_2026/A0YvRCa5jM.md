@@ -1,5 +1,6 @@
 # Optimal community detection with graphical neural networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

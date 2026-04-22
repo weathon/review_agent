@@ -1,5 +1,6 @@
 # MODS: Multi-Source Observation Conditional Diffusion Model for Meteorological State Downscaling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Taming Massive Activations and Preconditioning Weights: GSR-Guided Quantization for W4A4
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

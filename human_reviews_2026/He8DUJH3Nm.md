@@ -1,5 +1,6 @@
 # SE-VLN: A Self-Evolving Vision-Language Navigation Framework Based on Multimodal Large Language Models
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2, 4
 

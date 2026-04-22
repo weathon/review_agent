@@ -1,5 +1,6 @@
 # The Final Layer Holds the Key: A Unified and Efficient GNN Calibration Framework
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Few-Shot Paraphrase Generation with LLMs: An Empirical Study of Models and Hyperparameters
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

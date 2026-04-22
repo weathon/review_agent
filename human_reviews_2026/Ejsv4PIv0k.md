@@ -1,5 +1,6 @@
 # GMSA: Enhancing Context Compression via Group Merging and Layer Semantic Alignment
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

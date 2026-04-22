@@ -1,5 +1,6 @@
 # MoGU: Mixture-of-Gaussians with Uncertainty-based Gating for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

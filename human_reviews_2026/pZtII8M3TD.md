@@ -1,5 +1,6 @@
 # AlphaRoPE: A Simple Yet Effective Length Extrapolation Method
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

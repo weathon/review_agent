@@ -1,5 +1,6 @@
 # PRISM: A Hierarchical Multiscale Approach for Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 
@@ -60,7 +61,8 @@ The paper presents PRISM, a novel hierarchical multiscale model for time-series 
 4
 
 ### Summary
-The paper proposes PRISM, a time-series forecaster that builds a unified time–frequency hierarchy. Concretely: the model (i) performs binary time partitioning with overlap to form a tree, (ii) applies a time–frequency decomposition (default: Haar DWT) at each node, (iii) computes band importance weights via summary statistics → 2-layer MLP → softmax, and (iv) optimizes a joint loss that couples forecasting (future) with reconstruction (past). Experiments on 8 datasets × 4 horizons report SOTA or competitive results (best MSE in 17/32 settings; best MAE in 18/32), with extensive ablations showing the contribution of the tree encoder, wavelets, importance MLP, reconstruction loss, and residual connections. The motivation is that real-world series exhibit multi-scale behavior (global trends, local fluctuations, and intermediate scales), so hierarchical representations should align long-term structure and fine-scale variability.
+The paper proposes PRISM, a time-series forecaster that builds a unified time–frequency hierarchy. Concretely: the model (i) performs binary time partitioning with overlap to form a tree, (ii) applies a time–frequency decomposition (default: Haar DWT) at each node, (iii) computes band importance weights via summary statistics → 2-layer MLP → softmax, and (iv) optimizes a joint loss that couples forecasting (future) with reconstruction (past).
+Experiments on 8 datasets × 4 horizons report SOTA or competitive results (best MSE in 17/32 settings; best MAE in 18/32), with extensive ablations showing the contribution of the tree encoder, wavelets, importance MLP, reconstruction loss, and residual connections. The motivation is that real-world series exhibit multi-scale behavior (global trends, local fluctuations, and intermediate scales), so hierarchical representations should align long-term structure and fine-scale variability.
 
 ### Strengths
 * Clear problem framing and gap statement. The paper argues that prior work typically builds hierarchy in only time or only frequency, or mixes domains without a reconstructable shared hierarchy.
@@ -69,7 +71,8 @@ The paper proposes PRISM, a time-series forecaster that builds a unified time–
 * Efficiency and interpretability. Training-time comparisons (e.g., ETTh1–96: 10 epochs in 65s) and band-importance visualizations support practical utility and model introspection.
 
 ### Weaknesses
-* (Primary) Limited conceptual novelty relative to recent multiscale “decompose–mix” lines. The high-level philosophy—multiscale decomposition and mixing—strongly overlaps with recent TimeMixer-style approaches. The paper does cite such work in Related Work (e.g., Ref. [20]), but the manuscript does not clearly establish a qualitative leap beyond “engineered combination” of known ideas (time hierarchy + frequency filters + learned weighting + auxiliary reconstruction). Claimed distinction is a reconstructable, shared time–frequency tree, yet the empirical section lacks head-to-head, controlled comparisons designed to isolate scenarios where this specific design strictly dominates competing multiscale methods.
+* (Primary) Limited conceptual novelty relative to recent multiscale “decompose–mix” lines. The high-level philosophy—multiscale decomposition and mixing—strongly overlaps with recent TimeMixer-style approaches. The paper does cite such work in Related Work (e.g., Ref. [20]), but the manuscript does not clearly establish a qualitative leap beyond “engineered combination” of known ideas (time hierarchy + frequency filters + learned weighting + auxiliary reconstruction).
+Claimed distinction is a reconstructable, shared time–frequency tree, yet the empirical section lacks head-to-head, controlled comparisons designed to isolate scenarios where this specific design strictly dominates competing multiscale methods.
 * Wavelet superiority appears under-analyzed. Table-2 shows average gains over FFT/EMA/DoG/MCD, but there is no conditioned analysis clarifying when wavelets lose/win based on spectral characteristics, periodicity, or multivariate correlations.
 * Robustness in realistic settings is thin. The paper focuses on public benchmarks; it lacks systematic tests under missing values, anomalies, distribution shift/drift, or longer non-stationary horizons.
 * Hyperparameter sensitivity is under-reported. No systematic sweep over overlap (o), tree depth, or number of bands (K) to reveal accuracy/time/memory trade-offs and boundary effects of the cross-fade concatenation.

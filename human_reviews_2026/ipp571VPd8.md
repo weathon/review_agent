@@ -1,5 +1,6 @@
 # Anchor-Based Conformal Prediction Under Noisy Annotations in Single-Cell Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Metric $k$-clustering using only Weak Comparison Oracles
 
+- Avg Score: 7.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 8, 6
 

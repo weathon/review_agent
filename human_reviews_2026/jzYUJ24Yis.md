@@ -1,5 +1,6 @@
 # The Role of Stochastic Environments in Enabling Adam
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

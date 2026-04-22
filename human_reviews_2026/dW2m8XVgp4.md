@@ -1,5 +1,6 @@
 # Taming the Forensic Singularity: A Regularized Hyperbolic Framework for Generalizable AI-Generated Image Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

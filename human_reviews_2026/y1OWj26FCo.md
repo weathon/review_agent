@@ -1,5 +1,6 @@
 # Programming by Backprop: An Instruction is Worth 100 Examples When Finetuning LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

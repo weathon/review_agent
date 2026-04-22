@@ -1,5 +1,6 @@
 # InjecMEM: Memory Injection Attack on LLM Agent Memory Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

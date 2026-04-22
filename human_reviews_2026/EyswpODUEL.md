@@ -1,5 +1,6 @@
 # DIANA with Compression for Distributed Variational Inequalities: Eliminating the Need to Transmit Full Gradients
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

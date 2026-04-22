@@ -1,5 +1,6 @@
 # Breaking the Gridlock: Efficient Atmospheric Data Reconstruction and Prediction via Generative 3D Gaussian Splatting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

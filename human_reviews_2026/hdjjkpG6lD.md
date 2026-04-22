@@ -1,5 +1,6 @@
 # U-RankMOEA: Learning to Optimize High-Dimensional Expensive Multi-Objective Problems
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

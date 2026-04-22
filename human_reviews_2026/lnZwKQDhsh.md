@@ -1,5 +1,6 @@
 # InfiR2: A Comprehensive FP8 Training Recipe for Reasoning-Enhanced Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

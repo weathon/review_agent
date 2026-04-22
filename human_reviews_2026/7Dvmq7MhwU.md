@@ -1,5 +1,6 @@
 # TianQuan-S2S: A Subseasonal-to-Seasonal Global Weather Model via Incorporate Climatology State
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # DCTS: Fusing Discrete and Continuous Information for Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

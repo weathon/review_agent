@@ -1,5 +1,6 @@
 # Watermarking Graph Neural Networks via Explanations for Ownership Protection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

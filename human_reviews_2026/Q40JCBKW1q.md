@@ -1,5 +1,6 @@
 # Curriculum-Based Termination Critic for Scalable Program Decomposition in Hierarchical Reinforcement Learning
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 6, 0, 2
 

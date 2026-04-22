@@ -1,5 +1,6 @@
 # Characterising Universal Jailbreak Features and Refusal Direction in LLMs
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4, 2
 

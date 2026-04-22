@@ -1,5 +1,6 @@
 # APLA: A Simple Adaptation Method for Vision Transformers
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 2, 4
 

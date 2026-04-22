@@ -1,5 +1,6 @@
 # Representation Convergence: Mutual Distillation is Secretly a Form of Regularization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

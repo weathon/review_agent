@@ -1,5 +1,6 @@
 # Chain-of-Thought Reasoning In The Wild Is Not Always Faithful
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

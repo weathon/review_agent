@@ -1,5 +1,6 @@
 # Generalised Linear Models in Bayesian RL with Learnable Basis Functions
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

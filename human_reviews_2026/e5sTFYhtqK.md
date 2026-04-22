@@ -1,5 +1,6 @@
 # Estimating Latent Regularization Parameters in Ill-Posed Problems with Semi-Definite Programming
 
+- Avg Score: 1.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 0, 4, 0
 

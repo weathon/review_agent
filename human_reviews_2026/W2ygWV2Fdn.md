@@ -1,5 +1,6 @@
 # Mitigating Premature Exploitation in Particle-based Monte Carlo for Inference-Time Scaling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

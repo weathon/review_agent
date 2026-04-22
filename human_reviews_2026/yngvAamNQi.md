@@ -1,5 +1,6 @@
 # From Seeing to Doing: Bridging Reasoning and Decision for Robotic Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

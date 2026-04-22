@@ -1,5 +1,6 @@
 # PrunedLoRA: Robust Gradient-Based Structured Pruning for Low-rank Adaptation in Fine-tuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

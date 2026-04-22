@@ -1,5 +1,6 @@
 # EvolveR: Self-Evolving LLM Agents through an Experience-Driven Lifecycle
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

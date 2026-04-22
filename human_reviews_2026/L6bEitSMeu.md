@@ -1,5 +1,6 @@
 # InternSpatial: A Comprehensive Dataset for Spatial Reasoning in Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

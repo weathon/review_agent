@@ -1,5 +1,6 @@
 # Variability Aware Recursive Neural Network (VARNN): A Residual-Memory Model for Capturing Temporal Deviation in Sequence Regression Modeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 
@@ -28,13 +29,16 @@ This paper introduces the Variability-Aware Recursive Neural Network (VARNN), wh
 3. Its effectiveness is demonstrated through one-step-ahead forecasting with covariates on three datasets (Appliances Energy Prediction, BIDMC, Beijing), showing consistent improvements in test MSE.
 
 ### Weaknesses
-1. The baselines considered in the paper are quite limited compared to the range of methods available in the time series forecasting/regression literature. 
+1. The baselines considered in the paper are quite limited compared to the range of methods available in the time series forecasting/regression literature.
+
 
 a) For static regression baselines, it would have been interesting to include a dynamic version using features like $X = [y_{t-w+1}, \dots, y_{t-1}, x_t] \rightarrow Y = y_t$. This could be applied to Ridge (linear), MLP, and potentially CatBoost (which tends to overfit less than Random Forest).
 
- b) Another way to include temporal dynamics in classical regressors is to construct features as $X = [x_t, t] \rightarrow Y = y_t$ where t is rescaled between 0 and 1 over the window w (start of window \(t=0\), end \(t=1\)). Classical regressors like Ridge, CatBoost, or the recent TabPFN could perform well with this setup.
 
- c) Deep learning baselines for time series, such as PatchTST, are not considered. These could potentially be adapted for one-step-ahead forecasting.
+b) Another way to include temporal dynamics in classical regressors is to construct features as $X = [x_t, t] \rightarrow Y = y_t$ where t is rescaled between 0 and 1 over the window w (start of window \(t=0\), end \(t=1\)). Classical regressors like Ridge, CatBoost, or the recent TabPFN could perform well with this setup.
+
+
+c) Deep learning baselines for time series, such as PatchTST, are not considered. These could potentially be adapted for one-step-ahead forecasting.
 
 2. Only three datasets are considered, and they are relatively specific. Testing the method on a broader range of datasets, including cases with and without covariates, would strengthen the evaluation.
 

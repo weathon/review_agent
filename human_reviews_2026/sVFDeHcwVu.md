@@ -1,5 +1,6 @@
 # Effector Complexity Enhances Transfer Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 4
 

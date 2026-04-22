@@ -1,5 +1,6 @@
 # A Data-driven Typology of Vision Models from Integrated Representational Metrics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

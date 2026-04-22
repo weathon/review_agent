@@ -1,5 +1,6 @@
 # Gestalt Reasoning Machines: Structured Perception for Neuro-Symbolic Inference
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

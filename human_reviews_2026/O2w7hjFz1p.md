@@ -1,5 +1,6 @@
 # ArgQA: Evaluation of Reasoning Over Elementary Logical Structures in Arguments
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # PreDiff: Leveraging Data Priors to Enhance Time Series Generation with Scarce Samples
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

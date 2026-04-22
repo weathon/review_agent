@@ -1,5 +1,6 @@
 # Scalable Element-wise Finite-Time Optimization for Deep Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

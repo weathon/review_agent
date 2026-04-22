@@ -1,5 +1,6 @@
 # PHOENIX: Photonic Distillation Transfers Electronic Knowledge to Hybrid Optical Neural Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

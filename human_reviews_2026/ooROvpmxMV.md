@@ -1,5 +1,6 @@
 # Agentic Reinforcement Learning with Implicit Step Rewards
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

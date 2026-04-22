@@ -1,5 +1,6 @@
 # Falcon: A Cross-Modal Evaluation Dataset for Comprehensive Safety Perception
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 
@@ -78,15 +79,19 @@ The submission
 - In summary, I don’t think the dataset makes a meaningful conceptual or practical contribution to the community.
 - No analysis of the quality of the human annotations. E.g. what was the level of agreement between multiple human graders and how well are the auto-annotations from  Qwen-2.5-VL-72B-AWQ aligned with the human annotations on the test set?
 
-[1] Wang, Siyin, et al. "Safe Inputs but Unsafe Output: Benchmarking Cross-modality Safety Alignment of Large Vision-Language Model." arXiv preprint arXiv:2406.15279 (2024). 
+[1] Wang, Siyin, et al. "Safe Inputs but Unsafe Output: Benchmarking Cross-modality Safety Alignment of Large Vision-Language Model." arXiv preprint arXiv:2406.15279 (2024).
+
 
 [2] Röttger, Paul, et al. "MSTS: A Multimodal Safety Test Suite for Vision-Language Models." arXiv preprint arXiv:2501.10057 (2025).
 
- [3] Lee, Youngwan, et al. "HoliSafe: Holistic Safety Benchmarking and Modeling with Safety Meta Token for Vision-Language Model." arXiv preprint arXiv:2506.04704 (2025).
 
- [4] Palaskar, Shruti, et al. "VLSU: Mapping the Limits of Joint Multimodal Understanding for AI Safety." arXiv preprint arXiv:2510.18214 (2025).
+[3] Lee, Youngwan, et al. "HoliSafe: Holistic Safety Benchmarking and Modeling with Safety Meta Token for Vision-Language Model." arXiv preprint arXiv:2506.04704 (2025).
 
- [5] Yuan, Yuan, et al. "From hard refusals to safe-completions: Toward output-centric safety training." arXiv preprint arXiv:2508.09224 (2025).
+
+[4] Palaskar, Shruti, et al. "VLSU: Mapping the Limits of Joint Multimodal Understanding for AI Safety." arXiv preprint arXiv:2510.18214 (2025).
+
+
+[5] Yuan, Yuan, et al. "From hard refusals to safe-completions: Toward output-centric safety training." arXiv preprint arXiv:2508.09224 (2025).
 
 ### Questions
 - Human annotations

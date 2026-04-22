@@ -1,5 +1,6 @@
 # The Unseen Frontier: Pushing the Limits of LLM Sparsity with Surrogate-Free ADMM
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

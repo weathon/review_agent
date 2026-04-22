@@ -1,5 +1,6 @@
 # What Drives Paper Acceptance? A Process-Centric Analysis of Modern Peer Review
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 8, 0, 4, 0
 

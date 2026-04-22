@@ -1,5 +1,6 @@
 # Cut the Overcredit: Precision First Process Rewards for Reasoning LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

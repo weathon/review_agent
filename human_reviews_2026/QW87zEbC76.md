@@ -1,5 +1,6 @@
 # Toward Stable Brain-Computer Interfaces: Revealing and Addressing Prediction Fluctuations in EEG-Based BCIs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

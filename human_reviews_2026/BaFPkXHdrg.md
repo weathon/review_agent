@@ -1,5 +1,6 @@
 # Learning from Reference Answers: Versatile Language Model Alignment without Binary Human Preference Data
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

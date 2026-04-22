@@ -1,5 +1,6 @@
 # HUG3D: Human Group-Aware 3D Reconstruction from a Single Image with Physical Interaction
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 4
 

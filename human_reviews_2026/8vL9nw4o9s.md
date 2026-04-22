@@ -1,5 +1,6 @@
 # Robust Transfer for Bayesian Optimization with Multi-Task Prior-Fitted Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Learning Modal-mixed Chain-of-thought Reasoning with Latent Embedding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

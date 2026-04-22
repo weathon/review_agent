@@ -1,5 +1,6 @@
 # Empowering LLM Tool Invocation with Tool-call Reward Model
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

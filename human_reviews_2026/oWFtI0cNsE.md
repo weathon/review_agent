@@ -1,5 +1,6 @@
 # Verl-Tool: Towards Holistic Agentic Reinforcement Learning with Tool Use
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

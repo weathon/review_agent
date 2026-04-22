@@ -1,5 +1,6 @@
 # ArtUV: Artist-style UV Unwrapping
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

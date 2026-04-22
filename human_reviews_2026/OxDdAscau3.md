@@ -1,5 +1,6 @@
 # FreeRet: MLLMs as Training-Free Retrievers
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 2, 6
 

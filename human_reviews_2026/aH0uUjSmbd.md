@@ -1,5 +1,6 @@
 # Recurrent Off-Policy Deep Reinforcement Learning Doesn’t Have to be Slow
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 2, 4, 6
 

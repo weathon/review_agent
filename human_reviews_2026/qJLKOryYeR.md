@@ -1,5 +1,6 @@
 # Off-Policy Token Clipped Supervised Fine-Tuning Yields a Robust Cold-Start
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

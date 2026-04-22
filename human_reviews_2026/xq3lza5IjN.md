@@ -1,5 +1,6 @@
 # LSA: Layer-wise Sparsity Allocation for Large Language Model Pruning Based on Minimal Linear Reconstruction Error
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

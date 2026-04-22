@@ -1,5 +1,6 @@
 # S2J: Bridging the Gap Between Solving and Judging Ability in Generative Reward Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

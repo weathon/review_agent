@@ -1,5 +1,6 @@
 # Bridging Neural Learning and Symbolic Reasoning: A Differentiable Fuzzy Description Logic Framework
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

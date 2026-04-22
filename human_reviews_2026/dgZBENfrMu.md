@@ -1,5 +1,6 @@
 # Mind the budget: Accelerating Deep Reinforcement Learning using Early Exit Neural Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

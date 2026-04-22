@@ -1,5 +1,6 @@
 # SimuPhy: Towards Physical Understanding, Reasoning, and Evaluation via Code Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

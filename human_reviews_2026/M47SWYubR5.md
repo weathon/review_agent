@@ -1,5 +1,6 @@
 # Building a Foundational Guardrail for General Agentic Systems via Synthetic Data
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

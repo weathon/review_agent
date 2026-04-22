@@ -1,5 +1,6 @@
 # Nestor: A Nested MOE-based Neural Operator for Large-Scale PDE Pre-Training
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 8
 

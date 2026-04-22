@@ -1,5 +1,6 @@
 # Finding the Thread: Context-Driven Incremental Compression for Multi-Turn Dialogue
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

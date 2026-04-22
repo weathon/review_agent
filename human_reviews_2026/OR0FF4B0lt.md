@@ -1,5 +1,6 @@
 # Harnessing Model Uncertainty for Adaptive Causal Debiasing in Visual Question Answering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

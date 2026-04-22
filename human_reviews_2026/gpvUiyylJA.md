@@ -1,5 +1,6 @@
 # DLGNet: Hyperedge Classification via a Directed Line Graph for Chemical Reactions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

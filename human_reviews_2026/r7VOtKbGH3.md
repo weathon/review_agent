@@ -1,5 +1,6 @@
 # MMLU-Reason: Benchmarking Multi-Task Multi-modal Language Understanding and Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Agentic reinforcement learning for search is unsafe
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 8, 6
 

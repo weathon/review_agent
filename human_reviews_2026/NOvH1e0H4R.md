@@ -1,5 +1,6 @@
 # SADA: Safe and Adaptive Inference with Multiple Black-Box Predictions
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 4, 4
 

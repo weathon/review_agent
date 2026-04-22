@@ -1,5 +1,6 @@
 # Equivariant Flow Matching for Point Cloud Assembly
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

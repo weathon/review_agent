@@ -1,5 +1,6 @@
 # JavisDiT++: Unified Modeling and Optimization for Joint Audio-Video Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

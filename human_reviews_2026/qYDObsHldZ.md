@@ -1,5 +1,6 @@
 # Adaptive Moments are Surprisingly Effective for Plug-and-Play Diffusion Sampling
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 4, 8
 

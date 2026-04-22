@@ -1,5 +1,6 @@
 # SWINGARENA: Adversarial Programming Arena for Long-context GitHub Issue Solving
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 4, 6
 

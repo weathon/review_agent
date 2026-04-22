@@ -1,5 +1,6 @@
 # Enhancing Deep Tabular Models with GBDT-Guided Piecewise-Linear Embeddings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

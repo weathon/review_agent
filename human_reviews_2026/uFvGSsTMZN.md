@@ -1,5 +1,6 @@
 # HugAgent: Evaluating LLMs in Simulating Human-Like Individual Reasoning on Open-Ended Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

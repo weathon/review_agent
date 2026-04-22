@@ -1,5 +1,6 @@
 # RegionDoc-R1: Reinforcing Semantic Layout-Aware Learning for Document Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

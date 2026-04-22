@@ -1,5 +1,6 @@
 # SWAT: Sliding Window Adversarial Training for Gradual Domain Adaptation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

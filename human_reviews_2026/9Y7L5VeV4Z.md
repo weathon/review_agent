@@ -1,5 +1,6 @@
 # Globally 1-Lipschitz Attention Without Sequence-Length Dependence
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Particles Don’t Care About Z: Towards Scaling Entropy Estimation of Unnormalized Densities
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

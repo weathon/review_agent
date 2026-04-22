@@ -1,5 +1,6 @@
 # TextCAM: Explaining Class Activation Map with Text
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4, 4, 4
 

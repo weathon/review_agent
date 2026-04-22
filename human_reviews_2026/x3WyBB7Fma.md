@@ -1,5 +1,6 @@
 # DASHCO: Data-Aware SAT Heuristics Combinations Optimization via Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

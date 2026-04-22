@@ -1,5 +1,6 @@
 # How Well Does GPT-4o Understand Vision? Evaluating Multimodal Foundation Models on Standard Computer Vision Tasks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 6
 

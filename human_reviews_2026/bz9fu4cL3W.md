@@ -1,5 +1,6 @@
 # The Vendiscope: An Algorithmic Microscope For Data Collections
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

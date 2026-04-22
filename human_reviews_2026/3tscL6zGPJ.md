@@ -1,5 +1,6 @@
 # Semi-supervised Source Detection in Astronomical Images: New Benchmark and Strong Baseline
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Breaking the Exploration Bottleneck: Rubric-Scaffolded Reinforcement Learning for General LLM Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

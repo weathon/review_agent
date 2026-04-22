@@ -1,5 +1,6 @@
 # FlowAD: Ego-Scene Interactive Modeling for Autonomous Driving
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4
 

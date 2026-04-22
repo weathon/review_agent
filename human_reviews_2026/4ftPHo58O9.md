@@ -1,5 +1,6 @@
 # Towards Universal Semantics with Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

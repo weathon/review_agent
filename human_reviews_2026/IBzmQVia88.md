@@ -1,5 +1,6 @@
 # Rethinking Expressivity and Degradation-Awareness in Attention for All-in-One Blind Image Restoration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

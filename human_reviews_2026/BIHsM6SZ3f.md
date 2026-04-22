@@ -1,5 +1,6 @@
 # LitmusValues: Will AI Tell Lies to Save Sick Children? Litmus-Testing AI Values Prioritization with AIRiskDilemmas
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

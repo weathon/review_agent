@@ -1,5 +1,6 @@
 # PaX-RAG: Path-augmented and Cross relational Graph Retrieval Augmented Generation via Structural and Semantic Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

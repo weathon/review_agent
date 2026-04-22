@@ -1,5 +1,6 @@
 # BRENA: Brain-inspired Hierarchical Neural Alignment Framework for Visual Decoding from EEG Signals
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

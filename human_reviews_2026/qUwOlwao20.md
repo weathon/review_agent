@@ -1,5 +1,6 @@
 # TGT: Text-Grounded Trajectories for Locally Controlled Video Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 4
 

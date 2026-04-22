@@ -1,5 +1,6 @@
 # Legal-Gated Attention Networks: Enforcing Action Legality as a Structural Inductive Bias in Deep Reinforcement Learning
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4, 2
 

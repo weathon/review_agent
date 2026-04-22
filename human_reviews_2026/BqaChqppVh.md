@@ -1,5 +1,6 @@
 # Trace Anything: Representing Any Video in 4D via Trajectory Fields
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 10, 2, 6, 4
 

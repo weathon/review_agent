@@ -1,5 +1,6 @@
 # Regret Analysis of Hybrid Linear Bandits with Biased Offline Data
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

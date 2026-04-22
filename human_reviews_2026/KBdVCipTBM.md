@@ -1,5 +1,6 @@
 # Birch SGD: A Tree Graph Framework for Local and Asynchronous SGD Methods
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

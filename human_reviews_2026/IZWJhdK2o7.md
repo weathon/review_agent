@@ -1,5 +1,6 @@
 # APT: Towards Universal Scene Graph Generation via Plug-in Adaptive Prompt Tuning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

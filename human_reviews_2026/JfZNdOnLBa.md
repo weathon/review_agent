@@ -1,5 +1,6 @@
 # RoPE Attention Can Be Trained in Almost Linear Time
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

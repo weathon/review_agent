@@ -1,5 +1,6 @@
 # AnyAvatar: Dynamic and Consistent Audio-Driven Human Animation for Multiple Characters
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 6
 

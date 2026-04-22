@@ -1,5 +1,6 @@
 # Log-Normal Multiplicative Dynamics for Stable Low-Precision Deep Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

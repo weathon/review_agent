@@ -1,5 +1,6 @@
 # MARS: Optimizing Dual-System Deep Research via Multi-Agent Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

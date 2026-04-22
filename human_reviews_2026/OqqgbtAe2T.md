@@ -1,5 +1,6 @@
 # Efficient Visual Grounding via Alignment Priors and Scale Adaptability
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 2
 

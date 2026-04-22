@@ -1,5 +1,6 @@
 # Sample-efficient evidence estimation of score based priors for model selection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

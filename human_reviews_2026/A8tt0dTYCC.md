@@ -1,5 +1,6 @@
 # Domain-Aware Gradient Reuse for Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

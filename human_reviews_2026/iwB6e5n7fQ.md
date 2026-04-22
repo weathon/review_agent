@@ -1,5 +1,6 @@
 # Benchmarking Complex Chart Reasoning via Sub-question Decomposition and Variant-based Robustness Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

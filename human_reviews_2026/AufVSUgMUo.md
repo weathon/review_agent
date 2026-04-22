@@ -1,5 +1,6 @@
 # Task-free Adaptive Meta Black-box Optimization
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 2, 6, 6, 8
 

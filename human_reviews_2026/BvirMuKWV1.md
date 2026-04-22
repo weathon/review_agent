@@ -1,5 +1,6 @@
 # When a Robot is More Capable than a Human: Learning from Constrained Demonstrators
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

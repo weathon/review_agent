@@ -1,5 +1,6 @@
 # Bringing Stability to Diffusion: Decomposing and Reducing Variance of Training Masked Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

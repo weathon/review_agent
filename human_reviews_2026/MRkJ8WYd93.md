@@ -1,5 +1,6 @@
 # Quantum Learning from Label Proportion
 
+- Avg Score: 1.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 2, 0
 

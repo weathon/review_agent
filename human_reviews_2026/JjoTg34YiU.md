@@ -1,5 +1,6 @@
 # Training-Free Loosely Speculative Decoding: Accepting Semantically Correct Drafts Beyond Exact Match
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

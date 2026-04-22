@@ -1,5 +1,6 @@
 # FractalFold: Towards Fractal Structure Modeling for Hierarchical Inverse Protein Folding
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

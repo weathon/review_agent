@@ -1,5 +1,6 @@
 # MotionSight: Boosting Fine-Grained Motion Understanding in Multimodal LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Scalable Autoregressive 3D Molecule Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

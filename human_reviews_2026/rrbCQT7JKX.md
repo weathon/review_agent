@@ -1,5 +1,6 @@
 # Accelerating Eigenvalue Dataset Generation via Chebyshev Subspace Filter
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

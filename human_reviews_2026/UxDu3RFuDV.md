@@ -1,5 +1,6 @@
 # Language and Experience: A Computational Model of Social Learning in Complex Tasks
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Pretraining Scaling Laws for Generative Evaluations of Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

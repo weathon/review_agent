@@ -1,5 +1,6 @@
 # MR$^2$-Bench: Going Beyond Matching to Reasoning in Multimodal Retrieval
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8
 

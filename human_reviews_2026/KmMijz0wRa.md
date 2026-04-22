@@ -1,5 +1,6 @@
 # VoiceAssistant-Eval: Benchmarking AI Assistants across Listening, Speaking, and Viewing
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 6, 6
 

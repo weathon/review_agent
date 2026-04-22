@@ -1,5 +1,6 @@
 # Why Do Unlearnable Examples Work: A Novel Perspective of Mutual Information
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

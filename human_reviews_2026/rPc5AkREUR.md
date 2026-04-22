@@ -1,5 +1,6 @@
 # SCALER: Fast and Effective Graph Anomaly Detection via Dual-Level Synergistic Contrastive Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

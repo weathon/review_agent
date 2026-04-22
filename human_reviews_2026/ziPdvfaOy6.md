@@ -1,5 +1,6 @@
 # Dig2DIG: Dig into Diffusion Information Gains for Image Fusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

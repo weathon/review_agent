@@ -1,5 +1,6 @@
 # Evolving and Detecting Multi-Turn Deception using Geometric Signatures
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

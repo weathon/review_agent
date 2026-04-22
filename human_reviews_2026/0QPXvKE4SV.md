@@ -1,5 +1,6 @@
 # TCR-EML: Explainable Model Layers for TCR-pMHC Prediction
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 0, 4, 4
 

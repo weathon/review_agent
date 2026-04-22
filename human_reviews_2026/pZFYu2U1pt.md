@@ -1,5 +1,6 @@
 # COIG-Writer: A High-Quality Chinese Creative Writing with Thought Process Dataset
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

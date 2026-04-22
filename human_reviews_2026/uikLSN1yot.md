@@ -1,5 +1,6 @@
 # The SMeL Test: A simple benchmark for media literacy in language models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

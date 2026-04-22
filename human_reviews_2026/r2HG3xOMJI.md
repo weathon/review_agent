@@ -1,5 +1,6 @@
 # mCLM: A Modular Chemical Language Model that Generates Functional and Makeable Molecules
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 2, 8
 

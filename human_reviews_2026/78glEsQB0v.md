@@ -1,5 +1,6 @@
 # SMixer: Rethinking Efficient-Training and Event-Driven SNNs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Generative Adversarial Reasoner: Enhancing LLM Reasoning with Adversarial Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

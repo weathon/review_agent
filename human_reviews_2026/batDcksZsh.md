@@ -1,5 +1,6 @@
 # Boosted Trees on a Diet: Compact Models for Resource-Constrained Devices
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # GEAR: A $\textbf{G}$eneral $\textbf{E}$valuation Framework for $\textbf{A}$bductive $\textbf{R}$easoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

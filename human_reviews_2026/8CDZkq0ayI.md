@@ -1,5 +1,6 @@
 # UCD: Unconditional Discriminator Promotes Nash Equilibrium in GANs
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

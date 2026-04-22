@@ -1,5 +1,6 @@
 # CompoDistill: Attention Distillation for Compositional Reasoning in Multimodal LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

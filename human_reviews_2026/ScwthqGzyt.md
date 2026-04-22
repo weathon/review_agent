@@ -1,5 +1,6 @@
 # LLM Microscope: What Model Internals Reveal About Answer Correctness and Context Utilization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

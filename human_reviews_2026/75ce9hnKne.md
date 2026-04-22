@@ -1,5 +1,6 @@
 # When Bias Meets Trainability: Connecting Theories of Initialization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 4
 

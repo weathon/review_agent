@@ -1,5 +1,6 @@
 # Scalable Supervising Software Agents with Patch Reasoner
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Spatially Guided Training for Vision-Language-Action Model
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 6
 

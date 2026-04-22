@@ -1,5 +1,6 @@
 # RetroAux: Boosting Retrosynthesis via Molecular Property-Aware Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

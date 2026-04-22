@@ -1,5 +1,6 @@
 # Gene-M1: Advancing Cross-Species Genomic Discovery via Taxon-Specific Mixture-of-Experts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

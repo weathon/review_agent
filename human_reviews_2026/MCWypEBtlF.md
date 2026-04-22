@@ -1,5 +1,6 @@
 # Video models are zero-shot learners and reasoners
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

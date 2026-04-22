@@ -1,5 +1,6 @@
 # A foundation model with multi-variate parallel attention to generate neuronal activity
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

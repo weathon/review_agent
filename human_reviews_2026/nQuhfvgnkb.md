@@ -1,5 +1,6 @@
 # Generation Space Size:  Understanding and Calibrating Open-Endedness of LLM Generations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

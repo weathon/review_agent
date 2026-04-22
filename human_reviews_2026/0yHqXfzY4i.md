@@ -1,5 +1,6 @@
 # ReGenText: Joint Generation and Restoration for Diverse Text Image Super-Resolution
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 2
 

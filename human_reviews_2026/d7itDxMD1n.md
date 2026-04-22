@@ -1,5 +1,6 @@
 # Monocular Normal Estimation via Shading Sequence Estimation
 
+- Avg Score: 6.40
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6, 6
 

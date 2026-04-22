@@ -1,5 +1,6 @@
 # IGC-Net for conditional average potential outcome estimation over time
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4, 4
 

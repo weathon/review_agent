@@ -1,5 +1,6 @@
 # Dropping Just a Handful of Preferences Can Change Top Large Language Model Rankings
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

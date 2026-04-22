@@ -1,5 +1,6 @@
 # Paper2Code: Automating Code Generation from Scientific Papers in Machine Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 0
 

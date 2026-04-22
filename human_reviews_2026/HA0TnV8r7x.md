@@ -1,5 +1,6 @@
 # TurboBoA: Faster and Exact Attention-aware Quantization without Backpropagation
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 4
 

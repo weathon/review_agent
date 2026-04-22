@@ -1,5 +1,6 @@
 # Understanding the Learning Phases in Self-Supervised Learning via Critical Periods
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

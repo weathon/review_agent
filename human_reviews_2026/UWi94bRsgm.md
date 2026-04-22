@@ -1,5 +1,6 @@
 # Hey, That's My Model! Introducing Chain & Hash, An LLM Fingerprinting Technique
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

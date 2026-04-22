@@ -1,5 +1,6 @@
 # Learning Efficient and Interpretable Multi-Agent Communication
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Token Dynamics on Spheres in Mamba Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

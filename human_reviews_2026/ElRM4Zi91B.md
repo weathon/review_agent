@@ -1,5 +1,6 @@
 # Q1Fold: A Qubit-Efficient Hybrid Quantum-Classical Convolutional Neural Network for RNA secondary Structure Prediction
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

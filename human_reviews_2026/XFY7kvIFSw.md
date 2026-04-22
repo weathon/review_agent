@@ -1,5 +1,6 @@
 # MediX-R1:  Open Ended Medical Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

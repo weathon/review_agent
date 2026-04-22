@@ -1,5 +1,6 @@
 # Recurrent Action Transformer with Memory
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

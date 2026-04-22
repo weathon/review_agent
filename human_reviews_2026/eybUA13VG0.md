@@ -1,5 +1,6 @@
 # Pick Your Channel: Ultra-Sparse Readouts for Recovering Functional Cell Types
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

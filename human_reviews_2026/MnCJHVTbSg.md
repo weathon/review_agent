@@ -1,5 +1,6 @@
 # DR.PO: Dual Reference and Preference Optimization for Machine Unlearning in Large Language Model
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Efficient Multimodal Spatial Reasoning via Dynamic and Asymmetric Routing
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

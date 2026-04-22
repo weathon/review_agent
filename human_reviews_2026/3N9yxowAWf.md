@@ -1,5 +1,6 @@
 # Sparse Disentangled VAE for Treatment Effect Estimation with Irrelevant Variables
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

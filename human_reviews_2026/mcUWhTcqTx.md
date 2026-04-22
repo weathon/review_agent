@@ -1,5 +1,6 @@
 # Distillation Lineage Inspector: Black-Box Auditing of Model Distillation in LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

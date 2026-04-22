@@ -1,5 +1,6 @@
 # Small Transformers Don’t Need LayerNorm at Inference Time: Scaling LayerNorm Removal to GPT-2 XL and Implications for Mechanistic Interpretability
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 8
 

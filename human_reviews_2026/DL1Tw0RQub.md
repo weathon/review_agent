@@ -1,5 +1,6 @@
 # Multi-View Graph Disentanglement via Joint Contrastive Optimization
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2, 2
 

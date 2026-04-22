@@ -1,5 +1,6 @@
 # Deep Q-Network Based on a New Optimization Method with Applications to Path Planning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 6
 

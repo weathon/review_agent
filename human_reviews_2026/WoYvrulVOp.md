@@ -1,5 +1,6 @@
 # Reference-Free Rating of LLM Responses via Latent Information
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

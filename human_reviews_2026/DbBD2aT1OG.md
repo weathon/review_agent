@@ -1,5 +1,6 @@
 # Unified Latent Steering and Residual Refinement for Online Improvement of Diffusion Policy Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

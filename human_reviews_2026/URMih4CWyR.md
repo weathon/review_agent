@@ -1,5 +1,6 @@
 # WGREC: Weakly Supervised Generalized Referring Expression Comprehension Empowered by Large Language Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

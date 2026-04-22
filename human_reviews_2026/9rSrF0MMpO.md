@@ -1,5 +1,6 @@
 # Enhancing Open-Vocabulary Object Detection through Multi-Level Fine-Grained Visual-Language Alignment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

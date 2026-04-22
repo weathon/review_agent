@@ -1,5 +1,6 @@
 # Semantic Robustness of Deep Neural Networks in Ophthalmology: A Case Study with Colour Fundus Imaging
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 6, 0
 

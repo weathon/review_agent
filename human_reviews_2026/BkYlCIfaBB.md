@@ -1,5 +1,6 @@
 # DeepScholarBench: A Live Benchmark and Automated Evaluation for Generative Research Synthesis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8, 6, 4
 

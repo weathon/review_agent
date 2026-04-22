@@ -1,5 +1,6 @@
 # Interpreting Multi-Layer Transformers for In-Context Linear Regression with Varying Covariance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

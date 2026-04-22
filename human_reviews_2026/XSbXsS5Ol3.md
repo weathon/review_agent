@@ -1,5 +1,6 @@
 # MEDMKG: Benchmarking Medical Knowledge Exploitation with Multimodal Knowledge Graph
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4, 4
 

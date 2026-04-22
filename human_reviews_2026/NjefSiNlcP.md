@@ -1,5 +1,6 @@
 # Learning Provably Correct Distributed Protocols Without Human Knowledge
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

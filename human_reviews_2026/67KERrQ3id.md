@@ -1,5 +1,6 @@
 # OSCAR: Orthogonalized Sequential Component Analysis for Tensor-on-Tensor Regression
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

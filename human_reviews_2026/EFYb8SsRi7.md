@@ -1,5 +1,6 @@
 # Error Analysis of Discrete Flow with Generator Matching
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 6, 8, 4
 

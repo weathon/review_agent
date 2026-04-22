@@ -1,5 +1,6 @@
 # WARC-Bench: Web Archive based Benchmark for GUI Subtask Executions
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2
 

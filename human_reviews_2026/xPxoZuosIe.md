@@ -1,5 +1,6 @@
 # AttentionInfluence: Adopting Attention Head Influence for Weak-to-Strong Pretraining Data Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

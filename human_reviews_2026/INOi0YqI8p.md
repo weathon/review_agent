@@ -1,5 +1,6 @@
 # Self-Evolving Vision-Language Models for Image Quality Assessment via Voting and Ranking
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

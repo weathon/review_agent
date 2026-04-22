@@ -1,5 +1,6 @@
 # Self-Aware Reinforcement Learning for Improving LLMs with Minimal Data
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 6, 2, 4
 

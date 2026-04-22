@@ -1,5 +1,6 @@
 # Nested Text Labelling Structures to Organize Knowledge in AI Applications for the Humanities and Social Sciences
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

@@ -1,5 +1,6 @@
 # Universality of Many-body Projected Ensemble for Learning Quantum Data Distribution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

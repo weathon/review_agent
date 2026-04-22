@@ -1,5 +1,6 @@
 # DiFFPO: Training Diffusion LLMs to Reason Fast and Furious via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

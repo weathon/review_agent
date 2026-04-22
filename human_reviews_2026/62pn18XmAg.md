@@ -1,5 +1,6 @@
 # DNT: a Deeply Normalized Transformer that can be trained by Momentum SGD
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

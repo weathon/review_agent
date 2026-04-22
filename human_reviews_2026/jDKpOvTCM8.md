@@ -1,5 +1,6 @@
 # RE-PO: Robust Enhanced Policy Optimization as a General Framework for LLM Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

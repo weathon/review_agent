@@ -1,5 +1,6 @@
 # When Models Know When They Do Not Know: Calibration, Cascading and Cleaning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

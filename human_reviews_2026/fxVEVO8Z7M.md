@@ -1,5 +1,6 @@
 # Contrastive Semi-Supervised Domain Adaptation with von Mises-Fisher for Class Imbalance Mitigation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

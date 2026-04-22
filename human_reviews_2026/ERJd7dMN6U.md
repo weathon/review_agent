@@ -1,5 +1,6 @@
 # Riemannian Optimization on Relaxed Indicator Matrix Manifold
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Language Agents for Hypothesis-driven Clinical Decision Making with Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

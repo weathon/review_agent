@@ -1,5 +1,6 @@
 # Condensing Heterogeneous Datasets without Domain Labels
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Speech-to-LaTeX: New Models and Datasets for Converting Spoken Equations and Sentences
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

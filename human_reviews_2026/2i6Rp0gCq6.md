@@ -1,5 +1,6 @@
 # Adaptive Thinking: Large Language Models Know When to Think in Latent Space
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

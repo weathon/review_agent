@@ -1,5 +1,6 @@
 # SmartSAM: Segment Ambiguous Objects like Smart Annotators
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # ComGS: Efficient 3D Object-Scene Composition via Surface Octahedral Probes
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

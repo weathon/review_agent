@@ -1,5 +1,6 @@
 # Not All Tokens are Guided Equal: Elucidating Guidance in Autoregressive Modelling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

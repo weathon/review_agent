@@ -1,5 +1,6 @@
 # Safe Reinforcement Learning with ADRC Lagrangian Method
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 6, 2, 2, 4
 

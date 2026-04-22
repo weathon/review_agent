@@ -1,5 +1,6 @@
 # CURATE: Automatic Curriculum Learning for Reinforcement Learning Agents through Competence-Based Curriculum Policy Search
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # F1-Reasoner: Synthesizing Verifiable Reasoning Data From Formal Math Statements
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 2
 

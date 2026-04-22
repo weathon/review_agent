@@ -1,5 +1,6 @@
 # Player-optimal Stable Regret for Bandit Learning in Many-to-one Matching Markets with Substitutability
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

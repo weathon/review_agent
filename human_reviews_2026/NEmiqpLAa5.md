@@ -1,5 +1,6 @@
 # On the Diminishing Reliability of Reference-Free Memorization Detection in Modern Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 4
 

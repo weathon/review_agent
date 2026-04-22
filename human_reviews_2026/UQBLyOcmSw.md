@@ -1,5 +1,6 @@
 # Group-Label-Free Validation for Spuriously Correlated Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

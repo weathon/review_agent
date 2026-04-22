@@ -1,5 +1,6 @@
 # Is it Thinking or Cheating?  Detecting Implicit Reward Hacking by Measuring Reasoning Effort
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 6
 

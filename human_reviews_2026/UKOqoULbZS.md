@@ -1,5 +1,6 @@
 # Sample More to Think Less: Group Filtered Policy Optimization for Concise Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

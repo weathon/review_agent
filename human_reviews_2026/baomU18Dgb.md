@@ -1,5 +1,6 @@
 # FreeEyeglass: Training-free and Mask-free Eyeglass Transfer for Facial Videos
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # MedQuanBench: Quantization-Aware Analysis for Efficient Medical Imaging Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

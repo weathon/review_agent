@@ -1,5 +1,6 @@
 # Hinge Regression Tree: A Newton Method for Oblique Regression Tree Splitting
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

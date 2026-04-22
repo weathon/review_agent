@@ -1,5 +1,6 @@
 # IndustryGPT: A Large Language Model for Industrial Domain-Specific Question Answering
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2
 

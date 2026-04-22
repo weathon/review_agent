@@ -1,5 +1,6 @@
 # LRConfNet: Logical Reasoning-Driven Confidence Adjustment and Regularization for Hierarchical Classification of Degraded Images
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

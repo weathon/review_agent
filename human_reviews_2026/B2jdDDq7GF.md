@@ -1,5 +1,6 @@
 # Noise-Aware System Identification for High-Dimensional Stochastic Dynamics
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

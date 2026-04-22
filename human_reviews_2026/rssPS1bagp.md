@@ -1,5 +1,6 @@
 # Two-Phase Head-Specific LoRA: Balancing Global and Local Adaptation in Multi-Head Attention
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

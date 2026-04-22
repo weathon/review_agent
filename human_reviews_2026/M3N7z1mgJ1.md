@@ -1,5 +1,6 @@
 # NeuroSlice: Forward Selection-Based LLM Pruning via Neuron Contribution Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

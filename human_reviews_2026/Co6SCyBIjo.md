@@ -1,5 +1,6 @@
 # Exploring High-Order Self-Similarity for Video Understanding
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

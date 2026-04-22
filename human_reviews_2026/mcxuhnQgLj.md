@@ -1,5 +1,6 @@
 # Autonomy-Aware Clustering: When Local Decisions Supersede Global Prescriptions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 6, 0
 

@@ -1,5 +1,6 @@
 # Causal Analytical Framework for Time-Varying Dynamics of Hallucinations in LLMs
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

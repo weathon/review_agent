@@ -1,5 +1,6 @@
 # DuConTE: Dual-Granularity Text Encoder with Topology-Constrained Attention for Text-attributed Graphs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

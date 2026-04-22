@@ -1,5 +1,6 @@
 # Concept-Aware Privacy Mechanisms for Defending Embedding Inversion Attacks
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6, 4
 

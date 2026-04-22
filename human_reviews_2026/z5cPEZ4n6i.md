@@ -1,5 +1,6 @@
 # LaDiR: Latent Diffusion Enhances LLMs for Text Reasoning
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 6, 0, 0, 6
 

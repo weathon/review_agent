@@ -1,5 +1,6 @@
 # Multi-Agent Game Generation and Evaluation via Audio-Visual Recordings
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

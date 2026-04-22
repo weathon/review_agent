@@ -1,5 +1,6 @@
 # On the Convergence of Muon and Beyond
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 6, 4
 

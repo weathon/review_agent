@@ -1,5 +1,6 @@
 # Kontinuous Kontext: Continuous Strength Control for Instruction-based Image Editing
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 8
 

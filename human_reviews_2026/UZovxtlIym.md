@@ -1,5 +1,6 @@
 # Data Augmentations for Arithmetic Length Generalization in Small Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

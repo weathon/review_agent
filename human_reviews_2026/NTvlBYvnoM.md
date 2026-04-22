@@ -1,5 +1,6 @@
 # KEPIL: Knowledge-Enhanced Prompt-Image Learning for Prompt-Robust Disease Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

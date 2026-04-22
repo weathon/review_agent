@@ -1,5 +1,6 @@
 # Beyond Spectra: Eigenvector Overlaps in Loss Geometry
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Adaptive Domain Shift in Diffusion Models for Cross-Modality Image Translation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

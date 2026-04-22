@@ -1,5 +1,6 @@
 # SwiReasoning: Switch-Thinking in Latent and Explicit for Pareto-Superior Reasoning LLMs
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 2
 

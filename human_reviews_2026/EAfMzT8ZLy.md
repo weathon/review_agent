@@ -1,5 +1,6 @@
 # How Transformers Get Rich: Approximation and Dynamics Analysis
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

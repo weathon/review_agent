@@ -1,5 +1,6 @@
 # RoboAlign: Reinforcement Learning for Action-Aligned Multimodal Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

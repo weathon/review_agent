@@ -1,5 +1,6 @@
 # Context Tokens are Anchors: Understanding the Repeat Curse in dMLLMs from an Information Flow Perspective
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

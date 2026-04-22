@@ -1,5 +1,6 @@
 # Robu-MARC: A Masked Autoencoder-Aided Camera-Radar Network for Robust 3D Perception under Sensor Corruption
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2
 

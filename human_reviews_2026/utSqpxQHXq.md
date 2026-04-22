@@ -1,5 +1,6 @@
 # Two failure modes of deep transformers and how to avoid them: a unified theory of signal propagation at initialisation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

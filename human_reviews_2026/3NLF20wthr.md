@@ -1,5 +1,6 @@
 # 3S-Attack: Spatial, Spectral and Semantic Invisible Backdoor Attack Against DNN Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

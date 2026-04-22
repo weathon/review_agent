@@ -1,5 +1,6 @@
 # Model Agnostic Conditioning of Boltzmann Generators for Peptide Cyclization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

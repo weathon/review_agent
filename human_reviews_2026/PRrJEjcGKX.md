@@ -1,5 +1,6 @@
 # ALIGNEDEDIT: PROMPT-ALIGNED WEAK GUIDANCE FOR TEXT-GUIDED IMAGE EDITING
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

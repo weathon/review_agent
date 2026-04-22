@@ -1,5 +1,6 @@
 # How to Retrain Online Models Optimally with Few Updates
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 2, 6, 4, 4
 

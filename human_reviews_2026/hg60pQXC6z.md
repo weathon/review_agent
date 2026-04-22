@@ -1,5 +1,6 @@
 # Informative Posterior Ensembles for Sequential Simulation-Based Inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Latent instruction representation alignment: defending against jailbreaks, backdoors and undesired knowledge in LLMs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

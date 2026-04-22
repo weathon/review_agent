@@ -1,5 +1,6 @@
 # MedAraBench: Large-scale Arabic Medical Question Answering Dataset and Benchmark
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8
 

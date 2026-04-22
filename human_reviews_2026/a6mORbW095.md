@@ -1,5 +1,6 @@
 # AI Agents with Human-Like Collaborative Tools: Adaptive Strategies for Enhanced Problem-Solving
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

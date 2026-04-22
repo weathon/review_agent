@@ -1,5 +1,6 @@
 # Depth Anything 3: Recovering the Visual Space from Any Views
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 8
 

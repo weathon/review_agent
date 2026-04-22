@@ -1,5 +1,6 @@
 # Adaptive Dual-Granularity Pruning Method for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

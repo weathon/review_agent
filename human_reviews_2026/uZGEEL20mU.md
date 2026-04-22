@@ -1,5 +1,6 @@
 # Learnable Fractional Superlets with a Spectro-Temporal Emotion Encoder for Speech Emotion Recognition
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4
 

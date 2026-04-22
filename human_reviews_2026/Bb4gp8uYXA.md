@@ -1,5 +1,6 @@
 # Self-supervised Synthetic Pretraining for Inference of Stellar Mass Embedded in Dense Gas
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 4, 2, 2, 2
 

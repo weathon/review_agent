@@ -1,5 +1,6 @@
 # Logic of Hypotheses: From Zero to Full Knowledge in Neurosymbolic Integration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 
@@ -43,7 +44,8 @@ I will describe these points below.
 The claimed unification of knowledge injection and knowledge extraction is not clearly distinct from what existing (neuro)symbolic systems already achieve. Every ILP-style method naturally supports both the inclusion of background knowledge and the induction of new rules, as once worked the semantics of the rules-to-learn adding rules is automatic. As a result, the conceptual advance over prior work remains ambiguous.
 
 **Semantic grounding of the “choice” operator**
-The proposed operator resembles constructs that are well established in Statistical Relational AI and Probabilistic Logic Programming, such as probabilistic facts, annotated disjunctions and random-variable choices. The paper does not discuss these connections nor explain whether LoH provides new semantics beyond these long-known interpretations of discrete uncertainty. Given that “choosing among alternatives” is central to many probabilistic logic models, this omission weakens the originality and theoretical depth of the proposal.
+The proposed operator resembles constructs that are well established in Statistical Relational AI and Probabilistic Logic Programming, such as probabilistic facts, annotated disjunctions and random-variable choices.
+The paper does not discuss these connections nor explain whether LoH provides new semantics beyond these long-known interpretations of discrete uncertainty. Given that “choosing among alternatives” is central to many probabilistic logic models, this omission weakens the originality and theoretical depth of the proposal.
 
 **Unclear scope of contribution (syntax vs. semantics)**
 Connecting to the point before, it is difficult to determine whether LoH represents a genuinely new semantic model or merely a syntactic/implementation-level reformulation of existing differentiable logic frameworks. The paper does not demonstrate that LoH achieves behaviors that could not already be implemented within DeepProbLog, LTN or other differentiable logical systems by suitable parameterization. The lack of such differentiation undermines the claimed unification.

@@ -1,5 +1,6 @@
 # A Benchmark and Pair-Level 4PL-IRT Framework for Reliable Evaluation of LLM Reasoning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 6, 0, 2, 0
 

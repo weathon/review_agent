@@ -1,5 +1,6 @@
 # FSA: An Alternative Efficient Implementation of Native Sparse Attention Kernel
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8
 

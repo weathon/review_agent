@@ -1,5 +1,6 @@
 # Elevating Large Language Models with Module-of-Thought
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

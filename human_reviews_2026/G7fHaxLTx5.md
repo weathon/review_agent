@@ -1,5 +1,6 @@
 # Prior-Informed Flow Matching for Graph Reconstruction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 2
 

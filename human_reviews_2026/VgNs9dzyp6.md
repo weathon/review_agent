@@ -1,5 +1,6 @@
 # Feature-Level Adversarial Attack on Quantum Neural Networks
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2
 

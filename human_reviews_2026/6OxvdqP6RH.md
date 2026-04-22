@@ -1,5 +1,6 @@
 # SCAR: Shapley Credit Assignment for More Efficient RLHF
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

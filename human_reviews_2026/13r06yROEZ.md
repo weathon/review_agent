@@ -1,5 +1,6 @@
 # Adversarial Encoding Perturbation and Synthesis for Set Representation Auxiliary Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

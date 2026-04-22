@@ -1,5 +1,6 @@
 # CerebraGloss: Instruction-Tuning a Large Vision-Language Model for Fine-Grained Clinical EEG Interpretation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 6
 

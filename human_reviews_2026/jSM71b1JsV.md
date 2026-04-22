@@ -1,5 +1,6 @@
 # Battery Fault: A Comprehensive Dataset and Benchmark for Battery Fault Diagnosis
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 6
 

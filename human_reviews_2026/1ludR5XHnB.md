@@ -1,5 +1,6 @@
 # DisIR: Disentangled Learning of Controllable All-in-One Image Restoration under Composite Degradations
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

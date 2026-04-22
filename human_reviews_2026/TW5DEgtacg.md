@@ -1,5 +1,6 @@
 # Only Large Weights (And Not Skip Connections) Can Prevent the Perils of Rank Collapse
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 0, 4, 0
 

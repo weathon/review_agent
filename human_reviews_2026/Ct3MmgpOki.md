@@ -1,5 +1,6 @@
 # Tabular Anomaly Detection via Reconstruction with Attention-Based Bottleneck
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

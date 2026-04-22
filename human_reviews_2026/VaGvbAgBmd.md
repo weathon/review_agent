@@ -1,5 +1,6 @@
 # Do We Need All the Synthetic Data? Targeted Image Augmentation via Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

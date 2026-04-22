@@ -1,5 +1,6 @@
 # GraphFLEx: Structure Learning $\underline{\text{F}}$ramework for $\underline{\text{L}}$arge $\underline{\text{Ex}}$panding $\underline{\text{Graph}}$s
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Pick‑and‑Unfold: Mode‑Aware Non‑Linear Tucker Autoencoder for Tensorial Deep Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

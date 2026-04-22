@@ -1,5 +1,6 @@
 # Continual Parameter-Efficient Adaptation for Rehearsal-Free Graph Class-Incremental Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

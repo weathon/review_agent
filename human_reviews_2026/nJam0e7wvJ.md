@@ -1,5 +1,6 @@
 # Geo-R1: Unlocking VLM Geospatial Reasoning with Cross-View Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

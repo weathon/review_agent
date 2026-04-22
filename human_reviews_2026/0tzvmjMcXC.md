@@ -1,5 +1,6 @@
 # SophiaVL-R1: Reinforcing MLLMs Reasoning with Thinking Reward
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8
 

@@ -1,5 +1,6 @@
 # Take Note: Your Molecular Dataset Is Probably Aligned
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 10, 2, 8
 

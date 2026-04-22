@@ -1,5 +1,6 @@
 # Generative Adversarial Optimization: Dual-Reward Reinforcement Learning for Mathematics Reasoning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

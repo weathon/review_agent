@@ -1,5 +1,6 @@
 # FedChill: Adaptive Temperature Scaling for Federated Learning in Heterogeneous Client Environments
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

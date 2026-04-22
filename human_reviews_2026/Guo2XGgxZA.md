@@ -1,5 +1,6 @@
 # LoRA-S: An Efficient Low Rank Adaptation scheme via Sylvester equation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 8
 

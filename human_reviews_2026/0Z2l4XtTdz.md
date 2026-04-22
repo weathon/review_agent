@@ -1,5 +1,6 @@
 # PAS: Estimating the target accuracy before domain adaptation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2
 

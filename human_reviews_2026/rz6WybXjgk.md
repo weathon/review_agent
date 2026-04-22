@@ -1,5 +1,6 @@
 # LongFlow: Efficient KV Cache Compression for Reasoning Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

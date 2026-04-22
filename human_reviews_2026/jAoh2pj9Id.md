@@ -1,5 +1,6 @@
 # Generalizing Subgoals from Single Instances using Hypothesis-Preserving Ensembles
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

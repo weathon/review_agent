@@ -1,5 +1,6 @@
 # Efficient Implicit Neural Surfaces via Multiscale Residuals and Nested Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Bridging Offline and Online Reinforcement Learning for LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 8, 2
 

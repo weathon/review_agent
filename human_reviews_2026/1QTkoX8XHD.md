@@ -1,5 +1,6 @@
 # Efficient Facial Landmark Detection via Prior Knowledge-Guided Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

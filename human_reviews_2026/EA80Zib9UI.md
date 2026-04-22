@@ -1,5 +1,6 @@
 # SAFETY-GUIDED FLOW (SGF): A UNIFIED FRAMEWORK FOR NEGATIVE GUIDANCE IN SAFE GENERATION
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 10, 4, 6, 6
 

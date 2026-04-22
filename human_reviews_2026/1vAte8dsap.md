@@ -1,5 +1,6 @@
 # pi-Flow: Policy-Based Few-Step Generation via Imitation Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # CryoLVM: Self-supervised Learning from Cryo-EM Density Maps with Large Vision Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

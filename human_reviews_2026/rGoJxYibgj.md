@@ -1,5 +1,6 @@
 # Stop Guessing: Choosing the Optimization-Consistent Uncertainty Measurement for Evidential Deep Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 6
 

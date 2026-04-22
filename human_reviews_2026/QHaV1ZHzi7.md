@@ -1,5 +1,6 @@
 # Chart-RVR: Reinforcement Learning with Verifiable Rewards for Explainable Chart Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

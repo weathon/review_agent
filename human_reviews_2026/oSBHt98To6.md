@@ -1,5 +1,6 @@
 # Mitigating Watermark Forgery in Generative Models via Randomized Key Selection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

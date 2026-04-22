@@ -1,5 +1,6 @@
 # TIFO: Time-Invariant Frequency Operator for Stationarity-Aware Representation Learning in Time Series
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

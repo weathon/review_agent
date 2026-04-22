@@ -1,5 +1,6 @@
 # Immersive Multimodal Translation: A Proxy Task for Cross-modal and Objective Evaluation of Unified Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

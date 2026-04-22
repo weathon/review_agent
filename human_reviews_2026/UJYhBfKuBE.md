@@ -1,5 +1,6 @@
 # WingsFL: Speed-up Federated Learning via Co-optimization of Communication Frequency and Gradient Compression Ratio
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

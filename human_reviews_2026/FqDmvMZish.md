@@ -1,5 +1,6 @@
 # Autonomous Functional Play with Correspondence-Driven Trajectory Warping
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 4, 8
 

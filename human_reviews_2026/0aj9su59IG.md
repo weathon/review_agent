@@ -1,5 +1,6 @@
 # Free-Grained Hierarchical Recognition
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # One Demo Is All It Takes: Planning Domain Derivation with LLMs from A Single Demonstration
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

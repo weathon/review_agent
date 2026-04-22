@@ -1,5 +1,6 @@
 # Beyond Hard Supervised Fine-tuning: Enhancing Image-text Alignment of Strong Models with Weak Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Assembling the Mind's Mosaic: Towards EEG Semantic Intent Decoding
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

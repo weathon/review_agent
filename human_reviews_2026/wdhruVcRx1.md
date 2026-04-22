@@ -1,5 +1,6 @@
 # Rethinking Uncertainty Estimation in LLMs: A Principled Single-Sequence Measure
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

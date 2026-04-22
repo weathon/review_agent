@@ -1,5 +1,6 @@
 # Convex Dominance in Deep Learning I: A Scaling Law of Loss and Learning Rate
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

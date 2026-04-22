@@ -1,5 +1,6 @@
 # Training-Free Rate-Distortion-Perception Traversal With Diffusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 2
 

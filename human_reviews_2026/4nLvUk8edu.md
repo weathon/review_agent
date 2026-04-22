@@ -1,5 +1,6 @@
 # Lookahead Tree-Based Rollouts for Enhanced Trajectory-Level Exploration in Reinforcement Learning with Verifiable Rewards
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

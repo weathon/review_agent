@@ -1,5 +1,6 @@
 # I Know It’s Unfair, Do It Anyway: LLM Agents Exploiting Explicitly Unfair Tools for Voluntary Collusion in Strategic Games
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

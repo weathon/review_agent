@@ -1,5 +1,6 @@
 # Dynamic Context Adapters: Efficiently Infusing History into Vision-and-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

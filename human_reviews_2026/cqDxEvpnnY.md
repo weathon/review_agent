@@ -1,5 +1,6 @@
 # Principles-Driven Machine Learning for UV Spectral Prediction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Pre-Generating Multi-Difficulty PDE Data For Few-Shot Neural PDE Solvers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

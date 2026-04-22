@@ -1,5 +1,6 @@
 # Sparse-Compression Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Caffarelli Regularity and Hierarchical Phase Boundaries in Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # NeoBabel: An Inclusive Multilingual Open Tower for Visual Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

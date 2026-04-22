@@ -1,5 +1,6 @@
 # Ubiquity of Hebbian Dynamics in Complex Learning Rules
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 4, 2, 4, 4
 
@@ -207,7 +208,8 @@ The paper proposes the idea that
 
 
 The authors postulate that gradient descent training with weight decay (especially with high weight decay values) results into weight updates that are similar to those happening under purely Hebbian learning.
-They offer a clear argument that since weight decay is contractive, the learned gradient part of the update must be expansive on average, and an expansive, rank-1-looking update will look Hebbian. That is an interesting explanation for why Hebbian-looking updates can show up during learning with weight decay even when the underlying algorithm is not Hebbian. They find that  stronger weight decay, larger learning rate, and larger batch size
+They offer a clear argument that since weight decay is contractive, the learned gradient part of the update must be expansive on average, and an expansive, rank-1-looking update will look Hebbian. That is an interesting explanation for why Hebbian-looking updates can show up during learning with weight decay even when the underlying algorithm is not Hebbian.
+They find that  stronger weight decay, larger learning rate, and larger batch size
 lead to better alignment between gradient-based and Hebbian weight updates.
 Moreover they find that strong noise in learning results in a learning signal that is anti-Hebbian. They mention that when noise co-exists with weight decay there is a competition between the two forces that contribute Hebbian and anti-Hebbian aligned updates, and they identify a “phase transition” when the interplay between these two forces changes polarity. 
 

@@ -1,5 +1,6 @@
 # Multi-Representation Attention Framework for Underwater Bioacoustic Denoising and Recognition
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

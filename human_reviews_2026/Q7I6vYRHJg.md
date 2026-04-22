@@ -1,5 +1,6 @@
 # Frictional Q-Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2
 

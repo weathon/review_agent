@@ -1,5 +1,6 @@
 # C2-Evo: Co-Evolving Multimodal Data and Model for  Self-Improving Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

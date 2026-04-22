@@ -1,5 +1,6 @@
 # Mini-Omni-Reasoner: Token-Level Thinking-in-Speaking in Large Speech Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

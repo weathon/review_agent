@@ -1,5 +1,6 @@
 # IMSE: Intrinsic Mixture of Spectral Experts Fine-tuning for Test-Time Adaptation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # VidEEG-Gen: A Dataset and Diffusion Framework for Video-Conditioned Privacy-Preserving EEG Generation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 4
 

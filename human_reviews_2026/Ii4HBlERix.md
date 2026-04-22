@@ -1,5 +1,6 @@
 # Visual Multi-Agent System: Mitigating Hallucination Snowballing via Visual Flow
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

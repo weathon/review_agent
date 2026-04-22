@@ -1,5 +1,6 @@
 # Improving ML attacks on LWE with data repetition and stepwise regression
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

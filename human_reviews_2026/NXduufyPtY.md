@@ -1,5 +1,6 @@
 # CNSP: Consistent Null-Space Projection for Principled Prompt-Based Continual Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6
 

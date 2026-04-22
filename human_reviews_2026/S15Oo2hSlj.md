@@ -1,5 +1,6 @@
 # Entropy Never Lies: Signed Entropy Integral Unmasks Mislabeled Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # VLMShield: Efficient and Robust Defense of Vision-Language Models against Malicious Prompts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 2, 2, 6
 

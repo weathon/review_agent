@@ -1,5 +1,6 @@
 # PUM-Net: Plastic Unified Memory Network with Associative Interaction for Long-Context State Space Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

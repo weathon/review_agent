@@ -1,5 +1,6 @@
 # Continual Learning by Reuse, New, Adapt and Skip: A Hierarchical Exploration-Exploitation Approach
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

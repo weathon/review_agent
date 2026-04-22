@@ -1,5 +1,6 @@
 # Speech-DRAME: A Framework for Human-Aligned Benchmarks in Speech Role-Play
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 4, 4
 

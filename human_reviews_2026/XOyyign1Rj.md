@@ -1,5 +1,6 @@
 # StaR-KVQA: Structured Reasoning Traces for Implicit-Knowledge Visual Question Answering
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

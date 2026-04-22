@@ -1,5 +1,6 @@
 # PULSE: Benchmarking Large Language Models for ICU Time Series Classification
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

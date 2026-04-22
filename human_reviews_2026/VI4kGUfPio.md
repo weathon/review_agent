@@ -1,5 +1,6 @@
 # VideoMathQA: Benchmarking Mathematical Reasoning via Multimodal Understanding in Video
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4, 2
 

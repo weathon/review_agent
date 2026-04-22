@@ -1,5 +1,6 @@
 # Online Black-Box Prompt Optimization with Regret Guarantees under Noisy Feedback
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

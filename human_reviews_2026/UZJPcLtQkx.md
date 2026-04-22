@@ -1,5 +1,6 @@
 # UMZero: A Unified CNN-Mamba Framework for Zero-Shot learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

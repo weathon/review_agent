@@ -1,5 +1,6 @@
 # Learning What to Say and How Precisely: Efficient Communication via Differentiable Discrete Communication Learning
 
+- Avg Score: 6.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 8, 2, 6
 

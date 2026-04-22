@@ -1,5 +1,6 @@
 # ALS-ActLR: Alternating Least Squares based Activation-Aware Low-Rank Model Compression
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

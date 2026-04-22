@@ -1,5 +1,6 @@
 # FRAG: Filtering Noise Using Snippet-Level Query Relevance
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 6
 

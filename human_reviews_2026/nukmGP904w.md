@@ -1,5 +1,6 @@
 # EngiAgent: Fully Connected Coordination of LLM Agents for Solving Open-ended Engineering Problems with Feasible Solutions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 0, 6, 6, 6
 

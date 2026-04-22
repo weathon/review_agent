@@ -1,5 +1,6 @@
 # StyleStream: Real-Time Zero-Shot Voice Style Conversion
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 4, 0, 0, 6
 

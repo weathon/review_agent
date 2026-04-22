@@ -1,5 +1,6 @@
 # EpiCache: Episodic KV Cache Management for Long Conversational Question Answering
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

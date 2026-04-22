@@ -1,5 +1,6 @@
 # Seeing Through Deception: Uncovering Misleading Creator Intent in Multimodal News with Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

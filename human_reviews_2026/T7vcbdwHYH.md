@@ -1,5 +1,6 @@
 # CL2GEC: A Multi-Discipline Benchmark for Continual Learning in Chinese Literature Grammatical Error Correction
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 6
 

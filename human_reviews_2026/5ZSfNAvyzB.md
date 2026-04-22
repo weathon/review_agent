@@ -1,5 +1,6 @@
 # CREDIT: Certified Defense of Deep Neural Networks against Model Extraction Attacks
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 4, 8, 6, 4
 

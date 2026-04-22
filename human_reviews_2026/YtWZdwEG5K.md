@@ -1,5 +1,6 @@
 # Dynamic Multimodal Activation Steering for Hallucination Mitigation in Large Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

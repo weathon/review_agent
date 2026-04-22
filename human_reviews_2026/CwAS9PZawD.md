@@ -1,5 +1,6 @@
 # Distilled Protein Backbone Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 8, 4
 

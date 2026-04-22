@@ -1,5 +1,6 @@
 # Position-Aware Modeling for Next-Token Prediction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

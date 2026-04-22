@@ -1,5 +1,6 @@
 # Why Chain of Thought Fails in Clinical Text Understanding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # A Dynamic Multiscale Anti-Aliasing Network for Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

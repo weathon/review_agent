@@ -1,5 +1,6 @@
 # Multi-Cultural Preference Optimization of Reward Models
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 4
 

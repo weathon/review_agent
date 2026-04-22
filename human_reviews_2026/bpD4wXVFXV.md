@@ -1,5 +1,6 @@
 # UAVDB: Point-Guided Masks for UAV Detection and Segmentation
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

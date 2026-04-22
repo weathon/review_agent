@@ -1,5 +1,6 @@
 # Understanding Catastrophic Interference On the Identifibility of Latent Representations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Difference Predictive Coding for Training Spiking Neural Networks
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 4
 

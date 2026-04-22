@@ -1,5 +1,6 @@
 # In-Place Test-Time Training
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8
 

@@ -1,5 +1,6 @@
 # MLLM4TS: Leveraging Vision and Multimodal Language Models for General Time-Series Analysis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

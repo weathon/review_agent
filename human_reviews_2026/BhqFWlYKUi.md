@@ -1,5 +1,6 @@
 # Medical Interpretability and Knowledge Maps of Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

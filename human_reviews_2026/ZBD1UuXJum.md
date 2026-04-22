@@ -1,5 +1,6 @@
 # Learning Diverse Skills for Behavior Models with Mixture of Experts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 4
 

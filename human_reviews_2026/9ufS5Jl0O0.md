@@ -1,5 +1,6 @@
 # Unlearning during Training: Domain-Specific Gradient Ascent for Domain Generalization
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Beyond Speedup - Utilizing KV Cache for Sampling and Reasoning
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Q-RAG: Long Context Multi‑Step Retrieval via Value‑Based Embedder Training
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 2, 8, 8, 6
 

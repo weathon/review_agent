@@ -1,5 +1,6 @@
 # Variational Autoencoding Discrete Diffusion with Enhanced Dimensional Correlations Modeling
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

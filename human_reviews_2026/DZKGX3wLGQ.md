@@ -1,5 +1,6 @@
 # HyperINR: Ensuring Semantics in Weights with Implicit Function Theorem
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 6, 4
 

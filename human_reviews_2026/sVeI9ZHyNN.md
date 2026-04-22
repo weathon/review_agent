@@ -1,5 +1,6 @@
 # WebCIR: Bringing New Web Culture Concepts to Compositional Image Retrieval
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

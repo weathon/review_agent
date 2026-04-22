@@ -1,5 +1,6 @@
 # Condition Errors Refinement in Autoregressive Image Generation with Diffusion Loss
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

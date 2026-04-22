@@ -1,5 +1,6 @@
 # Implicit bias of Hessian Approximation in Regularized Randomized SR1 Method
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

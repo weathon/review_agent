@@ -1,5 +1,6 @@
 # A unified perspective on fine-tuning and sampling with diffusion and flow models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

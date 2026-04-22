@@ -1,5 +1,6 @@
 # The data manifold under the microscope
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 
@@ -190,11 +191,16 @@ This is a well-written and methodologically sound paper whose main contribution 
 * Potential for community impact: If released as a package, the proposed framework could serve as a valuable benchmark for manifold estimation and representation-geometry research.
 
 ### Weaknesses
-* Limited novelty beyond integration: The key contribution appears to be the framework rather than a fundamentally new theoretical or algorithmic idea. The paper would benefit from a more explicit discussion of how it extends beyond existing works on curvature or reach estimation (e.g., Aamari et al. 2019), theoretical bounds (Fefferman et al.), and prior controlled datasets (dSprites, COIL-20).
-* Choice of constants in theoretical comparisons: In Figures 5–7, empirical curves are plotted alongside theoretical upper/lower bounds. However, it is unclear how the constants in those bounds were chosen or fitted. Were they analytically derived, or manually scaled for visualization? Explicitly stating this would clarify the strength of the comparison.
-* Open-source and reproducibility: Since the main value lies in the pipeline, the paper would be significantly strengthened by releasing the dataset generators, FD estimators, and plotting utilities as an open-source package.
-* Interpretation of mixed bound-matching behavior: In some regimes, the empirical curves align with the theoretical upper bound, while in others they hug the lower bound. It would be interesting to discuss why this happens—e.g., differences in curvature concentration, sampling density, or estimator bias.
-* Scalability and scope: The FD approach depends on dense grids, which may not scale beyond low-dimensional transformations. A short discussion of this limitation would help readers understand the generality of the framework.
+* Limited novelty beyond integration:
+The key contribution appears to be the framework rather than a fundamentally new theoretical or algorithmic idea. The paper would benefit from a more explicit discussion of how it extends beyond existing works on curvature or reach estimation (e.g., Aamari et al. 2019), theoretical bounds (Fefferman et al.), and prior controlled datasets (dSprites, COIL-20).
+* Choice of constants in theoretical comparisons:
+In Figures 5–7, empirical curves are plotted alongside theoretical upper/lower bounds. However, it is unclear how the constants in those bounds were chosen or fitted. Were they analytically derived, or manually scaled for visualization? Explicitly stating this would clarify the strength of the comparison.
+* Open-source and reproducibility:
+Since the main value lies in the pipeline, the paper would be significantly strengthened by releasing the dataset generators, FD estimators, and plotting utilities as an open-source package.
+* Interpretation of mixed bound-matching behavior:
+In some regimes, the empirical curves align with the theoretical upper bound, while in others they hug the lower bound. It would be interesting to discuss why this happens—e.g., differences in curvature concentration, sampling density, or estimator bias.
+* Scalability and scope:
+The FD approach depends on dense grids, which may not scale beyond low-dimensional transformations. A short discussion of this limitation would help readers understand the generality of the framework.
 
 ### Questions
 1. How were the constants in the theoretical bounds chosen when overlaying them on the empirical results?

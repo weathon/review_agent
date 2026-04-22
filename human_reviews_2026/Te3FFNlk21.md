@@ -1,5 +1,6 @@
 # CoSMo-RL: Towards Trustworthy LMRMs via Joint Safety and Stability
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

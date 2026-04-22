@@ -1,5 +1,6 @@
 # NABLA: Neighborhood-Adaptive Block-Level Attention for Efficient Video Diffusion Transformers
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 2, 8
 

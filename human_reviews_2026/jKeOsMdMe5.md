@@ -1,5 +1,6 @@
 # Neural Latent Arbitrary Lagrangian-Eulerian Grids for Fluid-Solid Interaction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

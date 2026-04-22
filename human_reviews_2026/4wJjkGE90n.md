@@ -1,5 +1,6 @@
 # Online 3D Instance Segmentation at task-oriented granularity with Unposed Monocular Video
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

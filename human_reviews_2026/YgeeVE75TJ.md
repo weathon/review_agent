@@ -1,5 +1,6 @@
 # Temporal-Oriented Recipe for Transferring Large Vision-Language Model to Video Understanding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

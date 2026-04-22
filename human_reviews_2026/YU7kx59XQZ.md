@@ -1,5 +1,6 @@
 # TRAUMA THOMPSON: A Novel Dataset and Benchmarks For AI Copilots For Humanitarian Operational Medicine
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

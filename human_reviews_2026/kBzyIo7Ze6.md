@@ -1,5 +1,6 @@
 # From Poisoned to Aware: Fostering Backdoor Self-Awareness in LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

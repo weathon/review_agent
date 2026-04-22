@@ -1,5 +1,6 @@
 # CLASH: Evaluating Language Models on Judging High-Stakes Dilemmas from Multiple Perspectives
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

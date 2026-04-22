@@ -1,5 +1,6 @@
 # Bonsai Networks: Structured Pruning and Sparse Training of Foundation Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

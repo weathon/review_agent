@@ -1,5 +1,6 @@
 # Test-Time Graph Search for Goal-Conditioned Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

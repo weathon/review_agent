@@ -1,5 +1,6 @@
 # ALDEN: Reinforcement Learning for Active Navigation and Evidence Gathering in Long Documents
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

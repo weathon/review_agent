@@ -1,5 +1,6 @@
 # N-Gram Induction Heads for In-Context RL: Improving Stability and Reducing Data Needs
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 6, 2, 2
 

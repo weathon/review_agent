@@ -1,5 +1,6 @@
 # FIKSurvey: An Automated Peer Review Loop to Raise the Ceiling on AI Academic Writing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Proximal Supervised Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4, 2
 

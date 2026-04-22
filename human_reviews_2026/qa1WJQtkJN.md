@@ -1,5 +1,6 @@
 # Similarity as Reward Alignment: Robust and Versatile Preference-based Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

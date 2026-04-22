@@ -1,5 +1,6 @@
 # Flow-Based Single-Step Completion for Efficient and Expressive Policy Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

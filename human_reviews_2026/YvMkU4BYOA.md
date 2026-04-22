@@ -1,5 +1,6 @@
 # XBIC: Shapley-Weighted BIC for Score-Based Causal Discovery in Discrete Bayesian Networks
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

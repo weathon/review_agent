@@ -1,5 +1,6 @@
 # Single Answer is Not Enough: On Generating Ranked Lists with Medical Reasoning Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

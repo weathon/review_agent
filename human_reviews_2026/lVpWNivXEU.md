@@ -1,5 +1,6 @@
 # LaTtE-Flow: Layerwise Timestep-Expert Flow-based Transformer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

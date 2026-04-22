@@ -1,5 +1,6 @@
 # MARS: Harmonizing Multimodal Convergence via Adaptive Rank Search
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 6, 4
 

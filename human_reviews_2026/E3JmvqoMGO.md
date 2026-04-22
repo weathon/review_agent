@@ -1,5 +1,6 @@
 # Flow Matching in the Low-Noise Regime: Pathologies and a Contrastive Remedy
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

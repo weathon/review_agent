@@ -1,5 +1,6 @@
 # SOFTADACLIP: A SMOOTH CLIPPING STRATEGY FOR FAIR AND PRIVATE MODEL TRAINING
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 2, 8, 4
 

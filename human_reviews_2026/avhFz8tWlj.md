@@ -1,5 +1,6 @@
 # From Threat to Tool: Leveraging Refusal-Aware Injection Attacks for Safety Alignment
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

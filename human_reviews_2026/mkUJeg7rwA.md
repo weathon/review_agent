@@ -1,5 +1,6 @@
 # Intra-Prompt Parallel Decoding for Common-Context Question Answering
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

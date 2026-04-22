@@ -1,5 +1,6 @@
 # Reliable Poisoned Sample Detection against Backdoor Attacks Enhanced by Sharpness Aware Minimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

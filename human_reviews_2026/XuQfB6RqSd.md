@@ -1,5 +1,6 @@
 # Online Learning with Recency: Algorithms for Sliding-window Streaming Multi-armed Bandits
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # MP-GFormer: A 3D-Geometry-Aware Dynamic Graph Transformer Approach for Machining Process Planning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

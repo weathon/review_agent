@@ -1,5 +1,6 @@
 # Flat is the New Sharp: Flatness-Aware Regularization for Robust Learning
 
+- Avg Score: 0.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0, 0
 

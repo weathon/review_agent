@@ -1,5 +1,6 @@
 # FACT: Fine-grained Across-variable Convolution for Multivariate Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

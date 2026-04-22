@@ -1,5 +1,6 @@
 # S2AP: Score-space Sharpness Minimization for Adversarial Pruning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 4, 0
 

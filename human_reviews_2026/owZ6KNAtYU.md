@@ -1,5 +1,6 @@
 # Graph homophily booster: Reimagining the role of discrete features in heterophilic graph learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # T1: Tool-integrated Verification for Test-time Compute Scaling in Small Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

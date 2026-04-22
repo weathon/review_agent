@@ -1,5 +1,6 @@
 # AnTKV: Anchor Token-Aware Ultra-Low-Bit Vector Quantization for KV Cache in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

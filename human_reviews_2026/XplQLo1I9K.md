@@ -1,5 +1,6 @@
 # Reasoning to Regulate: Chain-of-Thought for Traffic Rule Understanding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

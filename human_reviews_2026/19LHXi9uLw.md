@@ -1,5 +1,6 @@
 # The Lie of the Average: How Class Incremental Learning Evaluation Deceives You?
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4, 6
 

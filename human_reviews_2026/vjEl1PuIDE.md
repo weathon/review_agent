@@ -1,5 +1,6 @@
 # AVoCaDO: An Audiovisual Video Captioner Driven by Temporal Orchestration
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # Explaining Metastable Cooperation in Independent Multi-Agent Boltzmann Q-Learning – A Deterministic Approximation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # Two-Stage Voting for Robust and Efficient Suicide Risk Detection on Social Media
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

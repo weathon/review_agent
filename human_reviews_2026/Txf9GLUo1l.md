@@ -1,5 +1,6 @@
 # Circuit-level Steering for Personalized Knowledge Injection in Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # OD$^3$: Optimization-free Dataset Distillation for Object Detection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

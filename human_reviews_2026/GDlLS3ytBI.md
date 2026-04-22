@@ -1,5 +1,6 @@
 # Improving Safe Offline Reinforcement Learning via Dual-Guide Diffuser
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 4, 8
 

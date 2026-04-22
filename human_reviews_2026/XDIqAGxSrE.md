@@ -1,5 +1,6 @@
 # Influence Guided Sampling for Domain Adaptation of Text Retrievers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Bidirectional Reverse Contrastive Distillation for Progressive Multi-Level Graph Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

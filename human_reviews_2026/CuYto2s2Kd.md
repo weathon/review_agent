@@ -1,5 +1,6 @@
 # Automating Structural Engineering Workflows with Large Language Model Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

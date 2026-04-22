@@ -1,5 +1,6 @@
 # VC-Bench: Pioneering the Video Connecting Benchmark with a Dataset and Evaluation Metrics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

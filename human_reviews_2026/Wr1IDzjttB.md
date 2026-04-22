@@ -1,5 +1,6 @@
 # Amortized Bayesian Meta-Learning for Low-Rank Adaptation of Large Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Quality of Rejections Matters: Preference Data Construction for Faithful Summarization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

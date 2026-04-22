@@ -1,5 +1,6 @@
 # CoLA: Co-Calibrated Logit Adjustment for Long-Tailed Semi-Supervised Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

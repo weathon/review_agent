@@ -1,5 +1,6 @@
 # MulCLIP: A Multi-level Alignment Framework for Enhancing Fine-grained Long-context CLIP
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

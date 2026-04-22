@@ -1,5 +1,6 @@
 # FuseBatch: Unlocking the Potential of Diffusion Models in Throughput Perspective
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

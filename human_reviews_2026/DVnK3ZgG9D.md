@@ -1,5 +1,6 @@
 # Empowering Channel-of-Mobile-Experts with Informative Hybrid-Capabilities Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

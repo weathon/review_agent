@@ -1,5 +1,6 @@
 # Emotions Where Art Thou: Understanding and Characterizing the Emotional Latent Space of Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

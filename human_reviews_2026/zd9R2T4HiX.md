@@ -1,5 +1,6 @@
 # Synthesising Counterfactual Explanations via Label-Conditional Gaussian Mixture Variational Autoencoders
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

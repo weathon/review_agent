@@ -1,5 +1,6 @@
 # Wasserstein Policy Gradient: Implicit Policies, Entropy Regularization and Linear Convergence
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

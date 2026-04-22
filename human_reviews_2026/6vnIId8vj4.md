@@ -1,5 +1,6 @@
 # Theoretical foundations of curriculum learning in linear RNNs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

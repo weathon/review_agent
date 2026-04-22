@@ -1,5 +1,6 @@
 # Towards Efficient Constraint Handling in Neural Solvers for Routing Problems
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

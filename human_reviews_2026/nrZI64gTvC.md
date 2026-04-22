@@ -1,5 +1,6 @@
 # OmniCT: Towards a Unified Slice-Volume LVLM for Comprehensive CT Analysis
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

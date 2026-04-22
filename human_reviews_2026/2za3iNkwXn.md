@@ -1,5 +1,6 @@
 # When Reasoning Meets Compression: Understanding the Effects of LLMs Compression on Large Reasoning Models
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4, 6
 

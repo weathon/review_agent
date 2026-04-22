@@ -1,5 +1,6 @@
 # DexMove: Learning Tactile-Guided Non-Prehensile Manipulation with Dexterous Hands
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

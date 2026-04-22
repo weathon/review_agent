@@ -1,5 +1,6 @@
 # Watch the Weights: Unsupervised monitoring and control of fine-tuned LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

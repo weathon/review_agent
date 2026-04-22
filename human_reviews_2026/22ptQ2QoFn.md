@@ -1,5 +1,6 @@
 # Think Right: Learning to Mitigate Under-Over Thinking via Adaptive, Attentive Compression
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # StableToken: A Noise-Robust Semantic Speech Tokenizer for Resilient SpeechLLMs
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 10, 6, 8, 6
 

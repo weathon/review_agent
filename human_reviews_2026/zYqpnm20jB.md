@@ -1,5 +1,6 @@
 # E$^3$-Pruner: Towards Efficient, Economical, and Effective Layer Pruning for Large Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 6
 

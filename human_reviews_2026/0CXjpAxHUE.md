@@ -1,5 +1,6 @@
 # Larger Datasets Can Be Repeated More: A Theoretical Analysis of Multi-Epoch Scaling in Linear Regression
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

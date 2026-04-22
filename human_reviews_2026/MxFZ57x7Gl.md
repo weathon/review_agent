@@ -1,5 +1,6 @@
 # Scaling Overhead Matters: Saliency-Aware Graph-Based Efficient Post-Training Quantization for LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

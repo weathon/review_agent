@@ -1,5 +1,6 @@
 # MomentSeg: Moment-Centric Sampling for Enhanced Video Pixel Understanding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

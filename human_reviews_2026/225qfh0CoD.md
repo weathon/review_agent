@@ -1,5 +1,6 @@
 # Improving Batch Normalization in Federated Learning with Non-IID Features
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

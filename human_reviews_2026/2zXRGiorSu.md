@@ -1,5 +1,6 @@
 # Linear Mechanisms for Spatiotemporal Reasoning in Vision Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

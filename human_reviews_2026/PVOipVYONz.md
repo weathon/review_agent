@@ -1,5 +1,6 @@
 # AGPD: Adaptive Guidance policy distillation for Imitation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

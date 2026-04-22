@@ -1,5 +1,6 @@
 # Solving the Granularity Mismatch: Hierarchical Preference Learning for Long-Horizon LLM Agents
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 6
 

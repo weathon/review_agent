@@ -1,5 +1,6 @@
 # CompSGD: Robust Comparison-Based Approach for Zeroth-Order Optimization under $(L_0, L_1)$-Smoothness and Heavy-Tailed Noise
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2, 4
 

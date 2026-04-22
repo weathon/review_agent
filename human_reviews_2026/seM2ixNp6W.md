@@ -1,5 +1,6 @@
 # Who Judges the Judge? LLM Jury-on-Demand: Building Trustworthy LLM Evaluation Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

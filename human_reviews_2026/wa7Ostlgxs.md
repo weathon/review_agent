@@ -1,5 +1,6 @@
 # Hierarchical Deep Counterfactual Regret Minimization
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Reevaluating Policy Gradient Methods for Imperfect-Information Games
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

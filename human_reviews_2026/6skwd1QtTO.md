@@ -1,5 +1,6 @@
 # CORRECT: COndensed eRror RECognition via knowledge Transfer in multi-agent systems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

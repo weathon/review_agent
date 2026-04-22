@@ -1,5 +1,6 @@
 # Bootstrap Learning for Combinatorial Graph Alignment with Sequential GNNs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 8, 2
 

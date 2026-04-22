@@ -1,5 +1,6 @@
 # AutoMat: Enabling Automated Crystal Structure Reconstruction from Microscopy via Agentic Tool Use
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 2, 8, 4
 

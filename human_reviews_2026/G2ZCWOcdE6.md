@@ -1,5 +1,6 @@
 # Trusted Multi-Rater Segmentation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 
@@ -40,7 +41,8 @@ The paper is well organized, technically sound, and addresses a relevant topicâ€
 
 2. Lack of comparison with latest probabilistic multi-rater models. The paper omits comparison with several recent state-of-the-art approaches that explicitly address inter- and intra-observer variability, such as: Probabilistic modeling of inter- and intra-observer variability in medical image segmentation (ICCV 2023), Diversified and Personalized Multi-Rater Medical Image Segmentation (CVPR 2024), both of which propose more expressive probabilistic or personalized frameworks for capturing annotator heterogeneity. Without such baselines, it is unclear whether TMS provides substantive advantages over probabilistic or generative formulations.
 
-3. The evaluation is limited to two small-scale datasets (RIGA, LIDC). There is no validation on broader benchmarks such as QUBIQ Challenge (Li, Hongwei Bran, et al. "Qubiq: Uncertainty quantification for biomedical image segmentation challenge"), NPC Dataset (Diversified and Personalized Multi-Rater Medical Image Segmentation), SUN-SEG Dataset (Ji et al., 2022, Video polyp segmentation: A deep learning perspective).â€¨Inclusion of these datasets would provide stronger evidence of robustness and generalizability across modalities and rater configurations.
+3. The evaluation is limited to two small-scale datasets (RIGA, LIDC). There is no validation on broader benchmarks such as QUBIQ Challenge (Li, Hongwei Bran, et al. "Qubiq: Uncertainty quantification for biomedical image segmentation challenge"), NPC Dataset (Diversified and Personalized Multi-Rater Medical Image Segmentation), SUN-SEG Dataset (Ji et al., 2022, Video polyp segmentation: A deep learning perspective).
+Inclusion of these datasets would provide stronger evidence of robustness and generalizability across modalities and rater configurations.
 
 4. The proposed model assumes consistent annotators across images, which holds for RIGA but not for LIDC. On datasets with varying annotator participation, the WBF weighting mechanism becomes ill-defined, undermining the claimed interpretability and limiting broader applicability.
 

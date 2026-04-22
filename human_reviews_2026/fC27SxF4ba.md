@@ -1,5 +1,6 @@
 # MATA: A Trainable Hierarchical Automaton System for Multi-Agent Visual Reasoning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

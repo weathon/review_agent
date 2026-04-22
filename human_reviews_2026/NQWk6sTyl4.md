@@ -1,5 +1,6 @@
 # MobileA3gent: Training Mobile GUI Agents Using Decentralized Self-Sourced Data from Diverse Users
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

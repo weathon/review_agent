@@ -1,5 +1,6 @@
 # CoT-MT$^3$ : CoT-Guided Meta Test-Time Training for Multimodal Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

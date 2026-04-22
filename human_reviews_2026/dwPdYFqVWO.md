@@ -1,5 +1,6 @@
 # Bridging Draft Policy Misalignment: Group Tree Optimization  for Speculative Decoding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

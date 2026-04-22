@@ -1,5 +1,6 @@
 # Measure Twice, Cut Once: A Semantic-Oriented Approach to Video Temporal Localization with Video LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

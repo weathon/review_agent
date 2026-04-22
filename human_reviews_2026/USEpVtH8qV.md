@@ -1,5 +1,6 @@
 # JIONE: an Approach for Merging Large Language Models via Teacher–Student Prediction Refinement
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

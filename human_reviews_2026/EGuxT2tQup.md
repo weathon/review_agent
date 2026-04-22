@@ -1,5 +1,6 @@
 # Bridging Implicit-Explicit Representations for Ultra-Low Bitrate Image Compression
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

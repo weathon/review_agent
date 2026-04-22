@@ -1,5 +1,6 @@
 # SRFT: A Single-Stage Method with Supervised and Reinforcement Fine-Tuning for Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

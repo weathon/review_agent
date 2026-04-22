@@ -1,5 +1,6 @@
 # A Biologically Plausible Dense Associative Memory with Exponential Capacity
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

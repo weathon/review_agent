@@ -1,5 +1,6 @@
 # String Seed of Thought: Prompting LLMs for Distribution-Faithful and Diverse Generation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

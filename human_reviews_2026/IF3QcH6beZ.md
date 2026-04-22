@@ -1,5 +1,6 @@
 # Position: The Hidden Costs and Measurement Gaps of Reinforcement Learning with Verifiable Rewards
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 2, 2
 

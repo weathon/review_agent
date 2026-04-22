@@ -1,5 +1,6 @@
 # Privacy Beyond Pixels: Latent Anonymization for Privacy-Preserving Video Understanding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

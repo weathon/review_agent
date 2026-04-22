@@ -1,5 +1,6 @@
 # DriveCamSim: Generalizable Camera Simulation via Explicit Camera Modeling for Autonomous Driving
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Guided Navigation in Knowledge-Dense Environments: Structured Semantic Exploration with Guidance Graphs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

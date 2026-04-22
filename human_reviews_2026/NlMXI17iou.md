@@ -1,5 +1,6 @@
 # Reordered SparseGPT: Optimizing the Pruning Order in Second-Order LLM Pruning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

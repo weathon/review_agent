@@ -1,5 +1,6 @@
 # AegisLLM: Scaling Agentic Systems for Self-Reflective Defense in LLM Security
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # ModelNet40-E: An Uncertainty-Aware Benchmark for Point Cloud Classification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

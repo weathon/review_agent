@@ -1,5 +1,6 @@
 # Beyond Formula Complexity: Effective Information Criterion Improves Performance and Interpretability for Symbolic Regression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

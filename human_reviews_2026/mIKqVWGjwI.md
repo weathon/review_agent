@@ -1,5 +1,6 @@
 # BeyondBench: Contamination-Resistant Evaluation of Reasoning in Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

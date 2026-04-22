@@ -1,5 +1,6 @@
 # Toward Self-Evolving Systems of LLM Agents through Exploration and Iterative Feedback
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

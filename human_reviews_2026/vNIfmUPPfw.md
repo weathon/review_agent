@@ -1,5 +1,6 @@
 # Channel-Similarity Aware Spike Encoding for Multivariate Time-Series Forecasting
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

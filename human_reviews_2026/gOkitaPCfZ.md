@@ -1,5 +1,6 @@
 # EditLens: Quantifying the Extent of AI Editing in Text
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

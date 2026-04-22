@@ -1,5 +1,6 @@
 # A Non-vacuous Test Error Guarantee for Deep Learning without Altering the Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 0, 4, 6, 6
 

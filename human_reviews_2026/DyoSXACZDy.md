@@ -1,5 +1,6 @@
 # ETA: Dual Evidence-Aware Uncertainty Learning for Open-Set Graph Domain Adaptation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 8, 4
 

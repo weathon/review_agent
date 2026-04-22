@@ -1,5 +1,6 @@
 # Lightweight Cross-text-vision Prompting Diffusion Network for Medical Image Segmentation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

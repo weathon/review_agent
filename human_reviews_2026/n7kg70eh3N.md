@@ -1,5 +1,6 @@
 # Graph Attribute Imputation via Generalized Wasserstein Balancing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

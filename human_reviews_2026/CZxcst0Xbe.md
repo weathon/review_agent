@@ -1,5 +1,6 @@
 # Debate with Image: Detecting Deceptive Behaviors in Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

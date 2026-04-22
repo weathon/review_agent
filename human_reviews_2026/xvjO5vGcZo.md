@@ -1,5 +1,6 @@
 # Dynamics of Learning: Generative Schedules from Latent ODEs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

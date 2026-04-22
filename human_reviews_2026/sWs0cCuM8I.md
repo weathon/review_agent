@@ -1,5 +1,6 @@
 # Spilling the Beans: Teaching LLMs to Self-Report Their Hidden Objectives
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

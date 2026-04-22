@@ -1,5 +1,6 @@
 # Masked Skill Token Training for Hierarchical Off-Dynamics Transfer
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

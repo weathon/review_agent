@@ -1,5 +1,6 @@
 # Flow Matching for Robust Simulation-Based Inference under Model Misspecification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

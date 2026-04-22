@@ -1,5 +1,6 @@
 # Unsupervised Reinforcement Learning with Verifiable Rewards via First Repeat Criterion
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

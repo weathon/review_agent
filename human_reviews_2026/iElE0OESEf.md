@@ -1,5 +1,6 @@
 # Neural Policy Iteration for Stochastic Optimal Control: A Physics-Informed Approach
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

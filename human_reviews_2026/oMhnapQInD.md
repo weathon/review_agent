@@ -1,5 +1,6 @@
 # Parameter-Efficient Attention Transfer for Multi-Modal Test-Time Adaptation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

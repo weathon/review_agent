@@ -1,5 +1,6 @@
 # Multi-Operator Few-Shot Learning for Generalization Across PDE Families
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 2, 6
 

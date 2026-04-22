@@ -1,5 +1,6 @@
 # Is your batch size the problem? Revisiting the Adam-SGD gap in language modeling
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

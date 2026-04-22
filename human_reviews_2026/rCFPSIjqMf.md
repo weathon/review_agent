@@ -1,5 +1,6 @@
 # SURGE: Surprise-Guided Token Reduction for Efficient Video Understanding with VLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

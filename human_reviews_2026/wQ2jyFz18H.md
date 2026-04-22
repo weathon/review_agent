@@ -1,5 +1,6 @@
 # Lean4Physics: Comprehensive Reasoning Framework for College-level Physics in Lean4
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

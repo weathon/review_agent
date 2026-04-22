@@ -1,5 +1,6 @@
 # Towards Safe and Optimal Online Bidding: A Modular Look-ahead Lyapunov Framework
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

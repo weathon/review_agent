@@ -1,5 +1,6 @@
 # On the Limits of Test-Time Compute: Sequential Reward Filtering for Better Inference
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # What is Missing? Explaining Neurons Activated by Absent Concepts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 6, 2
 

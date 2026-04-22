@@ -1,5 +1,6 @@
 # Turn-Level Trajectory Optimization for Robust Multi-Turn LLM Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Judge a Book by its Cover: Investigating Multi-Modal LLMs for Multi-Page Handwritten Document Transcription
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

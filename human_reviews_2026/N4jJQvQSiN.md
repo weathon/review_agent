@@ -1,5 +1,6 @@
 # FlexLinearAttention: Compiling a Unified Abstraction into Scalable Kernels for Linear Attention
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

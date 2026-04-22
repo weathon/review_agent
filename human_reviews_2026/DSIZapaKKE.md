@@ -1,5 +1,6 @@
 # Linearly Decoding Refused Knowledge in Aligned Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

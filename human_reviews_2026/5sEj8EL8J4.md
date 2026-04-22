@@ -1,5 +1,6 @@
 # Cross-Modal Syntax-NL Attention for Multi-Agent Reinforcement Learning in Collaborative Coding
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

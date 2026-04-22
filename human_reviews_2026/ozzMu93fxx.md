@@ -1,5 +1,6 @@
 # HTR for Russian Empire Period Manuscripts: A Two-Stage Framework with New Annotated Resources
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 2, 0
 

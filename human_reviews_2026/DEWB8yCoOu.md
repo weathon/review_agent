@@ -1,5 +1,6 @@
 # XTalker: Turn, Smile, and Speak in Controllable Talking Portrait Animation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 6, 0
 

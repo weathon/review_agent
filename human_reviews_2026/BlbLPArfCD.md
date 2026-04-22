@@ -1,5 +1,6 @@
 # MoST: Mixing Speech and Text with Modality-Aware Mixture of Experts
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 
@@ -102,14 +103,18 @@ How does MoE impact the original text foundation model?
 The paper introduces MoST, a speech-text large language model built on a Modality-Aware Mixture of Experts (MAMoE) architecture. The main idea is to extend a pretrained MoE language model with modality-aware routing, using modality-specific experts for speech and text tokens, along with shared experts for cross-modal interactions. The model is post-trained through a two-stage procedure of Cross-Modal ASR/TTS Post-Training and Mixed Instruction Fine-Tuning. The training data are based on open-source or derived from open-source datasets. Experiments cover ASR, TTS, audio language modeling, and spoken QA. Across these tasks, MoST achieves competitive or superior results compared with strong baselines while maintaining computational efficiency. The paper includes detailed ablation studies and commits to releasing code, model weights, and data for reproducibility.
 
 ### Strengths
-1. The modality-aware mixture of experts (MAMoE) provides a clean and intuitive way with modality-specific expert groups and a parallel shared expert for training a speech language model.  
+1. The modality-aware mixture of experts (MAMoE) provides a clean and intuitive way with modality-specific expert groups and a parallel shared expert for training a speech language model.
+
+
 
 2. The experimental validation is solid and rigorous, including ablations on initialization with non-MoE LLM (Llama3.2 3B), and ablations without modality-specific experts or shared experts.
 
 ### Weaknesses
 1. The partition of 50% of the initial text expert capacity to $\mathcal{E}_{audio}$ is a major structural change, but the division is simply based on index without any reliable partition mechanism. The hard 50% partition of experts may introduce a risk of losing valuable text knowledge. 
 
-2. The paper lacks text-only evaluations.  
+2. The paper lacks text-only evaluations.
+
+
 
 3. The paper frequently claims "efficiency" and "data efficiency" without direct, quantifiable metrics and experimentation. It feels like the efficiency claim is only an architectural inheritance from MoE.
 

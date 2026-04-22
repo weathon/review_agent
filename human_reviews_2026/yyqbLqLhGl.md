@@ -1,5 +1,6 @@
 # FLASH: Latent-Aware Semi-Autoregressive Speculative Decoding for Multimodal Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

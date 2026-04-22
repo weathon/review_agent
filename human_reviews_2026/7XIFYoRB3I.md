@@ -1,5 +1,6 @@
 # Why Sacrifice Majority Nodes?: Improving Imbalanced Node Classification via Class-Balanced Graph Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

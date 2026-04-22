@@ -1,5 +1,6 @@
 # Guided Diffusion by Optimized Loss Functions on Relaxed Parameters for Inverse Material Design
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

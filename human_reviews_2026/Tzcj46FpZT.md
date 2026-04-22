@@ -1,5 +1,6 @@
 # Concept Component Analysis: A Principled Approach for Concept Extraction in LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

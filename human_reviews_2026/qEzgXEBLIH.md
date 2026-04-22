@@ -1,5 +1,6 @@
 # Let Physics Guide Your Protein Flows: Topology-aware Unfolding and Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

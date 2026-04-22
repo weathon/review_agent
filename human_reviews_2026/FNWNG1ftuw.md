@@ -1,5 +1,6 @@
 # Scalable Second-order Riemannian Optimization for $K$-means Clustering
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

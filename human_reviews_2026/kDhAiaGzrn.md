@@ -1,5 +1,6 @@
 # VGR: Visual Grounded Reasoning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8, 4
 

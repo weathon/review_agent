@@ -1,5 +1,6 @@
 # Chart Deep Research in LVLMs via Parallel Relative Policy Optimization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

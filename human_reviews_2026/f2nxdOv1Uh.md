@@ -1,5 +1,6 @@
 # MTG-RPD: Multimodal Trajectories Generation with Rule-Based Prior Diffusion for End-to-End Autonomous Driving
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

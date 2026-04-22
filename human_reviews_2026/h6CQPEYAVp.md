@@ -1,5 +1,6 @@
 # A Unified Perspective and Review on Tree Search for LLMs Test-Time Scaling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2
 

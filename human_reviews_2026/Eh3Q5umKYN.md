@@ -1,5 +1,6 @@
 # Enhanced Causal Discovery for Autocorrelated Time Series via Adaptive Momentary Conditional Independence
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

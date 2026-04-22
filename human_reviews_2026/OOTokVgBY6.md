@@ -1,5 +1,6 @@
 # Learn More with Less: Uncertainty Consistency Guided Query Selection for RLVR
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

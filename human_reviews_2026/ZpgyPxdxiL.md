@@ -1,5 +1,6 @@
 # Where Matters More Than What: Decoding-aligned KV Cache Compression via Position-aware Pseudo-queries
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

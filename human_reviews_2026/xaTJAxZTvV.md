@@ -1,5 +1,6 @@
 # Disentangled Representation Learning for Parametric Partial Differential Equations
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

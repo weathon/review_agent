@@ -1,5 +1,6 @@
 # MHLA: Restoring Expressivity of Linear Attention via Token-Level Multi-Head
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

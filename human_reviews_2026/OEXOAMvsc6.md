@@ -1,5 +1,6 @@
 # Elucidating the Design Space of FP4 training
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

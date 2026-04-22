@@ -1,5 +1,6 @@
 # References Indeed Matter? Reference-Free Preference Optimization for Conversational Query Reformulation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

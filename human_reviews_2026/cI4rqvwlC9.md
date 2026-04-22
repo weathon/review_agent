@@ -1,5 +1,6 @@
 # Incremental Learning of Sparse Attention Patterns in Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 
@@ -108,16 +109,23 @@ The paper develops a theoretical framework to explain this phenomenon. Starting 
 * The connection between optimization dynamics and low-rank tensor factorization is elegant and offers intuitive insight into head specialization.
 
 ### Weaknesses
-1. Missing Discussion of Generalization.  The abstract mentions “generalization,” yet this topic is not revisited in the main text.
-2. Limited Scope of Contribution. The first stated contribution—analyzing a simplified, single-layer model—should be reframed as a limitation rather than a contribution. It remains unclear how the conclusions would extend to deeper or larger-scale architectures or more generalized type of sequences. 
-3. Unclear Cognitive Relevance. The setup—modeling the next token as a weighted superposition of prior chunks of tokens—deviates substantially from linguistic or cognitive formulation of hierarchical structures in sequences. Language is not well approximated by a linear summation of token embeddings.
+1. Missing Discussion of Generalization.
+ The abstract mentions “generalization,” yet this topic is not revisited in the main text.
+2. Limited Scope of Contribution.
+The first stated contribution—analyzing a simplified, single-layer model—should be reframed as a limitation rather than a contribution. It remains unclear how the conclusions would extend to deeper or larger-scale architectures or more generalized type of sequences. 
+3. Unclear Cognitive Relevance.
+The setup—modeling the next token as a weighted superposition of prior chunks of tokens—deviates substantially from linguistic or cognitive formulation of hierarchical structures in sequences. Language is not well approximated by a linear summation of token embeddings.
     * How canonical is this formulation for studying sequences in general?
     * How does it compare to more structured formulations of sequences (e.g., Wu et al., NeurIPS 2022; Wu et al., ICLR 2025)?
 
 ### Questions
-1. Copying vs. Reuse.  Lines 38–41 mention compositionality and the reuse of sub-components. Please clarify the distinction between copying, reusing, and re-binding (cf. Wu 2022, Wu 2024 ICLR) and how these mechanisms relate to the learning dynamics observed here.
-2. Conceptual Connection to Prior Work.  The relation to recent work such as Zucchet et al. on compositional knowledge formation should be discussed. How does the present theory complement or differ from these accounts?
-3. Interpretation of Results. In Fig. 3, why does the KL divergence for A A1∗ increase after the first training stage, given that it measures the divergence between the ground truth and a transformer with unrestricted context length? 
+1. Copying vs. Reuse. 
+Lines 38–41 mention compositionality and the reuse of sub-components. Please clarify the distinction between copying, reusing, and re-binding (cf. Wu 2022, Wu 2024 ICLR) and how these mechanisms relate to the learning dynamics observed here.
+2. Conceptual Connection to Prior Work.
+ The relation to recent work such as Zucchet et al. on compositional knowledge formation should be discussed. How does the present theory complement or differ from these accounts?
+3. Interpretation of Results.
+In Fig. 3, why does the KL divergence for A
+A1∗ increase after the first training stage, given that it measures the divergence between the ground truth and a transformer with unrestricted context length? 
 
 
 Reference:

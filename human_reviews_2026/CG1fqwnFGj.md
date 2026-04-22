@@ -1,5 +1,6 @@
 # VEM: Environment-Free Exploration for Training GUI Agent with Value Environment Model
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 2
 

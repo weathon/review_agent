@@ -1,5 +1,6 @@
 # FM-IRL: Flow-Matching for Reward Modeling and Policy Regularization in Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

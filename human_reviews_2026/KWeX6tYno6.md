@@ -1,5 +1,6 @@
 # WorldSplat: Gaussian-Centric Feed-Forward 4D Scene Generation for Autonomous Driving
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

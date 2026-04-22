@@ -1,5 +1,6 @@
 # Fast Intent Classification for LLM Routing via Statistical Analysis of Representations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2, 2
 

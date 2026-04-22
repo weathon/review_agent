@@ -1,5 +1,6 @@
 # Revisiting Sharpness-Aware Minimization: A More Faithful and Effective Implementation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

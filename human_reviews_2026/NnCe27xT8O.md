@@ -1,5 +1,6 @@
 # MoVie: Multimodal Video Compression with Text Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 6
 

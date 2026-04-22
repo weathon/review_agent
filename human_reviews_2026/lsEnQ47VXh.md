@@ -1,5 +1,6 @@
 # Image Can Bring Your Memory Back: A Novel Multi-Modal Guided Attack against Image Generation Model Unlearning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

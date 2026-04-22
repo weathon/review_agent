@@ -1,5 +1,6 @@
 # Can Trustworthiness Generalize? Leveraging Weak Supervision for Stronger Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

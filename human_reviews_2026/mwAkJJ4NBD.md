@@ -1,5 +1,6 @@
 # Coevolutionary Continuous Discrete Diffusion: Make Your Diffusion Language Model a Latent Reasoner
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

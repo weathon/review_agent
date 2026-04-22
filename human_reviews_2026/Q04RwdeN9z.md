@@ -1,5 +1,6 @@
 # Knowledge-Level Consistency Reinforcement Learning: Dual-Fact Alignment for Long-Form Factuality
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Object Hierarchy Guides Visual Relationship Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 0
 

@@ -1,5 +1,6 @@
 # The Best of Both Worlds: Amortized Variational Diffusion Posterior Sampling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

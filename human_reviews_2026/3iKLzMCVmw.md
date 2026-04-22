@@ -1,5 +1,6 @@
 # EGGS-PTP: An Expander-Graph Guided Structured Post-training Pruning Method for Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

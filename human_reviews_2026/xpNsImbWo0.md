@@ -1,5 +1,6 @@
 # Geometric Kolmogorov Superposition Representation of group invariant function for computational science
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

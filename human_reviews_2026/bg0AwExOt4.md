@@ -1,5 +1,6 @@
 # Aligning Forest and Trees in Images and Long Captions for Cross-Domain Grounding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

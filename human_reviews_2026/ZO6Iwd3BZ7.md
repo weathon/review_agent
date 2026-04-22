@@ -1,5 +1,6 @@
 # Optimal Robust Subsidy Policies for Irrational Agent in Principal-Agent MDPs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 2
 

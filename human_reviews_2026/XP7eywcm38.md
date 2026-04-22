@@ -1,5 +1,6 @@
 # OLIIV Benchmark: Does Your VLM Care What You Say, or How You Say It?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 8
 

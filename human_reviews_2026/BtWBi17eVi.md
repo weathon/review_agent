@@ -1,5 +1,6 @@
 # Demystifying and Enhancing the Efficiency of Large Language Model Based Search Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

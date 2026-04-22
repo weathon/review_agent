@@ -1,5 +1,6 @@
 # Latent Veracity Inference for Identifying Errors in Stepwise Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

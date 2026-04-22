@@ -1,5 +1,6 @@
 # GraphCliff: Short-Long Range Gating for Subtle Differences but Critical Changes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

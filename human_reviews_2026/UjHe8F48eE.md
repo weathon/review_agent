@@ -1,5 +1,6 @@
 # Rethinking Sparse Autoencoders: Select-and-Project for Fairness and Control from Encoder Features Alone
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

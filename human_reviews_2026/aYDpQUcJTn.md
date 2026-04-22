@@ -1,5 +1,6 @@
 # Single Index Bandits: Generalized Linear Contextual Bandits with Unknown Reward Functions
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # The Tool Decathlon: Benchmarking Language Agents for Diverse, Realistic, and Long-Horizon Task Execution
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

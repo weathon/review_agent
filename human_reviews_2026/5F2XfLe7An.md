@@ -1,5 +1,6 @@
 # SINQ: Sinkhorn-Normalized Quantization for Calibration-Free Low-Precision LLM Weights
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

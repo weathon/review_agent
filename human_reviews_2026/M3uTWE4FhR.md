@@ -1,5 +1,6 @@
 # LLMTrace: A Corpus for Classification and Fine-Grained Localization of AI-Written Text
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

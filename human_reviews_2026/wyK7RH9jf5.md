@@ -1,5 +1,6 @@
 # Flow Connecting Actions and Reactions: A Condition-Free Framework for Human Action-Reaction Synthesis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

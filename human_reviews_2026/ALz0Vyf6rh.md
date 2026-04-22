@@ -1,5 +1,6 @@
 # IRGCL： Information Refinement Graph Contrastive Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

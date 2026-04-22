@@ -1,5 +1,6 @@
 # Searching for the Best Polynomial Approximation for the Accurate Log Matrix Normalization in Global Covariance Pooling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

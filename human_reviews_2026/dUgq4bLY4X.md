@@ -1,5 +1,6 @@
 # Reducing Symmetry Increase in Equivariant Neural Networks
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8
 

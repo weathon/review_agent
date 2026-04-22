@@ -1,5 +1,6 @@
 # MsTok: Query-Based Multi-Scale 1D Visual Tokenization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

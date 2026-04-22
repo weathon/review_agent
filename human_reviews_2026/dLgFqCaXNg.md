@@ -1,5 +1,6 @@
 # LeVERB: Humanoid Whole-Body Control with Latent Vision-Language Instruction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

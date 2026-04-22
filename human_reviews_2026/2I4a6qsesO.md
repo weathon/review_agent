@@ -1,5 +1,6 @@
 # Tight Bounds for Schrodinger Potential Estimation in Unpaired Data Translation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

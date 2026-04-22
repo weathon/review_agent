@@ -1,5 +1,6 @@
 # Chemical Priors at Scale: Efficient Foundation Models without Big Corpora
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

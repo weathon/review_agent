@@ -1,5 +1,6 @@
 # ProSocialAlign: Preference-Conditioned Test-Time Alignment in Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

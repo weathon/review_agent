@@ -1,5 +1,6 @@
 # ReconDreamer-RL: Enhancing Reinforcement Learning via Diffusion-based Scene Reconstruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

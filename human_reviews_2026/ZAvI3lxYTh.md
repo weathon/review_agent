@@ -1,5 +1,6 @@
 # CaSBRE: Causality-inspired Semi-supervised Biomedical Relation Extraction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

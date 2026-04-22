@@ -1,5 +1,6 @@
 # Contact-guided Real2Sim from Monocular Video with Planar Scene Primitives
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

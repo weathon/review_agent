@@ -1,5 +1,6 @@
 # MedCalc-R1: Knowledge-Guided Reward Framework for Medical Mathematical Reasoning
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4, 6
 

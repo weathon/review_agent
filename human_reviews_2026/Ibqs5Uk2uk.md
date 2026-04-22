@@ -1,5 +1,6 @@
 # Accelerating MHC-II Epitope Discovery via Multi-Scale Prediction in Antigen Presentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # MoRL: Reinforced Reasoning for Unified Motion Understanding and Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

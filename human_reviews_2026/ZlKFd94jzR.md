@@ -1,5 +1,6 @@
 # Binning of Linear Models for Time Series Forecasting
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # DA$^{2}$: Depth Anything in Any Direction
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6, 6
 

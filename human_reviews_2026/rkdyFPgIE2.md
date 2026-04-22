@@ -1,5 +1,6 @@
 # Group Pattern Selection Optimal: Let LRMs Pick the Right Pattern for Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

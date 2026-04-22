@@ -1,5 +1,6 @@
 # MCP-Flow: Facilitating LLM Agents to Master Real-World, Diverse and Scaling MCP Tools
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # TabImpute: Accurate and Fast Zero-Shot Missing-Data Imputation with a Pre-Trained Transformer
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

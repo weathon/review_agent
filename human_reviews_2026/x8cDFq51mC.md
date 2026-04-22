@@ -1,5 +1,6 @@
 # Mitigating Spatial Redundancy: A Predictive Compression Framework for 3D Gaussian Splatting
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 2
 

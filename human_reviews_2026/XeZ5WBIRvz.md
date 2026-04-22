@@ -1,5 +1,6 @@
 # When Ethics and Payoffs Diverge: LLM Agents in Morally Charged Social Dilemmas
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

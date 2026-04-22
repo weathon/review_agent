@@ -1,5 +1,6 @@
 # AGENT*: Optimizing Test-Time Compute for Multi-Agent Systems with Modularized Collaboration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

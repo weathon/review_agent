@@ -1,5 +1,6 @@
 # AlignSentinel: Alignment-Aware Detection of Prompt Injection Attacks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

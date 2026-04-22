@@ -1,5 +1,6 @@
 # How to Break Image Classification Models: Random Noise knows better than Saliency
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

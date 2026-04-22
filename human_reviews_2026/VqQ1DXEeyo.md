@@ -1,5 +1,6 @@
 # Chasing Moving Targets with Online Self-Play Reinforcement Learning for Safer Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

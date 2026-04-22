@@ -1,5 +1,6 @@
 # Shave Peaks, Don't Fill Valleys: Upper-Tail Risk Balancing Improves Robustness without Accuracy Loss
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

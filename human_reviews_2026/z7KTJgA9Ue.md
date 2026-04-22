@@ -1,5 +1,6 @@
 # ThermoRL: Structure-Aware RL for Protein Mutation Design to Enhance Thermostability
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

@@ -1,5 +1,6 @@
 # DeAltHDR: Learning HDR Video Reconstruction from Degraded Alternating Exposure Sequences
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # UI-Ins: Enhancing GUI Grounding with Multi-Perspective Instruction as Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

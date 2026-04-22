@@ -1,5 +1,6 @@
 # T³: Test-Time Model Merging in VLMs for Zero-Shot Medical Imaging Analysis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

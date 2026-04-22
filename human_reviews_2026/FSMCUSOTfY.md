@@ -1,5 +1,6 @@
 # PEML: Prototype-enhanced Meta-learning for Multi-lingual Text Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

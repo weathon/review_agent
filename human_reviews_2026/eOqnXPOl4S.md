@@ -1,5 +1,6 @@
 # Reinforcement Learning with Missing Context to Mitigate Reward Hacking from Training Only on Golden Answers
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

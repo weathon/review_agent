@@ -1,5 +1,6 @@
 # Pixel3DMM: Versatile Screen-Space Priors for Single-Image 3D Face Reconstruction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

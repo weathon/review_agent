@@ -1,5 +1,6 @@
 # A Single Character Can Make or Break your LLM Evals
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

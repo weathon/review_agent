@@ -1,5 +1,6 @@
 # OptimSyn: Influence-Guided Rubrics Optimization for Synthetic Data Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Differentiable Lifting for Topological Neural Networks
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

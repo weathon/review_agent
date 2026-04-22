@@ -1,5 +1,6 @@
 # OmniPlay: Benchmarking Omni-Modal Models on Omni-Modal Game Playing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

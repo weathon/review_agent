@@ -1,5 +1,6 @@
 # Improving LLM Symbolic Problem-Solving via Automated Heuristic Discovery
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

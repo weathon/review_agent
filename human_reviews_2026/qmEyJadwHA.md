@@ -1,5 +1,6 @@
 # Object-Centric World Models from Few-Shot Annotations for Sample-Efficient Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

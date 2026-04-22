@@ -1,5 +1,6 @@
 # Topological Retrieval-Augmented Generation via Intersecting Evidence Paths
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 6, 8
 

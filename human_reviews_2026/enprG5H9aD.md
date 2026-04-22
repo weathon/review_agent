@@ -1,5 +1,6 @@
 # SLAP: Shortcut Learning for Abstract Planning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 8
 

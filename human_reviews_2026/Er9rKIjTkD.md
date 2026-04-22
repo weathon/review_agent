@@ -1,5 +1,6 @@
 # SANEval: Open-Vocabulary Compositional Benchmarks with Failure-mode Diagnosis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

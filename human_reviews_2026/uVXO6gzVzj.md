@@ -1,5 +1,6 @@
 # Fusing Pixels and Genes: Spatially-Aware Learning in Computational Pathology
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

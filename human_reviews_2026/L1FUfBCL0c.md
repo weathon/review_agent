@@ -1,5 +1,6 @@
 # CoT Vectors: Transferring and Probing the Reasoning Mechanisms of LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

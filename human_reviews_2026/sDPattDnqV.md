@@ -1,5 +1,6 @@
 # KARMA: Keyword-Aware Representation Modification for Efficient and Robust Model Amnesiac Unlearning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

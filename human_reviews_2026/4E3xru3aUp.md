@@ -1,5 +1,6 @@
 # Navigating Cognitive Manifolds: Optimal Transport for Large Language Model Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

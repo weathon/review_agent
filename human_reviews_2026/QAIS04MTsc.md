@@ -1,5 +1,6 @@
 # MindCraft: How Concept Trees Take Shape In Deep Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

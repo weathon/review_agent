@@ -1,5 +1,6 @@
 # C2T: Classifier-based Token Tree Construction in Speculative Decoding
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 4, 6
 

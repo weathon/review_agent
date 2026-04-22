@@ -1,5 +1,6 @@
 # Evolutionary Multi-Agent Reinforcement Learning for Crisis-Aware Demographic Policy Optimization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

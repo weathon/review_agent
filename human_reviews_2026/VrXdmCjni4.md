@@ -1,5 +1,6 @@
 # Interference-Isolated Elastic Weight Consolidation and Knowledge Calibration for Incremental Object Detection
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Learning to Reason over Neighborhoods: A Differentiable Guarded Logic Approach
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 
@@ -177,13 +178,17 @@ The idea of interpreting guarded quantification as a locality bias for reasoning
 The hybrid domain strategy (core plus latent) is interesting and could provide a mechanism to balance logical fidelity and generalization.
 
 ### Weaknesses
-Limited novelty of the guarded fragment focus. 
+Limited novelty of the guarded fragment focus.
 
-Limited novelty of  fuzzy semantics and grounding. 
 
-Empirical gains lack explanatory analysis. 
+Limited novelty of  fuzzy semantics and grounding.
 
-Missing statistical interpretation of the hybrid domain. 
+
+Empirical gains lack explanatory analysis.
+
+
+Missing statistical interpretation of the hybrid domain.
+
 
 
 I will detail these points in the section below.

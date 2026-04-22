@@ -1,5 +1,6 @@
 # Learning to Reason in Structured In-context Environments with Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

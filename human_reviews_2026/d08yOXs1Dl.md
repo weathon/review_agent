@@ -1,5 +1,6 @@
 # SpikePingpong: Spike Vision-based Fast-Slow Pingpong Robot System
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 0, 8, 8, 8
 

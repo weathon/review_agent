@@ -1,5 +1,6 @@
 # AdaSine-LoRA: Adaptive Frequency Modulation for Nonlinear Low-Rank Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

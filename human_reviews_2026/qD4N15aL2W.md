@@ -1,5 +1,6 @@
 # MTSSRL-MD: Multi-Task Self-Supervised Representation Learning for EEG Signals across Multiple Datasets
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 0, 4, 2
 

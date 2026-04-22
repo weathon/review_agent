@@ -1,5 +1,6 @@
 # Mechanistic Interpretability of Code Correctness in LLMs via Sparse Autoencoders
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

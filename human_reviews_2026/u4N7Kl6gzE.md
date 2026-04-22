@@ -1,5 +1,6 @@
 # The Seismic Wavefield Common Task Framework
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

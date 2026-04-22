@@ -1,5 +1,6 @@
 # Less is More: Contrastive Retrieval Heads Improve Attention-Based Re-Ranking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

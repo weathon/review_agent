@@ -1,5 +1,6 @@
 # Riemannian Networks over Full-Rank Correlation Matrices
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

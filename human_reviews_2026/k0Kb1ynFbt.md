@@ -1,5 +1,6 @@
 # Exploratory Diffusion Model for Unsupervised Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 6
 

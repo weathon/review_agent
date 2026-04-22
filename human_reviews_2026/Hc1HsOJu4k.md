@@ -1,5 +1,6 @@
 # One Sample to Rule Them All: Extreme Data Efficiency in RL Scaling
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 2
 

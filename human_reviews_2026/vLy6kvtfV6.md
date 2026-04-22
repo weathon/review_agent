@@ -1,5 +1,6 @@
 # SAFE: Benchmarking AI Weather Prediction Fairness with Stratified Assessments of Forecasts over Earth
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

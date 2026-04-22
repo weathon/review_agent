@@ -1,5 +1,6 @@
 # COGITAO: A Procedural Object-Centric Framework to Study Compositional Generalization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

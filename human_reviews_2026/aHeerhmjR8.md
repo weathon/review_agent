@@ -1,5 +1,6 @@
 # Revisiting the Past: Data Unlearning with Model State History
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

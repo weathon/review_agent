@@ -1,5 +1,6 @@
 # Structuring Semantic Embeddings for Principle Evaluation: A Kernel-Guided Contrastive Learning Approach
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

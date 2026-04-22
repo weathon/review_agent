@@ -1,5 +1,6 @@
 # FindingDory: A Benchmark to Evaluate Memory in Embodied Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

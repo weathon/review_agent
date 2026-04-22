@@ -1,5 +1,6 @@
 # Contrast-Aware Calibration for Fine-Tuned CLIP: Leveraging Image-Text Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

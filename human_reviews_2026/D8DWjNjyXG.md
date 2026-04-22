@@ -1,5 +1,6 @@
 # What Makes a Representation Relightable? Probing Visual Priors via Augmented Latent Intrinsics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

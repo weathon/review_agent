@@ -1,5 +1,6 @@
 # PosterCraft: Rethinking High-Quality Aesthetic Poster Generation in a Unified Framework
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

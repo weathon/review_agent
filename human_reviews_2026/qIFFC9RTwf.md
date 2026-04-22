@@ -1,5 +1,6 @@
 # Optimizing Visual Generative Models with Distribution-wise Rewards
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

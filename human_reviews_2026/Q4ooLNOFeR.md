@@ -1,5 +1,6 @@
 # Does Higher Interpretability Imply Better Utility? A Pairwise Analysis on Sparse Autoencoders
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 2
 

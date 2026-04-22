@@ -1,5 +1,6 @@
 # ExGS: Extreme 3D Gaussian Compression with Diffusion Priors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

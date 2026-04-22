@@ -1,5 +1,6 @@
 # Differentiable Top-k: From One-Hot to k-Hot
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Autoregressive Visual Decoding from EEG Signals
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

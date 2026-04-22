@@ -1,5 +1,6 @@
 # Beyond Simple Graphs: Neural Multi-Objective Routing on Multigraphs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

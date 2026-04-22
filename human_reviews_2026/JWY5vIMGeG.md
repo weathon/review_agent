@@ -1,5 +1,6 @@
 # SFA-KAN: Spatial-Frequency Aggregation Kolmogorov-Arnold Network for OCT Segmentation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Ensembling Pruned Attention Heads For Uncertainty-Aware Efficient Transformers
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 10, 6, 4
 

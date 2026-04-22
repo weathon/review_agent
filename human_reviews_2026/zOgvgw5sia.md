@@ -1,5 +1,6 @@
 # Efficient Compression of Time-Series Foundation Models via Consensus Subspace Distillation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

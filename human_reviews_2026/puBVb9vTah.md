@@ -1,5 +1,6 @@
 # Story-Iter: A Training-free Iterative Paradigm for Long Story Visualization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

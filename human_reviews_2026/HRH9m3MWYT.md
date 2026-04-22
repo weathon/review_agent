@@ -1,5 +1,6 @@
 # Through BabyAI Steps: Understanding and Evaluating Grounded Intelligence in LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

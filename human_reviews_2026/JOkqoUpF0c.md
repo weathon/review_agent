@@ -1,5 +1,6 @@
 # AvatarSync: Rethinking Talking-Head Animation through Phoneme-Guided Autoregressive Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 4
 

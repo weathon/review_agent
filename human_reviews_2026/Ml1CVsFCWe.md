@@ -1,5 +1,6 @@
 # SMARTS: A Small-to-large Model Coordinated Retrieval and Response Framework for Task-Oriented Dialogue
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

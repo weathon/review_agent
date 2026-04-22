@@ -1,5 +1,6 @@
 # Pensieve: Self-supervised Novel View Synthesis via Implicit and Explicit Reconstruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

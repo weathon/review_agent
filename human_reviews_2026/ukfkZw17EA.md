@@ -1,5 +1,6 @@
 # Mitigating Hallucinations via Inter-Layer Consistency Aggregation in Large Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

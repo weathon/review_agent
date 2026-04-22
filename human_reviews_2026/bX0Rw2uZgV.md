@@ -1,5 +1,6 @@
 # An Automated Data Engineering Pipeline for Time Series Classification Via Text Embeddings
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

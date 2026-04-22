@@ -1,5 +1,6 @@
 # SMARTER SAMPLING FOR LLM JUDGES: RELIABLE EVALUATION ON A BUDGET
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 
@@ -65,7 +66,8 @@ Please the section of weakness.
 This paper focuses on estimating the Intraclass Correlation Coefficient (ICC) between LLM judges and humans, aiming to answer two core questions: how many human annotations are needed for accurate ICC estimation, and how to select informative samples to minimize annotation costs. Centered on the estimation of the Intraclass Correlation Coefficient (ICC): Theoretically, a concentration inequality based on the Chernoff bound is derived, reducing the required sample size by an average of 18% compared to the baseline method（2012）.
 
 ### Strengths
-* The study brings a fresh angle by treating the selection of annotation samples for LLM judges as a core-set selection task. It also cleverly mixes classic statistical methods (Chernoff bounds) with clustering and active learning concepts to make ICC estimation more efficient with limited resources. This combination hasn't really been tried before for evaluating LLM judge reliability on a tight budget.
+* The study brings a fresh angle by treating the selection of annotation samples for LLM judges as a core-set selection task. It also cleverly mixes classic statistical methods (Chernoff bounds) with clustering and active learning concepts to make ICC estimation more efficient with limited resources. This combination hasn't really been tried before for evaluating LLM judge reliability on a tight budget.
+
 * The empirical design is relatively rigorous, with evaluations across 4 diverse real-world datasets (covering 15 assessment axes) and 100 rollouts to reduce random variance.
 
 * Overall Well-Written: The paper is generally well-written.

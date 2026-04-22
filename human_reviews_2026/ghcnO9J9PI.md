@@ -1,5 +1,6 @@
 # QuantDemoire: Quantization with Outlier Aware for Image Demoiréing
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

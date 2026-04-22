@@ -1,5 +1,6 @@
 # FS-DFM: Fast and Accurate Long Text Generation with Few-Step Diffusion Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Joint Structure Search for Tensor Network Operators Inspired by Symmetry Breaking
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 4, 8, 4, 6
 

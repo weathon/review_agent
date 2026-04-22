@@ -1,5 +1,6 @@
 # Reinforcement Learning for Symbolic Graphics Code with Visual Feedback
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 2
 

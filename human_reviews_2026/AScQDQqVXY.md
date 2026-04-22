@@ -1,5 +1,6 @@
 # CARPRT: Class-Aware Zero-Shot Prompt Reweighting for Vision-Language Model
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

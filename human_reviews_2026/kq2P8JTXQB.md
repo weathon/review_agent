@@ -1,5 +1,6 @@
 # Inference-Time Diffusion Model Alignment via Random Ordinary Equations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

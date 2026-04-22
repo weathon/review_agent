@@ -1,5 +1,6 @@
 # The Sequential Edge: Inverse-Entropy Voting Beats Parallel Self-Consistency at Matched Compute
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

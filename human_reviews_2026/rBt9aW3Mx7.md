@@ -1,5 +1,6 @@
 # Complexity- and Statistics-Guided Anomaly Detection in Time Series Foundation Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 4
 

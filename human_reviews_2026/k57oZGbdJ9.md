@@ -1,5 +1,6 @@
 # Unifying Reinforcement Learning and Distillation via Distribution Matching for Video Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2
 

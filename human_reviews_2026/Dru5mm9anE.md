@@ -1,5 +1,6 @@
 # Scaling Agents via Continual Pre-training
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8
 

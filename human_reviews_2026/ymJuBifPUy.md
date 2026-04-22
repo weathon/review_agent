@@ -1,5 +1,6 @@
 # AutoMetrics: Approximate Human Judgments with Automatically Generated Evaluators
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

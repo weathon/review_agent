@@ -1,5 +1,6 @@
 # Nonconvex Decentralized Stochastic Bilevel Optimization under Heavy-Tailed Noises
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Hybrid Numerical PINNs: On the effectiveness of numerical differentiation for complex problems
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

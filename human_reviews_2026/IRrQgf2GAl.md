@@ -1,5 +1,6 @@
 # Query-Kontext: An Unified Multimodal Model for Image Generation and Editing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

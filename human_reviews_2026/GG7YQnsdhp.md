@@ -1,5 +1,6 @@
 # Adaptive Social Learning via Mode Policy Optimization for Language Agents
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

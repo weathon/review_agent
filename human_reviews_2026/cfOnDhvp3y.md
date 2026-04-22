@@ -1,5 +1,6 @@
 # Small Talk, Big Impact: The Energy Cost of Thanking AI
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Learning to Reason About Code Insecurity: Composite-Reinforcement Fine-Tuning for Cognitive Alignment
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

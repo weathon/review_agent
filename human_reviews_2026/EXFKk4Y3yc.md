@@ -1,5 +1,6 @@
 # Spilled Energy in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

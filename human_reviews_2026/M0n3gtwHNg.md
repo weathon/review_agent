@@ -1,5 +1,6 @@
 # Efficient Multi-objective Prompt Optimization via Pure-exploration Bandits
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

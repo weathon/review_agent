@@ -1,5 +1,6 @@
 # Learning equivariant tensor function representations via covariant algebra of binary forms
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

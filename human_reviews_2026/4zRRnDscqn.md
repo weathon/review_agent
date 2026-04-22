@@ -1,5 +1,6 @@
 # GGBall: Graph Generative Model on Poincaré Ball
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

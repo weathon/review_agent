@@ -1,5 +1,6 @@
 # Privasis: Synthesizing the Largest "Public" Private Dataset from Scratch
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

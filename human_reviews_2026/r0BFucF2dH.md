@@ -1,5 +1,6 @@
 # Meta-Router: Bridging Gold-standard and Preference-based Evaluations in LLM Routing
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

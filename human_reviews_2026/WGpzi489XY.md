@@ -1,5 +1,6 @@
 # Local Linear Attention: An Optimal Interpolation of Linear and Softmax Attention For Test-Time Regression
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 2
 

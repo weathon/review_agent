@@ -1,5 +1,6 @@
 # EvolProver: Advancing Automated theorem proving by Evolving Formalized Problems via Symmetry and Difficulty
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4, 4
 

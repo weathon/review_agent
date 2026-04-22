@@ -1,5 +1,6 @@
 # Harnessing Optimization Dynamics for Curvature-Informed Model Merging
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8, 6
 

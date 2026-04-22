@@ -1,5 +1,6 @@
 # PredNext: Explicit Cross-View Temporal Prediction for Unsupervised Learning in Spiking Neural Networks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

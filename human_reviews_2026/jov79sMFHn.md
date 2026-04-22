@@ -1,5 +1,6 @@
 # Nano3D: A Training-Free Approach for Efficient 3D Editing Without Masks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # EPnG: Adaptive Expert Prune-and-Grow for Parameter-Efficient MoE Fine-tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6
 

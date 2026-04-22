@@ -1,5 +1,6 @@
 # Human3R: Everyone Everywhere All at Once
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8
 

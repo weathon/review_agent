@@ -1,5 +1,6 @@
 # The Tutor-Pupil Augmentation: Enhancing Learning and Interpretability via Input Corrections
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

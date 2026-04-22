@@ -1,5 +1,6 @@
 # VizAgentBench: Benchmarking Multimodal Agent Reasoning on Coordinated Multi-View Visual Analytics Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

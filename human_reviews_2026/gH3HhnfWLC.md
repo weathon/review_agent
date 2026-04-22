@@ -1,5 +1,6 @@
 # Block Recurrent Dynamics in Vision Transformers
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 8, 4
 

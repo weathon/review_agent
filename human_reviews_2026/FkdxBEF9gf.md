@@ -1,5 +1,6 @@
 # Can-Cap: Calibration-Free and Noise-Resilient Human Motion Capture via LiDAR-Camera Integration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

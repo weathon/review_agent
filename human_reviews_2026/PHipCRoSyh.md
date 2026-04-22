@@ -1,5 +1,6 @@
 # LazyDrag: Enabling Stable Drag-Based Editing on Multi-Modal Diffusion Transformers via Explicit Correspondence
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 6
 

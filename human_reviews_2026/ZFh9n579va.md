@@ -1,5 +1,6 @@
 # AlignPose: Generalizable 6D Pose Estimation via Multi-view Feature-metric Alignment
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

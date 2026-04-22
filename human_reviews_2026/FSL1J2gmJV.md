@@ -1,5 +1,6 @@
 # MergePRAG: Orthogonal Merging of Passage-experts for Multi-hop Parametric RAG
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

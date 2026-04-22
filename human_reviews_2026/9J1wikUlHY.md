@@ -1,5 +1,6 @@
 # Beyond BFI: The CSI for Enhanced Reliability and Validity in Evaluating LLM Personality Traits
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

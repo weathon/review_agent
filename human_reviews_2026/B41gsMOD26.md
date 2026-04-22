@@ -1,5 +1,6 @@
 # From Prediction to Perfection: Introducing Refinement to Autoregressive Image Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

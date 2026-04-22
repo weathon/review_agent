@@ -1,5 +1,6 @@
 # GuidedSampling: Steering LLMs Towards Diverse Candidate Solutions at Inference-Time
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

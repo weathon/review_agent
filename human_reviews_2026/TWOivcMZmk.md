@@ -1,5 +1,6 @@
 # Healthy LLMs? Benchmarking LLM Knowledge of UK Government Public Health Information
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

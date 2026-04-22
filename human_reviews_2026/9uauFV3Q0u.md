@@ -1,5 +1,6 @@
 # Spectral Sheaf Filtering: A Topological Approach to Spatio-Temporal Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 0, 8
 

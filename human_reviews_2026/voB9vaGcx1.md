@@ -1,5 +1,6 @@
 # Conditional Deontics over Terminals: A Mildly Context-Sensitive Formal Grammar for Constrained Decoding
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 
@@ -42,7 +43,9 @@ The paper presents a formalism for mildly context-sensitive grammar constrained 
 ### Weaknesses
 ## Presentation of Technical Contribution
 
-> we design a new formal grammar for constrained-decoding  
+> we design a new formal grammar for constrained-decoding
+
+
 
 * What do you mean by design a new grammar? Do you mean a new class of grammars and a parser?
 

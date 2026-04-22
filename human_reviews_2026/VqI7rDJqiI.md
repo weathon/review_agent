@@ -1,5 +1,6 @@
 # C2Rust-Bench: A Minimized, Representative Benchmark for C-to-Rust Transpilation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

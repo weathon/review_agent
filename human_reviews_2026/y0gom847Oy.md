@@ -1,5 +1,6 @@
 # Gram-weighted Mahalanobis Fréchet Mean: A Hyperparameter-Tuning-Free Solution for Model Merging
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

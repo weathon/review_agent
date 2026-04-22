@@ -1,5 +1,6 @@
 # HyperVLA: Efficient Inference in Vision-Language-Action Models via Hypernetworks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 6, 2, 2
 

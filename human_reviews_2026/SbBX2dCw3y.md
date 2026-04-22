@@ -1,5 +1,6 @@
 # Multi-Scale Hypergraph Meets LLMs: Aligning Large Language Models for Time Series Analysis
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

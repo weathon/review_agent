@@ -1,5 +1,6 @@
 # WAPITI: A Watermark for Finetuned Open-Source LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

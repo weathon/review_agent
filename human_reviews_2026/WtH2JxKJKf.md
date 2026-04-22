@@ -1,5 +1,6 @@
 # Are Deep Speech Denoising Models Robust to Adversarial Noise?
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4, 4
 

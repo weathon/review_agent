@@ -1,5 +1,6 @@
 # One More Glance with Sharp Eyes: Rethinking Lightweight Captioning as a Practical Visual Specialist
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

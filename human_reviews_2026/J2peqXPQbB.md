@@ -1,5 +1,6 @@
 # In-Context Algebra
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

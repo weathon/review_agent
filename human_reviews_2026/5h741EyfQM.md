@@ -1,5 +1,6 @@
 # A Brain-Inspired Gating Mechanism Unlocks Robust Computation in Spiking Neural Networks
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

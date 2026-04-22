@@ -1,5 +1,6 @@
 # A Causal Perspective on Jump-Diffusion for Time-Series Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

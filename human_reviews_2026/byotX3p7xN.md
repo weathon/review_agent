@@ -1,5 +1,6 @@
 # Personalized and Temporal-aware Attention for Efficient Generative Recommendation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

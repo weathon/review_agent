@@ -1,5 +1,6 @@
 # LLMs are Greedy Agents: Effects of RL Fine-tuning on Decision-Making Abilities
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

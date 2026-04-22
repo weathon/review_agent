@@ -1,5 +1,6 @@
 # Balancing Objective Function and Search Nodes in MCTS  for Constraint Optimization Problems
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

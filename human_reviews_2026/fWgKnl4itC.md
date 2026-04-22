@@ -1,5 +1,6 @@
 # Bottlenecked Transformers: Periodic KV Cache Consolidation for Generalised Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

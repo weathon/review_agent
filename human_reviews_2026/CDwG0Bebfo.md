@@ -1,5 +1,6 @@
 # LumiTex: Towards High-Fidelity PBR Texture Generation with Illumination Context
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 2
 

@@ -1,5 +1,6 @@
 # Scaling up Memory for Robotic Control via Experience Retrieval
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

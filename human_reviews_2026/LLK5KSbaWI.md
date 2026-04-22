@@ -1,5 +1,6 @@
 # Visual Token Compression Enhances Model Robustness of VLMs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Reward-Guided Flow Merging via Implicit Density Operators
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

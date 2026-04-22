@@ -1,5 +1,6 @@
 # Knowledgeless Language Models: Decoupling Linguistic Competence and Factual Knowledge
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

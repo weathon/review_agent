@@ -1,5 +1,6 @@
 # Is Layer Normalization Fine-tuning Sufficient for Visual Distribution Shifts?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 6, 4, 2
 

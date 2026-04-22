@@ -1,5 +1,6 @@
 # Learning Human Habits with Rule-Guided Active Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 
@@ -133,54 +134,79 @@ I would be happy to raise my score if my concerns/comments are addressed.
 ### Summary
 The paper proposes a hybrid active‑inference (AIF) framework in which symbolic “rules” are learned and consolidated via a wake–sleep procedure and then fused with expected free energy (EFE) planning for action selection. Concretely, the latent state is split into a continuous external state (S_t) and a discrete “mental state” (m_t). Candidate rules of the form ((S_f^\star, m_f^\star) -> a_f) are harvested during a wake phase and consolidated with generative replay in sleep. At decision time, if a rule “hits” (via a kernel match to the MAP estimate of ((S_t,m_t))) it supplies a prior over actions; otherwise the agent falls back to EFE‑based planning. Experiments on NBA player trajectories, car‑following, DDXPlus (URTI), and Atari–Berzerk report higher Acc@k and lower latency than logic‑based, deep learning, AIF, and DreamerV2 baselines, while yielding interpretable rules. (Table 1; figs. on pp. 8–9.)
 
-  The key problem that is tackled is learning habit‑like, interpretable shortcuts that allow an AIF agent to arbitrate between fast habitual actions and slower planning, and applying this to modeling human(-like) behavior across domains.
 
- The motivation (habits vs. planning) is timely and clear, and the ability to flexibly and context-sensitively tradeoff between habit-based action vs more costly-model based planning is a very valuable one. A small nitpick is that the paper under‑positions itself relative to existing methods in computational cognitive neuroscience, psychophysics and computational psychiatry and the large literature on fitting RL/decision‑making models to human data (e.g., model‑based RL, active inference, DDMs). The Related Work emphasizes neuro‑symbolic rules and AIF agents, but not human model‑fitting traditions.  Reported gains in Acc@k/latency appear consistent across tasks (Table 1) and ablations indicate that rules and (m_t) matter. However, several specification and correctness issues (see below) make it hard to assess whether improvements stem from principled inference or from ad‑hoc fusion/thresholding. 
+ The key problem that is tackled is learning habit‑like, interpretable shortcuts that allow an AIF agent to arbitrate between fast habitual actions and slower planning, and applying this to modeling human(-like) behavior across domains.
+
+
+The motivation (habits vs. planning) is timely and clear, and the ability to flexibly and context-sensitively tradeoff between habit-based action vs more costly-model based planning is a very valuable one. A small nitpick is that the paper under‑positions itself relative to existing methods in computational cognitive neuroscience, psychophysics and computational psychiatry and the large literature on fitting RL/decision‑making models to human data (e.g., model‑based RL, active inference, DDMs). The Related Work emphasizes neuro‑symbolic rules and AIF agents, but not human model‑fitting traditions.
+
+Reported gains in Acc@k/latency appear consistent across tasks (Table 1) and ablations indicate that rules and (m_t) matter. However, several specification and correctness issues (see below) make it hard to assess whether improvements stem from principled inference or from ad‑hoc fusion/thresholding.
+
 
 The idea of rule‑guided AIF and the attempt to compress planning into reusable symbolic habits is interesting and potentially impactful for both interpretable agents and human behavior modeling. In its current form, however, conceptual and notational gaps limit the work’s reliability and portability.
 
 ### Strengths
-Compelling objective: compressing repeated planning successes into interpretable rules and using them to shortcut EFE search is elegant and practical. 
+Compelling objective: compressing repeated planning successes into interpretable rules and using them to shortcut EFE search is elegant and practical.
 
-Clear engineering benefit: latency vs. accuracy curves and ablations demonstrate a Pareto knee where small rule banks reduce inference time while preserving accuracy. 
 
-Visualization & interpretability: rule envelopes in latent space and trajectory overlays help the reader understand what the rules encode. 
+Clear engineering benefit: latency vs. accuracy curves and ablations demonstrate a Pareto knee where small rule banks reduce inference time while preserving accuracy.
+
+
+Visualization & interpretability: rule envelopes in latent space and trajectory overlays help the reader understand what the rules encode.
+
 
 Cross‑domain experiments spanning continuous control/trajectories, clinical dialog, and pixels.
 
 ### Weaknesses
-EFE definition and preference distribution:  In AIF the EFE uses a biased preference likelihood (encoding utilities/preferences) that is not the same as the observation model used for inference. Here EFE is written with the same (p_\phi(O_{t+\tau}\mid Z_{t+\tau})) used by VFE (Eq. 3), and the text does not explain how preferences are encoded. This obscures how “goals” enter planning and undermines the conceptual link to the risk/ambiguity decomposition. 
+EFE definition and preference distribution:
+ In AIF the EFE uses a biased preference likelihood (encoding utilities/preferences) that is not the same as the observation model used for inference. Here EFE is written with the same (p_\phi(O_{t+\tau}\mid Z_{t+\tau})) used by VFE (Eq. 3), and the text does not explain how preferences are encoded. This obscures how “goals” enter planning and undermines the conceptual link to the risk/ambiguity decomposition.
 
-Ad‑hoc policy fusion and temperature dependence: The hybrid policy adds a rule prior to a temperature‑scaled EFE term (Eq. 4) and gates it with a binary “rule hit” indicator based on a similarity kernel and threshold in ((S_t^\text{MAP},m_t^\text{MAP})). This is anti‑Bayesian in spirit and creates several tuning knobs (kernel, threshold (\tau_r), temperature). A principled alternative is to cast rule invocation as inference under a mixture model (e.g., infer (q(m_t)) and mixture weights over rule‑conditioned policies), letting uncertainty in EFE naturally down‑weight unreliable rollouts without extra temperatures. 
 
-Objective couples VFE and EFE without theoretical justification:  The “total free energy” in Eq. (5) simply sums per‑step VFE, rollout EFE (scaled by (\eta)), and a KL regularizer on successive (q(m_t)) (scaled by (\gamma)). The inclusion ofc (\operatorname{KL}[q(m_{t-1})\Vert q(m_t)]) feels ad‑hoc (shouldn’t that KL come out naturally of the generative model when minimizing VFE), and the paper does not justify why this combination is a coherent bound or how it relates to generalised free energy or control‑as‑inference objectives. (§4.2, Eq. 5.) 
+Ad‑hoc policy fusion and temperature dependence:
+The hybrid policy adds a rule prior to a temperature‑scaled EFE term (Eq. 4) and gates it with a binary “rule hit” indicator based on a similarity kernel and threshold in ((S_t^\text{MAP},m_t^\text{MAP})). This is anti‑Bayesian in spirit and creates several tuning knobs (kernel, threshold (\tau_r), temperature). A principled alternative is to cast rule invocation as inference under a mixture model (e.g., infer (q(m_t)) and mixture weights over rule‑conditioned policies), letting uncertainty in EFE naturally down‑weight unreliable rollouts without extra temperatures.
 
-Rule growth is heuristic:  Rules are created/updated when a triplet ((S_t^\text{MAP},m_t^\text{MAP},a_t)) recurs and “reliably reduces free energy,” with centroids updated by exp(−VFE) weights. This is reasonable as an engineering heuristic, but it could be formalised as variational learning in a mixture model with inference over (q(m_t)) and parameters of (p(S_t\mid m_t)) (and optionally a nonparametric prior for rule birth/pruning). 
 
-Typos and clarity 
-Minor: Ambiguity of contribution (human modeling vs. model-based RL agent):  The abstract and introduction oscillate between “learning human habits alongside human models” and benchmarking a better agent (“improves predictive accuracy and efficiency”). Please clarify whether the primary goal is computational cognitive neuroscience (fitting human behavior) or agent performance. As written, expectations are set for both. I assume it’s the former, otherwise you would have ben benchmarking on metrics more like reward than model-fit like (the number of accurately predicted actions, rather than whether those actions were “correct” in a maximizing-reward sense). 
+Objective couples VFE and EFE without theoretical justification:
+ The “total free energy” in Eq. (5) simply sums per‑step VFE, rollout EFE (scaled by (\eta)), and a KL regularizer on successive (q(m_t)) (scaled by (\gamma)). The inclusion ofc (\operatorname{KL}[q(m_{t-1})\Vert q(m_t)]) feels ad‑hoc (shouldn’t that KL come out naturally of the generative model when minimizing VFE), and the paper does not justify why this combination is a coherent bound or how it relates to generalised free energy or control‑as‑inference objectives. (§4.2, Eq. 5.)
+
+
+Rule growth is heuristic:
+ Rules are created/updated when a triplet ((S_t^\text{MAP},m_t^\text{MAP},a_t)) recurs and “reliably reduces free energy,” with centroids updated by exp(−VFE) weights. This is reasonable as an engineering heuristic, but it could be formalised as variational learning in a mixture model with inference over (q(m_t)) and parameters of (p(S_t\mid m_t)) (and optionally a nonparametric prior for rule birth/pruning).
+
+
+Typos and clarity
+
+Minor: Ambiguity of contribution (human modeling vs. model-based RL agent):
+ The abstract and introduction oscillate between “learning human habits alongside human models” and benchmarking a better agent (“improves predictive accuracy and efficiency”). Please clarify whether the primary goal is computational cognitive neuroscience (fitting human behavior) or agent performance. As written, expectations are set for both. I assume it’s the former, otherwise you would have ben benchmarking on metrics more like reward than model-fit like (the number of accurately predicted actions, rather than whether those actions were “correct” in a maximizing-reward sense).
+
 Minor: Generative model misspecification in Eq. (1):
 
 No explicit prior over initial hidden states (e.g., (p_\phi(Z_1))).
 
 The factorization includes (p_\phi(a_t\mid Z_t)) inside the generative model while the LHS lists (a_{1:T-1}), creating an indexing mismatch (a term for (a_T) is included on the RHS but not in the LHS).
 
-There is no prior over (a_{t-1}), yet the state transition conditions on it; the dependency graph is inconsistent. (p. 3, Eq. 1.) 
+There is no prior over (a_{t-1}), yet the state transition conditions on it; the dependency graph is inconsistent. (p. 3, Eq. 1.)
+
 Minor: Latent split factorization also misses initial priors and has indexing mismatches. In the section(Latent State Representation), the joint (p_\phi(O_{1:T},S_{1:T},m_{1:T},a_{1:T-1})=\prod_t p(O_t \mid S_t) p(S_t \mid S_{t-1},a_{t-1}) p(m_t \mid m_{t-1},S_t) p_{\phi^\pi}(a_t \mid S_t,m_t)) lacks priors for (S_1) and (m_1), and again indexes (a_t) up to (T) while the LHS says (a_{1:T-1}). (p. 4.)
 
 “neurosciencetau accounts…” (p. 5, l. ~262) → “neuroscientific accounts.”
 
-Positioning with neuroscience evidence:  The claim that seamless habit–planning switching is a hallmark of human intelligence contradicts years of evidence from the behavioral neuroscience literature and animal studies (in rodents and to some extent monkeys) on the transition between goal-directed and habitual behavior. Classic devaluation and contingency-degradation paradigms demonstrate context-dependent switching early (goal-directed) vs. after overtraining (habit). In terms of its biological basis, evidence suggests that dorsomedial striatum and prelimbic PFC support goal-directed control, while dorsolateral striatum and infralimbic PFC promote habits. Flexibly toggling between cached habits and on-the-fly planning is a general mammalian capability, not a human hallmark. 
+Positioning with neuroscience evidence:
+ The claim that seamless habit–planning switching is a hallmark of human intelligence contradicts years of evidence from the behavioral neuroscience literature and animal studies (in rodents and to some extent monkeys) on the transition between goal-directed and habitual behavior. Classic devaluation and contingency-degradation paradigms demonstrate context-dependent switching early (goal-directed) vs. after overtraining (habit). In terms of its biological basis, evidence suggests that dorsomedial striatum and prelimbic PFC support goal-directed control, while dorsolateral striatum and infralimbic PFC promote habits. Flexibly toggling between cached habits and on-the-fly planning is a general mammalian capability, not a human hallmark. 
 
 Overall recommendation
 Key reasons: (i) policy fusion relies on ad‑hoc kernel thresholds and temperatures rather than principled inference; (ii) Generative model and EFE formulation contain gaps/mismatches that need fixing; (iii) contribution framing (human modeling vs. agent) is unclear. The core idea—rule‑guided AIF that amortises planning into reusable, interpretable habits—is promising and, with the above issues addressed, could become a strong contribution.
 
 ### Questions
-Preferences in EFE: How are preferences represented in Eq. (3)? Is (p_\phi(O_{t+\tau}\mid Z_{t+\tau})) re‑used from the observation model or replaced with a preference distribution? Please spell this out and reconcile with the standard EFE decomposition. (§3.)  
+Preferences in EFE: How are preferences represented in Eq. (3)? Is (p_\phi(O_{t+\tau}\mid Z_{t+\tau})) re‑used from the observation model or replaced with a preference distribution? Please spell this out and reconcile with the standard EFE decomposition. (§3.)
 
-Rule fusion as inference: Could the rule‑vs‑planning arbitration be formulated as posterior inference (e.g., a gating variable) instead of kernel‑plus‑temperature? What prevents learning the weights of this mixture directly via variational inference under your joint objective? (§4.1–§4.2.) 
 
-Objective design: What is the principled justification for VFE + (\eta)·EFE + (\gamma)·KL? Is there a derivation tying this to a bound on expected log‑evidence or a generalised free energy objective? (§4.2.) 
+
+Rule fusion as inference: Could the rule‑vs‑planning arbitration be formulated as posterior inference (e.g., a gating variable) instead of kernel‑plus‑temperature? What prevents learning the weights of this mixture directly via variational inference under your joint objective? (§4.1–§4.2.)
+
+
+Objective design: What is the principled justification for VFE + (\eta)·EFE + (\gamma)·KL? Is there a derivation tying this to a bound on expected log‑evidence or a generalised free energy objective? (§4.2.)
+
 
 Baselines and fairness: How was DreamerV2 adapted (offline? behaviour‑cloned?) to these supervised prediction tasks and tuned to parity (esp. on DDXPlus/Atari)? Please clarify compute budgets, hyperparameter search, and early‑stopping criteria across methods. (Table 1.)
 

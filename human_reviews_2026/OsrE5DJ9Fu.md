@@ -1,5 +1,6 @@
 # COMAL: A Convergent Meta-Algorithm for Aligning LLMs with General Preferences
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

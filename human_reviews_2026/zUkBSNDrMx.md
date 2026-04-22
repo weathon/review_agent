@@ -1,5 +1,6 @@
 # Scientific Algorithm Discovery by Augmenting AlphaEvolve with Deep Research
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

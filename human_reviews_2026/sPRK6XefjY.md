@@ -1,5 +1,6 @@
 # On the Lipschitz Continuity of Set Aggregation Functions and Neural Networks for Sets
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 8
 

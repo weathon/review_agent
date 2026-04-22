@@ -1,5 +1,6 @@
 # Once-More: Continuous Self-Correction for Large Language Models via Perplexity-Guided Intervention
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 4
 

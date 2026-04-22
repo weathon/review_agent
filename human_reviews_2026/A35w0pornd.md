@@ -1,5 +1,6 @@
 # Automatic Synthesis of High-quality Triplet Data for Composed Image Retrieval
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

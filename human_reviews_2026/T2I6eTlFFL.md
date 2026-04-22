@@ -1,5 +1,6 @@
 # LADA: Enabling Adaptation of Black-Box LLMs to Dynamic Domain Changes at Test Time
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

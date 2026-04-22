@@ -1,5 +1,6 @@
 # Vision-Centric Activation and Coordination for Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

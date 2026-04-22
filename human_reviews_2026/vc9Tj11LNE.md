@@ -1,5 +1,6 @@
 # Stackelberg Learning from Human Feedback: Preference Optimization as a Sequential Game
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 10, 6, 6
 

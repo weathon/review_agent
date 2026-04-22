@@ -1,5 +1,6 @@
 # Diagnosing and Mitigating Modality Interference in Multimodal Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

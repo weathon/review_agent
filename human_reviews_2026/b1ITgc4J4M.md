@@ -1,5 +1,6 @@
 # Residual Feature Integration is Sufficient to Prevent Negative Transfer
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 2, 4
 

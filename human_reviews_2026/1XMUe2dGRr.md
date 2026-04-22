@@ -1,5 +1,6 @@
 # Towards Persistent Noise-Tolerant Active Learning of Regular Languages with Class Query
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 2, 8
 

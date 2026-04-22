@@ -1,5 +1,6 @@
 # $\mathbf{T^2HTR}$: $\textbf{T}$est-$\textbf{t}$ime $\textbf{H}$ierarchical $\textbf{T}$emporal $\textbf{R}$etrieval for Long Video Understanding
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

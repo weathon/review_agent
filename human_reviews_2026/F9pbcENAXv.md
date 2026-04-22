@@ -1,5 +1,6 @@
 # Multi-Fidelity Physics-Informed Neural Networks (PINN) with Boundary-Aware Losses for Ice-Bed Topography Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

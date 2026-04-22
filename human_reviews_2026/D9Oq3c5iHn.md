@@ -1,5 +1,6 @@
 # GALE: Gradient Activation Low-rank Extraction for Fast Memory Efficient Large Language Model Training
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

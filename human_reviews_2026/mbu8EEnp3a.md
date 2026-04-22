@@ -1,5 +1,6 @@
 # Do LLMs Signal When They’re Right?  Evidence from Neuron Agreement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

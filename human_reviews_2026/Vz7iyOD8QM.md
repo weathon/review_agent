@@ -1,5 +1,6 @@
 # Dynamical system reconstruction from partial observations using stochastic dynamics
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 6, 6
 

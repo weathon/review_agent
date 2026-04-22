@@ -1,5 +1,6 @@
 # SEA-SafeguardBench: Evaluating AI Safety in SEA Languages and Cultures
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

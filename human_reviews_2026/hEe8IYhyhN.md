@@ -1,5 +1,6 @@
 # Instance-Prototype Affinity Learning for Non-Exemplar Continual Graph Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Empowering Multi-Robot Cooperation via Sequential World Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 8
 

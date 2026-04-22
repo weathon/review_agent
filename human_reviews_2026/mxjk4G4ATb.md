@@ -1,5 +1,6 @@
 # Latency-Aware Contextual Bandit: Application to Cryo-EM Data Collection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

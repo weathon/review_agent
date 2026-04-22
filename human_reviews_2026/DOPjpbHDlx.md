@@ -1,5 +1,6 @@
 # R&B: Domain Regrouping and Data Mixture Balancing for Efficient Foundation Model Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

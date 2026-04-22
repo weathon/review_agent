@@ -1,5 +1,6 @@
 # On the Expressiveness of State Space Models via Temporal Logics
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 8
 

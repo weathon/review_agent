@@ -1,5 +1,6 @@
 # Accelerating Diffusion Planners in Offline RL via Reward-Aware Consistency Trajectory Distillation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

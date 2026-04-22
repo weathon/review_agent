@@ -1,5 +1,6 @@
 # From Language to Locomotion: Retargeting-free Humanoid Control via Motion Latent Guidance
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

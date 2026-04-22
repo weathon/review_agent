@@ -1,5 +1,6 @@
 # Fractured Chain-of-Thought Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

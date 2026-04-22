@@ -1,5 +1,6 @@
 # MolEditRL: Structure-Preserving Molecular Editing via Discrete Diffusion and Reinforcement Learning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 2, 6
 

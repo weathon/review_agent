@@ -1,5 +1,6 @@
 # HiBio-ST: A Hierarchical Multimodal Foundation Model with Biological Prior Anchors for Spatial Transcriptomics
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

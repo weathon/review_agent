@@ -1,5 +1,6 @@
 # VARIATIONAL QUANTUM ALGORITHMS ARE LIPSCHITZ SMOOTH
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 4, 6, 6
 

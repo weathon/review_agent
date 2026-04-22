@@ -1,5 +1,6 @@
 # A Dataset and Benchmark for 3D Part Recognition from 2D Images
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # CaTS: Calibrated Test-Time Scaling for Efficient LLM Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 10, 6, 4
 

@@ -1,5 +1,6 @@
 # VideoEval-Pro: Robust and Realistic Long Video Understanding Evaluation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

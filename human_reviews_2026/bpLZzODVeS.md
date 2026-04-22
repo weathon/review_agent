@@ -1,5 +1,6 @@
 # DiCoH: Rethinking Self-Supervised Pretraining for Semantic Segmentation in Homogenous Medical Domains
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

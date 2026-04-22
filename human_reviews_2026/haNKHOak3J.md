@@ -1,5 +1,6 @@
 # When sufficiency is insufficient: Probabilistic neural representations as an information bottleneck
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

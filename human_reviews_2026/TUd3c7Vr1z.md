@@ -1,5 +1,6 @@
 # Towards Self-Robust LLMs: Intrinsic Prompt Noise Resistance via CoIPO
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

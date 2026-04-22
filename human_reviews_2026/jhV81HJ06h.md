@@ -1,5 +1,6 @@
 # Optical Diffraction-based Convolution for Semiconductor Mask Optimization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

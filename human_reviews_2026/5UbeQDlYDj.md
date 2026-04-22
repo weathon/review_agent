@@ -1,5 +1,6 @@
 # TABLET: A Large-Scale Dataset for Robust Visual Table Understanding
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

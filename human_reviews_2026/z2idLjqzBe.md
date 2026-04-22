@@ -1,5 +1,6 @@
 # Death of the Novel(ty): Beyond N-Gram Novelty as a Metric for Textual Creativity
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Token-Level Early Fusion Model Bridging Text and 3D Electron Density Grids in Chemistry
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 4
 

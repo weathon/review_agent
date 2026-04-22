@@ -1,5 +1,6 @@
 # ViT-GCT: Enhancing Vision Transformers with a Global Context Token for Face Recognition
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0
 

@@ -1,5 +1,6 @@
 # Egalitarian Gradient Descent: A Simple Approach to Accelerated Grokking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

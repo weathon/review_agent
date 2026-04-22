@@ -1,5 +1,6 @@
 # Exploring Mode Connectivity in Krylov Subspace for Domain Generalization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8
 

@@ -1,5 +1,6 @@
 # Large-Scale Molecular Dynamics Simulation: Direct Interatomic Modeling with Dilated Message Passing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 0, 8, 6, 6
 

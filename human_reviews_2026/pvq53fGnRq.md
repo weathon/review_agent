@@ -1,5 +1,6 @@
 # Plug-in Image Quality Control for Posterior Diffusion Super-Resolution
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

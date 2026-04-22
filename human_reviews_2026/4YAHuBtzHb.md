@@ -1,5 +1,6 @@
 # Explore More, Learn Better: Parallel MLLM Embeddings under Mutual Information Minimization
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

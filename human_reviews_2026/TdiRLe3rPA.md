@@ -1,5 +1,6 @@
 # From Ticks to Flows: Dynamics of Neural Reinforcement Learning in Continuous Environments
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

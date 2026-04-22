@@ -1,5 +1,6 @@
 # CDE: Curiosity-Driven Exploration for Efficient Reinforcement Learning in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 0
 

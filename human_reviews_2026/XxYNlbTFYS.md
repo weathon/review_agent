@@ -1,5 +1,6 @@
 # ReAlign: Safety-Aligning Reasoning Models with Verifier-Guided Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

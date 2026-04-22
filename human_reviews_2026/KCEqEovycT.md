@@ -1,5 +1,6 @@
 # Diffusion-LLM Provides Ultra-Long-Term Time Series Forecasting with Probabilistic Alignment
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

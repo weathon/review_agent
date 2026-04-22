@@ -1,5 +1,6 @@
 # In-Context Alignment: Resolving Representation Conflict for Parameter-Efficient Forgery Detection in Vision Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

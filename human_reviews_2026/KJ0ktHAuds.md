@@ -1,5 +1,6 @@
 # Gaze on the Prize: Shaping Visual Attention with Return-Guided Contrastive Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 
@@ -30,12 +31,16 @@ The paper introduces a framework for visual reinforcement learning that trains a
 ### Weaknesses
 The authors may benefit from providing additional implementation details and a more thorough discussion of the framework’s limitations.
 
-1. Clarification on implementation and data mining: I would appreciate a more detailed explanation of Sections 3.3.2 and 4.1–4.2, where the authors discuss return-guided triplet mining and the model implementation. The proposed method appears to rely heavily on datasets that provide dense reward signals and a large number of feature pairs with similar representations but different returns, which may not be readily available in many practical settings. More details on the data-mining process, dataset characteristics, and implementation specifics would help readers better understand the method’s applicability. 
+1. Clarification on implementation and data mining:
+I would appreciate a more detailed explanation of Sections 3.3.2 and 4.1–4.2, where the authors discuss return-guided triplet mining and the model implementation. The proposed method appears to rely heavily on datasets that provide dense reward signals and a large number of feature pairs with similar representations but different returns, which may not be readily available in many practical settings. More details on the data-mining process, dataset characteristics, and implementation specifics would help readers better understand the method’s applicability.
+
 Additionally, the experiments include a baseline model (“Foveal attention” without contrastive loss). It would be helpful to elaborate on this model’s setup to clarify the standalone impact of the contrastive loss component.
 
-2. Extension of the gaze module: The current gaze module focuses on a single focal point, which may limit its generalizability. The authors are encouraged to discuss whether the framework could be extended to handle multiple focal locations. If such an extension is feasible, it would be useful to describe the required adaptations; if not, clarifying the bottlenecks or constraints preventing this would strengthen the discussion.
+2. Extension of the gaze module:
+The current gaze module focuses on a single focal point, which may limit its generalizability. The authors are encouraged to discuss whether the framework could be extended to handle multiple focal locations. If such an extension is feasible, it would be useful to describe the required adaptations; if not, clarifying the bottlenecks or constraints preventing this would strengthen the discussion.
 
-3. Data availability and robustness: A key limitation, also noted by the authors, concerns the availability of return signals or, more broadly, the scarcity of triplet-mining data. It would be valuable to provide insights into how much effective data is required for training, and how data scarcity might influence performance or stability. This discussion would help readers understand the framework’s robustness under less ideal data conditions.
+3. Data availability and robustness:
+A key limitation, also noted by the authors, concerns the availability of return signals or, more broadly, the scarcity of triplet-mining data. It would be valuable to provide insights into how much effective data is required for training, and how data scarcity might influence performance or stability. This discussion would help readers understand the framework’s robustness under less ideal data conditions.
 
 ### Questions
 see comments above.

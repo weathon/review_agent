@@ -1,5 +1,6 @@
 # Optimal Sub-data Selection for Nonparametric Function Estimation in Kernel Learning with Large-scale Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # D2-LoRA: A Synergistic Approach to Differential and Directional Low-Rank Adaptation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

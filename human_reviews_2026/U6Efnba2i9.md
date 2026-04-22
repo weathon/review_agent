@@ -1,5 +1,6 @@
 # Correspondence-Oriented Imitation Learning: Flexible Visuomotor Control with 3D Conditioning
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 6
 

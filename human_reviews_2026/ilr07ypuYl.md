@@ -1,5 +1,6 @@
 # FUSE: Full‑spectrum Unlearnable Examples via Spectral Equalization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

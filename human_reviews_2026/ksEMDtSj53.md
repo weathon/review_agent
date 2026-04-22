@@ -1,5 +1,6 @@
 # Structured-Noise Masked Modeling for Video, Audio and Beyond
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 8, 6
 

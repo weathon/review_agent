@@ -1,5 +1,6 @@
 # When Can You Get Away with Low Memory Adam?
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 2
 

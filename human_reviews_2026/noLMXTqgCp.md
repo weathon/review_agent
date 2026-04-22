@@ -1,5 +1,6 @@
 # Decoupled-Value Attention for Prior-Data Fitted Networks: GP-Inference for Physical Equations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

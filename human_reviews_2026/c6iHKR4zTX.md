@@ -1,5 +1,6 @@
 # Latent-Informed Energy-Based Models with collaborative generator training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

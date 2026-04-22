@@ -1,5 +1,6 @@
 # Atom-anchored LLMs speak Chemistry: A Retrosynthesis Demonstration
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

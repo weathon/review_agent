@@ -1,5 +1,6 @@
 # PAML: MoE-Based Partitioning and Merging Framework for Solving Large-scale Multi-task VRPs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

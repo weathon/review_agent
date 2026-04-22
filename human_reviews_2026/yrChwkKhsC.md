@@ -1,5 +1,6 @@
 # Evaluating the Promise and Pitfalls of Using LLMs in Hiring Decisions
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Uni-CoT: Towards Unified Chain-of-Thought Reasoning Across Text and Vision
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # OD-LoRA: Overcoming the Dilemma between Weight Representation and Gradient Approximation in Low-Rank Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

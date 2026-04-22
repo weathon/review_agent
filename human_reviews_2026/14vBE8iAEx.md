@@ -1,5 +1,6 @@
 # Beyond Reward Hacking: Causal Rewards for Large Language Model Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 6, 2
 

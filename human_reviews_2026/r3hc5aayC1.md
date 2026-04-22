@@ -1,5 +1,6 @@
 # Class-Adaptive Rectification with Experts for Robust Long-Tailed Noisy Label Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

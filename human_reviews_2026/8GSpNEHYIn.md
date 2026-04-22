@@ -1,5 +1,6 @@
 # Deep Thinking on Out-Of-Distribution Data: How can we know when a model is overthinking?
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

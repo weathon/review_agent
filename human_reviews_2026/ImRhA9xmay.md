@@ -1,5 +1,6 @@
 # YoNoSplat: You Only Need One Model for Feedforward 3D Gaussian Splatting
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

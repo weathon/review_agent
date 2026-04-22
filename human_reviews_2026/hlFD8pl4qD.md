@@ -1,5 +1,6 @@
 # LLMs for Sequential Optimization Tasks: from Evaluation to Dialectical Improvement
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # IPOD:Inverse-Problem-Driven Meta-Learning for Fast Generalizable Neural Representations in MRI Reconstruction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

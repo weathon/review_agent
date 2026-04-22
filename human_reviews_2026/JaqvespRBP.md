@@ -1,5 +1,6 @@
 # Improving Reasoning for Diffusion Language Models via Group Diffusion Policy Optimization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

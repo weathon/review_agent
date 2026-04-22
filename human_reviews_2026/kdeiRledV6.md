@@ -1,5 +1,6 @@
 # Overthinking Reduction with Decoupled Rewards and Curriculum Data Scheduling
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 10, 2, 6, 8
 

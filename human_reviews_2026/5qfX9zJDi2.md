@@ -1,5 +1,6 @@
 # RRVF: Visual Reinforcement Learning with Reasoning, Rendering, and Visual Feedback
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

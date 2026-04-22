@@ -1,5 +1,6 @@
 # I$^2$C: Intra- and Inter-modality Consistency Learning for Multimodal Sentiment Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

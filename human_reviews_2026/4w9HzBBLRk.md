@@ -1,5 +1,6 @@
 # Towards Multimodal Understanding, Reasoning, and Tool Usage across Vision, Speech, and Audio in Long Videos
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

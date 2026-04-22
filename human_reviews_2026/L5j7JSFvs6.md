@@ -1,5 +1,6 @@
 # PIFE: Progressive Insight driven Feature Engineering via Multimodal Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

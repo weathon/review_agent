@@ -1,5 +1,6 @@
 # Best-of-three-worlds Analysis for Dueling Bandits with Borda Winner
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

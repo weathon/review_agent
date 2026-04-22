@@ -1,5 +1,6 @@
 # SPRIG: Improving Large Language Model Performance by System Prompt Optimization
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 6
 

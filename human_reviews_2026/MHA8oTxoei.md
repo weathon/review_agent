@@ -1,5 +1,6 @@
 # Investigating the Link Between Representational Similarity and Model Interactions
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

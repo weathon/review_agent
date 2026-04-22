@@ -1,5 +1,6 @@
 # Do AI models perform human-like abstract reasoning across modalities?
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 8, 0, 6
 

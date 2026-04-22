@@ -1,5 +1,6 @@
 # BEP: A Binary Error Propagation Algorithm for Binary Neural Networks Training
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

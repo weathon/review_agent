@@ -1,5 +1,6 @@
 # DepthLM: Metric Depth from Vision Language Models
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 10, 4, 6
 

@@ -1,5 +1,6 @@
 # MePo: Meta Post-Refinement for Rehearsal-Free General Continual Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

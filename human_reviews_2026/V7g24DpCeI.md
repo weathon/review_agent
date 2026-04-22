@@ -1,5 +1,6 @@
 # Quantum Algorithm for Deep Neural Networks with Efficient I/O
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 
@@ -39,7 +40,8 @@ This paper proposes a hybrid quantum-classical framework for deep learning, whic
 
 2. When $W_Q, W_K, W_V$ in a quantum transformer are updated, how is $U_A(W)$ adjusted? Is there any incremental update mechanism, or must the oracle be recompiled entirely?
 
-3. Given that gradients are computed and stored classically, do you consider the claimed quantum advantage to apply only to inference? If so, could this distinction be made explicit?
+3. Given that gradients are computed and stored classically, do you consider the claimed quantum advantage to apply only to inference?
+If so, could this distinction be made explicit?
 
 ### Soundness
 2

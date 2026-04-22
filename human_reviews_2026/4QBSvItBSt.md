@@ -1,5 +1,6 @@
 # Thinking Sparks!: Emergent Attention Heads in Reasoning Models During Post Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 6, 2
 

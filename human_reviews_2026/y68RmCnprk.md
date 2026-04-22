@@ -1,5 +1,6 @@
 # Progressive Latent Calibration for Stable Score Distillation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

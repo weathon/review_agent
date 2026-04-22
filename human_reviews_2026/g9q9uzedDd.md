@@ -1,5 +1,6 @@
 # Towards Principled Design for Graph Neural Networks Through Governing Law of Dynamic Learning Behavior
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 6
 

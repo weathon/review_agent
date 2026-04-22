@@ -1,5 +1,6 @@
 # Toward a unified framework for data-efficient evaluation of large language models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Reasoning at the Right Length: Adaptive Budget Forcing for Efficient and Accurate LLM Inference
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

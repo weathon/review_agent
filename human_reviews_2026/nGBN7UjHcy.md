@@ -1,5 +1,6 @@
 # Beyond Accuracy: Are Time Series Foundation Models Well-Calibrated?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

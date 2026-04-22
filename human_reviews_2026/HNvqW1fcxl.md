@@ -1,5 +1,6 @@
 # Online Prediction of Stochastic Sequences with High Probability Regret Bounds
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 8
 

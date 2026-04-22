@@ -1,5 +1,6 @@
 # Physics of Learning: A Lagrangian perspective to different learning paradigms
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2, 8
 

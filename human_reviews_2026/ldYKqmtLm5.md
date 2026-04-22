@@ -1,5 +1,6 @@
 # Differentially Private One Permutation Hashing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

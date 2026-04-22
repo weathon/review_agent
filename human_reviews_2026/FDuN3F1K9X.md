@@ -1,5 +1,6 @@
 # InsCal: Calibrated Multi-Source Fully Test-Time Prompt Tuning for Object Detection
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

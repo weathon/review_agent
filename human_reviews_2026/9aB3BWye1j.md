@@ -1,5 +1,6 @@
 # PairedContrast: A Multimodal Benchmark for Medical Image Translation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

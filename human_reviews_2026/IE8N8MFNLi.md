@@ -1,5 +1,6 @@
 # Deciphering Self-Improvement: Large Language Models Can Take False First Steps
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

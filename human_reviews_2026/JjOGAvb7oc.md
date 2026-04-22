@@ -1,5 +1,6 @@
 # Holistic Advances through Large-Scale Embodied Dialog Augmentation for Navigation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

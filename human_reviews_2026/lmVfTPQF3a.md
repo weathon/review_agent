@@ -1,5 +1,6 @@
 # Dataset Distillation for Memorized Data: Soft Labels can Leak Held-Out Teacher Knowledge
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

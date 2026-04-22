@@ -1,5 +1,6 @@
 # You Do Not Fully Utilize Transformer's Representation Capacity
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

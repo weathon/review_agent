@@ -1,5 +1,6 @@
 # XYZ-Text2SQL-R1: Simple Rewards, Strong Reasoning in Text-to-SQL
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

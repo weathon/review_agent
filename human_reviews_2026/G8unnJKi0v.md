@@ -1,5 +1,6 @@
 # FHDM-KGE: Fuzzy Hierarchical Modeling and Dual Mixture-of-Experts for Knowledge Graph Embedding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

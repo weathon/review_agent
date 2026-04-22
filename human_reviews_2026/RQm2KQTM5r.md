@@ -1,5 +1,6 @@
 # GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 2, 6, 10
 

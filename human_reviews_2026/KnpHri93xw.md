@@ -1,5 +1,6 @@
 # Masked AutoRegressive Detokenization with Semantic Visual Tokens for High-fidelity Image Synthesis
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 6, 4
 

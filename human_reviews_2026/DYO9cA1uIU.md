@@ -1,5 +1,6 @@
 # LLaVA-FA: Learning Fourier Approximation for Compressing Large Multimodal Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

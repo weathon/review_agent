@@ -1,5 +1,6 @@
 # Transfer is All You Need: Revisiting the Stability–Plasticity Dilemma through Backward and Forward Transfer in PLMs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

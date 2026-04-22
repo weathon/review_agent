@@ -1,5 +1,6 @@
 # Sample-efficient Reinforcement Learning by Warm-starting with LLMs
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0, 2
 

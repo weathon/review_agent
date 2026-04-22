@@ -1,5 +1,6 @@
 # The Latent Cause Blind Spot: an Empirical Study of Update Types and Their Collateral Effects on LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

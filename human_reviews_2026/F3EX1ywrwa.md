@@ -1,5 +1,6 @@
 # From Denoising to Refining: A Corrective Framework for Vision-Language Diffusion Model
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

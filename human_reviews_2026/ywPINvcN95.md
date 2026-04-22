@@ -1,5 +1,6 @@
 # Knowledge-Augmented Long-CoT Generation for Complex Biomolecular Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

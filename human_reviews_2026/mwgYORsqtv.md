@@ -1,5 +1,6 @@
 # Demystifying The Mechanisms Behind Emergent Exploration in Goal-Conditioned RL
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

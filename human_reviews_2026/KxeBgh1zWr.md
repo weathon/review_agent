@@ -1,5 +1,6 @@
 # Curse of Slicing: Why Sliced Mutual Information is a Deceptive Measure of Statistical Dependence
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

@@ -1,5 +1,6 @@
 # Dynamic Preference Calibration: Meta-Learning Soft Labels for Robust Alignment
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2, 4
 

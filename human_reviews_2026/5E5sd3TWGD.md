@@ -1,5 +1,6 @@
 # RD-HRL: Generating Reliable Sub-Goals for Long-Horizon Sparse-Reward Tasks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

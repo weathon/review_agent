@@ -1,5 +1,6 @@
 # Diffusion^2: Turning 3D Environments into Radio Freqneucny Heatmaps
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 0
 

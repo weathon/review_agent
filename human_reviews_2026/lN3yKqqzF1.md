@@ -1,5 +1,6 @@
 # FaithCoT-Bench: Benchmarking Instance-Level Faithfulness of Chain-of-Thought Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

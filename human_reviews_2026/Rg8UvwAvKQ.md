@@ -1,5 +1,6 @@
 # BESPOKE: Benchmark for Search-Augmented Large Language Model Personalization via Diagnostic Feedback
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

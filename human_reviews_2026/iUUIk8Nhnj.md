@@ -1,5 +1,6 @@
 # TailorPiece: Tailoring Linear Models for Joint Representation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

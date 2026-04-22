@@ -1,5 +1,6 @@
 # Low-Pass Filtering Improves Behavioral Alignment of Vision Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

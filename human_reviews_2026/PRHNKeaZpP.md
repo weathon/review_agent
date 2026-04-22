@@ -1,5 +1,6 @@
 # Human-in-the-Loop Policy Optimization for Preference-Based Multi-Objective Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

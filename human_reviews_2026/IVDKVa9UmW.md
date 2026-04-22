@@ -1,5 +1,6 @@
 # FoundationMotion: Auto-labeling and Reasoning about Spatial Movement in Videos
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

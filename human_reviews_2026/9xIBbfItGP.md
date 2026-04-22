@@ -1,5 +1,6 @@
 # Count Counts: Motivating Exploration in LLM Reasoning with Count-based Intrinsic Rewards
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

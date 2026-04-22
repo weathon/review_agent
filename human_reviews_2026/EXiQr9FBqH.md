@@ -1,5 +1,6 @@
 # CausalKANs: interpretable treatment effect estimation with Kolmogorov-Arnold networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

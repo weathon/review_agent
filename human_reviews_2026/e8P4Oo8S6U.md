@@ -1,5 +1,6 @@
 # Astraea: A Token-wise Acceleration Framework for Video Diffusion Transformers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

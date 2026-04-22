@@ -1,5 +1,6 @@
 # SEED: Towards More Accurate Semantic Evaluation for Visual Brain Decoding
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # CTC-DRO: Robust Optimization for Reducing Language Disparities in Speech Recognition
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

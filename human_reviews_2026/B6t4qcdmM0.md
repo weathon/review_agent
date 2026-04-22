@@ -1,5 +1,6 @@
 # CAPL: Graph Few-Shot Class-Incremental Learning Via Class-Adaptive Prototype Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

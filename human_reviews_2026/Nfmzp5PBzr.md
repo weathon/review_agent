@@ -1,5 +1,6 @@
 # PAGE-4D: Disentangled Pose and Geometry Estimation for VGGT-4D Perception
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

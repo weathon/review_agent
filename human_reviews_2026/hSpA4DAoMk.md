@@ -1,5 +1,6 @@
 # Adaptive Methods Are Preferable in High Privacy Settings: An SDE Perspective
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

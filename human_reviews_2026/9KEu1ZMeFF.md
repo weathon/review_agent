@@ -1,5 +1,6 @@
 # A Finite-Time Analysis of TD Learning with Linear Function Approximation without Projections or Strong Convexity
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 10, 0
 

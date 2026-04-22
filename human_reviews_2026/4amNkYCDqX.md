@@ -1,5 +1,6 @@
 # Data-Centric Lessons To Improve Speech-Language Pretraining
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

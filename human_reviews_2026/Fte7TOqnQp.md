@@ -1,5 +1,6 @@
 # Inter-Agent Relative Representations for Multi-Agent Option Discovery
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

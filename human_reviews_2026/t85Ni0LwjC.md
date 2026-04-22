@@ -1,5 +1,6 @@
 # SpecPrune-VLA: Accelerating Vision-Language-Action Models via Action-Aware Self-Speculative Pruning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 6, 4, 4
 

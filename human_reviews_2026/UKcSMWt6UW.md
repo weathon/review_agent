@@ -1,5 +1,6 @@
 # Local Linear Convergence of Projected Gradient Descent: A Discrete and Continuous Analysis
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

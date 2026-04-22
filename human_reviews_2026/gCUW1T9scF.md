@@ -1,5 +1,6 @@
 # LLM2Token: Distilling Large Language Models into Task-Specific Tokenizer
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 2
 

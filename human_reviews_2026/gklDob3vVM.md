@@ -1,5 +1,6 @@
 # RsGCN: Subgraph-Based Rescaling Enhances Generalization of GCNs for Solving Traveling Salesman Problems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

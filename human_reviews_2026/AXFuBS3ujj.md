@@ -1,5 +1,6 @@
 # CLaMR: Contextualized Late-Interaction for Multimodal Content Retrieval
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Zero-Shot Video Restoration and Enhancement with Assistance of Video Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

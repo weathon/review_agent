@@ -1,5 +1,6 @@
 # Style Decomposition and  Content Preservation for Artistic Style Transfer
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

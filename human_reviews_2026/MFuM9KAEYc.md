@@ -1,5 +1,6 @@
 # AVEX: What Matters for Animal Vocalization Encoding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

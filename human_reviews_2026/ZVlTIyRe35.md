@@ -1,5 +1,6 @@
 # Neural Graduated Assignment for Maximum Common Edge Subgraphs
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

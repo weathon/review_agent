@@ -1,5 +1,6 @@
 # ILVS\(^2\)Net: Illumination-Driven Non-Local Visual State Space Unfolding Network for Low-Light Enhancement
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

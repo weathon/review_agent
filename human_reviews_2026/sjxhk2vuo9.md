@@ -1,5 +1,6 @@
 # Long-Horizon Model-Based Offline Reinforcement Learning Without Conservatism
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

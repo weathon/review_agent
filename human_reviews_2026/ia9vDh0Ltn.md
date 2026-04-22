@@ -1,5 +1,6 @@
 # Catalog-Native LLM: Speaking Item-ID dialect with Less Entanglement for Recommendation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # TelecomTS: Observability Dataset for Multi-Modal Time-Series and Language Analysis
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

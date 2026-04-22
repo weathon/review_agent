@@ -1,5 +1,6 @@
 # Beyond Policy Training: Solution Search via Task Flow Learning and Planning from Unlabeled Videos
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

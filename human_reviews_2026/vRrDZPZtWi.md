@@ -1,5 +1,6 @@
 # SDDuSR: Sparse Feature Matching and Token Dictionary Learning for  Dual-Lens Super-Resolution
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

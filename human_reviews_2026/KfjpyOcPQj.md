@@ -1,5 +1,6 @@
 # Reducing Class-Wise Performance Disparity via Margin Regularization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

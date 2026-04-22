@@ -1,5 +1,6 @@
 # Learning Human-Perceived Fakeness in AI-Generated Videos via Multimodal LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

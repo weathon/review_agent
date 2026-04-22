@@ -1,5 +1,6 @@
 # One Policy Learns Them All: Synergizing  Prior-Guided Exploitation and Online Exploration in Curriculum Based MARL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

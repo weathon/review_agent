@@ -1,5 +1,6 @@
 # SLAD : Shared LoRA Adapters for Task Specific Distillation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

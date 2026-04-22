@@ -1,5 +1,6 @@
 # K-frames: Scene-Driven Any-k Keyframe Selection for Long Video Understanding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

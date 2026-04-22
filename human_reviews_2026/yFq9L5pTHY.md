@@ -1,5 +1,6 @@
 # Geometric IB: Improving Information Bottleneck with Geometry-Aware Compression on Statistical Manifolds
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

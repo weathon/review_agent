@@ -1,5 +1,6 @@
 # InverseScope: Scalable Activation Inversion for Interpreting Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 8, 4
 

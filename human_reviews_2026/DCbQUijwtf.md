@@ -1,5 +1,6 @@
 # Inferring Dynamic Physical Properties from Video Foundation Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Routing Channel-Patch Dependencies in Time Series Forecasting with Graph Spectral Decomposition
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

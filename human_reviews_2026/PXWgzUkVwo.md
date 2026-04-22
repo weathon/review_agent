@@ -1,5 +1,6 @@
 # Fast Catch-Up, Late Switching: Optimal Batch Size Scheduling via Functional Scaling Laws
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Entropy-Lens: The Information Signature of Transformer Computations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

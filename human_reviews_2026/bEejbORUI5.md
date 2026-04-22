@@ -1,5 +1,6 @@
 # ExPO-HM: Learning to Explain-then-Detect for Hateful Meme Detection
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

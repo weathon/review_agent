@@ -1,5 +1,6 @@
 # A Convergence Analysis of Adaptive Optimizers under Floating-point Quantization
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 2
 

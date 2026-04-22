@@ -1,5 +1,6 @@
 # Forward-Forward Learning with Dynamic Architecture Adaptation for Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 0, 6
 

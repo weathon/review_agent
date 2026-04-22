@@ -1,5 +1,6 @@
 # REAL-TIME RISK EVALUATION FOR LLM DECISION- MAKING VIA AN REGRET BOUND
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 4
 

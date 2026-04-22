@@ -1,5 +1,6 @@
 # Action-Conditioned Transformers for Decentralized Multi-Agent World Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

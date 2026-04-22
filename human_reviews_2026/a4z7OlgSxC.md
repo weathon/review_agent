@@ -1,5 +1,6 @@
 # Q-learning with Posterior Sampling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 2
 

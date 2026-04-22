@@ -1,5 +1,6 @@
 # Event-T2M: Event-level Conditioning for Complex Text-to-Motion Synthesis
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

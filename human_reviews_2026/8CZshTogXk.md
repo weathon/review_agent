@@ -1,5 +1,6 @@
 # ArabiDoc: A Holistic Arabic-English Evaluation Suite for End-to-End Document Processing
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Relational Knowledge Distillation Using Finetuned Function Vectors
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

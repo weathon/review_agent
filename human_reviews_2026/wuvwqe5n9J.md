@@ -1,5 +1,6 @@
 # Efficient Gradient Clipping Methods in DP-SGD for Convolution Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

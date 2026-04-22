@@ -1,5 +1,6 @@
 # Reflexivity in AI systems: metacognition, metalearning, self-improving systems, and second-guessing
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 0
 

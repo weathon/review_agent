@@ -1,5 +1,6 @@
 # ArgBench: A Lean based Benchmark for Automated Theorem Provers on General-Purpose Reasoning Tasks
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

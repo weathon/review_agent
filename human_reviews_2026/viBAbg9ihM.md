@@ -1,5 +1,6 @@
 # Eliciting Harmful Capabilities by Fine-Tuning on Safeguarded Outputs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8
 

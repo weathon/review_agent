@@ -1,5 +1,6 @@
 # Both Local Validity and Global Effectiveness Matter:  Decoupled Credit Assignment for Long‑Horizon Agentic Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MoM: Mixtures of Scenario-Aware Document Memories for Retrieval-Augmented Generation Systems
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Diffusion-Based, Data-Assimilation-Enabled Super-Resolution of Hub-height Winds
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

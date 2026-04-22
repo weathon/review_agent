@@ -1,5 +1,6 @@
 # Back to Basics: Motion Representation Matters for Human Motion Generation Using Diffusion Model
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

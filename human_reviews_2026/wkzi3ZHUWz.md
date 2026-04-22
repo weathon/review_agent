@@ -1,5 +1,6 @@
 # Discrepancy-aware Score Learningfor Diffusion Training
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 2, 8, 8
 

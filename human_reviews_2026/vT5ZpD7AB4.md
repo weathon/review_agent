@@ -1,5 +1,6 @@
 # A Robust Certified Machine Unlearning Method Under Distribution Shift
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

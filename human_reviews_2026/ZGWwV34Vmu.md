@@ -1,5 +1,6 @@
 # BridgeV2W: Bridging Video Generation Models to Embodied World Models via Embodiment Masks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

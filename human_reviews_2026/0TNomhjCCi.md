@@ -1,5 +1,6 @@
 # How Brittle is Agent Safety? Rethinking Agent Risk under Intent Concealment and Task Complexity
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

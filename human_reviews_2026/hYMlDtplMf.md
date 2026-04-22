@@ -1,5 +1,6 @@
 # Group Critical-token Policy Optimization for Autoregressive Image Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

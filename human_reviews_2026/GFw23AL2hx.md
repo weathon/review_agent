@@ -1,5 +1,6 @@
 # Truly Optimal Inverse Propensity Scoring for Off-Policy Evaluation with Multiple Loggers
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Train, Mutate, or Reward? A Unified View of Supervised Ensembling for Time Series Anomaly Detection.
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

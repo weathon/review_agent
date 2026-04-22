@@ -1,5 +1,6 @@
 # Power of Sign: High Probability Bounds Under $(L_0, L_1)$-smoothness and Heavy-Tailed Noise
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

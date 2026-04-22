@@ -1,5 +1,6 @@
 # BHAVNET: Efficient Knowledge Transfer from Large Knowledge Models to Task-Specific Architectures through Features
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 0, 0, 2
 

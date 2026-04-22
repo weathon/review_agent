@@ -1,5 +1,6 @@
 # The Ideation-Execution Gap: Execution Outcomes of LLM-Generated versus Human Research Ideas
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

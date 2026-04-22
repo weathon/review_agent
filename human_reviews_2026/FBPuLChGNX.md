@@ -1,5 +1,6 @@
 # Learning to Generate Stylized Handwritten Text via a Unified Representation of Style, Content, and Noise
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

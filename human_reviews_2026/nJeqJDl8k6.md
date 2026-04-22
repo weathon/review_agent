@@ -1,5 +1,6 @@
 # SimulRAG: Simulator-based RAG for Grounding LLMs in Long-form Scientific QA
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

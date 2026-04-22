@@ -1,5 +1,6 @@
 # Accelerated Gradient Descent for Faster Convergence with Minimal Overhead
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 2, 4
 

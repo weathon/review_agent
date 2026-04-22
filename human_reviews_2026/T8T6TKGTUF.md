@@ -1,5 +1,6 @@
 # A Bio-inspired Gradient-Free Learning Framework for CPG-based Neural Networks in Robot Locomotion
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

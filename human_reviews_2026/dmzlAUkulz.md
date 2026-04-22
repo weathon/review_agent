@@ -1,5 +1,6 @@
 # AUHead: Realistic Emotional Talking Head Generation via Action Units Control
 
+- Avg Score: 4.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 0, 6, 2, 6
 

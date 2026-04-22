@@ -1,5 +1,6 @@
 # MLLM-CL: Continual Learning for Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

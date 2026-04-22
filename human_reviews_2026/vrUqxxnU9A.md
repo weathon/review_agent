@@ -1,5 +1,6 @@
 # Disentangled Information Quantification for Dataset Construction in Data-Centric AI
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

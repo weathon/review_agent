@@ -1,5 +1,6 @@
 # GRLA: Bridging Softmax and Linear Attention via Gaussian RBF Kernel for Lightweight Image Super-Resolution
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

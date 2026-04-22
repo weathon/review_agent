@@ -1,5 +1,6 @@
 # Mitigating Text Degeneration via Token-Level Guidance For pruned Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

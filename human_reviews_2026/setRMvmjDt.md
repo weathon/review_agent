@@ -1,5 +1,6 @@
 # Provably Convergent Nonconvex Algorithm for Volume Optimization-based Latent Component Analyses
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

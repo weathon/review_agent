@@ -1,5 +1,6 @@
 # The Surprising Soupability of Documents in State Space Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

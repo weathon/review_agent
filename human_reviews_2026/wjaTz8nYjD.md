@@ -1,5 +1,6 @@
 # Predicting Training Re-evaluation Curves Enables Effective Data Curriculums for LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

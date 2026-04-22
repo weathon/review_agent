@@ -1,5 +1,6 @@
 # BRIDGE: Bi-level Reinforcement Learning for Dynamic Group Structure in Coalition Formation Games
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

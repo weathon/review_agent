@@ -1,5 +1,6 @@
 # MrRoPE: Mixed-radix Rotary Position Embedding
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6
 
@@ -37,7 +38,8 @@ This paper introduces MrRoPE (Mixed-Radix Rotary Position Embedding), a training
 
 ### Questions
 1. How accurate is the approximation of RoPE as a mixed-radix system when floor/mod terms are **non-negligible**? Could you provide error bounds or an empirical validation of this assumption?
-2. How sensitive is MrRoPE-Pro to the choice of scaling parameters and dimensional splits? Would the same configuration generalize to very different models or hidden sizes?
+2. How sensitive is MrRoPE-Pro to the choice of scaling parameters and dimensional splits?
+Would the same configuration generalize to very different models or hidden sizes?
 3. Could unified radix conversion be extended beyond RoPE? For instance, to ALiBi or other relative positional encodings? Is the mixed-radix perspective specific to sinusoidal embeddings?
 4. What is the inference-time cost or memory overhead compared to baseline RoPE and YaRN implementations?
 5. Could you provide results for fine-tuned long-context methods to better contextualize MrRoPE’s efficiency vs. performance trade-off?

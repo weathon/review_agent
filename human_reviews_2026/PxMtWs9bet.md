@@ -1,5 +1,6 @@
 # Expo-GS: Exposure-Aware Signed Distance Function in Gaussian Splatting for High Dynamic Range
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

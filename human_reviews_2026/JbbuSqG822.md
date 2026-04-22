@@ -1,5 +1,6 @@
 # Thinking in Groups: Permutation Tests Reveal Near-Out-of-Distribution
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 4, 0, 2
 

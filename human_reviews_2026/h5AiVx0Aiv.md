@@ -1,5 +1,6 @@
 # DrVoice: Parallel Speech-Text Voice Conversation Model via Dual-Resolution Speech Representations
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # SESaMo: Symmetry-Enforcing Stochastic Modulation for Normalizing Flows
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

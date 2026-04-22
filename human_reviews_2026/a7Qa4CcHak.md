@@ -1,5 +1,6 @@
 # Terminal-Bench: Benchmarking Agents on Hard, Realistic Tasks in Command Line Interfaces
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

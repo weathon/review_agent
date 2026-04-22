@@ -1,5 +1,6 @@
 # Opponent Shaping in LLM Agents
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Class-specific Feature Learning through Mitigating Spurious Correlation in Context-Poor Classes for Long-Tailed Classification
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

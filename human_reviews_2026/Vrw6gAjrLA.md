@@ -1,5 +1,6 @@
 # Pruning Without Fine-Tuning: Dynamic Pruning of Autoregressive Image Generation Models to Mixtures of Experts
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

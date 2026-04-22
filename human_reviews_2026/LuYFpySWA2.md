@@ -1,5 +1,6 @@
 # Capacity-Aware Inference: Mitigating the Straggler Effect in Mixture of Experts
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

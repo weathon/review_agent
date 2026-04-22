@@ -1,5 +1,6 @@
 # Geometric Graph Neural Diffusion for Stable Molecular Dynamics Simulations
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8, 6, 4
 

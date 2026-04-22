@@ -1,5 +1,6 @@
 # LLM-REVal: Can We Trust LLM Reviewers Yet?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

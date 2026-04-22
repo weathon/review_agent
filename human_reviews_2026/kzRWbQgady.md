@@ -1,5 +1,6 @@
 # Rethinking RL Evaluation: Can Benchmarks Truly Reveal Failures of RL Methods?
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

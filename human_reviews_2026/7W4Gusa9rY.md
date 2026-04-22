@@ -1,5 +1,6 @@
 # VLOD-TTA: Test-Time Adaptation of Vision-Language Object Detectors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

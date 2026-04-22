@@ -1,5 +1,6 @@
 # MelCap: A Unified Single-Codebook Neural Codec for High-Fidelity Audio Compression
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2
 

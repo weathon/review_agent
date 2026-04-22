@@ -1,5 +1,6 @@
 # Expand Neurons, Not Parameters
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

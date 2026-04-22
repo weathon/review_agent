@@ -1,5 +1,6 @@
 # Pairwise Worst-Case Ratio Analysis for Discriminative Dimensionality Reduction via Minorization-Maximization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

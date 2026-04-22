@@ -1,5 +1,6 @@
 # MoS-VLA: A Vision-Language-Action Model with One-Shot Skill Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

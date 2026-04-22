@@ -1,5 +1,6 @@
 # AutoTSAugment: Model-Agnostic Automated Data Augmentation for Unsupervised Contrastive-based Time Series Representation Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

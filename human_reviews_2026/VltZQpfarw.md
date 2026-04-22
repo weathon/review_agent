@@ -1,5 +1,6 @@
 # STABLE: Shift-Tolerant Allocation via Black-Litterman Using Conditional Diffusion Estimates
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

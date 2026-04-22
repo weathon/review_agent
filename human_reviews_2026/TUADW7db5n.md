@@ -1,5 +1,6 @@
 # Batch Pruning by Activation Stability
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # The Decrypto Benchmark for Multi-Agent Reasoning and Theory of Mind
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Ads that Stick: Near-Optimal Ad Optimization through Psychological Behavior Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

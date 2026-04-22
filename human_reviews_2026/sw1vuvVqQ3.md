@@ -1,5 +1,6 @@
 # Data-efficient Online Training for Direct Alignment in LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

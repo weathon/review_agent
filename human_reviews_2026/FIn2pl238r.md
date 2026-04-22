@@ -1,5 +1,6 @@
 # WaveDiffusion: Joint Latent Diffusion for Physically Consistent Seismic and Velocity Generation
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

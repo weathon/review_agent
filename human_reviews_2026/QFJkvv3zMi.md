@@ -1,5 +1,6 @@
 # EgoTwin: Dreaming Body and View in First Person
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 8
 

@@ -1,5 +1,6 @@
 # Knowing When to Quit: Probabilistic Early Exits for Speech Separation Networks
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4, 4
 

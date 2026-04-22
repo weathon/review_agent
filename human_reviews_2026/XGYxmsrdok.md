@@ -1,5 +1,6 @@
 # Rethinking Driving Topology Reasoning: Plug-and-Play Discrete Graph Refinement
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

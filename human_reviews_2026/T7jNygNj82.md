@@ -1,5 +1,6 @@
 # Distribution-Aware Synergistic Evolution for Few-shot Discrimination and Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

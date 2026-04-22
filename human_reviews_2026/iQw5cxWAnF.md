@@ -1,5 +1,6 @@
 # HashMark: Watermarking Tabular/Synthetic Data For Machine Learning Via Cryptographic Hash Functions
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

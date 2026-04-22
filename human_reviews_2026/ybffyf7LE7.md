@@ -1,5 +1,6 @@
 # Iterative Training of Physics-Informed Neural Networks with Fourier-enhanced Features
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

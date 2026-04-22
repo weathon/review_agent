@@ -1,5 +1,6 @@
 # GeoEvolve: Automating Geospatial Model Discovery via Multi-Agent Large Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

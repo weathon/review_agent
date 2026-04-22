@@ -1,5 +1,6 @@
 # FedCRAP: Federated Critical-Region-Aware Perturbations for Refined Privacy-Preserving Federated Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

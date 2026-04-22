@@ -1,5 +1,6 @@
 # Spiking Neuron as Discrete Gating for Long-Term Memory Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

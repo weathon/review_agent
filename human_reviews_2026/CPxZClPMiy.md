@@ -1,5 +1,6 @@
 # Aria: an Agent for Retrieval and Iterative Auto-Formalization via Dependency Graph
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 4, 8
 

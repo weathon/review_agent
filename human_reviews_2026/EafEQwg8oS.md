@@ -1,5 +1,6 @@
 # RIV: RECURSIVE INTROSPECTION MASK DIFFUSION VISION LANGUAGE MODEL
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

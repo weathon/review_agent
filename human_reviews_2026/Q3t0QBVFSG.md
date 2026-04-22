@@ -1,5 +1,6 @@
 # Not Just a Flash in Time: Interpreting Long Event Streams through Language
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

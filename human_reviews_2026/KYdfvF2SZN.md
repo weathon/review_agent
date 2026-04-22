@@ -1,5 +1,6 @@
 # Structured Flow Autoencoders: Learning Structured Probabilistic Representations with Flow Matching
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Beyond Weight-Only: Mixed-Precision Quantization for BERT Weights, Activations and Embeddings
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

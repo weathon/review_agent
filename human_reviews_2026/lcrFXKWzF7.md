@@ -1,5 +1,6 @@
 # $\textit{All the World's a Sphere}$: Learning Expressive Hierarchical Representations with Isotropic Hyperspherical Embeddings
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

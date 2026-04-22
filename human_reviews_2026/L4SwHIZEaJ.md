@@ -1,5 +1,6 @@
 # The Lattice Geometry of Neural Network Quantization: A Short Equivalence Proof of GPTQ and Babai's Algorithm
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 8, 0, 4, 2
 

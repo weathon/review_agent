@@ -1,5 +1,6 @@
 # Secondary Motion-Aware 3D Clothed Gaussian Avatars from Monocular Videos
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

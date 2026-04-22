@@ -1,5 +1,6 @@
 # Distributed Specialization: Rare-Token Neurons in Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

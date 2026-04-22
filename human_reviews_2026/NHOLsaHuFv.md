@@ -1,5 +1,6 @@
 # Label-Free Mitigation of Spurious Correlations in VLMs using Sparse Autoencoders
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

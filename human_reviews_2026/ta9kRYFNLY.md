@@ -1,5 +1,6 @@
 # Ensuring Physicochemical Fidelity of Generated Polymers with PoGE
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

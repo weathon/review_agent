@@ -1,5 +1,6 @@
 # HEAPr: Hessian-based Efficient Atomic Expert Pruning in Output Space
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

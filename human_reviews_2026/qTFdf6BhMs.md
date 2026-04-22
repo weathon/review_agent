@@ -1,5 +1,6 @@
 # Underwater Visual Geometry Estimation with Self-supervised Prototype-Graph Modulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

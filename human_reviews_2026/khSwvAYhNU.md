@@ -1,5 +1,6 @@
 # Multi Perspective Actor Critic: Adaptive Value Decomposition for Robust and Safe Reinforcement Learning
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 2
 

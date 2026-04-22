@@ -1,5 +1,6 @@
 # MedFrameQA: A Multi-Image Medical VQA Benchmark for Clinical Reasoning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8
 

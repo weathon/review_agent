@@ -1,5 +1,6 @@
 # Generalization of Diffusion Models Arises with a Balanced Representation Space
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Culture In a Frame: C$^3$B as a Comic-Based Benchmark for Multimodal Culturally Awareness
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 2
 

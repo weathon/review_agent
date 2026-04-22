@@ -1,5 +1,6 @@
 # Aligned Novel View Image and Geometry Synthesis via Cross-modal Attention Instillation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

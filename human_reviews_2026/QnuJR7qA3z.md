@@ -1,5 +1,6 @@
 # HARA: A Unified Framework for Hardware-Efficient Non-Linearity in Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

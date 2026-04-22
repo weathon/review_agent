@@ -1,5 +1,6 @@
 # Memory, Benchmark & Robots: A Benchmark for Solving Complex Tasks with Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 6
 

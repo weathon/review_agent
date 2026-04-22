@@ -1,5 +1,6 @@
 # Approximate Multi-Matrix Multiplication for Streaming Power Iteration Clustering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

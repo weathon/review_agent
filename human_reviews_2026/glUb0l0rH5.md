@@ -1,5 +1,6 @@
 # Reversible Lifelong Model Editing via Semantic Routing-Based LoRA
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

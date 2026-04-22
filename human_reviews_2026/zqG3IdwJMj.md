@@ -1,5 +1,6 @@
 # ModelPirate: Security Analysis of Partial Merging Against Model Stealing Attacks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

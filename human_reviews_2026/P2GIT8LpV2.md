@@ -1,5 +1,6 @@
 # Minimax Sample Complexity of Graph Neural Networks: Lower Bounds and Structural Effects
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

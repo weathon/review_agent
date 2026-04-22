@@ -1,5 +1,6 @@
 # Diverging Flows: Detecting Out-of-Distribution Inputs in Conditional Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

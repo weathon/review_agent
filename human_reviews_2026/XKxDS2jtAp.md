@@ -1,5 +1,6 @@
 # Bad-OOD: Discovering Harmful Synthetic Diffusion Outliers via Confidence Calibration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

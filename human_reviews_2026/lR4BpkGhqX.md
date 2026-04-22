@@ -1,5 +1,6 @@
 # All by Large Language Model Itself
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # Stage-wise Dynamics of Classifier-Free Guidance in Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

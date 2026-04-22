@@ -1,5 +1,6 @@
 # EchoMotion: Unified Human Video and Motion Generation via Dual-Modality Diffusion Transformer
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Knowledge-Centric Data Selection for Effective Domain Adaptation of Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 8, 4
 

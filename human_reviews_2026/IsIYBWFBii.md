@@ -1,5 +1,6 @@
 # MV-Diffus3R: Refining Multi-View Diffusions for Geometric Coherence 3D Reconstruction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

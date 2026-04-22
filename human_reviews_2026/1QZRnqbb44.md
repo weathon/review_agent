@@ -1,5 +1,6 @@
 # Tracking the Discriminative Axis: Dual Prototypes for Test-Time OOD Detection Under Coveriate Shift
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # A Gain for Reconstruction, A Pain for Generation: Exploiting Representation in Visual Tokenization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

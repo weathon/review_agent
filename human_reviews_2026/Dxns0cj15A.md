@@ -1,5 +1,6 @@
 # EDINET-Bench: Evaluating LLMs on Complex Financial Tasks using Japanese Financial Statements
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # ROADSIGHT: A novel dataset for real-time intersection detection in aerial scenes under seasonal variation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 0, 4
 

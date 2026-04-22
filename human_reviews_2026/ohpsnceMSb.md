@@ -1,5 +1,6 @@
 # Optimizing ID Consistency in Multimodal Large Models:  Facial Restoration via Alignment, Entanglement, and Disentanglement
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

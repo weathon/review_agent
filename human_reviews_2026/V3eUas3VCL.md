@@ -1,5 +1,6 @@
 # DiffSparse: Accelerating Diffusion Transformers with Learned Token Sparsity
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

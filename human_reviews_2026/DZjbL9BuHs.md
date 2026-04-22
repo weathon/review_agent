@@ -1,5 +1,6 @@
 # Generalization of RLVR Using Causal Reasoning as a Testbed
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

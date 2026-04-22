@@ -1,5 +1,6 @@
 # Utilizing LLM Robustness for LVLM Safety via Reducing the Pretraining Modality Gap
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 8, 6
 

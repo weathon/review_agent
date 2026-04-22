@@ -1,5 +1,6 @@
 # Brain Signal Rendering: Unifying EEG Video Representations for Subject-level Few-shot Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 4, 4
 

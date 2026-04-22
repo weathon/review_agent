@@ -1,5 +1,6 @@
 # LayerDecompose: Exploring weight sharing for Large Language Model Compression
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

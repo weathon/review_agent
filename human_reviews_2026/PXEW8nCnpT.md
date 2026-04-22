@@ -1,5 +1,6 @@
 # Projected Neural Additive Models as Universal Approximators
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

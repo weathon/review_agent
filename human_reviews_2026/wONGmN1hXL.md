@@ -1,5 +1,6 @@
 # CLUE-VAD: Structured Semantic Clues for Understanding Explainable Events in Video Anomaly Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

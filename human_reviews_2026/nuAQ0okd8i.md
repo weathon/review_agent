@@ -1,5 +1,6 @@
 # SELECTIVE FINE-TUNING FOR TARGETED AND ROBUST CONCEPT UNLEARNING
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 6, 6, 4
 

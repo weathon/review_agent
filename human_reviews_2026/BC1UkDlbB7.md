@@ -1,5 +1,6 @@
 # mmBERT: A Modern Multilingual Encoder with Annealed Language Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

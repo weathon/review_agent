@@ -1,5 +1,6 @@
 # Market Games for Generative Models: Equilibria, Welfare, and Strategic Entry
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

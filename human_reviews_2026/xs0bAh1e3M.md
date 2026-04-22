@@ -1,5 +1,6 @@
 # DualRes: A Resampling-Based Framework for Enhancing Probabilistic Forecasting
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

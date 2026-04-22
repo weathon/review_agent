@@ -1,5 +1,6 @@
 # AlignSep: Temporally-Aligned Video-Queried Sound Separation with Flow Matching
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 2, 8
 

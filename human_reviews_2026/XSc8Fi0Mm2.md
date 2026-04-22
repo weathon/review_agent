@@ -1,5 +1,6 @@
 # RetouchLLM: Training-free Code-based Image Retouching with Vision Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

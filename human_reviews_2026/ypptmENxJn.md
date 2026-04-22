@@ -1,5 +1,6 @@
 # GUI‑AIMA: Aligning Intrinsic Multi-Modal Attention with a Context Anchor for GUI Grounding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

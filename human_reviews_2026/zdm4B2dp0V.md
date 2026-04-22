@@ -1,5 +1,6 @@
 # Learning Mutation-Aware Visual Context for Antibody-Antigen Affinity Maturation Prediction
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

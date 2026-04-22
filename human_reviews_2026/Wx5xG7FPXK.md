@@ -1,5 +1,6 @@
 # ARMOR: Aligning Secure and Safe Large Language  Models via Meticulous Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

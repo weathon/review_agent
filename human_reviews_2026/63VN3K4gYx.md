@@ -1,5 +1,6 @@
 # Revisiting Multivariate Time Series Forecasting with Missing Values
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 2, 4, 6
 

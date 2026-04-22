@@ -1,5 +1,6 @@
 # Post-training Large Language Models for Diverse High-Quality Responses
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

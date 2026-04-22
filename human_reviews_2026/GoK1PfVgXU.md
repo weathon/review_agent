@@ -1,5 +1,6 @@
 # On the Limitation and Redundancy of Transformers: A Rank Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

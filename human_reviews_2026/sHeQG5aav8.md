@@ -1,5 +1,6 @@
 # SpineBench: A Clinically Salient, Level-Aware Benchmark Powered by the SpineMed-450k Corpus
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

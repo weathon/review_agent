@@ -1,5 +1,6 @@
 # SSDi8: Accurate and Efficient 8-bit Quantization for State Space Duality
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

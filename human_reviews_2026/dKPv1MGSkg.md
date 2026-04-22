@@ -1,5 +1,6 @@
 # Near-Optimal Convergence of Accelerated Gradient Methods under Generalized and $(L_0, L_1)$-Smoothness
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4
 

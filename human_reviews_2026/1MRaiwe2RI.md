@@ -1,5 +1,6 @@
 # Counterfactual Visual Explanation via Causally-Guided Adversarial Steering
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 4, 2, 4
 

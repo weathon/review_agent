@@ -1,5 +1,6 @@
 # UPCORE: Utility-Preserving Coreset Selection for Balanced Unlearning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

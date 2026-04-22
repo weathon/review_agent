@@ -1,5 +1,6 @@
 # One Snapshot, Many Clues: Inverse Protocol Prediction from Single-View Spheroid Images
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 4, 2, 0
 

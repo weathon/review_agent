@@ -1,5 +1,6 @@
 # Exploiting Client Heterogeneity for Forgetting Mitigation in Federated Continual Learning: A Spatio-Temporal Gradient Alignment Approach
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 
@@ -114,15 +115,21 @@ This paper proposes STAMP, a federated continual learning (FCL) approach incorpo
 2.Prototypical coreset is a good alternative to generative replay and full memory buffers.
 
 ### Weaknesses
-- Handling catastrophic forgetting: Although this work is rehearsal based, the work does not explicitly handle catastrophic forgetting (most of the rehearsal methods do, such as AGEM/GEM). However, the paper repeatedly claims that STAMP reduces catastrophic forgetting, but this is not explicitly demonstrated experimentally or theoretically. The provided plots focus only on temporal and spatio gradient alignment metrics. Good alignment does not necessarily guarantee reduced forgetting. More direct evidence such as forgetting curves and class/task-level retention is needed.
+- Handling catastrophic forgetting: Although this work is rehearsal based, the work does not explicitly handle catastrophic forgetting (most of the rehearsal methods do, such as AGEM/GEM). However,
+the paper repeatedly claims that STAMP reduces catastrophic forgetting, but this is not explicitly demonstrated experimentally or theoretically. The provided plots focus only on temporal and spatio gradient alignment metrics. Good alignment does not necessarily guarantee reduced forgetting. More direct evidence such as forgetting curves and class/task-level retention is needed.
 - The claim of Fig 1 is misleading. The difference indeed decreases, but at the cost of global accuracy in STAMP. How is this a good case? This also contradicts the claim of improved intra-client retention. The paper needs to explain this discrepancy.
-- It is unclear how spatio and temporal gradient alignment preserve the gradient direction, especially in coparison with the memory data. The paper states that alignment prevents negative transfer, but lacks intuition or analysis on how this specifically preserves directionality of task gradients over time.
+- It is unclear how spatio and temporal gradient alignment preserve the gradient direction, especially in coparison with the memory data.
+The paper states that alignment prevents negative transfer, but lacks intuition or analysis on how this specifically preserves directionality of task gradients over time.
 - It is not clear how the theoretical results show the impact of using coresets - a typical generalization result must encompass the effect of coresets. For instance, if one performed random sampling of points instead of using a coreset, how would the effect be reflected in Thm 2. 
-- Storage cost concern for storing gradients. Calculating gradient alignment implicitly requires storing gradients from previous tasks and clients. This may become costly for large models.
-- Ablation studies are insufficient. The method introduces multiple components (temporal GA, spatio GA, prototypical coreset, ProtoNet, MixStyle), yet ablations are limited. Add more like varying number of tasks, effect of different epochs per task, impact of removing the prototypical network, varying coreset sizes.
+- Storage cost concern for storing gradients.
+Calculating gradient alignment implicitly requires storing gradients from previous tasks and clients. This may become costly for large models.
+- Ablation studies are insufficient.
+The method introduces multiple components (temporal GA, spatio GA, prototypical coreset, ProtoNet, MixStyle), yet ablations are limited. Add more like varying number of tasks, effect of different epochs per task, impact of removing the prototypical network, varying coreset sizes.
 - \gamma used in the gradient alignment formulation is not defined in the main text.
-- Possible error in Section 2.1. The description states that r is the current round of task t, but it should logically refer to the current round of task t+1.
-- Figure 3 does not support the claim that heterogeneity helps generalization. The results do not show a clear benefit as heterogeneity increases. This contradicts the core hypothesis. The chosen values of \alpha are quite high, and does not indicate highly heterogeneous cases. 
+- Possible error in Section 2.1.
+The description states that r is the current round of task t, but it should logically refer to the current round of task t+1.
+- Figure 3 does not support the claim that heterogeneity helps generalization.
+The results do not show a clear benefit as heterogeneity increases. This contradicts the core hypothesis. The chosen values of \alpha are quite high, and does not indicate highly heterogeneous cases. 
 Missing plots in Figures 5 and 6. No results for CIFAR100 with 2 classes/task for temporal gradient alignment in Fig. 5. No results for CIFAR100 with 20 classes/task for spatio gradient alignment Fig. 6. Some recent baselines with theoretical guarantees (CFLAG, AISTATS 2025) is not cited.
 
 ### Questions

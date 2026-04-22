@@ -1,5 +1,6 @@
 # JCGEL: Joint Color and Geometric Group Equivariant Convolutional Layer
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

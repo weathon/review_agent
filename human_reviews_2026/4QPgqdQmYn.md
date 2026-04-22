@@ -1,5 +1,6 @@
 # Beyond Text-Only: Towards Multimodal Table Retrieval in Open-World
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4, 4
 

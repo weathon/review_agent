@@ -1,5 +1,6 @@
 # Test-time Domain Generalization for Image Super-resolution
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

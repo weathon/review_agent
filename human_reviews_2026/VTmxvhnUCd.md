@@ -1,5 +1,6 @@
 # Online Versatile Incremental Learning: Towards Class and Domain-Agnostic Adaptation at Any Time
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Zero-Residual Concept Erasure via Progressive Alignment in Text-to-Image Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

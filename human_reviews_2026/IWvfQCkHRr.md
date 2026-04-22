@@ -1,5 +1,6 @@
 # Putting It All into Context: Simplifying Agents with LCLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

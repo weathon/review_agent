@@ -1,5 +1,6 @@
 # Data Value in the Age of Scaling: Understanding LLM Scaling Dynamics Under Real–Synthetic Data Mixtures
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

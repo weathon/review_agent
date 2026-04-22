@@ -1,5 +1,6 @@
 # Fixing What Fine-Tuning Breaks: A Simple and Efficient Method to Improve Safety Post Domain Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

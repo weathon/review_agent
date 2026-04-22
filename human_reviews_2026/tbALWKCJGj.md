@@ -1,5 +1,6 @@
 # Taming Text Alignment for Personalization: Disentangling Foreground Customization and Background Style in Diffusion Models for Personalized Image Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 
@@ -30,7 +31,8 @@ The authors proposed a customization method of a diffusion model, focusing on ob
 
 2. The idea of background and foreground disentanglement is artificial and unnatural. No justification for why this method is superior. No justification for why to formulate image customization for foreground and style transfer for background.
 
-3. The problem mentioned in 083 - incorrect number of “woman” - can have different roots. That is not proof of the problem the authors described.  e.g., in the paper Make It Count [1], the diffusion model struggles to keep the count correct in generated images. They do not deal with any style transfer.
+3. The problem mentioned in 083 - incorrect number of “woman” - can have different roots. That is not proof of the problem the authors described. 
+e.g., in the paper Make It Count [1], the diffusion model struggles to keep the count correct in generated images. They do not deal with any style transfer.
 
 4. Unclear logical chain in 086-089. It needs more evidence to make it true.
 

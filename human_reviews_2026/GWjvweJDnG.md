@@ -1,5 +1,6 @@
 # Offline Federated Deep Reinforcement Learning with Awareness of Expected Returns and Policy Inconsistency
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

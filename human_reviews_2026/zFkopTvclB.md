@@ -1,5 +1,6 @@
 # AutoTool: Automatic Scaling of Tool-Use Capabilities in RL via Decoupled Entropy Constraints
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Enhancing the Medical Context-Awareness Ability of LLMs via Multifaceted Self-Refinement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

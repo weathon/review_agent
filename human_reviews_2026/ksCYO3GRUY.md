@@ -1,5 +1,6 @@
 # MetaOCDN: A Cognition-Inspired Meta Optimized Complementary Dual Networks for Online Continual Concept Drift Adaptation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 8, 4
 

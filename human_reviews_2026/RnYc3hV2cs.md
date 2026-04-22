@@ -1,5 +1,6 @@
 # Enhancing Reasoning Chains through GANs and Textual Gradient Feedback
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

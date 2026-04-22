@@ -1,5 +1,6 @@
 # NIRVANA: Structured Pruning Reimagined for Large Language Models Compression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

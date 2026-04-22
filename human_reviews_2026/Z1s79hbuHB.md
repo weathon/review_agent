@@ -1,5 +1,6 @@
 # The Generalization Ridge: Information Flow in Natural Language Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

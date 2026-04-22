@@ -1,5 +1,6 @@
 # CityLens: Evaluating Large Vision-Language Models for Urban Socioeconomic Sensing
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

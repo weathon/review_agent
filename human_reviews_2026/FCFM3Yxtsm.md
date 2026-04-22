@@ -1,5 +1,6 @@
 # One for all: Zero-Shot Cross-Hardware Performance Modeling with LLMs for Tensor Program Tuning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 4
 

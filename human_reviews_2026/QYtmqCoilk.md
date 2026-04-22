@@ -1,5 +1,6 @@
 # Rethinking the Gold Standard: Why Discrete Curvature Fails to Fully Capture Over-squashing in GNNs?
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 10, 8, 6
 

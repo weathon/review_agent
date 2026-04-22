@@ -1,5 +1,6 @@
 # Beyond Words: Multimodal LLM Knows When to Speak
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

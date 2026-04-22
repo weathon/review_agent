@@ -1,5 +1,6 @@
 # Quantifying the Accuracy-Interpretability Trade-Off in Concept-Based Sidechannel Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

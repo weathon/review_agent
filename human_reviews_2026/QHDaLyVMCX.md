@@ -1,5 +1,6 @@
 # GAIA: A Data Flywheel System for Training GUI Test-Time Scaling Critic Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

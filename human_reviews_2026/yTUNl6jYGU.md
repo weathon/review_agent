@@ -1,5 +1,6 @@
 # In Agents We Trust, but Who Do Agents Trust? Latent Source Preferences Steer LLM Generations
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

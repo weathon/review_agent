@@ -1,5 +1,6 @@
 # Emergent Alignment Via Competition
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 4, 8, 8
 

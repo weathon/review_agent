@@ -1,5 +1,6 @@
 # FlashWorld: High-quality 3D Scene Generation within Seconds
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Fast training of accurate physics-informed neural networks without gradient descent
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 8, 8
 

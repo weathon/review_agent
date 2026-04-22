@@ -1,5 +1,6 @@
 # Scalable and Adaptive Trust-Region Learning via Projection Convex Hull
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

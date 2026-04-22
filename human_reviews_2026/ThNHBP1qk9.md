@@ -1,5 +1,6 @@
 # CodeInsightBench: A Benchmark for Advanced Code Understanding and Comparison in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

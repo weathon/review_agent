@@ -1,5 +1,6 @@
 # Direct Preference Optimization for Primitive-Enabled Hierarchical RL: A Bilevel Approach
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8
 

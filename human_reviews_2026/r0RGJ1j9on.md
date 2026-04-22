@@ -1,5 +1,6 @@
 # Real-Time Robot Execution with Masked Action Chunking
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

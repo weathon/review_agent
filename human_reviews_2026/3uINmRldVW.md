@@ -1,5 +1,6 @@
 # LCA: Local Classifier Alignment for Continual Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # When Unlearning Backfires: Partial Unlearning Increases PII Regurgitation and enables data extraction in Meta’s Llama 3.2 1B
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 0, 4
 

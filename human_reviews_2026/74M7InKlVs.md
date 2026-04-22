@@ -1,5 +1,6 @@
 # C$^3$-Bench: Evaluating and Achieving Controllable Code Completion in Code LLM
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # EmotionThinker: Prosody-Aware Reinforcement Learning for Explainable Speech Emotion Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6
 

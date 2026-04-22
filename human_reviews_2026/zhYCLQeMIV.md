@@ -1,5 +1,6 @@
 # GDaT: Generalizable Density-aware Transformer for Solving the Traveling Salesman Problem
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

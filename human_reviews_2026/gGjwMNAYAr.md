@@ -1,5 +1,6 @@
 # Align to Misalign: Automatic LLM Jailbreak with Meta-Optimized LLM Judges
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

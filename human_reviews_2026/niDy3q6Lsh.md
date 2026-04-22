@@ -1,5 +1,6 @@
 # One Scale at a Time: Scale-Autoregressive Modeling for Fluid Flow Distributions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

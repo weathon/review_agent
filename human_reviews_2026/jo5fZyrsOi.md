@@ -1,5 +1,6 @@
 # Gradient-based Dynamic Sparse Training with Adaptive Rewinding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 4, 0, 2
 

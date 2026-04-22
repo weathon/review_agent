@@ -1,5 +1,6 @@
 # Transductive Visual Programming: Evolving Tool Libraries from Experience for Spatial Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

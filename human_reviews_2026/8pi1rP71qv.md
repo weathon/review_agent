@@ -1,5 +1,6 @@
 # FlyPrompt: Brain-Inspired Random-Expanded Routing with Temporal-Ensemble Experts for General Continual Learning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4, 10
 

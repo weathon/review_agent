@@ -1,5 +1,6 @@
 # ProteinRPN: Towards Accurate Protein Function Prediction with Graph-Based Region Proposals
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

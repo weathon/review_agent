@@ -1,5 +1,6 @@
 # V2A-CoT: A Training-Free Video-to-Audio Method via Expert Chain-of-Thought
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

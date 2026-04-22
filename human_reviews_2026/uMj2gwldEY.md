@@ -1,5 +1,6 @@
 # Federated DRL-based Coordination of Multi-UAVs for Wildfire Tracking
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 6, 0
 

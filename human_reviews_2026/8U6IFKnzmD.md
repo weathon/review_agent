@@ -1,5 +1,6 @@
 # Learning from What the Model Forgets: Prototype-Guided Patch-wise Replay for Medical Image Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Consistent Cross-Modal Alignment in Continual Learning for Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

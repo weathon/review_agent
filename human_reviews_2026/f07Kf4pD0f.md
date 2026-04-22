@@ -1,5 +1,6 @@
 # Expressiveness of Multi-Neuron Convex Relaxations in Neural Network Certification
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 2
 

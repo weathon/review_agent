@@ -1,5 +1,6 @@
 # The Effect of Depth on the Expressivity of Deep Linear State-Space Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

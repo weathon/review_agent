@@ -1,5 +1,6 @@
 # Beyond Classification Accuracy:  Neural-MedBench and the Need for Deeper Reasoning Benchmarks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

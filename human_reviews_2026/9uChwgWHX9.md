@@ -1,5 +1,6 @@
 # Design Principles for Sequence Models via Coefficient Dynamics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

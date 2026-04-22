@@ -1,5 +1,6 @@
 # Improving Zero-shot Low-light Object Detection via Handling of Motion Blur
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6
 

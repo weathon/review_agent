@@ -1,5 +1,6 @@
 # A Unified Data and Model-Centric Framework for Robust Facial Emotion Recognition
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 0
 

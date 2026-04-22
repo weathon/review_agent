@@ -1,5 +1,6 @@
 # Know but can't Say: Exploring the Hidden Knowledge of Large Vision-Language Models for Fine-grained Perception
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

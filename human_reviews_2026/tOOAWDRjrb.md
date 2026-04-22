@@ -1,5 +1,6 @@
 # Massive Activations are the Key to Local Detail Synthesis in Diffusion Transformers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

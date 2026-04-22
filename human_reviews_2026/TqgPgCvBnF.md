@@ -1,5 +1,6 @@
 # PhysUniBench: A Multi-Modal Physics Reasoning Benchmark at Undergraduate Level
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

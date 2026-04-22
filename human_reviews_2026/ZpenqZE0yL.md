@@ -1,5 +1,6 @@
 # GeoCrossBench: Cross-Band Generalization for Remote Sensing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

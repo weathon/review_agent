@@ -1,5 +1,6 @@
 # SocialVeil: Probing Social Intelligence of Language Agents under Communication Barriers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

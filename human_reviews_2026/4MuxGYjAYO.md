@@ -1,5 +1,6 @@
 # VerifyThisBench: Generating Code, Specifications, and Proofs All at Once
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

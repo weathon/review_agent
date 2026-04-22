@@ -1,5 +1,6 @@
 # Tackling the Noisy Elephant in the Room: Label Noise-robust Out-of-Distribution Detection via Loss Correction and Low-rank Decomposition
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

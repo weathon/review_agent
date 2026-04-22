@@ -1,5 +1,6 @@
 # Multimodal Information is All You Need for Adversarial Purification via Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

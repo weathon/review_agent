@@ -1,5 +1,6 @@
 # TimeRewarder: Learning Dense Reward from Passive Videos via Frame-wise Temporal Distance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

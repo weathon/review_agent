@@ -1,5 +1,6 @@
 # Robust Policy Gradient Optimization through Action Parameter Perturbation in Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 4, 4
 

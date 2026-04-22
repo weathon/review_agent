@@ -1,5 +1,6 @@
 # Reviving Error Correction in Modern Deep Time-Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

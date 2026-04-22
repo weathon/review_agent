@@ -1,5 +1,6 @@
 # Collaborative Unpaired Multimodal Learning for Image Classification
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 2, 8, 4
 

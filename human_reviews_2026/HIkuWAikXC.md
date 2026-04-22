@@ -1,5 +1,6 @@
 # ICDiffAD: Implicit Conditioning Diffusion Model for Time Series Anomaly Detection
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 6
 

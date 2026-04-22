@@ -1,5 +1,6 @@
 # Fine-Tuning Diffusion Models via Intermediate Distribution Shaping
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2
 

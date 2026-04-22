@@ -1,5 +1,6 @@
 # Probabilistic Robustness for Free? Revisiting Training via a Benchmark
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

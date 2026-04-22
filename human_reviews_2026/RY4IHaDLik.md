@@ -1,5 +1,6 @@
 # CLEAR: Calibrated Learning for Epistemic and Aleatoric Risk
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # On the Universality of Self-Supervised Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 6, 4, 6
 

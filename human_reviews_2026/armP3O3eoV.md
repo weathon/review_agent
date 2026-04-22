@@ -1,5 +1,6 @@
 # Random Projections for Spectral Algorithms in Mis-specified Setting: Sobolev Norm Learning Rates and Minimax Optimality
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 8
 

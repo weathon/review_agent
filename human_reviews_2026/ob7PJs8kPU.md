@@ -1,5 +1,6 @@
 # All Patches Matter, More Patches Better: Enhance AI-Generated Image Detection via Panoptic Patch Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 2
 

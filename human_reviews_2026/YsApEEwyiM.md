@@ -1,5 +1,6 @@
 # HDC-X: Efficient Medical Data Classification for Embedded Devices
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

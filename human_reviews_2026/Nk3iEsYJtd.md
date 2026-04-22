@@ -1,5 +1,6 @@
 # Policy-Based Sentence Simplification: Replacing Parallel Corpora with LLM-as-a-Judge
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

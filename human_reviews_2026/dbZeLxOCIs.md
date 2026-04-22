@@ -1,5 +1,6 @@
 # GRAM-DTI: Adaptive Multimodal Representation Learning for Drug–Target Interaction Prediction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

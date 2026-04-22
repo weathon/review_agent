@@ -1,5 +1,6 @@
 # Diffusion Large Language Models for Black-Box Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

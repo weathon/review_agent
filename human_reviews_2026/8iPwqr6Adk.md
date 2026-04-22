@@ -1,5 +1,6 @@
 # Theory of Space: Can Foundation Models Construct Spatial Beliefs through Active Exploration?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

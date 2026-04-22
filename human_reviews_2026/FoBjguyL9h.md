@@ -1,5 +1,6 @@
 # Understanding Tool-Integrated Reasoning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 4, 8
 

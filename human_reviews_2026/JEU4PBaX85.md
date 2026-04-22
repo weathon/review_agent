@@ -1,5 +1,6 @@
 # What happens when generative AI models train recursively on each others' outputs?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

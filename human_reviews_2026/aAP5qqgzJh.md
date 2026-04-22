@@ -1,5 +1,6 @@
 # Propaganda AI: An Analysis of Semantic Divergence in Large Language Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

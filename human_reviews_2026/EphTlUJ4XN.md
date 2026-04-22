@@ -1,5 +1,6 @@
 # PINFDiT: Energy-Based Physics-Informed Diffusion Transformers for General-purpose Time Series Tasks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

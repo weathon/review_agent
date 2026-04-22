@@ -1,5 +1,6 @@
 # Reinforcement learning for hierarchical proof generation in Lean 4
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

@@ -1,5 +1,6 @@
 # GPAR: Gaussian process based association rule mining
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 0, 4
 

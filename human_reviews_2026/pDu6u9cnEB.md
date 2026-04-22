@@ -1,5 +1,6 @@
 # Omni-View: Unlocking How Generation Facilitates Understanding in Unified 3D Model based on Multiview images
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

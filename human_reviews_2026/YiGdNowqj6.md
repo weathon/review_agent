@@ -1,5 +1,6 @@
 # FARI: Robust One-Step Inversion for Watermarking in Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

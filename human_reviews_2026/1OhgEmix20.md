@@ -1,5 +1,6 @@
 # LaSeR: Reinforcement Learning with Last-Token Self-Rewarding
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4, 8
 

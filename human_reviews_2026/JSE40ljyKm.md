@@ -1,5 +1,6 @@
 # Predicting LLM Reasoning Performance with Small Proxy Model
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

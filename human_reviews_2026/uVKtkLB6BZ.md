@@ -1,5 +1,6 @@
 # Adapting Noise to Data: Generative Flows from learned 1D Processes
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 2, 6, 10
 

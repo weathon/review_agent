@@ -1,5 +1,6 @@
 # Mitigating Fine-tuning Risks in LLMs via Safety-Aware Probing Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

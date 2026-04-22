@@ -1,5 +1,6 @@
 # Discriminator-Guided Diffusion for Generating Large Directed and Undirected Graphs
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 4
 

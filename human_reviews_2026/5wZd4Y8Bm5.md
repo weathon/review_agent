@@ -1,5 +1,6 @@
 # Less Is More: Generating Time Series with LLaMA-Style Autoregression in Simple Factorized Latent Spaces
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

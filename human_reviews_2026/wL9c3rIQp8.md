@@ -1,5 +1,6 @@
 # DeepWaveRL: Self-Supervised Full Waveform Inversion via Reinforcement Learning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

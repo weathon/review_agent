@@ -1,5 +1,6 @@
 # Generalizable Opponent Exploitation in LLM Agents via Mixed Best-Responses Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

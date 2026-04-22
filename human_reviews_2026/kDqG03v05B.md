@@ -1,5 +1,6 @@
 # Revisiting Tree-Sliced Wasserstein Distance Through the Lens of the Fermat–Weber Problem
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

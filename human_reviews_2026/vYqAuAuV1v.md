@@ -1,5 +1,6 @@
 # Temporal Saliency-Guided Distillation: A Scalable Framework for Distilling Video Datasets
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

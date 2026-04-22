@@ -1,5 +1,6 @@
 # Bootstrapping MLLM for Weakly‑Supervised  Class‑Agnostic Object Counting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6, 4
 

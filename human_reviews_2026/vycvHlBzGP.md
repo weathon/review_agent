@@ -1,5 +1,6 @@
 # TeZO: Empowering the Low-Rankness on the Temporal Dimension in the Zeroth-Order Optimization for Fine-tuning LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

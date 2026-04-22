@@ -1,5 +1,6 @@
 # Structure before the Machine: Input Space is the Prerequisite for Concepts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

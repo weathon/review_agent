@@ -1,5 +1,6 @@
 # MoGIC: Boosting Motion Generation via Intention Understanding and Visual Context
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Did You Faithfully Say What You Thought? Bridging the Gap Between LLMs Neural Activity and Self-Explanations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # One Intervention per Component is Enough: Towards Identifiability in Linear Stochastic Dynamics from Steady State
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

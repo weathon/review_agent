@@ -1,5 +1,6 @@
 # Online Reusable Resource Allocation with Adversarial Requests
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

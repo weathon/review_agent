@@ -1,5 +1,6 @@
 # Optimizing Long-Form Clinical Text Generation with Claim-Based Rewards
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

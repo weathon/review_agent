@@ -1,5 +1,6 @@
 # OrthoSolver: A Neural Proper Orthogonal Decomposition Solver For PDEs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

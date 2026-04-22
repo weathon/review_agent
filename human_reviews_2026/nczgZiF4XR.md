@@ -1,5 +1,6 @@
 # Securing Transfer-Learned Networks with Reverse Homomorphic Encryption
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

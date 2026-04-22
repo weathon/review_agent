@@ -1,5 +1,6 @@
 # Symbiotic Cooperation for Web Agents: Harnessing Complementary Strengths of Large and Small LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

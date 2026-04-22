@@ -1,5 +1,6 @@
 # Analyzing the Training Dynamics of Image Restoration Transformers: A Revisit to Layer Normalization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

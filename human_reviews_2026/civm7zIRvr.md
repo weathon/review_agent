@@ -1,5 +1,6 @@
 # Semantic F1 Scores: Fair Evaluation Under Fuzzy Class Boundaries
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

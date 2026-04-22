@@ -1,5 +1,6 @@
 # LLM-First Search: Self-Guided Exploration of the Solution Space
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Efficient Morphology-Control Co-Design via Stackelberg Proximal Policy Optimization
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 6
 

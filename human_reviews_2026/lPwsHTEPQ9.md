@@ -1,5 +1,6 @@
 # Let's Let's Let's Let's... Understand Looping in Reasoning Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 4, 2, 4
 

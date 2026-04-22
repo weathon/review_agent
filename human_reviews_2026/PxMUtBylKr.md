@@ -1,5 +1,6 @@
 # Strategic Self-Improvement for Competitive Agents in AI Labour Markets
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

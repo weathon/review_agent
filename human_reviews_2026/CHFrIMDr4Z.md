@@ -1,5 +1,6 @@
 # An Asset Foundation Model for Industrial Asset Performance Management
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

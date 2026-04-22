@@ -1,5 +1,6 @@
 # Generalization in Monitored Markov Decision Processes (Mon-MDPs)
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 4
 

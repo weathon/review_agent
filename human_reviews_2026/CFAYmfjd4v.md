@@ -1,5 +1,6 @@
 # Empowering Test-Time Adaptation with Complementary Vision-Language Knowledge in Open-World Scenarios
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 6
 

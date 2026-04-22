@@ -1,5 +1,6 @@
 # InsertAny3D: VLM-Assisted and Geometry-Grounded Framework for 3D Object Insertion in Complex 3D Scenes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

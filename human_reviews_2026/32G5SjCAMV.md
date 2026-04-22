@@ -1,5 +1,6 @@
 # PiCa: Parameter-Efficient Fine-Tuning with Column Space Projection
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

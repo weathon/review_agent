@@ -1,5 +1,6 @@
 # EvA: Evolutionary Attacks on Graphs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 4
 

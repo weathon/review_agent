@@ -1,5 +1,6 @@
 # JDM: Joint Distribution Modeling for Fine-Grained Text-to-Video Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

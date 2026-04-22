@@ -1,5 +1,6 @@
 # Interaction Field Matching: Overcoming Limitations of Electrostatic Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

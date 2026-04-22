@@ -1,5 +1,6 @@
 # DiaQ: Direction-aware Activation Quantization for Fast and Accurate Model Inference
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

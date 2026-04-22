@@ -1,5 +1,6 @@
 # Increasing Information Extraction in Low-Signal Regimes via Multiple Instance Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

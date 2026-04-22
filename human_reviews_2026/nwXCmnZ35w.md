@@ -1,5 +1,6 @@
 # Agent²: An Agent-Generates-Agent Framework for Reinforcement Learning Automation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

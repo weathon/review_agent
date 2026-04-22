@@ -1,5 +1,6 @@
 # Learning Representations from Pre-synaptic Glomerular Responses for Odor Classification
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

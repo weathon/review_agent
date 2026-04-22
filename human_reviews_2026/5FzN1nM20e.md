@@ -1,5 +1,6 @@
 # Advancing LLM Reasoning with Natural Language and Numerical Feedback
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

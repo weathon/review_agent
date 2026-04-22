@@ -1,5 +1,6 @@
 # Improving LLM First-Token Predictions in Multiple-Choice Question Answering via Output Prefilling
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 0, 2, 2
 

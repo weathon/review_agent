@@ -1,5 +1,6 @@
 # Continuity-Regularized Flow Matching for Offline Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

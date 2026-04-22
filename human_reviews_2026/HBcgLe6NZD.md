@@ -1,5 +1,6 @@
 # GNN Explanations that do not Explain and How to find Them
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

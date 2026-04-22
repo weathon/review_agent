@@ -1,5 +1,6 @@
 # Seeing but Not Believing: Probing the Disconnect Between Visual Attention and Answer Correctness in VLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

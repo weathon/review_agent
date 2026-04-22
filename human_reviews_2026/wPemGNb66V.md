@@ -1,5 +1,6 @@
 # Bring Future Vision: Dynamic Computation Allocation Guided by Lightweight Feature Forecaster
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

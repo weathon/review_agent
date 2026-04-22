@@ -1,5 +1,6 @@
 # Level Up: Defining and Exploiting Transitional Problems for Curriculum Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

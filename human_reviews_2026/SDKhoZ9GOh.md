@@ -1,5 +1,6 @@
 # OBI CHARiot: Full-page OBI Rubbing Segmentation with Dual Data Flywheels
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # StreamUni: Achieving Streaming Speech Translation with a Unified Large Speech-Language Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

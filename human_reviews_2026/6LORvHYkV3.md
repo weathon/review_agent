@@ -1,5 +1,6 @@
 # Stabilizing MoE Reinforcement Learning by Aligning Training and Inference Routers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

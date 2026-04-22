@@ -1,5 +1,6 @@
 # Universal Reasoner: A Single, Composable Plug-and-Play Reasoner for Frozen LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

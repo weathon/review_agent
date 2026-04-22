@@ -1,5 +1,6 @@
 # UniTTS: Towards End-to-End Speech Synthesis with Joint Acoustic-Semantic Modeling
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2, 2
 

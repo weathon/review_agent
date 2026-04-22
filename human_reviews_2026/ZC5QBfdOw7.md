@@ -1,5 +1,6 @@
 # How Text Quality Interventions Reshape Neural Scaling Laws for LLMs: Empirical Study
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

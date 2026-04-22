@@ -1,5 +1,6 @@
 # MEAL: A Multi-dimensional Evaluation of Alignment Techniques for LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

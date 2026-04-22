@@ -1,5 +1,6 @@
 # Three Forward, One Backward: Memory-Efficient Full-Rank Fine-Tuning of Large Models via Extra Forward Passes
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2
 

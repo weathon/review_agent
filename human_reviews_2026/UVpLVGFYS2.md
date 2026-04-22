@@ -1,5 +1,6 @@
 # CondiQuant: Condition Number Based Low-Bit Quantization for Image Super-Resolution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

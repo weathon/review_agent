@@ -1,5 +1,6 @@
 # Jailbreak Transferability Emerges from Shared Representations
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8
 

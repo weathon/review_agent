@@ -1,5 +1,6 @@
 # DDL: Dynamic Discard Deep Learning for Rice Yield Prediction on Mixed-Accuracy Datasets
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

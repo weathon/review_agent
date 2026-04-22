@@ -1,5 +1,6 @@
 # Efficient Recommendation Unlearning via Task Vector Arithmetic in Shared Space
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

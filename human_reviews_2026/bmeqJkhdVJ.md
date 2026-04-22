@@ -1,5 +1,6 @@
 # TELL-TALE:  Task Efficient LLMs with Task Aware Layer Elimination
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

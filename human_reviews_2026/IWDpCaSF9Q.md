@@ -1,5 +1,6 @@
 # SMAN-Bench: A Cross-System Benchmark for Mobile Agents under Single- and Multi-path, Ambiguous, and Noisy Tasks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 
@@ -101,17 +102,26 @@ This paper presents SMAN-Bench, a comprehensive benchmark for evaluating vision-
 The benchmark features a slot-based instruction generation method (GIAS) for scalable annotation, and includes cross-system coverage across Android, iOS, HarmonyOS, and HyperOS. It also incorporates robustness and interaction evaluation, testing agents under ad noise and ambiguous instructions. Extensive experiments with open- and closed-source VLMs under multiple agent frameworks demonstrate that SMAN-Bench captures realistic challenges and reveals performance differences across reasoning, robustness, and multi-path capabilities.
 
 ### Strengths
-1. **Novel and well-motivated benchmark design**: The offline multi-path evaluation successfully bridges the gap between deterministic offline datasets and unstable online evaluations. By rewarding progress toward “key nodes” within the graph rather than requiring exact path matches, the benchmark achieves both reproducibility and multi-solution coverage.
-2. **Comprehensive task diversity and realism**: SMAN-Bench extends evaluation beyond task completion to robustness and interaction. The Noisy split (ads, pop-ups, redirects) and Ambiguous split (Q&A clarifications) emulate real-world conditions that are rarely tested in prior benchmarks such as Mobile-Agent-Bench or SPA-Bench.
-3. **Scalable annotation pipeline (GIAS)**: The GIAS method systematically extracts action intents and fills template slots to produce thousands of instructions without manual labeling. This approach reduces annotation cost and links one instruction to multiple trajectories, supporting multi-path evaluation.
-4. **Thorough experimentation**: The authors evaluate more than twenty models under three frameworks and analyze success rate (SR), step accuracy, and step efficiency (SE). Results reveal that multi-path evaluation correlates better with true capabilities than single-path evaluation, and ambiguous instructions enhance reasoning VLMs such as LLaMA and GPT-4o.
+1. **Novel and well-motivated benchmark design**:
+The offline multi-path evaluation successfully bridges the gap between deterministic offline datasets and unstable online evaluations. By rewarding progress toward “key nodes” within the graph rather than requiring exact path matches, the benchmark achieves both reproducibility and multi-solution coverage.
+2. **Comprehensive task diversity and realism**:
+SMAN-Bench extends evaluation beyond task completion to robustness and interaction. The Noisy split (ads, pop-ups, redirects) and Ambiguous split (Q&A clarifications) emulate real-world conditions that are rarely tested in prior benchmarks such as Mobile-Agent-Bench or SPA-Bench.
+3. **Scalable annotation pipeline (GIAS)**:
+The GIAS method systematically extracts action intents and fills template slots to produce thousands of instructions without manual labeling. This approach reduces annotation cost and links one instruction to multiple trajectories, supporting multi-path evaluation.
+4. **Thorough experimentation**:
+The authors evaluate more than twenty models under three frameworks and analyze success rate (SR), step accuracy, and step efficiency (SE). Results reveal that multi-path evaluation correlates better with true capabilities than single-path evaluation, and ambiguous instructions enhance reasoning VLMs such as LLaMA and GPT-4o.
 
 ### Weaknesses
-1. **Clarity and writing quality**: The paper is dense and often unclear about implementation details. For instance, the “offline simulator” and the definition of “key nodes” are spread across sections without a cohesive overview. Figures 1 and 2 contain too much information without step-wise guidance. A clearer explanation of evaluation loops and agent–graph interaction would aid reproducibility.
-2. **Evaluation protocol ambiguities**: It is unclear how actions not present in the Mobile3M graph are handled (for example, unseen coordinates or slot values). Does the simulator terminate, discard the action, or return an error? Similarly, the definition of the “predefined query pool” is not quantitatively specified, and the interaction between step limits and noisy tasks remains unclear.
-3. **Limited comparison with related graph-based benchmarks**: The paper focuses its comparison on Mobile-Agent-Bench and SPA-Bench but omits recent graph-structured evaluators such as ColorBench [1], WebGraphEval [2], CRAB [3], and OmniBench [4]. A discussion contrasting SMAN-Bench’s key-node reward with these graph-centric methods would clarify its unique contribution.
-4. **Under-explored cross-system analysis**: Although SMAN-Bench covers four OS ecosystems, the results mainly aggregate performance without analyzing per-OS differences or transfer difficulties. Understanding how models generalize from Android to iOS or HarmonyOS would strengthen the “cross-system” claim.
-5. **Slot-value and coverage uncertainty**: While the paper mentions a predefined query pool, it is unclear how slot values such as song titles or colors are bounded. If an instruction contains a slot not present in the dataset, the paper does not explain how correctness is judged. 
+1. **Clarity and writing quality**:
+The paper is dense and often unclear about implementation details. For instance, the “offline simulator” and the definition of “key nodes” are spread across sections without a cohesive overview. Figures 1 and 2 contain too much information without step-wise guidance. A clearer explanation of evaluation loops and agent–graph interaction would aid reproducibility.
+2. **Evaluation protocol ambiguities**:
+It is unclear how actions not present in the Mobile3M graph are handled (for example, unseen coordinates or slot values). Does the simulator terminate, discard the action, or return an error? Similarly, the definition of the “predefined query pool” is not quantitatively specified, and the interaction between step limits and noisy tasks remains unclear.
+3. **Limited comparison with related graph-based benchmarks**:
+The paper focuses its comparison on Mobile-Agent-Bench and SPA-Bench but omits recent graph-structured evaluators such as ColorBench [1], WebGraphEval [2], CRAB [3], and OmniBench [4]. A discussion contrasting SMAN-Bench’s key-node reward with these graph-centric methods would clarify its unique contribution.
+4. **Under-explored cross-system analysis**:
+Although SMAN-Bench covers four OS ecosystems, the results mainly aggregate performance without analyzing per-OS differences or transfer difficulties. Understanding how models generalize from Android to iOS or HarmonyOS would strengthen the “cross-system” claim.
+5. **Slot-value and coverage uncertainty**:
+While the paper mentions a predefined query pool, it is unclear how slot values such as song titles or colors are bounded. If an instruction contains a slot not present in the dataset, the paper does not explain how correctness is judged. 
 
 ### **References**
 

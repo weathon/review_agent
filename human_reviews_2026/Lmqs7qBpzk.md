@@ -1,5 +1,6 @@
 # Constrained Linear Best Arm Identification with Covariate Selection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

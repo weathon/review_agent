@@ -1,5 +1,6 @@
 # Clinically Interpretable Rule–Guided Preference Optimization in Vision–Language Models for Radiology Report Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

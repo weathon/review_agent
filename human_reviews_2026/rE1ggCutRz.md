@@ -1,5 +1,6 @@
 # Adaptive Spatial-Temporal Generalization for Physics-Informed Neural PDE Solvers
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 0, 2, 2
 

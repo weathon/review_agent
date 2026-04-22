@@ -1,5 +1,6 @@
 # Initialization Schemes for Kolmogorov–Arnold Networks: An Empirical Study
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

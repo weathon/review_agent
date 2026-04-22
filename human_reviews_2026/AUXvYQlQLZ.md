@@ -1,5 +1,6 @@
 # The Coverage Principle: How Pre-Training Enables Post-Training
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8
 

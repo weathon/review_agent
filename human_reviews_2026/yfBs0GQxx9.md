@@ -1,5 +1,6 @@
 # Sparling: End-to-End Spatial Concept Learning via Extremely Sparse Activations
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 0
 

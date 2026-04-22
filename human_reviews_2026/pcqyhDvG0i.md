@@ -1,5 +1,6 @@
 # Curvature Meets Bispectrum: A Correspondence Theory for Transformer Gauge Invariants
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

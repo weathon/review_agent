@@ -1,5 +1,6 @@
 # Debiasing CLIP: Interpreting and Correcting Bias in Attention Heads
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

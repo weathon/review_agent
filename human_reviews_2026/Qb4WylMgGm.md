@@ -1,5 +1,6 @@
 # CASE: Coupled Adaptive Feature–Target Smoothing with Density-Gated Mixture-of-Experts for Robust Imbalanced Tabular Regression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

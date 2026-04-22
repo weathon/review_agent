@@ -1,5 +1,6 @@
 # Reimagining Agent-based Modeling with Large Language Model Agents via Shachi
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

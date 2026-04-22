@@ -1,5 +1,6 @@
 # Action-Free Offline-To-Online RL via Discretised State Policies
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 4
 

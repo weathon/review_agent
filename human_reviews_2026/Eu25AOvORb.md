@@ -1,5 +1,6 @@
 # UniOD: A Universal Model for Outlier Detection across Diverse Domains
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

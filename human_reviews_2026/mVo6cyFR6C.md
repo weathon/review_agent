@@ -1,5 +1,6 @@
 # WorldTree: Towards 4D Dynamic Worlds from Monocular Video using Tree-Chains
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

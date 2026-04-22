@@ -1,5 +1,6 @@
 # Rodrigues Network for Learning Robot Actions
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 2, 6, 8, 8
 

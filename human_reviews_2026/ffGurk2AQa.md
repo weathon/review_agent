@@ -1,5 +1,6 @@
 # NOCL: Node-Oriented Conceptualization LLM for Graph Tasks without Message Passing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

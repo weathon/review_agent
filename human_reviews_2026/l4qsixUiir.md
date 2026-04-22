@@ -1,5 +1,6 @@
 # Online Continual Learning for Time Series: a Natural Score-driven Approach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

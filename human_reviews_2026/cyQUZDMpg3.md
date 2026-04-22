@@ -1,5 +1,6 @@
 # HiGS: History-Guided Sampling for Plug-and-Play Enhancement of Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

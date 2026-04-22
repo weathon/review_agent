@@ -1,5 +1,6 @@
 # When Bigger isn't Better: The Role of Model-Data Complexity in Time Series Forecasts
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 6, 2
 

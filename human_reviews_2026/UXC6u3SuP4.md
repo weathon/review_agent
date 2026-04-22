@@ -1,5 +1,6 @@
 # IP$^{2}$-RSNN: Bi-level Intrinsic Plasticity Enables Learning-to-learn in Recurrent Spiking Neural Networks
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 
@@ -144,7 +145,9 @@ In Figure 2 they run 1000 task samples for each family and perform ablations by 
 
 
 I find the proposed approach of optimising only intrinsic neuronal parameters interesting, since it deviates form the usual weight optimisation training of recurrent networks, but it is yet unclear to me if this is really what the authors are doing. However, I have to admit that I was expecting the outer slower optimisation to adapt the synaptic weights, while the inner faster timescale modifies the intrinsic neuronal parameters. 
-Nevertheless I think the manuscript needs clarifications on several essential points, some I already mentioned and other I detail below.  The main points are that the optimisation is not described clearly, especially the meta-optimisation and how do the authors compute gradients through spikes; they need to describe better the training of a single task (each task index). Thus in my opinion the paper needs major updates for clarity, hopefully the authors can clarify during the rebuttal.
+Nevertheless I think the manuscript needs clarifications on several essential points, some I already mentioned and other I detail below.
+
+The main points are that the optimisation is not described clearly, especially the meta-optimisation and how do the authors compute gradients through spikes; they need to describe better the training of a single task (each task index). Thus in my opinion the paper needs major updates for clarity, hopefully the authors can clarify during the rebuttal.
 
 ### Strengths
 - The paper proposes an interesting approach for learning to learn that of optimising intrinsic neuronal parameters and selecting the subset of parameters that are important for each task type.
@@ -183,7 +186,9 @@ Nevertheless I think the manuscript needs clarifications on several essential po
 
 ## Papers to be cited
 
-I think the authors should cite the following paper from the Clopath lab that considers training RNNs by changing both synaptic weights and  neuronal excitability of neurons [1] (although not in a multi-task training setting), and this work [2] which considers multi-task training by optimising only task-specific biases for each neuron (which has similar flavour as optimising the “excitability” of each neuron for each task).  
+I think the authors should cite the following paper from the Clopath lab that considers training RNNs by changing both synaptic weights and  neuronal excitability of neurons [1] (although not in a multi-task training setting), and this work [2] which considers multi-task training by optimising only task-specific biases for each neuron (which has similar flavour as optimising the “excitability” of each neuron for each task).
+
+
 
 ## Other comments
 
@@ -192,7 +197,9 @@ I think the authors should cite the following paper from the Clopath lab that co
 ---
 ## References
 
-  [1] Delamare, Geoffroy, Douglas Feitosa Tomé, and Claudia Clopath. "Intrinsic neural excitability biases allocation and overlap of memory engrams." Journal of Neuroscience 44.21 (2024).
+
+
+[1] Delamare, Geoffroy, Douglas Feitosa Tomé, and Claudia Clopath. "Intrinsic neural excitability biases allocation and overlap of memory engrams." Journal of Neuroscience 44.21 (2024).
 
 [2] Williams, E., Payeur, A., Ryoo, A. H. W., Jiralerspong, T., Perich, M. G., Mazzucato, L., & Lajoie, G. (2024). Expressivity of neural networks with random weights and learned biases. arXiv preprint arXiv:2407.00957.
 

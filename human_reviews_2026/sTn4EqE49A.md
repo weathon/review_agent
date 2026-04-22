@@ -1,5 +1,6 @@
 # SpatialVLA-Mamba: Efficient State-Space Models with Self-Refinement for Spatially-Grounded Robotic Control
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2
 

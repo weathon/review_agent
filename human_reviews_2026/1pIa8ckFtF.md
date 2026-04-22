@@ -1,5 +1,6 @@
 # TS-Reasoner: Aligning Time Series Foundation Models with LLM Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

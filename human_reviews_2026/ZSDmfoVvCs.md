@@ -1,5 +1,6 @@
 # ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

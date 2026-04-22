@@ -1,5 +1,6 @@
 # AlphaSteer: Learning Refusal Steering with Principled Null-Space Constraint
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 8
 

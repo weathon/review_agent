@@ -1,5 +1,6 @@
 # SimGFM: Simplifying Discrete Flow Matching for Graph Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

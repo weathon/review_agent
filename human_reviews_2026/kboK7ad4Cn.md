@@ -1,5 +1,6 @@
 # LoRA is All You Need for Safety Alignment of Reasoning LLMs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

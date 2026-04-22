@@ -1,5 +1,6 @@
 # HAD: Hybrid Architecture Distillation for Bridging Large-Transformer Knowledge into Compact Genomic Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

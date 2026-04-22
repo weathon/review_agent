@@ -1,5 +1,6 @@
 # LinguaMap: Which Layers of LLMs Speak Your Language and How to Tune Them?
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

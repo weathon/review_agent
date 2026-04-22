@@ -1,5 +1,6 @@
 # Quantifying Mechanistic Gaps in Algorithmic Reasoning via Neural Compilation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 
@@ -131,7 +132,8 @@ I think internal faithfulness via attention-trace similarity really complements 
 1. So, the internal metric compares learned attention to one compiled attention trace, but BFS and Bellman–Ford can admit many low-level realisations (e.g., different tie-breaking, temperature/scaling of logits, distributing computation into decoders). The paper works with algorithmic phase space and unique solutions, but does not formalize equivalence classes or prove that the chosen $\alpha*$ is the mechanism to match. The divergence might actually reflect an equally faithful but different mechanism. Please either justify uniqueness (up to known invariances) or report faithfulness against multiple compiled references (e.g., different tie-breakers) and/or invariance-aware distances. 
 2. I think external faithfulness mixes hidden-state quality with decoder power. Appendix A highlights that decoders can perform substantial computation, and the main text notes learned models are only good at predicting traces early on, possibly due to under-convergence or decoding (Fig. 3). Without fixing decoder capacity or probing states with a constrained linear probe (e.g 2210.13382 or 2408.14915), the external metric partly measures decoder design, not mechanism. I think using linear probes for core variables (visited, dist, $\pi$) would increase the soundness of the study. For example, If you probe $[visited, dist, \pi]$ directly from hidden states, how do external faithfulness curves change (Fig. 3/10)? 
 
-3. I suspect that there is a high possibility that a single-head constraint may mask faithfulness. All core results use one attention head because one head is sufficient, but there are evidences from various studies that emergent mechanistic modularity and expressivity might require multiple heads. Please report internal/external faithfulness with more heads (keeping capacity roughly fixed) to test whether additional heads close the gap.
+3. I suspect that there is a high possibility that a single-head constraint may mask faithfulness.
+All core results use one attention head because one head is sufficient, but there are evidences from various studies that emergent mechanistic modularity and expressivity might require multiple heads. Please report internal/external faithfulness with more heads (keeping capacity roughly fixed) to test whether additional heads close the gap.
 
 ### Questions
 0. The questions above in the Weaknesses. 

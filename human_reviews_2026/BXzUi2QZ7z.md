@@ -1,5 +1,6 @@
 # Tracing Concept Circuits to Audit and Steer Vision Transformers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 
@@ -150,7 +151,8 @@ The paper introduces concept circuits for ViTs: a layer-wise, directed graph whe
 - Eq 4 clearly implies that this mapping is neither injective nor surjective. This is only briefly acknowledged and not sufficiently analyzed.
 - The do operator is used to define indirect effects via within-model edits, but no explicit SCM/graph is specified.
 - Table 3 shows that “Ours-16k” greatly improves accuracy when the ground truth for the test split is itself GPT-5 concept annotations drawn from their proving suite. This probably privileges their vocabulary vs LAION/Google.
-- The alignment step assumes CLIP’s embedding geometry reflects concept presence. 
+- The alignment step assumes CLIP’s embedding geometry reflects concept presence.
+
 
 Minor: The X-ray/MRI analogy is confusing and potentially misleading.
 

@@ -1,5 +1,6 @@
 # Unleashing 2D Rewards for Human Preference Aligned Text-to-3D Generation via Preference Score Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 
@@ -39,7 +40,8 @@ The main contribution is adding the preference score guidance term in the optimi
     - Line 464: suppress
 
 ### Questions
-The main questions are the first two points in the weaknesses section.  It would be great if they can be addressed in the rebuttal.
+The main questions are the first two points in the weaknesses section. 
+It would be great if they can be addressed in the rebuttal.
 
 ### Soundness
 3

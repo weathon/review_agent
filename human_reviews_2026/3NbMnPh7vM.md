@@ -1,5 +1,6 @@
 # Mastering Domain Shift Image Enhancement Via Differentiable Physics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

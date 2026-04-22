@@ -1,5 +1,6 @@
 # SMOTE and Mirrors: Exposing Privacy Leakage from Synthetic Minority Oversampling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

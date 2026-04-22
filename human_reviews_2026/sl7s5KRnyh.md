@@ -1,5 +1,6 @@
 # VisionTS++: Cross-Modal Time Series Foundation Model with Continual Pre-trained Vision Backbones
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

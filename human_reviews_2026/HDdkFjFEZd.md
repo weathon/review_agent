@@ -1,5 +1,6 @@
 # A Function-Centric Graph Neural Network Approach for Predicting Electron Densities
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

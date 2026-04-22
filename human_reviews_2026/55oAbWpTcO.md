@@ -1,5 +1,6 @@
 # Latent Refinement Decoding: Enhancing Diffusion-Based Language Models by Refining Belief States
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # HyenaMoE: A Hybrid and Scalable Architecture for Efficient Genomic Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

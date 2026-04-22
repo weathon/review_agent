@@ -1,5 +1,6 @@
 # FlexiVoice: Enabling Flexible Style Control in Zero-Shot TTS with Natural Language Instructions
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

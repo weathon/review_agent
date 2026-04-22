@@ -1,5 +1,6 @@
 # Teaching Pretrained Language Models to Think Deeper with Retrofitted Recurrence
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

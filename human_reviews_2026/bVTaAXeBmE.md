@@ -1,5 +1,6 @@
 # DEAS: DEtached value learning with Action Sequence for Scalable Offline RL
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

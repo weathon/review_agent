@@ -1,5 +1,6 @@
 # PAC-Bayes bounds for cumulative loss in Continual Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

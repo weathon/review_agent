@@ -1,5 +1,6 @@
 # Intrinsic training dynamics of deep neural networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

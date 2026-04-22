@@ -1,5 +1,6 @@
 # Perturbation Guided Drug Molecule Design via Latent Rectified Flow
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

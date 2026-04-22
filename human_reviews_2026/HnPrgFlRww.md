@@ -1,5 +1,6 @@
 # Disentangling Behaviorally Relevant Latent Dynamics in Multimodal Neural Time-series
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 6, 0
 

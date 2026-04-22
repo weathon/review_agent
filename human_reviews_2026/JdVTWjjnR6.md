@@ -1,5 +1,6 @@
 # HiTNet: Hippocampal-Thalamic Inspired Dual-Stream Network for Multimodal Sentiment Analysis under Missing Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 6, 6, 2
 

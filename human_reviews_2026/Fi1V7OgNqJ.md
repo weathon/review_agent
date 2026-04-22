@@ -1,5 +1,6 @@
 # SaraCoder: Orchestrating Semantic and Structural Cues for Resource-Optimized Repository-Level Code Completion
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

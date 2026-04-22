@@ -1,5 +1,6 @@
 # Library Hallucinations in LLMs: Risk Analysis Grounded in Developer Queries
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

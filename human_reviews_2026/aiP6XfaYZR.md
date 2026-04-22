@@ -1,5 +1,6 @@
 # What Layers When: Learning to Skip Compute in LLMs with Residual Gates
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

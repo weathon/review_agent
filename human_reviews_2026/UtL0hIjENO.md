@@ -1,5 +1,6 @@
 # Streaming Drag-Oriented Interactive Video Manipulation: Drag Anything, Anytime!
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

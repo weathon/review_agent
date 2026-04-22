@@ -1,5 +1,6 @@
 # Scaling Large Vision-Language Model RL Training via Efficient Load Balancing
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

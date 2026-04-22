@@ -1,5 +1,6 @@
 # Combining Euclidean and Hyperbolic Representations for Node-level Anomaly Detection
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

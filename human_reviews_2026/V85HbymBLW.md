@@ -1,5 +1,6 @@
 # LogART: Pushing the Limit of Efficient Logarithmic Post-Training Quantization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

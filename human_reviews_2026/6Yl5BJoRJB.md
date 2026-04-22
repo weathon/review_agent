@@ -1,5 +1,6 @@
 # Generation-Augmented Multimodal Retrieval in Personal LLM Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

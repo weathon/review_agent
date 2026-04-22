@@ -1,5 +1,6 @@
 # Adaptive Friend Agent: Personalized Multi-User Memory for Conversational AI
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # How to train data-efficient LLMs
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6, 6
 

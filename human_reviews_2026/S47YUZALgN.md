@@ -1,5 +1,6 @@
 # Classifier-Driven Diffusion Model and Plug-and-Play of Weakly-Supervised Learning for Conditional Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

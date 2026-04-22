@@ -1,5 +1,6 @@
 # JudgeLRM: Large Reasoning Models as a Judge
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2
 

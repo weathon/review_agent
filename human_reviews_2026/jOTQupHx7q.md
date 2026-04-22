@@ -1,5 +1,6 @@
 # PropensityBench: Evaluating Latent Safety Risks in Large Language Models via an Agentic Approach
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

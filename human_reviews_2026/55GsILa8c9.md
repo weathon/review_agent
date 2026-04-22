@@ -1,5 +1,6 @@
 # CausalNovo: Advancing De Novo Peptide Sequencing via a Causality-Informed Framework
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 6, 8
 

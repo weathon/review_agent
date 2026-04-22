@@ -1,5 +1,6 @@
 # MatRIS: Toward Reliable and Efficient Pretrained Machine Learning Interatomic Potentials
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

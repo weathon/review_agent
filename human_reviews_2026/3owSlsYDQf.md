@@ -1,5 +1,6 @@
 # A Simple "Motivation" Can Enhance Reinforcement Finetuning of Large Reasoning Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 2
 

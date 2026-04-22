@@ -1,5 +1,6 @@
 # Completed Hyperparameter Transfer across Modules, Width, Depth, Batch and Duration
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

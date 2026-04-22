@@ -1,5 +1,6 @@
 # From Data to Rewards: a Bi-level Optimization Perspective on Maximum Likelihood Estimation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

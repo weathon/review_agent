@@ -1,5 +1,6 @@
 # h1: Bootstrapping Models to Reason over Longer Horizons via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

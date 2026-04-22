@@ -1,5 +1,6 @@
 # SWE-Tester: Training Open-Source LLMs for Issue Reproduction in Real-World Repositories
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

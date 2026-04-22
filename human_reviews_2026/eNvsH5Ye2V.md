@@ -1,5 +1,6 @@
 # Constitutional Classifiers++: Efficient Production-Grade Defenses against Universal Jailbreaks
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 6
 

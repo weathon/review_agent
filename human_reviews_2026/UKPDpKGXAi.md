@@ -1,5 +1,6 @@
 # A widely used protocol for EEG classification experiments leads to a confound
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

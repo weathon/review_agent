@@ -1,5 +1,6 @@
 # Variational Semantic Decomposition of Compositional Representations
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 2
 

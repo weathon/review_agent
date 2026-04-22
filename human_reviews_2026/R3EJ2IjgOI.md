@@ -1,5 +1,6 @@
 # Memory Caching: RNNs with Growing Memory
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

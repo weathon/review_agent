@@ -1,5 +1,6 @@
 # CCKS: Cooperative CPU-GPU Scheduling for Fused Kernels on Coherent Architectures
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 6, 0
 

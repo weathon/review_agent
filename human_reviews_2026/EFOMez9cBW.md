@@ -1,5 +1,6 @@
 # GLaVE-Cap: Global-Local Aligned Video Captioning with Vision Expert Integration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

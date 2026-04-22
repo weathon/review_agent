@@ -1,5 +1,6 @@
 # P$^3$-SAM: Native 3D Part Segmentation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

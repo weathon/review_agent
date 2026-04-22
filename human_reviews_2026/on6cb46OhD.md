@@ -1,5 +1,6 @@
 # Improving Discrete Diffusion Unmasking Policies Beyond Explicit Reference Policies
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

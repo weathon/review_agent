@@ -1,5 +1,6 @@
 # From Minor Adjustment to Major Gains: Soft Logit Normalization Loss Enhances Representations and Generalization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 4, 8
 

@@ -1,5 +1,6 @@
 # DSTA4D: Rethinking Adaptive Spatio-Temporal Decoupling for Dynamic Point Cloud Videos
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

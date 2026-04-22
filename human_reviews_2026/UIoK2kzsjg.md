@@ -1,5 +1,6 @@
 # Deep Adaptive  Cross Domain  Learning for Continuous Pressure Wave Signal Recovery
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

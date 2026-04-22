@@ -1,5 +1,6 @@
 # Adversarial Reinforcement Learning for Large Language Model Agent Safety
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

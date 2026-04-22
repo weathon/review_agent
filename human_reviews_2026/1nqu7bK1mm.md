@@ -1,5 +1,6 @@
 # WFR-FM: Simulation-Free Dynamic Unbalanced Optimal Transport
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

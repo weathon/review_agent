@@ -1,5 +1,6 @@
 # Bridged Clustering for Representation Learning: Semi-Supervised Sparse Bridging
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

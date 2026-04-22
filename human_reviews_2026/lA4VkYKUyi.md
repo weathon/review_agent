@@ -1,5 +1,6 @@
 # VAE with Hyperspherical Coordinates: Improving Anomaly Detection from Hypervolume-Compressed Latent Space
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

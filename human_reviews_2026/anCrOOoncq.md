@@ -1,5 +1,6 @@
 # Query-Centric Graph Retrieval Augmented Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

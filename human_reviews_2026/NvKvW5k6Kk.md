@@ -1,5 +1,6 @@
 # Improving Semantic Proximity in Information Retrieval through Cross-Lingual Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

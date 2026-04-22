@@ -1,5 +1,6 @@
 # Iterative Amortized Inference: Unifying In-Context Learning and Learned Optimizers
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 8, 4
 

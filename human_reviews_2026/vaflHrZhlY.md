@@ -1,5 +1,6 @@
 # AutoDV: An End-to-End Deep Learning Model for High-Dimensional Data Visualization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

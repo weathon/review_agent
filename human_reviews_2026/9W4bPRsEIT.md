@@ -1,5 +1,6 @@
 # Just Do It!? Computer-Use Agents Exhibit Blind Goal-Directedness
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

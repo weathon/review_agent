@@ -1,5 +1,6 @@
 # Bench-CoE: A Framework for Collaboration of Experts from Benchmark
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Topology aware optimization of soft prompts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 2, 4
 

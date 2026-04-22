@@ -1,5 +1,6 @@
 # INSES: Intelligent Navigation and Similarity Enhanced Search for Knowledge Graph Reasoning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

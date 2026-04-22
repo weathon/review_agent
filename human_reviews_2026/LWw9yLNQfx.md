@@ -1,5 +1,6 @@
 # FLARE: Fully Integration of Vision-Language Representations for Deep Cross-Modal Understanding
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

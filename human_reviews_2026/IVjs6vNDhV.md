@@ -1,5 +1,6 @@
 # GenCape: Structure-Inductive Generative Modeling for Category-Agnostic Pose Estimation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

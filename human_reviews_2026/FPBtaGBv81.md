@@ -1,5 +1,6 @@
 # Dynamic Trust Region Adaptation for \\ Human-in-the-Loop Reinforcement Learning \\ in Code Refinement
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 2, 0
 

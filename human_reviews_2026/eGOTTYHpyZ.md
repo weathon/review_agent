@@ -1,5 +1,6 @@
 # The Tail Tells All: Estimating Model-Level Membership Inference Vulnerability Without Reference Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

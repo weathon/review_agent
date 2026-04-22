@@ -1,5 +1,6 @@
 # BiasScope: Towards Automated Detection of Bias in LLM-as-a-Judge Evaluation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

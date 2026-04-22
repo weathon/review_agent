@@ -1,5 +1,6 @@
 # HoloPart: Generative 3D Part Amodal Segmentation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

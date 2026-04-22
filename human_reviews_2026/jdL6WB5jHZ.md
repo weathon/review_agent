@@ -1,5 +1,6 @@
 # Regularized Latent Dynamics Prediction is a Strong Baseline For Behavioral Foundation Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

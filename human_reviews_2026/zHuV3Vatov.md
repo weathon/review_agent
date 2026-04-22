@@ -1,5 +1,6 @@
 # VeriCoT: Neuro-symbolic Chain-of-Thought Validation via Logical Consistency Checks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # DeFacto: Counterfactual Thinking with Images for Enforcing Evidence-Grounded and Faithful Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

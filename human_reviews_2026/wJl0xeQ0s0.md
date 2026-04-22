@@ -1,5 +1,6 @@
 # TabPFN-Wide: Continued Pre-Training for Extreme Feature Counts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Learning Task-Invariant Features in VLMs via Dynamic Bayesian IRM
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

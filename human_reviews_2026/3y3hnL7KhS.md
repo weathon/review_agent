@@ -1,5 +1,6 @@
 # AEGIS: Adversarial Target-Guided Retention-Data-Free Robust Concept Erasure from Diffusion Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 4
 

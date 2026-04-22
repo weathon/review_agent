@@ -1,5 +1,6 @@
 # FRABench and UFEval: Unified Fine-grained Evaluation with Task and Aspect Generalization
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 4, 6, 8
 

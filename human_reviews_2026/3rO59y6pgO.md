@@ -1,5 +1,6 @@
 # Revealing the Impacts of In-Context Learning on Gender Bias in Large Vision-Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

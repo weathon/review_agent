@@ -1,5 +1,6 @@
 # STAN: A Spatio-Temporal Attention Network for Space Debris Multistage Collision Avoidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

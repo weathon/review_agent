@@ -1,5 +1,6 @@
 # Explore Briefly, Then Decide: Mitigating LLM Overthinking via Cumulative Entropy Regulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

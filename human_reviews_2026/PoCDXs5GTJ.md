@@ -1,5 +1,6 @@
 # TimeFlow: Towards Stochastic-Aware and Efficient Time Series Generation via Flow Matching Modeling
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 0
 

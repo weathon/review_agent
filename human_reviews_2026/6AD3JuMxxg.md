@@ -1,5 +1,6 @@
 # Fast Visuomotor Policy for Robotic Manipulation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

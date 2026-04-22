@@ -1,5 +1,6 @@
 # MARS - A Foundational Map Auto-Regressor
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

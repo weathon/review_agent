@@ -1,5 +1,6 @@
 # SPECS: Decoupling Multimodal Learning via  Self-distilled Preference-based Cold Start
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

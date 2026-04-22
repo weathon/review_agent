@@ -1,5 +1,6 @@
 # TokenTune: Dual-Level Utility Estimation for Scalable Data Selection in Instruction Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

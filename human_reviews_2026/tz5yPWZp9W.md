@@ -1,5 +1,6 @@
 # TRAC: Tensor-Train based Across-layer Compression for Parameter-Efficient Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 0, 2
 

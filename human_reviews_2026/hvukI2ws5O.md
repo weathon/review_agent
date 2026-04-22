@@ -1,5 +1,6 @@
 # Implicit Inversion turns CLIP into a Decoder
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

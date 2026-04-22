@@ -1,5 +1,6 @@
 # Skywork-Reward-V2: Scaling Preference Data Curation via Human-AI Synergy
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 6
 

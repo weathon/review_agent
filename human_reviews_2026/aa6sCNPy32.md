@@ -1,5 +1,6 @@
 # Motion-Aware Concept Alignment for Consistent Video Editing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Echo: Towards Advanced Audio Comprehension via Audio-Interleaved Reasoning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Are LLMs Ready for English Standardized Tests? A Benchmarking and Elicitation Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

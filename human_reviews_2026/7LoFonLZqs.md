@@ -1,5 +1,6 @@
 # Greater than the Sum of Its Parts:  Building Substructure into Protein Encoding Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

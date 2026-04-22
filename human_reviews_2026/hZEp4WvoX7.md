@@ -1,5 +1,6 @@
 # BASE-Q: Bias and Asymmetric Scaling Enhanced Rotational Quantization for Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

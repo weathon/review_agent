@@ -1,5 +1,6 @@
 # RETA: Real-Time and Expressive Talking Head Animation without Emotion Label
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

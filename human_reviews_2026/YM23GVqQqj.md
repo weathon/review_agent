@@ -1,5 +1,6 @@
 # Stealthy Backdoor Attack in Reinforcement Learning via Bi-level Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

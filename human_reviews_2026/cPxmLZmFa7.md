@@ -1,5 +1,6 @@
 # Local Entropy Search over Descent Sequences for Bayesian Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 10
 

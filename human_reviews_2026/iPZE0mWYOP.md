@@ -1,5 +1,6 @@
 # Principal Components for Neural Network Initialization: A Novel Approach to Explainability and Efficiency
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

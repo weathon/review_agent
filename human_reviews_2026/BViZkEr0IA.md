@@ -1,5 +1,6 @@
 # The Mechanistic Emergence of Symbol Grounding in Language Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 4, 6
 
@@ -141,10 +142,14 @@ By perturbing specific attention heads, they demonstrate that symbol grounding i
 
 ### Questions
 * It is unclear how attention heads act as a mechanistic pathway for symbol grounding. What is the precise mechanism introduced by these heads? How do earlier-layer heads influence the residual streams that, in turn, affect later layers? Why does grounding typically emerge in intermediate rather than early or late layers?
-* Choice of mismatch tokens:  More discussion is needed on how mismatch tokens are selected, especially within the same semantic category, as this could strongly affect the interpretability of the surprisal effects.
-* Surprisal distribution:  I am intrigued that the VLMs exhibit non-deterministic surprisal. It would be informative to visualize the distribution of surprisal values across the token dictionary and to analyze how they relate to different semantic categories or levels of abstraction.
-* Abstract category representation:  How does grounding behave for hierarchical semantic categories (e.g. elephant -> mammal -> animal)? For example, if the visual scene depicts an elephant but the text says “the animal,” does the attention head for the abstract category (“animal”) emerge earlier or later than the one for the specific concept (“elephant”)? 
-* Behavioral observation:  it is puzzling that symbol grounding does not emerge in LSTMs. I am curious to hear the author's explanation on this observation.
+* Choice of mismatch tokens:
+ More discussion is needed on how mismatch tokens are selected, especially within the same semantic category, as this could strongly affect the interpretability of the surprisal effects.
+* Surprisal distribution: 
+I am intrigued that the VLMs exhibit non-deterministic surprisal. It would be informative to visualize the distribution of surprisal values across the token dictionary and to analyze how they relate to different semantic categories or levels of abstraction.
+* Abstract category representation:
+ How does grounding behave for hierarchical semantic categories (e.g. elephant -> mammal -> animal)? For example, if the visual scene depicts an elephant but the text says “the animal,” does the attention head for the abstract category (“animal”) emerge earlier or later than the one for the specific concept (“elephant”)? 
+* Behavioral observation:
+ it is puzzling that symbol grounding does not emerge in LSTMs. I am curious to hear the author's explanation on this observation.
 * What is the relation of this work to the work by Pavlick discussing symbolic grounding in LLMs?
 
 Reference:

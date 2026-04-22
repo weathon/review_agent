@@ -1,5 +1,6 @@
 # Not All Who Wander Are Lost: Hallucinations as Neutral Dynamics in Residual Transformers
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 6, 2, 2, 0
 

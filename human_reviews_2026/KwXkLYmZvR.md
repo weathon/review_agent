@@ -1,5 +1,6 @@
 # Exploring Specular Reflection Inconsistency for Generalizable Face Forgery Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

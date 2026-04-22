@@ -1,5 +1,6 @@
 # Paying More Attention to Images in Large-scale Dataset Compression
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

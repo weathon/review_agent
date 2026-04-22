@@ -1,5 +1,6 @@
 # Worse Together: Understanding the Brittleness of Multimodal Models on Rare Concept Pairs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

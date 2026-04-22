@@ -1,5 +1,6 @@
 # OwlEye: Zero-Shot Learner for Cross-Domain Graph Data Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

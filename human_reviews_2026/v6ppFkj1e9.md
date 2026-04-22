@@ -1,5 +1,6 @@
 # Efficient Training-Free High-Resolution Synthesis with Energy Rectification in Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 6
 

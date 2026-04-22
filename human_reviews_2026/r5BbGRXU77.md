@@ -1,5 +1,6 @@
 # SGMem: Sentence Graph Memory for Long-Term Conversational Agents
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

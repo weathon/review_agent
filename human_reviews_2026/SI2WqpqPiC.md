@@ -1,5 +1,6 @@
 # Group-Wise Optimization for Self-Extensible Codebooks in Vector Quantized Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

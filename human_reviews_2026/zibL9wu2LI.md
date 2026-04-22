@@ -1,5 +1,6 @@
 # InSTA: Towards Internet-Scale Training For Agents
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 10, 4
 

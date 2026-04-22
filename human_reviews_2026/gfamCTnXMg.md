@@ -1,5 +1,6 @@
 # CellxPert: An Efficient Reasoning Language Model for Single-Cell and Spatial Multi-Omics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 6, 2, 2
 

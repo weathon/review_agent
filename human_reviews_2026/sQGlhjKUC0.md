@@ -1,5 +1,6 @@
 # To Sink or Not to Sink: Visual Information Pathways in Large Vision-Language Models
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6, 8
 

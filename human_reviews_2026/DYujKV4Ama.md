@@ -1,5 +1,6 @@
 # Your Discriminative Model is Secretly a Generative Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

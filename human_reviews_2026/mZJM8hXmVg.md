@@ -1,5 +1,6 @@
 # Advancing Multimodal Fusion on Heterogeneous Data with Physics-inspired Attention
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Efficient Cell Painting Image Representation Learning via Cross-Well Aligned Masked Siamese Network
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

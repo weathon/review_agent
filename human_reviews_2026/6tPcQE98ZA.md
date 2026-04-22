@@ -1,5 +1,6 @@
 # Benchmark Datasets for Lead-Lag Forecasting on Social Platforms
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

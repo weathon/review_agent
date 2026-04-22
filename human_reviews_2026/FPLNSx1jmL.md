@@ -1,5 +1,6 @@
 # Improving Developer Emotion Classification via LLM-Based Augmentation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

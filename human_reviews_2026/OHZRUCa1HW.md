@@ -1,5 +1,6 @@
 # Unconditional Human Motion and Shape Generation via Balanced Score-Based Diffusion
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

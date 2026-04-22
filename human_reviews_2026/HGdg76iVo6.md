@@ -1,5 +1,6 @@
 # Which Heads Matter for Reasoning? RL-Guided KV Cache Compression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

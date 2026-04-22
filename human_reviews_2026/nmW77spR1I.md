@@ -1,5 +1,6 @@
 # Vision-Language-Action Pretraining from Large-Scale Human Videos
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 6, 6, 8
 

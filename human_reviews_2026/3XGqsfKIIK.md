@@ -1,5 +1,6 @@
 # SplitGaussian: Reconstructing Dynamic Scenes via Visual Geometry Decomposition
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

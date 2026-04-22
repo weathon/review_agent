@@ -1,5 +1,6 @@
 # Benchmarking Bias Mitigation Toward Fairness Without Harm from Vision to LVLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

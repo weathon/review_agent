@@ -1,5 +1,6 @@
 # A Hybrid Feature Tree-Based Approach for Explainable LLMs in Domain-Specific Knowledge Management
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

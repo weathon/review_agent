@@ -1,5 +1,6 @@
 # AHELM: A Holistic Evaluation of Audio-Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

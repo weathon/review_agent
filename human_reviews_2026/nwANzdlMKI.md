@@ -1,5 +1,6 @@
 # TherapyGym: Evaluating and Aligning Clinical Fidelity and Safety in Therapy Chatbots
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

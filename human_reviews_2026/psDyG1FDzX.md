@@ -1,5 +1,6 @@
 # Large Language Models as a Computable Surrogate to Solomonoff Induction
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 4
 

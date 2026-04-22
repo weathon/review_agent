@@ -1,5 +1,6 @@
 # PRISM: A Unified and Generalizable Adversarial Robustness Evaluation Framework for LLM-based Classification
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 
@@ -27,7 +28,8 @@ This paper proposes a unified framework for assessing the robustness and vulnera
 
 2. The authors provide sufficient evidence to support the effectiveness of their proposed method.
 
-3.  This paper is well-written, making it easy to follow.
+3. 
+This paper is well-written, making it easy to follow.
 
 ### Weaknesses
 1. This paper reads more like a technical report than a research paper. It essentially reproduces techniques from multiple prior works and combines them into a framework for evaluating LLM robustness. The overall framework heavily relies on existing research and task-specific prompt engineering, both of which limit its novelty and generalizability (as changing the task requires redesigning the prompt).

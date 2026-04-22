@@ -1,5 +1,6 @@
 # Feature Dynamics as Implicit Data Augmentation: A Depth-Decomposed View on Deep Neural Network Generalization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 0, 4, 6
 

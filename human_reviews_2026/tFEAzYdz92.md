@@ -1,5 +1,6 @@
 # OR-PRM: A Process Reward Model for Algorithmic Problem in Operations Research
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 8
 

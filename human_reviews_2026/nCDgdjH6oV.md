@@ -1,5 +1,6 @@
 # Neural Catalog: Scaling Species Recognition with Catalog of Life–Augmented Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

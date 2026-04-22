@@ -1,5 +1,6 @@
 # IV-Bench: A Benchmark for Image-Grounded Video Perception and Reasoning in Multimodal LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

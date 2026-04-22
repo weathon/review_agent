@@ -1,5 +1,6 @@
 # GraphCPD: Coherent Point Drift for Point Cloud Registration via Graph Signal Processing
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

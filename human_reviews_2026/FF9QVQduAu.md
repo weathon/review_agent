@@ -1,5 +1,6 @@
 # Towards a Foundation Model for Crowdsourced Label Aggregation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

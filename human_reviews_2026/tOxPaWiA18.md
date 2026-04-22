@@ -1,5 +1,6 @@
 # The Effect of Temporal Resolution in Offline Temporal Difference Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 4
 

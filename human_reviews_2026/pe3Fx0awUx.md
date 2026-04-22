@@ -1,5 +1,6 @@
 # Enhancing Vision-Language Reasoning via Reinforcement Learning with Scalable Multimodal QA Synthesis
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 8
 

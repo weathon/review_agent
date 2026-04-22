@@ -1,5 +1,6 @@
 # Learn to be Honest: Mitigate LLMs' Overconfidence for Improving Hallucination Detection with Self-Hesitation Activation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

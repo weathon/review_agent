@@ -1,5 +1,6 @@
 # Semi-structured LLM Reasoners Can Be Rigorously Audited
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

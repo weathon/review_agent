@@ -1,5 +1,6 @@
 # Head-Level Mechanistic Attribution for Hallucination Control: Training-Free Counteractive Pruning in LVLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

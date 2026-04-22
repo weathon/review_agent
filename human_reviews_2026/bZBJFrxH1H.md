@@ -1,5 +1,6 @@
 # Distillation of Large Language Models via Concrete Score Matching
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

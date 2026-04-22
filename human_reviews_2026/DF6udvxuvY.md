@@ -1,5 +1,6 @@
 # From Pixels to Words -- Towards Native Vision-Language Primitives at Scale
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

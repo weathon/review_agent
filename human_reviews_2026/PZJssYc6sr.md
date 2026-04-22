@@ -1,5 +1,6 @@
 # Efficient Estimation of Kernel Surrogate Models for Task Attribution
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

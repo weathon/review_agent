@@ -1,5 +1,6 @@
 # Multi-Domain Riemannian Graph Gluing for Building Graph Foundation Models
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 4
 

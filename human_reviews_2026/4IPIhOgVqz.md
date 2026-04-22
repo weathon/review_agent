@@ -1,5 +1,6 @@
 # DoFlow: Flow-based Generative Models for Interventional and Counterfactual Forecasting on Time Series
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

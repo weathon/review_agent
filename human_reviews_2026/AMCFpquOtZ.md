@@ -1,5 +1,6 @@
 # Certifying the Full YOLO Pipeline: A Probabilistic Verification Approach
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8, 4
 

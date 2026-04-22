@@ -1,5 +1,6 @@
 # Consistency Models as Plug-and-Play Priors for Inverse Problems
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # CMQuant: A Quantization-Aware Parameter-Efficient Fine-Tuning Framework for 4-Bit Consistency Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

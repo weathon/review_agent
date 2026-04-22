@@ -1,5 +1,6 @@
 # Dual-Robust Cross-Domain Offline Reinforcement Learning Against Dynamics Shifts
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

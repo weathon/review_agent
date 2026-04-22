@@ -1,5 +1,6 @@
 # BoundRL: Efficient Structured Text Segmentation through Reinforced Boundary Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

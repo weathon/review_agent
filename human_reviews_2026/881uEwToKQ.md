@@ -1,5 +1,6 @@
 # MoNE: Replacing Redundant Experts with Lightweight Novices for Structured Pruning of MoE
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

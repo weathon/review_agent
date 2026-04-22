@@ -1,5 +1,6 @@
 # InfBaGel: Human-Object-Scene Interaction Generation with Dynamic Perception and Iterative Refinement
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

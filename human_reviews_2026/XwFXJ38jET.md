@@ -1,5 +1,6 @@
 # ST-VLO: Unified Spatio-Temporal Correlation for Visual-LiDAR Odometry with Temporal Drift Compensation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

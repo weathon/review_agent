@@ -1,5 +1,6 @@
 # Group Fairness Meets the Black Box: Enabling Fair Algorithms on Closed LLMs via Post-Processing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

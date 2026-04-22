@@ -1,5 +1,6 @@
 # Multi-marginal temporal Schrödinger Bridge Matching for video generation from unpaired data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 4, 0
 

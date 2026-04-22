@@ -1,5 +1,6 @@
 # Clue2Geo: Fine-Grained Image Geolocation via Cluemap and Multi-Stage Fine-Tuning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

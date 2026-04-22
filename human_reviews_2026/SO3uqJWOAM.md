@@ -1,5 +1,6 @@
 # Scalable Evaluation of Closed-Set and Open-Set Semantic and Spatial Alignment in Layout-Guided Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

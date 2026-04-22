@@ -1,5 +1,6 @@
 # Identification of Task Affinity for Multi-Task Learning based on Divergence of Task Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

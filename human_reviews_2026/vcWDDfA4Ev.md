@@ -1,5 +1,6 @@
 # ADEPT: Continual Pretraining via Adaptive Expansion and Dynamic Decoupled Tuning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 
@@ -47,9 +48,11 @@ Thank you for this well-written and insightful paper. The proposed ADEPT framewo
 
 3. **Minor Proofreading and Formatting Suggestions**: I noticed a few minor typos that could be easily addressed. Could the authors perform a final proofread to catch minor errors? A few examples I noted include:
 
-    - Page 2, Figure 1: The label "Target Domian Extension" appears to have a typo. 
+    - Page 2, Figure 1: The label "Target Domian Extension" appears to have a typo.
 
-    - Page 3, Section 2.2: In the first paragraph, the corpus is described as something that "servers as the probing ground". The correct grammar would be "serves as the probing ground". 
+
+    - Page 3, Section 2.2: In the first paragraph, the corpus is described as something that "servers as the probing ground". The correct grammar would be "serves as the probing ground".
+
 
     - Page 29, Appendix E: In the table 9, the method name "Importance Cumulatation" is misspelled. It should likely be "Importance Cumulation" or "Importance Accumulation".
 

@@ -1,5 +1,6 @@
 # Squeeze3D: Your 3D Generation Model is Secretly an Extreme Neural Compressor
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

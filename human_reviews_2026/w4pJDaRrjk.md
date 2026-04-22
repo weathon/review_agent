@@ -1,5 +1,6 @@
 # MegaScience: Pushing the Frontiers of Open Post-Training Datasets for Science Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

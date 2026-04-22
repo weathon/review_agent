@@ -1,5 +1,6 @@
 # Exact Combinatorial Optimization for Synchronization of Partial Multi-Matching
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 4, 6, 10
 

@@ -1,5 +1,6 @@
 # SPRINT: Stochastic Performative Prediction With Variance Reduction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

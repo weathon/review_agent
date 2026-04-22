@@ -1,5 +1,6 @@
 # MoFE-Time: Mixture of Frequency Domain Experts for Time-Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 

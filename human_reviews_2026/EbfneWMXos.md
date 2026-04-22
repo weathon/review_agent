@@ -1,5 +1,6 @@
 # Observe-Then-Think: Learning to Elicit Multimodal Understanding by Decoupling Perception and Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Is Graph Unlearning Ready for Practice? A Benchmark on Efficiency, Utility, and Forgetting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

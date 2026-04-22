@@ -1,5 +1,6 @@
 # SENTINEL: A Multi-Level Formal Framework for Safety Evaluation of LLM-based Embodied Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

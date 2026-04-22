@@ -1,5 +1,6 @@
 # An Analysis of the Cauchy Method for Different Steplength Coefficient
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

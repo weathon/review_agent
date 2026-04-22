@@ -1,5 +1,6 @@
 # gp2Scale: A Class of Compactly-Supported Non-Stationary Kernels and Distributed Computing for Exact Gaussian Processes on 10 Million Data Points
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # ``Noisier'’ Noise Contrastive Estimation is (Almost) Maximum Likelihood
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

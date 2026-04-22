@@ -1,5 +1,6 @@
 # CoPRS: Learning Positional Prior from Chain-of-Thought for Reasoning Segmentation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

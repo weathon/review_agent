@@ -1,5 +1,6 @@
 # WRING Out The Bias: A Rotation-Based Alternative To Projection Debiasing
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

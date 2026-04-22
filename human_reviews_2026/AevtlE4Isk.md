@@ -1,5 +1,6 @@
 # EReLiFM: Evidential Reliability-Aware Residual Flow Meta-Learning for Open-Set Domain Generalization under Noisy Labels
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 6
 

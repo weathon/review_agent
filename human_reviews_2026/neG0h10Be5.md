@@ -1,5 +1,6 @@
 # Few-Shot Adversarial Low-Rank Fine-Tuning of Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

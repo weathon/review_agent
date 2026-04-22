@@ -1,5 +1,6 @@
 # PLoRA: Efficient LoRA Hyperparameter Tuning for Large Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

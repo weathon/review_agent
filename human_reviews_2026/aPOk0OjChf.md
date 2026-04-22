@@ -1,5 +1,6 @@
 # Code Researcher: Deep Research Agent for Large Systems Code and Commit History
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

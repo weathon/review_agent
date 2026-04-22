@@ -1,5 +1,6 @@
 # LiNC: Lightweight Noise Correction via Adaptive Label Refinement
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 2, 4
 

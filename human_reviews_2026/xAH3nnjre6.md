@@ -1,5 +1,6 @@
 # IPCP: Interpreter, Planner, Checker, and Painter Dialogue for Compositional Text-to-Image Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

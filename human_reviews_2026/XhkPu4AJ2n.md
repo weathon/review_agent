@@ -1,5 +1,6 @@
 # Beyond Dual Representations: Collaborative Learning for Semi-Supervised LiDAR Semantic Segmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

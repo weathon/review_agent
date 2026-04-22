@@ -1,5 +1,6 @@
 # EmotionHallucer: Evaluating Emotion Hallucinations in Multimodal Large Language Models
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6, 4
 

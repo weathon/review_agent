@@ -1,5 +1,6 @@
 # Quantum-Classical Knowledge Distillation via Quantum Soft Labels
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 6, 4, 2
 

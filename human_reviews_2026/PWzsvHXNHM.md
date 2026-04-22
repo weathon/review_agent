@@ -1,5 +1,6 @@
 # Select the Key, Then Generate the Rest: Improving Multi-Modal Learning with Limited Data Budget
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

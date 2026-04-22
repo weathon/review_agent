@@ -1,5 +1,6 @@
 # Chance-constrained Flow Matching for High-Fidelity Constraint-aware Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

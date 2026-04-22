@@ -1,5 +1,6 @@
 # UrbanFusion: Stochastic Multimodal Fusion for Contrastive Learning of Robust Spatial Representations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

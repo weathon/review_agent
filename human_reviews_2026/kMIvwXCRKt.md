@@ -1,5 +1,6 @@
 # VEFlow: Training-free Text to Video Editing via Inversion-Free Video Editing Flow
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 0
 

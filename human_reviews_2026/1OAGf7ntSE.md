@@ -1,5 +1,6 @@
 # Language Identification in the Limit with Computational Trace
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

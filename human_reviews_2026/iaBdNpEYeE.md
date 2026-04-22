@@ -1,5 +1,6 @@
 # Aegis: Towards Governance, Integrity, and Security of AI Voice Agents
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 2, 4, 6, 2, 4
 

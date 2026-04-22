@@ -1,5 +1,6 @@
 # Concise Reasoning in the Lens of Lagrangian Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

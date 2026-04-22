@@ -1,5 +1,6 @@
 # Newton-PINet: A fast physics-informed neural network with Newton linearization for meta-learning nonlinear PDEs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

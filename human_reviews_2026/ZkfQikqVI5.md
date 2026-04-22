@@ -1,5 +1,6 @@
 # White-Box Prompt Transformers: Variationally Grounded Prompt–Attention Coupling for Unified Image Restoration
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

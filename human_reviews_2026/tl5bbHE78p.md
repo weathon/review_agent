@@ -1,5 +1,6 @@
 # FlowLet: Conditional 3D Brain MRI Synthesis using Wavelet Flow Matching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

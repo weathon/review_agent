@@ -1,5 +1,6 @@
 # Contrastive Residual Energy Test-time Adaptation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

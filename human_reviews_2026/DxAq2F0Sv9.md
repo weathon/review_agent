@@ -1,5 +1,6 @@
 # Provably Convergent and Private Distributed Optimization via Smoothed Normalization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

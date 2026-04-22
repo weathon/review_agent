@@ -1,5 +1,6 @@
 # ReMix: Reinforcement Routing for Mixtures of LoRAs in LLM Finetuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

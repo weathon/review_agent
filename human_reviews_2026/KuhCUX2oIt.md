@@ -1,5 +1,6 @@
 # LEAD: Large Foundation Model for EEG-Based Alzheimer’s Disease Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Latent Personality Alignment: Improving harmlessness without mentioning harms
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

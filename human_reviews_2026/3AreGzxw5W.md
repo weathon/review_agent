@@ -1,5 +1,6 @@
 # Ctrl-Z Sampling: Diffusion Sampling with Controlled Random Zigzag Explorations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

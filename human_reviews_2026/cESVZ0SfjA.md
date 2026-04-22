@@ -1,5 +1,6 @@
 # Label Transfer Hypothesis: A Clinical Prior Knowledge-Guided Approach for Disease Diagnosis
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

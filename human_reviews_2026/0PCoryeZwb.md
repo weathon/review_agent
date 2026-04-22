@@ -1,5 +1,6 @@
 # Overconfidence in LLM-as-a-Judge: Diagnosis and Confidence-Driven Solution
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

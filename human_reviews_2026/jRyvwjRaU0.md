@@ -1,5 +1,6 @@
 # Gradually Compacting Large Language Models for Reasoning Like a Boiling Frog
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

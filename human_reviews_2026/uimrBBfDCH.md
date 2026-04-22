@@ -1,5 +1,6 @@
 # FlowGen: Synthesizing Diverse Flowcharts to Enhance and Benchmark MLLM Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

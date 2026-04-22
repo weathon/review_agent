@@ -1,5 +1,6 @@
 # Towards Efficient Post-Training Quantization For Large Vision-Language Models Via Token-Wise Redundancy Elimination
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

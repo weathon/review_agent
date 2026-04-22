@@ -1,5 +1,6 @@
 # Mitigating Disparate Impact of Differentially Private Learning through Bounded Adaptive Clipping
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 4, 4, 4, 2
 

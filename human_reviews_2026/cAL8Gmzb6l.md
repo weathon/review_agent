@@ -1,5 +1,6 @@
 # Faithful Rule Learning for Tabular Data Cell Completion
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

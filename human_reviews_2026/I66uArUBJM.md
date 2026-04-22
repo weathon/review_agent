@@ -1,5 +1,6 @@
 # Fast Generation, Forecasting, and Imputation of Multivariate Irregular Time Series with OUFlow
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

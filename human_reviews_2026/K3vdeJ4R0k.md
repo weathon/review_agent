@@ -1,5 +1,6 @@
 # Towards Scalable Distance-Enhanced Graph Neural Network
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

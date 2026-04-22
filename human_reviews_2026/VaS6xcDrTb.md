@@ -1,5 +1,6 @@
 # Special Unitary Parameterized Estimators of Rotation
 
+- Avg Score: 8.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8, 10
 

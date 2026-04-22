@@ -1,5 +1,6 @@
 # Memorize or Generalize? Evaluating LLM Code Generation with Code Rewriting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

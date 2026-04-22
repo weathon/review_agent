@@ -1,5 +1,6 @@
 # Midway Network: Learning Representations for Recognition and Motion from Latent Dynamics
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

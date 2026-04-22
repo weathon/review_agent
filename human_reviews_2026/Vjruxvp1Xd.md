@@ -1,5 +1,6 @@
 # Agent-X: Evaluating Deep Multimodal Reasoning in Vision-Centric Agentic Tasks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # DaMo: Data Mixing Optimizer in Fine-tuning  Multimodal LLMs for Mobile Phone  Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

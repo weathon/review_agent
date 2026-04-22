@@ -1,5 +1,6 @@
 # Matrix-Free Least Squares Solvers: Values, Gradients, and What to Do With Them
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

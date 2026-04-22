@@ -1,5 +1,6 @@
 # ProSafePrune: Projected Safety Pruning for Mitigating Over-Refusal in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # OffTopicEval: When Large Language Models Enter the Wrong Chat, Almost Always!
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

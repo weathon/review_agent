@@ -1,5 +1,6 @@
 # UDIS: A User-query Driven Framework for Image Forgery Localization
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 8, 8, 4
 

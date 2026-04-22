@@ -1,5 +1,6 @@
 # Closing the Modality Gap for Mixed Modality Search
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 

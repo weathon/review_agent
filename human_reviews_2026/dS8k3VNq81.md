@@ -1,5 +1,6 @@
 # Oh SnapMMD! Forecasting stochastic dynamics beyond the Schrödinger bridge’s end
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

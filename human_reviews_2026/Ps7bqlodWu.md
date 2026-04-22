@@ -1,5 +1,6 @@
 # Client-Aware Multimodal Distillation with Adaptive Aggregation for Robust Federated Learning in Noisy and Adversarial Environments
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

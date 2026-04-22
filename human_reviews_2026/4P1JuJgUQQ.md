@@ -1,5 +1,6 @@
 # Decision Making under Imperfect Recall: Algorithms and Benchmarks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

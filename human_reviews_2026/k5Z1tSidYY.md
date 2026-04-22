@@ -1,5 +1,6 @@
 # Adaptive Fourier Decomposition-guided Neural Operator Design for Inverse PDE Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

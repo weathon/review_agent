@@ -1,5 +1,6 @@
 # Teachers That Listen: Adaptive Student-Aware Distillation for Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

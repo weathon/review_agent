@@ -1,5 +1,6 @@
 # Adaptive Mixing of Non-Invariant Information for Generalized Diffusion Policy
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4, 2
 

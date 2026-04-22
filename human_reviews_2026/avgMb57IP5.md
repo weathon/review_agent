@@ -1,5 +1,6 @@
 # New Hybrid Fine-Tuning Paradigm for LLMs:  Algorithm Design and Convergence Analysis Framework
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Evaluating off-the-shell LLMs’  Red-teaming Ability  for Multi-round Jailbreak Attack
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 0, 4, 4
 

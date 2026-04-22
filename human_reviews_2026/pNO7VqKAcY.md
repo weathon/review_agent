@@ -1,5 +1,6 @@
 # DiffBED: Scaling Bayesian Experimental Design to High-Dimensions
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4
 

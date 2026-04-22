@@ -1,5 +1,6 @@
 # GVote: Adaptive Per-request KV-Cache Compression without Manually Setting Budget
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

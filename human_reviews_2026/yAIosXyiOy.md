@@ -1,5 +1,6 @@
 # MoSE: Decoupled Tuning for Forgetting-Resilient Multi-task Fine-tuning of LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

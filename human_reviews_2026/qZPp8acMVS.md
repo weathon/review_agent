@@ -1,5 +1,6 @@
 # Curvature-Aware Residual Prediction for Stable and Faithful Diffusion Transformer Acceleration Under Large Sampling Intervals
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

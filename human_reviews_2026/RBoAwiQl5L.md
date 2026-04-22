@@ -1,5 +1,6 @@
 # ZeroGR: A Generalizable and Scalable Framework for Zero-Shot Generative Retrieval
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

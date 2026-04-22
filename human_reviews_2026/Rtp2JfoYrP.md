@@ -1,5 +1,6 @@
 # Decoupled Human-Object Interaction Inference Addressing Architectural Order Dependency in the Query-based Model
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6, 0
 

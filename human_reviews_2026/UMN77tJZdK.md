@@ -1,5 +1,6 @@
 # GraphPlan: Graph-enhanced Planning via Thinking LLMs for Embodied Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

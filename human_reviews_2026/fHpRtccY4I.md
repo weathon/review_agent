@@ -1,5 +1,6 @@
 # ERIS: Enhancing Privacy and Communication Efficiency in Serverless Federated Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

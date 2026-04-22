@@ -1,5 +1,6 @@
 # Disentangled representation learning through unsupervised symmetry group discovery
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 

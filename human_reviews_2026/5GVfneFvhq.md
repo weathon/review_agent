@@ -1,5 +1,6 @@
 # WaterDrum: Watermark-based Data-centric Unlearning Metric
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

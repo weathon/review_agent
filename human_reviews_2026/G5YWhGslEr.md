@@ -1,5 +1,6 @@
 # History-Aware Transformation of ReID Features for Multiple Object Tracking
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

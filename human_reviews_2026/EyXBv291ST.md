@@ -1,5 +1,6 @@
 # Effective Unlearning in LLMs Relies on the Right Data Retention Strategy
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Feasible Policy Optimization for Safe Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 4
 

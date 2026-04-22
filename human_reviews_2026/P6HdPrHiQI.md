@@ -1,5 +1,6 @@
 # Estimating Time Series Foundation Model Transferability via In-Context Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

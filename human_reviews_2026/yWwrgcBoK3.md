@@ -1,5 +1,6 @@
 # RedTeamCUA: Realistic Adversarial Testing of Computer-Use Agents in Hybrid Web-OS Environments
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 4
 

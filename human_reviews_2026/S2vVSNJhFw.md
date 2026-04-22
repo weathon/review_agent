@@ -1,5 +1,6 @@
 # Dynamic Contrastive Reinforcement Learning for Adaptive Code-Text Alignment via Multi-Modal Fusion
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4, 2
 

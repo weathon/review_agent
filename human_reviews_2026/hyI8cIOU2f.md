@@ -1,5 +1,6 @@
 # Are LLMs Better Formalizers than Solvers on Complex Problems?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

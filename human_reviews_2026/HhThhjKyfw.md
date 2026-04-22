@@ -1,5 +1,6 @@
 # WSM: Decay-Free Learning Rate Schedule via Checkpoint Merging for LLM Pre-training
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 2, 10, 10
 

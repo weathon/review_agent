@@ -1,5 +1,6 @@
 # ENACT: Evaluating Embodied Cognition with World Modeling of Egocentric Interaction
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 4
 

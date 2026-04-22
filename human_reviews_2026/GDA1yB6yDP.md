@@ -1,5 +1,6 @@
 # Not Search, But Scan: Benchmarking MLLMs on Scan-Oriented Academic Paper Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 8
 

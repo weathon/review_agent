@@ -1,5 +1,6 @@
 # Context-aware Heterogeneous Graph-driven Multimodal Representation Learning for Emotion Recognition
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

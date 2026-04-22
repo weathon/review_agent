@@ -1,5 +1,6 @@
 # STAC: When Innocent Tools Form Dangerous Chains to Jailbreak LLM Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

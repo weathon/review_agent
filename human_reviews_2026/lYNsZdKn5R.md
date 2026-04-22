@@ -1,5 +1,6 @@
 # Steerable Adversarial Scenario Generation through Test-Time Preference Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

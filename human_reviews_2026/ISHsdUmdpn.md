@@ -1,5 +1,6 @@
 # Compute as Teacher: Turning Inference Compute Into Reference-Free Supervision
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

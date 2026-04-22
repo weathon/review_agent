@@ -1,5 +1,6 @@
 # Do Role-Playing Agents Practice What They Preach? Belief-Behavior Alignment in LLM-Based Simulations of Human Trust
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

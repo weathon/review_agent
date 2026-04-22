@@ -1,5 +1,6 @@
 # Language Embedding Meets Dynamic Graph: A New Exploration for Neural Architecture Representation Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

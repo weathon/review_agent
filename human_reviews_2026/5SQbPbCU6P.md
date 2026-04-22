@@ -1,5 +1,6 @@
 # RS-MoE: Collaborative Compression for Mixture-of-Experts LLMs based on Low-Rank and Sparse Approximation
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 4, 4, 6, 2
 

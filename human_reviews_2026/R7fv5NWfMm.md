@@ -1,5 +1,6 @@
 # Randomization Boosts KV Caching, Learning Balances Query Load: A Joint Perspective
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

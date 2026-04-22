@@ -1,5 +1,6 @@
 # DeLiVR: Differential Spatiotemporal Lie Bias for Efficient Video Deraining
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

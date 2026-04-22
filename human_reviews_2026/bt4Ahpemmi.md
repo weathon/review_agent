@@ -1,5 +1,6 @@
 # Conformal Robustness Control: A New Strategy for Robust Decision
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6
 

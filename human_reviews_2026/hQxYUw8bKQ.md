@@ -1,5 +1,6 @@
 # Structure- and Appearance-Rich Training-Free Spatial Control for Text-to-Image Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Evolve to Adapt, Not Guess: A Gradient-Free and Robust Framework for Layer-Wise Fine-Tuning via Evolutionary Learning Rate Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

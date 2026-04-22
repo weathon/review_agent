@@ -1,5 +1,6 @@
 # Scalable Decision Focused Learning via Online Trainable Surrogates
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

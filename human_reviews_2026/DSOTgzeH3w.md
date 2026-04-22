@@ -1,5 +1,6 @@
 # On the Limits of Sparse Autoencoders: A Theoretical Framework and Reweighted Remedy
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

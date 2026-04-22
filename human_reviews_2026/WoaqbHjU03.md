@@ -1,5 +1,6 @@
 # Making A Trade-Off Between Cost and Distance By A Differentiable Way
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

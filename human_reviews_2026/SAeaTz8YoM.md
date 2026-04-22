@@ -1,5 +1,6 @@
 # SysMoBench: Evaluating AI on Formally Specifying Complex Real-World Systems
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 8
 

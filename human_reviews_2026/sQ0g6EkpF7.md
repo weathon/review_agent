@@ -1,5 +1,6 @@
 # RAPID$^3$: Tri-Level Reinforced Acceleration Policies for Diffusion Transformer
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

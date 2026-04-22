@@ -1,5 +1,6 @@
 # IDER: IDempotent Experience Replay for Reliable Continual Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 10
 

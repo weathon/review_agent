@@ -1,5 +1,6 @@
 # ELPO: Ensemble Learning Based Prompt Optimization for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

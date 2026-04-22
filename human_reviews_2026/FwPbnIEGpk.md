@@ -1,5 +1,6 @@
 # A Multi-Institutional Multimodal EEG Benchmark for Foundation Model Generalization and Early Neurological Diagnosis
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 4, 8
 

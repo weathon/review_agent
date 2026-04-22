@@ -1,5 +1,6 @@
 # Scouting for Potential LLMs: A Preliminary Assessment of Domain Adaptability for Supervised Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

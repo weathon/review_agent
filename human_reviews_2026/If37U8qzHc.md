@@ -1,5 +1,6 @@
 # Towards Reversible Model Merging For Low-rank Weights
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

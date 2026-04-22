@@ -1,5 +1,6 @@
 # Learning Representations Through Contrastive Neural Model Checking
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

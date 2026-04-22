@@ -1,5 +1,6 @@
 # Contextual Forgetting: Mitigating Knowledge Obsolescence for Safe Lifelong Robot Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

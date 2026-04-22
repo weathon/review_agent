@@ -1,5 +1,6 @@
 # HG-DCM: History Guided Deep Compartmental Model for Early Stage Pandemic Forecasting
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0
 

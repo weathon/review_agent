@@ -1,5 +1,6 @@
 # The Matthew Effect of AI Programming Assistants: A Hidden Bias in Software Evolution
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4, 2
 

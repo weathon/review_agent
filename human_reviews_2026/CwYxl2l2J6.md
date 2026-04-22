@@ -1,5 +1,6 @@
 # Learning Nonlinear Causal Reductions to Explain Reinforcement Learning Policies
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

@@ -1,5 +1,6 @@
 # How Do Language Models Compose Functions?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

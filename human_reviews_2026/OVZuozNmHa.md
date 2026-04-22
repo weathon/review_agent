@@ -1,5 +1,6 @@
 # Reasoning Matters: Benchmarking and Advancing Spatial Reasoning in Vision-Language Models via Agentic Approaches
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 6
 

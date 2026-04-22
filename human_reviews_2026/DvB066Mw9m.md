@@ -1,5 +1,6 @@
 # Effective Interaction between Quantization and Low-Rank Decomposition based on LLMs
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 0
 

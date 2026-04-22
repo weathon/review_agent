@@ -1,5 +1,6 @@
 # Advancing the understanding of fixed point iterations in deep neural networks: a detailed analytical study
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

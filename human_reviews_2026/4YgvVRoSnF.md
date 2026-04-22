@@ -1,5 +1,6 @@
 # JailbreakLoRA: Your Downloaded LoRA from Sharing Platforms might be Unsafe
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

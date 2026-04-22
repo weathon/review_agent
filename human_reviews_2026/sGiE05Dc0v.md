@@ -1,5 +1,6 @@
 # Recast Your Input via a Mapping Function for Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

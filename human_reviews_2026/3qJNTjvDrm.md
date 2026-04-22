@@ -1,5 +1,6 @@
 # Reasoning-Preserved Safety Alignment for Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

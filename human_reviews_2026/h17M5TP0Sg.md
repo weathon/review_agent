@@ -1,5 +1,6 @@
 # Breaking the Efficiency-Accuracy: Fusion of Rotation Quantization and N:M Sparsity for LLMs Inference
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 8
 

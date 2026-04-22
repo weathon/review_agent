@@ -1,5 +1,6 @@
 # A Tight  Error Bound for Deep Learning via Distribution and Loss Complexity
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # Closing the Safety Gap: Surgical Concept Erasure in Visual Autoregressive Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6, 6
 

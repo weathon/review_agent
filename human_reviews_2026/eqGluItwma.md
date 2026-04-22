@@ -1,5 +1,6 @@
 # GLDS: Global–Local Diversity Selection for Scalable Token Pruning in Vision–Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # BrainAE: Alignment-driven Autoencoder for Bidirectional Visual Encoding and Decoding
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

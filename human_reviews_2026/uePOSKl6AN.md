@@ -1,5 +1,6 @@
 # CAPO: Towards Enhancing LLM Reasoning through Generative Credit Assignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

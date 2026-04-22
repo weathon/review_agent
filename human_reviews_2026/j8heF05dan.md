@@ -1,5 +1,6 @@
 # EffSelect: Efficient Feature Value Selection for Deep Recommender Systems with Mini-Batch Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

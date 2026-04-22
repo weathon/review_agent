@@ -1,5 +1,6 @@
 # Tight Bounds and Achievable Upper Bounds of Minimal Dimensions for Embedding-based Retrieval
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 2, 6, 8, 6
 

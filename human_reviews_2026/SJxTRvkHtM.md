@@ -1,5 +1,6 @@
 # LO-SDA: Latent Optimization for Score-based Atmospheric Data Assimilation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

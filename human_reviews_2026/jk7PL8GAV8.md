@@ -1,5 +1,6 @@
 # Erased but Not Forgotten: How Backdoors Compromise Concept Erasure
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Graph-Enhanced EEG-to-Text Decoding: A Spatio-Temporal Relational Embedding Framework for Brain Signal Translation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 2, 4
 

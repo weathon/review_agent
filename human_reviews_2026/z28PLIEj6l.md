@@ -1,5 +1,6 @@
 # FutureX: An Advanced Live Benchmark for LLM Agents in Future Prediction
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

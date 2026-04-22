@@ -1,5 +1,6 @@
 # CMT-Benchmark: A Benchmark for Condensed Matter Theory Built by Expert Researchers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

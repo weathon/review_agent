@@ -1,5 +1,6 @@
 # PDE-SHARP: PDE Solver Hybrids Through Analysis & Refinement Passes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

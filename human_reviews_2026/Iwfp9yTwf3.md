@@ -1,5 +1,6 @@
 # Stick-Breaking Mixture Normalizing Flows with Component-Wise Tail Adaptation for Variational Inference
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

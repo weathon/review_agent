@@ -1,5 +1,6 @@
 # The Information Bottleneck of Chain-of-Thought and How Latent CoT Overcomes It
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 4, 8, 6, 2, 8
 

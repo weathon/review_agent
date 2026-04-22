@@ -1,5 +1,6 @@
 # Resolving Interference (RI): Disentangling Models for Improved Model Merging
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

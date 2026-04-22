@@ -1,5 +1,6 @@
 # WS-GRPO: Weakly-Supervised Group-Relative Policy Optimization
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

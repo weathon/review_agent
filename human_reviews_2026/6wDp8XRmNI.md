@@ -1,5 +1,6 @@
 # EMFuse: Energy-based Model Fusion for Decision Making
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

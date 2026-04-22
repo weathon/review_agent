@@ -1,5 +1,6 @@
 # Programming with Pixels: Can Computer-Use Agents do Software Engineering?
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6, 6, 6
 

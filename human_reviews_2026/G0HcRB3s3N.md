@@ -1,5 +1,6 @@
 # To View Transform or Not to View Transform: NeRF-based Pre-training Perspective
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

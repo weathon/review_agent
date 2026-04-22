@@ -1,5 +1,6 @@
 # Dual Randomized Smoothing: Beyond Global Noise Variance
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

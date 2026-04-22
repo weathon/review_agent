@@ -1,5 +1,6 @@
 # Less is More: Improving Molecular Force Fields with Minimal Temporal Information
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

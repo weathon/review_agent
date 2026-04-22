@@ -1,5 +1,6 @@
 # OmniActor: A Generalist GUI and Embodied Agent for 2D&3D Worlds
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 10
 

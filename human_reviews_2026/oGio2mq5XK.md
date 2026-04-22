@@ -1,5 +1,6 @@
 # PanoLAM: Large Avatar Model for Gaussian Full-Head Synthesis from One-shot Unposed Image
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

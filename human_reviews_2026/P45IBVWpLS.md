@@ -1,5 +1,6 @@
 # TENET: Leveraging Tests Beyond Validation for Code Generation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

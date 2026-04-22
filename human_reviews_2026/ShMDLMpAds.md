@@ -1,5 +1,6 @@
 # Buzz, Choose, Forget: A Meta-Bandit Framework for Bee-Like Decision Making
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

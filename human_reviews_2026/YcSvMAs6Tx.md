@@ -1,5 +1,6 @@
 # Blessings of Many Good Arms in Multi-Objective Linear Bandits
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

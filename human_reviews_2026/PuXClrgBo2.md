@@ -1,5 +1,6 @@
 # T2VPhysBench: A First‑Principles Benchmark for Physical Consistency in Text‑to‑Video Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

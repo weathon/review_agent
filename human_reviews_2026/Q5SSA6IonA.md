@@ -1,5 +1,6 @@
 # Fourier Neural Filter as Generic Vision Backbone
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

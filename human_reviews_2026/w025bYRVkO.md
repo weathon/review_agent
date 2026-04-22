@@ -1,5 +1,6 @@
 # Knowledgeable Language Models as Black-Box Optimizers for Personalized Medicine
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

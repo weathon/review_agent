@@ -1,5 +1,6 @@
 # Attending on Multilevel Structure of Proteins enables Accurate Prediction of Cold-Start Drug-Target Interactions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

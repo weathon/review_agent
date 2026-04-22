@@ -1,5 +1,6 @@
 # Beyond Consensus: Mitigating the Agreeableness Bias in LLM Judge Evaluations
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # PolyAudio: Advancing Multi-Audio Analysis & Reasoning in Large Audio Language Models
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2, 2
 

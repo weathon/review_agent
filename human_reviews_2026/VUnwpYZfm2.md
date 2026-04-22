@@ -1,5 +1,6 @@
 # Exploring the Boundary of Diffusion-based Methods for Solving Constrained Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

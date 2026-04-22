@@ -1,5 +1,6 @@
 # Online Test-Time Adaptation in Tabular Data with Minimal High-Certainty Samples
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

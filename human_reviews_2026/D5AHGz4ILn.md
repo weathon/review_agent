@@ -1,5 +1,6 @@
 # Lego-Edit: A General Image Editing Framework with Model-Level Bricks and MLLM Builder
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

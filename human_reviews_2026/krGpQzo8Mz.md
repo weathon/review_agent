@@ -1,5 +1,6 @@
 # Latent Speech-Text Transformer
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 10, 6, 2
 

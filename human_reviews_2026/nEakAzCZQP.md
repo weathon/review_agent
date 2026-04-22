@@ -1,5 +1,6 @@
 # Beyond GPS: Tri-Modal Contrastive Learning for Global Geo-Localization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

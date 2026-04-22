@@ -1,5 +1,6 @@
 # CurES: From Gradient Analysis to Efficient Curriculum Learning for Reasoning LLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Peak-Return Greedy Slicing: Subtrajectory Selection for Transformer-based Offline RL
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

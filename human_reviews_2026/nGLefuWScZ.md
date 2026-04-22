@@ -1,5 +1,6 @@
 # FITS: Conditional Diffusion Model for Irregular Time Series Forecasting with Pseudo-future Exogenous Covariates
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

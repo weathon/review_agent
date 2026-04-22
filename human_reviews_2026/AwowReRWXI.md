@@ -1,5 +1,6 @@
 # Beyond Ensembles: Simulating All-Atom Protein Dynamics in a Learned Latent Space
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

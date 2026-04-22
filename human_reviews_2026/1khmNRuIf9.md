@@ -1,5 +1,6 @@
 # MASpi: A Unified Environment for Evaluating Prompt Injection Robustness in LLM-Based Multi-Agent Systems
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

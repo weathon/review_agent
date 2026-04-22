@@ -1,5 +1,6 @@
 # L-FMLC: End-to-End Neuro-Fuzzy Learning for Adaptive and Scalable Interpretability
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

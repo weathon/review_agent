@@ -1,5 +1,6 @@
 # LLM-HFR-RL: Large Language Model (LLM)-Driven Cross-Modal Fine-Grained Alignment and Reinforcement Learning for the Prediction of Heart Failure Risk
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

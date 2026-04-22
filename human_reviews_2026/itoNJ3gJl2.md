@@ -1,5 +1,6 @@
 # Group Representational Position Encoding
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 4
 

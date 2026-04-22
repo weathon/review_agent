@@ -1,5 +1,6 @@
 # Discrete Diffusion VLA: Bringing Discrete Diffusion to Action Decoding in Vision-Language-Action Policies
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 6, 2
 

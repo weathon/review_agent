@@ -1,5 +1,6 @@
 # AVI-Bench: Toward Human-like Audio-Visual Intelligence of Omni-MLLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

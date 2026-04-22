@@ -1,5 +1,6 @@
 # TopGQ: Fast GNN Post-Training Quantization Leveraging Topology Information
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

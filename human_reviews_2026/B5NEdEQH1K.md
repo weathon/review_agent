@@ -1,5 +1,6 @@
 # Jigsaw3D: Disentangled 3D Style Transfer via Patch Shuffling and Masking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

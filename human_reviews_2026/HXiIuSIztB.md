@@ -1,5 +1,6 @@
 # MINED: Probing and Updating  with Multimodal Time-Sensitive Knowledge for Large Multimodal Models
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # VidGuard-R1: AI-Generated Video Detection and Explanation via Reasoning MLLMs and RL
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

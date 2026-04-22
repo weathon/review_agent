@@ -1,5 +1,6 @@
 # TGPO: Temporal Grounded Policy Optimization for Signal Temporal Logic Tasks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

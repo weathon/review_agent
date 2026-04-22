@@ -1,5 +1,6 @@
 # Bridging the Gap Between Homogeneous and Heterogeneous Asynchronous Optimization is Surprisingly Difficult
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

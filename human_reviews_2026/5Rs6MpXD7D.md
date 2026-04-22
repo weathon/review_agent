@@ -1,5 +1,6 @@
 # Scaling Weisfeiler–Leman Expressiveness Analysis to Massive Graphs with GPUs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

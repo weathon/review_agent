@@ -1,5 +1,6 @@
 # Recycling Pretrained Checkpoints: Orthogonal Growth of Mixture-of-Experts for Efficient Large Language Model Pre-Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

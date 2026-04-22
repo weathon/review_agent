@@ -1,5 +1,6 @@
 # Decomposing Policy Optimization into Proxy Objective and Knowledge Distillation for Long-context Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

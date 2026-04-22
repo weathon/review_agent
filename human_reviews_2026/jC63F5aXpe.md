@@ -1,5 +1,6 @@
 # CPMöbius: Iterative Coach–Player Reasoning for Data-Free Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

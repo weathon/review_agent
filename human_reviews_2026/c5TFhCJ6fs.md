@@ -1,5 +1,6 @@
 # Attention Sinks and Compression Valleys in LLMs are Two Sides of the Same Coin
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # TopoMHC: Sequence–Topology Fusion for MHC Binding
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 0, 8
 

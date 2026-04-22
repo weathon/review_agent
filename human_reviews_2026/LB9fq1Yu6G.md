@@ -1,5 +1,6 @@
 # Real-Time Coaching of Human Physical Skills with Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

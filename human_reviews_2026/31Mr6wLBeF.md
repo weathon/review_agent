@@ -1,5 +1,6 @@
 # OPPO: Accelerating PPO-based RLHF via Pipeline Overlap
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

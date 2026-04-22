@@ -1,5 +1,6 @@
 # Point-wise Anomaly Detection via Fold-bifurcation ODE
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

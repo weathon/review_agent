@@ -1,5 +1,6 @@
 # Sharp Monocular View Synthesis in Less Than a Second
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

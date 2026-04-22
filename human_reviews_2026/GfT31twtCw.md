@@ -1,5 +1,6 @@
 # SToRe3D: Sparse Token Relevance in ViTs for Efficient Multi-View 3D Object Detection
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

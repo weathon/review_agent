@@ -1,5 +1,6 @@
 # KnowGuard: Knowledge-Driven Abstention for Multi-Round Clinical Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

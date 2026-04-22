@@ -1,5 +1,6 @@
 # CACD-SEG: Contrastive Alignment Consistent Distillation for All Day Semantic Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

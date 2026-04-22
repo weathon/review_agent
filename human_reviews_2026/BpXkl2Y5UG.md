@@ -1,5 +1,6 @@
 # The Anatomy of Alignment: Decomposing Preference Optimization by Steering Sparse Features
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 
@@ -139,7 +140,8 @@ Regarding (3): The authors note that, given Table 2, “the adapter learns to de
 
 ### Questions
 Where is the benefit of FSRL over prior work? 
-What is the novelty of FSRL with respect to Bayat et al.? Why do you observe decreasing proportions of alignment and style features after training with FSRL?
+What is the novelty of FSRL with respect to Bayat et al.?
+Why do you observe decreasing proportions of alignment and style features after training with FSRL?
 
 ### Soundness
 3

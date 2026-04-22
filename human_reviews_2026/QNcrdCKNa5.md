@@ -1,5 +1,6 @@
 # TopoScorer: a light, interpretable predictor for protein-protein binding affinity
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Rethinking Model Calibration through Spectral Entropy Regularization in Medical Image Segmentation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

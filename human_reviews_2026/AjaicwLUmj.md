@@ -1,5 +1,6 @@
 # Wirbelsäule-Plot for Multivariate Timeseries customized with AIP Agent
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 2, 2, 0
 

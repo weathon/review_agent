@@ -1,5 +1,6 @@
 # Breadcrumbs Reasoning: Memory-Efficient Reasoning with Compression Beacons
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

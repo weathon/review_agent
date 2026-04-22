@@ -1,5 +1,6 @@
 # Robustly Improving LLM Fairness in Realistic Settings via Interpretability
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 
@@ -149,7 +150,8 @@ Protocol for the mitigation
 Overstatement / not fair presentation of the results / weak arguments
 - In some cases the concept editing mitigation seems to be overcorrecting. To the extent that it ends up inducing a pro-stereotypical bias of a comparable, or at times even higher magnitude. E.g., Figure 3 (a) Gemma-3 12B and Mistral,  Figure 5 Gemma-2 27B, Figure 7 Gemma-3 12B. Yet these weaknesses are not commented.
 - Some claims are overstated. For example “biases consistently favor Black over White candidates and female over male candidates across all tested models and scenarios” is strong, yet there are example in the Appendix (e.g., Figure 5 and 6) where the bias is in the opposite direction. It would help to tone the statement down given those results. 
-- Some arguments seem counter intuitive and weak. For example the authors state that “Internal interventions have intuitive advantages over external methods such as prompting. Real-world hiring contexts are inherently complex and multifaceted, involving countless variations of job descriptions, domains, prompts, and candidate information. Ensuring consistently unbiased responses across every possible input scenario via prompt engineering alone may be unrealistic.”  Surely changing the prompt is much more intuitive and easier to do than performing concept editing. Additionally, a “ complex and multifaceted” task surely requires multi-concept editing which, as mentioned above, the current empirical evaluation do not present (and multi concept editing is known to be challenging). 
+- Some arguments seem counter intuitive and weak. For example the authors state that “Internal interventions have intuitive advantages over external methods such as prompting. Real-world hiring contexts are inherently complex and multifaceted, involving countless variations of job descriptions, domains, prompts, and candidate information. Ensuring consistently unbiased responses across every possible input scenario via prompt engineering alone may be unrealistic.”  Surely changing the prompt is much more intuitive and easier to do than performing concept editing. Additionally, a “ complex and multifaceted” task surely requires multi-concept editing which, as mentioned above, the current empirical evaluation do not present (and multi concept editing is known to be challenging).
+
 
 Writing
 - Sampling / dataset construction: The setup uses synthetic or canned “candidate resumes” and “job descriptions” plus added context. But the paper gives limited detail  about how the candidate/resume set was constructed (number of candidates, how demographic attributes were randomized, how subtle cues like “College affiliation” were inserted). While Appendix provides some, but not all, this info the main paper could better summarize it. 
@@ -160,7 +162,8 @@ Writing
 - [Minor] Many key information are in the appendix. For example the exact prompts used appear there but are not referenced from the main paper. In section 3.2 when talking about prompting you should add the reference to the Appendix where the actual prompts are listed.
 
 
-Suggestions 	
+Suggestions
+	
 - You have some hypothesis that adding “only accept candidates in the top 10%” etc… causes the bias to appear but there is no ablation that shows which of these contextual information induce the bias. This would be a great addition to the work.
 - In addition to MMLU it would be great to add Perplexity and some measure of fluency.
 - As mentioned above I don’t believe CoT would be particularly useful. However, an interesting experiments could be to test CoT before and after concept editing and analyze the differences in the CoT. 

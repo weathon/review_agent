@@ -1,5 +1,6 @@
 # How LLMs Learn to Reason: A Complex Network Perspective
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 2, 10, 4
 

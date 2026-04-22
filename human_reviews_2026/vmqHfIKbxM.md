@@ -1,5 +1,6 @@
 # Multi-modal Learning via Slot-Guided Fine-grained Alignment with Pre-trained Uni-modal Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

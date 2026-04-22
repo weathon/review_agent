@@ -1,5 +1,6 @@
 # Revisiting Random Generation Order: Ordinal-Biased Random Training for Efficient Visual Autoregressive Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

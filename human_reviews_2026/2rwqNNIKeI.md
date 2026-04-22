@@ -1,5 +1,6 @@
 # PRISM: Agentic Retrieval with LLMs for Multi-Hop Question Answering
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

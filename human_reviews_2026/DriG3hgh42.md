@@ -1,5 +1,6 @@
 # dLLM-Cache: Accelerating Diffusion Large Language Models with Adaptive Caching
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

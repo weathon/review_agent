@@ -1,5 +1,6 @@
 # PAL: Probing Audio Encoders via LLMs - Audio Information Transfer into LLMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 8, 4, 6, 2
 

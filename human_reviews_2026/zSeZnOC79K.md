@@ -1,5 +1,6 @@
 # Visibility-Uncertainty-guided 3D Gaussian Inpainting via Scene Conceptional Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

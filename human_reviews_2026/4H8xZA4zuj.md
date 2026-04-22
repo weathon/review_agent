@@ -1,5 +1,6 @@
 # On the Interaction of Batch Noise, Adaptivity, and Compression, under $(L_0,L_1)$-Smoothness: An SDE Approach
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 8, 4, 2
 

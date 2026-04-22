@@ -1,5 +1,6 @@
 # How to Lose Inherent Counterfactuality in Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # Offline Reinforcement Learning with Adaptive Feature Fusion
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

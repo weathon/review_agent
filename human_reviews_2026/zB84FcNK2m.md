@@ -1,5 +1,6 @@
 # ResLR: Residual-Low-Rank Surrogates for Stable and Fast Context Adaptive Computing in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

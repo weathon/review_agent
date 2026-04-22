@@ -1,5 +1,6 @@
 # Augmenting Research Ideation with Data: An Empirical Investigation in Social Science
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

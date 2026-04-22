@@ -1,5 +1,6 @@
 # WebSeer: Training Deeper Search Agents through Reinforcement Learning with Self-Reflection
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 8, 6
 

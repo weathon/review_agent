@@ -1,5 +1,6 @@
 # Rubrics as Rewards: Reinforcement Learning Beyond Verifiable Domains
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 4
 

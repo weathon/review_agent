@@ -1,5 +1,6 @@
 # HyperBatch: Scaling Contrastive Learning Batch Sizes by Two Orders of Magnitude
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # GeoPE:A Unified Geometric Positional  Embedding for Structured Tensors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

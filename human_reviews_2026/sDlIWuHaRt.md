@@ -1,5 +1,6 @@
 # Impact of Regularization on Calibration and Robustness: From the Representation Space Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

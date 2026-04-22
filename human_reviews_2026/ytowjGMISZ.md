@@ -1,5 +1,6 @@
 # A Reason-then-Describe Instruction Interpreter for Controllable Video Generation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # SpareTrain: Fault-Tolerant LLM Training via Low-Cost Dual Modular Redundancy
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

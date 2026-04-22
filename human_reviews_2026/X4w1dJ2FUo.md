@@ -1,5 +1,6 @@
 # Scaling Multimodal Temporal Graphs with Event-Adaptive Compression and Sparse Connectivity
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

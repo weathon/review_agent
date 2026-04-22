@@ -1,5 +1,6 @@
 # Rethinking Residual Errors in Compensation-based LLM Quantization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # Learning and Reusing Abstract Latent Actions in a Hippocampal-Entorhinal-Inspired World Model
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 8, 4
 

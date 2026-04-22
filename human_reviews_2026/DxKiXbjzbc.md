@@ -1,5 +1,6 @@
 # How Does RL Induce Skill Composition? A Case Study Using Countdown
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 2, 2, 6, 8
 

@@ -1,5 +1,6 @@
 # Shadow-FT: Tuning Instruct Model via Training on Paired Base Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

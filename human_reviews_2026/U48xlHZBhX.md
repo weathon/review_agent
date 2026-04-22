@@ -1,5 +1,6 @@
 # CausalDiffusion: A Causality-Embedded Diffusion Model for Cross-Modal Physiological Signal Synthesis
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

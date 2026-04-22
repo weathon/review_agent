@@ -1,5 +1,6 @@
 # Class-Wise Disparity in Adversarial Training: Implicit Bias Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

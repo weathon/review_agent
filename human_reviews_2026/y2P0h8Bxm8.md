@@ -1,5 +1,6 @@
 # Towards Faithful and Controllable Personalization via Critique-Post-Edit Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

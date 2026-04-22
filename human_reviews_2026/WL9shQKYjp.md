@@ -1,5 +1,6 @@
 # HistoBench: World History Event Extraction and Cognitive-Level Benchmarking of Generative AI
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2
 

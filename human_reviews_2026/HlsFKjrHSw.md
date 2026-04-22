@@ -1,5 +1,6 @@
 # GenFusion: Feed-forward Human Performance Capture via Progressive Canonical Space Updates
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

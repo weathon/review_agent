@@ -1,5 +1,6 @@
 # LLE-MORL: Locally Linear Extrapolation of Policies for Efficient Multi-Objective Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 6
 

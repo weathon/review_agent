@@ -1,5 +1,6 @@
 # Is it Bigger than a Breadbox: Efficient Cardinality Estimation for Real World Workloads
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

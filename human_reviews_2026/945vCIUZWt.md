@@ -1,5 +1,6 @@
 # Guided and Interpretable Neural Operator Design for Partial Differential Equation Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 0, 8, 6, 6
 

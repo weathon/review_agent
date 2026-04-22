@@ -1,5 +1,6 @@
 # Dynamical properties of dense associative memory
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 2, 10, 8, 8
 

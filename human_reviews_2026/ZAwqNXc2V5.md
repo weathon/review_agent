@@ -1,5 +1,6 @@
 # Forging a Masterpiece from Any Face: A Universal Framework for Face Stylization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

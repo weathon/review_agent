@@ -1,5 +1,6 @@
 # Strategic AI Training Sabotage: State Attacks on Advanced Systems' Development
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

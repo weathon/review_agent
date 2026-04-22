@@ -1,5 +1,6 @@
 # Towards an AI Musician: Synthesizing Sheet Music Problems for Musical Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

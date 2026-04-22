@@ -1,5 +1,6 @@
 # Synchronizing Probabilities in Model-Driven Lossless Compression
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Trajectory-Based Neural Darwinism in Convolutional Neural Networks: Variation, Competition, and Selective Retention
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 6
 

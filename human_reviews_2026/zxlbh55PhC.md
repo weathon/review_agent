@@ -1,5 +1,6 @@
 # Clustering by Denoising: Latent plug-and-play diffusion for single-cell embeddings
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

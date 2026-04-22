@@ -1,5 +1,6 @@
 # Conceptual Belief-Informed Reinforcement Learning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 6
 

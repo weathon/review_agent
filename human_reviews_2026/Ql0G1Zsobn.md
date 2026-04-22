@@ -1,5 +1,6 @@
 # Retrospective Sparse Attention for Efficient Long-Context Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

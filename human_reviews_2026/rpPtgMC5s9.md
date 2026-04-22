@@ -1,5 +1,6 @@
 # Relational Transformer: Toward Zero-Shot Foundation Models for Relational Data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

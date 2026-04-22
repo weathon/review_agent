@@ -1,5 +1,6 @@
 # It's All Connected: A Journey Through Test-Time Memorization, Attentional Bias, Retention, and Online Optimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Neural Darwinism: A Theoretical Framework for Representation Evolution in Convolutional Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # CALM Before the STORM: Unlocking Native Reasoning for Optimization Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

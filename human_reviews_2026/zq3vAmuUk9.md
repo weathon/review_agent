@@ -1,5 +1,6 @@
 # AgentRL: Scaling Agentic Reinforcement Learning with a Multi-Turn, Multi-Task Framework
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

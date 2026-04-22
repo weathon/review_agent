@@ -1,5 +1,6 @@
 # Connecting the Dots: A Chain-of-Collaboration Prompting Framework for LLM Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 2
 

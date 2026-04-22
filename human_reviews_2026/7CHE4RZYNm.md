@@ -1,5 +1,6 @@
 # Lifelong control through Neuro-Evolution
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 2
 

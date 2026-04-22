@@ -1,5 +1,6 @@
 # Entropy-Select: Training-Free Local Entropy Token Compression for Video LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

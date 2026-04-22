@@ -1,5 +1,6 @@
 # Query-Aware Flow Diffusion for Graph-Based RAG with Retrieval Guarantees
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Forget Forgetting: Continual Learning in a World of Abundant Memory
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

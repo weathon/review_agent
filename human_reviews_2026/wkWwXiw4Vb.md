@@ -1,5 +1,6 @@
 # Learning from Mixed-Quality Data via Exploration-Guided Cognitive Manifolds
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

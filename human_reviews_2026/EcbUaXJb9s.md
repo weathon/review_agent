@@ -1,5 +1,6 @@
 # MARWA: Multi-agent retrieval-augmented framework for reliable bioinformatics workflow automation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

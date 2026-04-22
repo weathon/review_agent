@@ -1,5 +1,6 @@
 # Redirection for Erasing Memory (REM): Towards a universal unlearning method for corrupted data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Learning to Play Multi-Follower Bayesian Stackelberg Games
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 10
 

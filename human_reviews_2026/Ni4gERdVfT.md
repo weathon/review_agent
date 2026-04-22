@@ -1,5 +1,6 @@
 # LoraQuant: Mixed-Precision Quantization of LoRA to Ultra-Low Bits
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

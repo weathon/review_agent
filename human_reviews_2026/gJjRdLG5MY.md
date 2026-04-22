@@ -1,5 +1,6 @@
 # A Representer Theorem for Hawkes Processes via Penalized Least Squares Minimization
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 2, 6
 

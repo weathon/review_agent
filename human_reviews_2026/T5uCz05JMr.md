@@ -1,5 +1,6 @@
 # Global Convergence and Pareto Front Exploration in Deep-Neural Actor-Critic Multi-Objective Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

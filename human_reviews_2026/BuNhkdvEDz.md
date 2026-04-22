@@ -1,5 +1,6 @@
 # Can LLMs Reliably Evaluate Themselves? A Probabilistic VC Framework
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

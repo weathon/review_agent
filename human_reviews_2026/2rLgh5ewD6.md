@@ -1,5 +1,6 @@
 # Adaptive Correction Mechanism for Ensuring Conservation Laws in Neural Operators
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

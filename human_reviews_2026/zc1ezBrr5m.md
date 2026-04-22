@@ -1,5 +1,6 @@
 # TaTToo: Tool-Grounded Thinking PRM for Test-Time Scaling in Tabular Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

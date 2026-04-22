@@ -1,5 +1,6 @@
 # EXP-Bench: Can AI Conduct AI Research Experiments?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

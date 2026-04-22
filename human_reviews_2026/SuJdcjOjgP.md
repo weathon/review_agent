@@ -1,5 +1,6 @@
 # NLI : Non-uniform Linear Interpolation Approximation of Nonlinear Operations for Efficient LLMs Inference
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8
 
@@ -108,7 +109,10 @@ It also includes efficiency analysis, proposed hardware implementation and evalu
 ### Weaknesses
 NLI selects cutpoints from the FP16 domain and performs interpolation using FP16 arithmetic (Stages 1–4). A direct comparison with naïve FP16 evaluation of the same nonlinear operations should be provided to contextualize NLI’s advantages. 
 
-- This comparison should include for example: i) error-wise: NLI reports an error of $1.2\sim1.5\times10^{-3}$; what is the corresponding error for plain FP16 evaluation? ii) performance-wise: How do models perform across tasks when nonlinear operations are evaluated directly in FP16? iii) efficiency-wise: How does the computational efficiency of NLI (lookup + FP16 linear arithmetic) compare with that of standard FP16 implementations? Additionally, NLI could also select cutpoints from the FP32 domain and use FP32 arithmetic for Stages 1–4, will there be any efficiency concern (compared to naive FP32 and current fp16 implementations)?
+- This comparison should include for example:
+i) error-wise: NLI reports an error of $1.2\sim1.5\times10^{-3}$; what is the corresponding error for plain FP16 evaluation?
+ii) performance-wise: How do models perform across tasks when nonlinear operations are evaluated directly in FP16?
+iii) efficiency-wise: How does the computational efficiency of NLI (lookup + FP16 linear arithmetic) compare with that of standard FP16 implementations? Additionally, NLI could also select cutpoints from the FP32 domain and use FP32 arithmetic for Stages 1–4, will there be any efficiency concern (compared to naive FP32 and current fp16 implementations)?
 
 Such analyses would substantiate the benefits of NLI over standard FP16 inference.
 

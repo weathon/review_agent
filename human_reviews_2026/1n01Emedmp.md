@@ -1,5 +1,6 @@
 # Exploration for Building Next-Generation Foundation MLLMs via Self-Learning
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Overclocking LLM Reasoning: Monitoring and Controlling Thinking Path Lengths in LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

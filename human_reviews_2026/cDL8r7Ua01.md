@@ -1,5 +1,6 @@
 # SeVA: Learning to Ask Discriminative Queries for Fine-Grained Visual Recognition
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # SplitLoRA: Balancing Stability and Plasticity in Continual Learning Through Gradient Space Splitting
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

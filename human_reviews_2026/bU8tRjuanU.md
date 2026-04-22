@@ -1,5 +1,6 @@
 # Low-Rank Attention and Contrastive Alignment for Deep Multi-View Clustering
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 2
 

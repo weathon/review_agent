@@ -1,5 +1,6 @@
 # Multi‑view Adaptive Partitioning with Global Association for Graph Anomaly Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

@@ -1,5 +1,6 @@
 # The Chosen Few: Sparse Adaptation for Large Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 4, 8
 

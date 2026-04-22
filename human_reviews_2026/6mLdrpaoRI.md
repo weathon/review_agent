@@ -1,5 +1,6 @@
 # Efficient Multi-Source Knowledge Transfer by Model Merging
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

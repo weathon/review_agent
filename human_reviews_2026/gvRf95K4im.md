@@ -1,5 +1,6 @@
 # K-Prism: A Knowledge-Guided and Prompt Integrated Universal Medical Image Segmentation Model
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

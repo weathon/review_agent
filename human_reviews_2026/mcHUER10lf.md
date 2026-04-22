@@ -1,5 +1,6 @@
 # AUPO - Abstracted until proven otherwise: A reward distribution based abstraction algorithm
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 0
 

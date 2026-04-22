@@ -1,5 +1,6 @@
 # Shared Contexts, Personalized Outputs: A Benchmark for Document Generation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 2
 

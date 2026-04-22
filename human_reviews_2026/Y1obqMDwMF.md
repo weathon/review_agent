@@ -1,5 +1,6 @@
 # Why Do Medical Time Series Models for Disease Detection Generalize Poorly to Unseen Subjects?
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

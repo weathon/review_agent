@@ -1,5 +1,6 @@
 # Breaking the Limits of Open-Weight CLIP: An Optimization Framework for Self-supervised Fine-tuning of CLIP
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

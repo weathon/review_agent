@@ -1,5 +1,6 @@
 # Go Beyond Your Means: Unlearning with Per-Sample Gradient Orthogonalization
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

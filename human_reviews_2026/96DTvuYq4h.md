@@ -1,5 +1,6 @@
 # Uncertainty-Aware 3D Reconstruction for Dynamic Underwater Scenes
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

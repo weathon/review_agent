@@ -1,5 +1,6 @@
 # AgentHard: Hardening LLM-Agent Evaluation with a Taxonomy of Artifacts and Automated Cleaning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

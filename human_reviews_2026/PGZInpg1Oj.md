@@ -1,5 +1,6 @@
 # CODEALIGNBENCH: Assessing Code Generation Models on Developer-Preferred Code Adjustments
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

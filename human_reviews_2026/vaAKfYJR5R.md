@@ -1,5 +1,6 @@
 # Utility-Diversity Aware Online Batch Selection for LLM Supervised Fine-tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

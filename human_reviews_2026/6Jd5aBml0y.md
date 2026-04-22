@@ -1,5 +1,6 @@
 # OXtal: An All-Atom Diffusion Model for Organic Crystal Structure Prediction
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

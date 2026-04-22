@@ -1,5 +1,6 @@
 # Logits Replay + MoClip: Stabilized, Low-Cost Post-Training with Minimal Forgetting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

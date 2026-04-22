@@ -1,5 +1,6 @@
 # P2P: Automated Paper-to-Poster Generation and Fine-Grained Benchmark
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

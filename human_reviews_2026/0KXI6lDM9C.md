@@ -1,5 +1,6 @@
 # Proving the Limited Scalability of Centralized Distributed Optimization via a New Lower Bound Construction
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

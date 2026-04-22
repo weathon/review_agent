@@ -1,5 +1,6 @@
 # Towards Understanding Multimodal Fine-Tuning: A Case Study into Spatial Features
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

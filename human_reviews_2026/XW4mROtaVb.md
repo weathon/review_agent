@@ -1,5 +1,6 @@
 # JUDO: A Juxtaposed Domain-Oriented Multimodal Reasoner for Industrial Anomaly QA
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

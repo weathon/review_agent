@@ -1,5 +1,6 @@
 # AC-Foley: Reference-Audio-Guided Video-to-Audio Synthesis with Acoustic Transfer
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

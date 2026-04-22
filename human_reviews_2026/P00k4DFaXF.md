@@ -1,5 +1,6 @@
 # Process-Verified Reinforcement Learning for Theorem Proving via Lean
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

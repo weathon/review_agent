@@ -1,5 +1,6 @@
 # Combining Auxiliary Losses for Safer and More Robust Trajectory Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

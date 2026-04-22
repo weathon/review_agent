@@ -1,5 +1,6 @@
 # Progressive Online Video Understanding with Evidence-Aligned Timing and Transparent Decisions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

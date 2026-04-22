@@ -1,5 +1,6 @@
 # Breaking Static Paradigms: A Mutual Evolution Framework for Edge-Cloud Model Collaboration
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 2, 4, 8
 

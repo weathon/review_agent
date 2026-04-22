@@ -1,5 +1,6 @@
 # WetBench: LLM-Based Simulation Environment to Evaluate Wet-Lab Experiment Planning and Design
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

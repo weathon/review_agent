@@ -1,5 +1,6 @@
 # A New Paradigm for Genome-wide DNA Methylation Prediction Without Methylation Input
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

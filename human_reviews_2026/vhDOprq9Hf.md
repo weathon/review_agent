@@ -1,5 +1,6 @@
 # KG-Infused RAG: Augmenting Corpus-Based RAG with External Knowledge Graphs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

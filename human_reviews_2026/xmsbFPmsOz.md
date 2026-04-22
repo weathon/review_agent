@@ -1,5 +1,6 @@
 # Marginal Girsanov Reweighting: Stable Variance Reduction via Neural Ratio Estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

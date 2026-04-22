@@ -1,5 +1,6 @@
 # From Fragile to Certified: Wasserstein Audits of Group Fairness Under Distribution Shift
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

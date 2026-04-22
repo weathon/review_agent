@@ -1,5 +1,6 @@
 # $\text{G}^2$RPO: Granular GRPO for Precise Reward in Flow Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

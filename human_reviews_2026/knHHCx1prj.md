@@ -1,5 +1,6 @@
 # Recurrent Deep Differentiable Logic Gate Networks
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0
 

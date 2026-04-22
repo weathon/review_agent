@@ -1,5 +1,6 @@
 # Early Guidance, Late Convergence: Hidden‑State Massive Values in Diffusion MLLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Importance Weighted Score Matching for Diffusion Samplers with Enhanced Mode Coverage
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

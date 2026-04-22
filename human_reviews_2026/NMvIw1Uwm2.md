@@ -1,5 +1,6 @@
 # Better LMO-based Momentum Methods with Second-Order Information
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 6, 4, 6
 

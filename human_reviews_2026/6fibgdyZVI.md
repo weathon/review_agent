@@ -1,5 +1,6 @@
 # One-shot Conditional Sampling: MMD meets Nearest Neighbors
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

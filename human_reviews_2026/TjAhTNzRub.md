@@ -1,5 +1,6 @@
 # MoRE: Mixture of Remapping Experts For Irreversible Feature-Level Unlearning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Achieving Faster than $O(1/t)$ Convergence in Convex Federated Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

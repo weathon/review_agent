@@ -1,5 +1,6 @@
 # NEOL: REWARD-GATED ONLINE PLASTICITY FOR SCALABLE NEUROEVOLUTION
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 
@@ -124,8 +125,10 @@ During each episode, synaptic weights adapt online according to a biologically i
 3. The approach could easily be applied to other neuroevolution algorithms beyond NEAT.
 
 ### Weaknesses
-1. Evaluation is restricted to low-dimensional control tasks  that do not require within-lifetime adaptation. This makes it difficult to assess NEOL’s claimed advantage as an “online learning” or “adaptive” system. What about the T-maze or something GoalDirection HalfCheetah? 
-2. No separate hyperparameter tuning between NEAT and NEOL. Both methods use the same NEAT settings, except for additional plasticity parameters. 
+1.
+Evaluation is restricted to low-dimensional control tasks  that do not require within-lifetime adaptation. This makes it difficult to assess NEOL’s claimed advantage as an “online learning” or “adaptive” system. What about the T-maze or something GoalDirection HalfCheetah? 
+2. No separate hyperparameter tuning between NEAT and NEOL.
+Both methods use the same NEAT settings, except for additional plasticity parameters. 
 3. NEOL is compared only to NEAT and an ablated NEAT (η=0). Missing are comparisons to e.g. Najarro & Risi (2020) and other meta-plasticity or evolutionary meta-learning methods. 
 4. Limited novelty and missing early work. Other approaches have already combined NEAT with plasticity and are not mentioned, e.g. "Evolving adaptive neural networks with and without adaptive synapses" by Stanley et al.
 

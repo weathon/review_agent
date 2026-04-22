@@ -1,5 +1,6 @@
 # Quantum-inspired benchmark for Intrinsic Dimension Estimation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

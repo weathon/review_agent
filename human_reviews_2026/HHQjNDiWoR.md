@@ -1,5 +1,6 @@
 # Can LLMs Serve as Causal Inference Agents? A Study on Post-Training Methods
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

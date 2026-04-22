@@ -1,5 +1,6 @@
 # Scalable Exploration for High-Dimensional Continuous Control via Value-Guided Flow
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

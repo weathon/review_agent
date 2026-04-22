@@ -1,5 +1,6 @@
 # Exploring System-1 and System-2 Communication for Latent Reasoning in LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

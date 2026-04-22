@@ -1,5 +1,6 @@
 # FreqKV: Key-Value Compression in Frequency Domain for Context Window Extension
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

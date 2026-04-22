@@ -1,5 +1,6 @@
 # WeFT: Weighted Entropy-driven Fine-Tuning for dLLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # FreeKV: Boosting KV Cache Retrieval for Efficient LLM Inference
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

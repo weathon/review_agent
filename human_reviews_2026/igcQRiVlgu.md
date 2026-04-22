@@ -1,5 +1,6 @@
 # Don't Throw Away Your Beams: Improving Consistency-based Uncertainties in LLMs via Beam Search
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4, 0
 

@@ -1,5 +1,6 @@
 # HieraTok: Multi-Scale Visual Tokenizer Improves Image Reconstruction and Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

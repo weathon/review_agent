@@ -1,5 +1,6 @@
 # Are we measuring oversmoothing in graph neural networks correctly?
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

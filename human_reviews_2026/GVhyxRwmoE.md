@@ -1,5 +1,6 @@
 # Plan Deeply or Estimate Precisely?: A Resource-Aware AlphaZero with Dynamic Quantile Allocation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

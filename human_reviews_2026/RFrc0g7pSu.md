@@ -1,5 +1,6 @@
 # PAV-DiT: A Cross-modal Alignment Projected Latent Diffusion Transformer for Synchronized Audio-Video Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

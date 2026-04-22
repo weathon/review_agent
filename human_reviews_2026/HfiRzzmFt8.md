@@ -1,5 +1,6 @@
 # Amortized Bayesian Causal Discovery of Extended Factor Graphs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

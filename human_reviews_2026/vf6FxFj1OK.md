@@ -1,5 +1,6 @@
 # Constrained Multi-Objective Reinforcement Learning with Max-Min Criterion
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 6, 4, 2
 

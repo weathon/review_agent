@@ -1,5 +1,6 @@
 # An Efficient Structural Pruning for Spiking Neural Networks by Balancing Accuracy and Sparsification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 0, 6, 6, 6
 

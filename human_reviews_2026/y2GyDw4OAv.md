@@ -1,5 +1,6 @@
 # Imputation-free Learning of Tabular Data with Missing Values using Incremental Feature Partitions in Transformer
 
+- Avg Score: 1.60
 - Decision: Reject
 - Scores: 2, 2, 0, 2, 2
 

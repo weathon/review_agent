@@ -1,5 +1,6 @@
 # Overlap-weighted orthogonal meta-learner for treatment effect estimation over time
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

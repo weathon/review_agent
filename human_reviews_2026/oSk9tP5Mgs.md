@@ -1,5 +1,6 @@
 # FAFO: Lossy KV Cache Compression for Lossless Inference Acceleration via Draftless Fumble Decoding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

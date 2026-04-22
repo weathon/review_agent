@@ -1,5 +1,6 @@
 # Parameter-wise Weighted Model Editing for Efficient and Retentive LLM Unlearning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

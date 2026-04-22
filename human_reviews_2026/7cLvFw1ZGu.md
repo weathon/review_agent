@@ -1,5 +1,6 @@
 # VoxSet: Sparse Voxel Set Tokenizer for 3D Shape Generation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 8
 

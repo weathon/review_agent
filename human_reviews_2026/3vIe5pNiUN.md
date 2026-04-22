@@ -1,5 +1,6 @@
 # Joint Distribution–Informed Shapley Values for Sparse Counterfactual Explanations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

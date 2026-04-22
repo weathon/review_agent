@@ -1,5 +1,6 @@
 # CyberV: A Cybernetic Framework for Enhancing Logical Reasoning in Video Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

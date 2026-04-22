@@ -1,5 +1,6 @@
 # Boosting Language Model Fine-Tuning via Zeroth-Order Hybrid Methods with Additional  Memory Aid
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

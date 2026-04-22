@@ -1,5 +1,6 @@
 # GLASS Flows: Efficient Inference for Reward Alignment of Flow and Diffusion Models
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 6
 

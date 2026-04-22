@@ -1,5 +1,6 @@
 # A Joint Diffusion Model with Pre-Trained Priors for RNA Sequence-Structure Co-Design
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

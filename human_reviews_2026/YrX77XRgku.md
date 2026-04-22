@@ -1,5 +1,6 @@
 # Diffusion and Flow-based Copulas: Forgetting and Remembering Dependencies
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

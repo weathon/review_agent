@@ -1,5 +1,6 @@
 # ReWatch-R1: Boosting Complex Video Reasoning in Large Vision-Language Models through Agentic Data Synthesis
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # RIFLE: Removal of Image Flicker-Banding via Latent Diffusion Enhancement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

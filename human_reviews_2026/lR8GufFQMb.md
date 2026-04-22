@@ -1,5 +1,6 @@
 # Test-time scaling of diffusions with flow maps
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 0, 10, 4
 

@@ -1,5 +1,6 @@
 # Initialization using Update Approximation is a Silver Bullet for Extremely Efficient Low-Rank Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

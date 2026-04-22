@@ -1,5 +1,6 @@
 # Learning multimodal dictionary decompositions with group-sparse autoencoders
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2, 6
 

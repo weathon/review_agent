@@ -1,5 +1,6 @@
 # Safety Instincts: LLMs Learn to Trust Their Internal Compass for Self-Defense
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

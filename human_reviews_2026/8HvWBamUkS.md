@@ -1,5 +1,6 @@
 # Adaptive Curriculum Learning for RLHF with Influence-Based Cluster Bandits
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

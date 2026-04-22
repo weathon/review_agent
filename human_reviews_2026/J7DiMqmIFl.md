@@ -1,5 +1,6 @@
 # G-CUT3R: Guided 3D Reconstruction with Camera and Depth Prior Integration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

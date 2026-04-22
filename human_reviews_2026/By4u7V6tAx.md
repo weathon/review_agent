@@ -1,5 +1,6 @@
 # Closing the Train-Test Gap in World Models for Gradient-Based Planning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

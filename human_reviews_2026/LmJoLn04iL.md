@@ -1,5 +1,6 @@
 # IndicVisionBench: Benchmarking Cultural and Multilingual Understanding in VLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6
 

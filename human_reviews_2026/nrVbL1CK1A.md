@@ -1,5 +1,6 @@
 # From Acceleration to Saturation: Scaling Behavior of Bootstrapped Language Model Pretraining
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

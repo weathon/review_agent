@@ -1,5 +1,6 @@
 # PolyGraph Discrepancy: a classifier-based metric for graph generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

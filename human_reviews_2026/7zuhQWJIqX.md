@@ -1,5 +1,6 @@
 # Towards Policy-Compliant Agents: Learning Efficient Guardrails for Policy Violation Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

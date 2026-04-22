@@ -1,5 +1,6 @@
 # From Hallucinations to Jailbreaks: Rethinking the Vulnerability of Large Foundation Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

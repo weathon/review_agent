@@ -1,5 +1,6 @@
 # Multi-agent System with Individual Optimized Expertise for Retrieval Augmented Generation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

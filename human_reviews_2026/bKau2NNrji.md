@@ -1,5 +1,6 @@
 # Aligning Draft and Target in Speculative Decoding: A CoT-Aware and SR-Guided Mixed Framework
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 4, 4
 

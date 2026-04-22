@@ -1,5 +1,6 @@
 # Learning a Dense Reasoning Reward Model from Expert Demonstration via Inverse Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

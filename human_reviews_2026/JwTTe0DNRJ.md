@@ -1,5 +1,6 @@
 # Background Prompt for Few-Shot Out-of-Distribution Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

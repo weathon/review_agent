@@ -1,5 +1,6 @@
 # Harmonizing Multi-Site Multi-Sequence Brain MRI via Semantic-Guided Conditional Diffusion
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 6, 2, 0
 

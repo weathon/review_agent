@@ -1,5 +1,6 @@
 # FingER: Fact-Level Answerability for Explainable Refusals in Multi-Hop RAG
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

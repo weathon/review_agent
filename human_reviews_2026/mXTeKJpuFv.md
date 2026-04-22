@@ -1,5 +1,6 @@
 # Transitioning from Full-Context to Active Evidence-Seeking Evaluation: A Novel Benchmark for Real-World Artificial Intelligence Assisted Medical Diagnosis
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

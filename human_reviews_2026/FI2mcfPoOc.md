@@ -1,5 +1,6 @@
 # How to Mitigate the Distribution Shift Problem in Robotics Control: A Robust and Adaptive Approach Based on Offline to Online Imitation Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 8, 4, 6, 6, 2
 

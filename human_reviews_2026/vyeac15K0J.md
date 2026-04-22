@@ -1,5 +1,6 @@
 # FaCE: Provable Frequency-Aware Convex Enhancement for Training-Free Low-Light Images
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 2, 6
 

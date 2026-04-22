@@ -1,5 +1,6 @@
 # ExpoTab: One-Step Mixed-Type Tabular Data Generation using Manifold Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

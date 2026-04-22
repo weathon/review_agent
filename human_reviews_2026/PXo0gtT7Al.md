@@ -1,5 +1,6 @@
 # Attention, Please! Revisiting Attentive Probing Through the Lens of Efficiency
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

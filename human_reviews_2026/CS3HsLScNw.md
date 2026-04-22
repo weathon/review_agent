@@ -1,5 +1,6 @@
 # PrismLayers: Open Data for High-Quality Multi-Layer Transparent Image Generative Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

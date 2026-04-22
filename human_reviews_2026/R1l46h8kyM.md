@@ -1,5 +1,6 @@
 # GAS: Improving Discretization of Diffusion ODEs via Generalized Adversarial Solver
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2
 

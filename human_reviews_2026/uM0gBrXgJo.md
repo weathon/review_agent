@@ -1,5 +1,6 @@
 # Towards By-Design Interpretable Transformers via Modular Interpretability-Guided Alignment
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Lyra: Generative 3D Scene Reconstruction via Video Diffusion Model Self-Distillation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

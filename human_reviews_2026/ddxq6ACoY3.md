@@ -1,5 +1,6 @@
 # MatchingPolicy: Correspondence-aware Policy For Cross-object In-context Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

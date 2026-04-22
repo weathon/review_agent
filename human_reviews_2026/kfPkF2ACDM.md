@@ -1,5 +1,6 @@
 # When to Ensemble: Identifying Token-Level Points for Stable and Fast LLM Ensembling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # ExoPredicator: Learning Abstract Models of Dynamic Worlds for Robot Planning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 8
 

@@ -1,5 +1,6 @@
 # Language Specific Knowledge: Do Models Know Better in X than in English?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

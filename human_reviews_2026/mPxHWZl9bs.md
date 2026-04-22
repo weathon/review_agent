@@ -1,5 +1,6 @@
 # VideoExplorer: Boosting Long Video Understanding with Dynamic Temporal Grounding
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 6, 4
 

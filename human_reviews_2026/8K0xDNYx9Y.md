@@ -1,5 +1,6 @@
 # Data Pruning: Counting the Frequency of Loss Transition from Above-Average to Below-Average (FATB) During Early Training
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2, 0
 

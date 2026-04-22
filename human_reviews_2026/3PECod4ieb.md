@@ -1,5 +1,6 @@
 # Chronoberg: Capturing Language Evolution And Temporal Awareness In Foundation Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Randomness Helps Rigor: A Probabilistic Learning Rate Scheduler Bridging Theory and Deep Learning Practice
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 2
 

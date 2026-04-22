@@ -1,5 +1,6 @@
 # Fake-in-Facext: Towards Fine-Grained Explainable DeepFake Analysis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

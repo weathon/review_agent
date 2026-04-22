@@ -1,5 +1,6 @@
 # Investigating Memory in RL with POPGym Arcade
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 6, 0
 

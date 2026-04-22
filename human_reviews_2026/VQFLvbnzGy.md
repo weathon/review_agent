@@ -1,5 +1,6 @@
 # Don't Forget the Nonlinearity: Unlocking Activation Functions in Efficient Fine-Tuning
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

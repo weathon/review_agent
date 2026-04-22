@@ -1,5 +1,6 @@
 # Not All Rollouts are Useful: Down-Sampling Rollouts in LLM Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

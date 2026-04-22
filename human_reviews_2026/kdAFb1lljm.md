@@ -1,5 +1,6 @@
 # Med-SegNet: A Hierarchical Architecture for Binary Medical Image Segmentation
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2
 

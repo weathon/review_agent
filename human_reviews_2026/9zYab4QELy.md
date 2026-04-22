@@ -1,5 +1,6 @@
 # OmniLens++: Blind Lens Aberration Correction via Large LensLib Pre-Training and Latent PSF Representation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

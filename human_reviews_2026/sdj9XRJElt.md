@@ -1,5 +1,6 @@
 # Group Distributionally Robust Machine Learning under Group Level Distributional Uncertainty
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

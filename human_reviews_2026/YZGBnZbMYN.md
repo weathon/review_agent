@@ -1,5 +1,6 @@
 # SGD-Based Knowledge Distillation with Bayesian Teachers: Theory and Guidelines
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # TANGRAM: A Dataset for FPGA-Based Heterogeneous Systems-on-Chip Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

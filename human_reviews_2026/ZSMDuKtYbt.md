@@ -1,5 +1,6 @@
 # SketchThinker-R1: Towards Efficient Sketch-Style Reasoning in Large Multimodal Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

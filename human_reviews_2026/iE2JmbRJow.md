@@ -1,5 +1,6 @@
 # SimpleToM: Exposing the Gap between Explicit ToM Inference and Implicit ToM Application in LLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

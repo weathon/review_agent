@@ -1,5 +1,6 @@
 # Efficient Sliced Wasserstein Distance Computation via Adaptive Bayesian Optimization
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2, 6
 

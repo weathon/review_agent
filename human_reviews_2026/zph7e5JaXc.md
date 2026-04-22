@@ -1,5 +1,6 @@
 # Explain in Your Own Words: Improving Reasoning via Token-Selective Dual Knowledge Distillation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

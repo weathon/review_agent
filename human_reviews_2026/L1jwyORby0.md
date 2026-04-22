@@ -1,5 +1,6 @@
 # Hypothesis Hunting with Evolving Networks of Autonomous Scientific Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

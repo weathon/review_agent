@@ -1,5 +1,6 @@
 # Expanding the Chaos: Neural Operator for Stochastic (Partial) Differential Equations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # VIPO-R1: Cultivating Video Reasoning in MLLMs via Verifier-Guided Iterative Policy Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

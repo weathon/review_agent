@@ -1,5 +1,6 @@
 # HiViBiX: Hierarchical Visually-informed Binaural Audio Generation using Ambisonics
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 8, 2
 

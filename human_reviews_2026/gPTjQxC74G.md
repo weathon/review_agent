@@ -1,5 +1,6 @@
 # Joint Adaptation of Uni-modal Foundation Models for Multi-modal Alzheimer's Disease Diagnosis
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6
 

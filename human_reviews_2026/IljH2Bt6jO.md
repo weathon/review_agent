@@ -1,5 +1,6 @@
 # Training a Vision-Language Model for Diverse Exploration in Open GUI World
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

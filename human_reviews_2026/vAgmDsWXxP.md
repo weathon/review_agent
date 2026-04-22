@@ -1,5 +1,6 @@
 # BEARD: Benchmarking the Adversarial Robustness for Dataset Distillation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

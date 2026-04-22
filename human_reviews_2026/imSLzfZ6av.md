@@ -1,5 +1,6 @@
 # HiFo-Prompt: Prompting with Hindsight and Foresight for LLM-based Automatic Heuristic Design
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 2
 

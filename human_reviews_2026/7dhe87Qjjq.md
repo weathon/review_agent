@@ -1,5 +1,6 @@
 # LLaDA 1.5: Variance-Reduced Preference Optimization for Large Language Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

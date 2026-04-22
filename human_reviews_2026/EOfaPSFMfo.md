@@ -1,5 +1,6 @@
 # Velocity-Centric 4D Gaussian Splatting for Physical Realistic Dynamic Rendering
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

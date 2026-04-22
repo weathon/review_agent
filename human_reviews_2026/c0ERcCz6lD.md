@@ -1,5 +1,6 @@
 # Towards Understanding The Calibration Benefits of Sharpness-Aware Minimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 4
 

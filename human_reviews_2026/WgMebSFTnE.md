@@ -1,5 +1,6 @@
 # Automating Meta-learning by Learning to Map Task Distributions to Initial Weights
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # KB-DMGen: Knowlege-Based Global Guidance and Dynamic Pose Masking for Human Image Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

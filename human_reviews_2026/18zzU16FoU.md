@@ -1,5 +1,6 @@
 # FURINA: Free from Unmergeable Router via lINear Aggregation of mixed experts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

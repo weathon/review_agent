@@ -1,5 +1,6 @@
 # Aegis: Automated Error Generation and Attribution for Multi-Agent Systems
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

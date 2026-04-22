@@ -1,5 +1,6 @@
 # On the Universality and Complexity of GNN for Solving Second-order Cone Programs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

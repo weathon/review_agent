@@ -1,5 +1,6 @@
 # Balancing Mixed Labels: Mixup meets Neural Collapse in Imbalanced Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

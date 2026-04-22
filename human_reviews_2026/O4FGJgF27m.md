@@ -1,5 +1,6 @@
 # VCR: Variance-aware Channel Recalibration Network for Low Light Image with Distribution Alignment
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

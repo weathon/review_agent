@@ -1,5 +1,6 @@
 # Segmental Advantage Estimation: Enhancing PPO for Long-Context LLM Training
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

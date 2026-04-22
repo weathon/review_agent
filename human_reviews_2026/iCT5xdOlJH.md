@@ -1,5 +1,6 @@
 # IO-Adam: Rethinking Memory-Efficient Adaptive Optimizers from Gradient Computation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

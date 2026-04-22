@@ -1,5 +1,6 @@
 # CodeChemist: Test-Time Scaling for Low-Resource Code Generation via Functional Knowledge Transfer
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

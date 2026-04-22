@@ -1,5 +1,6 @@
 # Learning to Cooperate with Humans through Theory-Informed Trust Beliefs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # A Boosting-Driven Model for Updatable Learned Indexes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

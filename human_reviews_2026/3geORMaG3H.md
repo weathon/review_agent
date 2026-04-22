@@ -1,5 +1,6 @@
 # Structuring Collective Action with LLM-Guided Evolution: From Ill-Structured Problems to Executable Heuristics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

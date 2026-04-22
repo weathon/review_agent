@@ -1,5 +1,6 @@
 # OmniCVR: A Benchmark for Omni-Composed Video Retrieval with Vision, Audio, and Text
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

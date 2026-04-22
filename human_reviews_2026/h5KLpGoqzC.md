@@ -1,5 +1,6 @@
 # Hierarchical Semantic-Acoustic Modeling via Semi-Discrete Residual Representations for Expressive End-to-End Speech Synthesis
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4, 6
 

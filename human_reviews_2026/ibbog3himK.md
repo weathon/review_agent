@@ -1,5 +1,6 @@
 # SimpleDesign - A Joint Model for Protein Sequence and Structure Codesign
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Culture in Action: Evaluating Text-to-Image Models through Social Activities
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

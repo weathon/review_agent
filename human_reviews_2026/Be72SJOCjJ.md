@@ -1,5 +1,6 @@
 # On the Sharp Input-Output Analysis of Nonlinear Systems under Adversarial Attacks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

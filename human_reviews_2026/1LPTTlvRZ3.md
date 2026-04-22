@@ -1,5 +1,6 @@
 # Textual and Temporal-Guided Feature Decoupling for Video Temporal Grounding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

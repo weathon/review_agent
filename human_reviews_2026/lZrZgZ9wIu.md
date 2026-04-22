@@ -1,5 +1,6 @@
 # Conversion of sparse Artificial Neural Network to sparse Spiking Neural Network can save up to 99% of energy
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

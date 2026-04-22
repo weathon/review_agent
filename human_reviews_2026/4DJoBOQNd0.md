@@ -1,5 +1,6 @@
 # Linking Process to Outcome: Conditional Reward Modeling for LLM Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # OceanVerse: Evaluable 4D Ocean Element Reconstruction Dataset under Realistic Sparsity
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 8
 

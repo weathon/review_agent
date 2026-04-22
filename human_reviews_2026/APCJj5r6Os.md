@@ -1,5 +1,6 @@
 # A Computationally Efficient Case-Control Sampling Framework for G-Formula with Longitudinal Data
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

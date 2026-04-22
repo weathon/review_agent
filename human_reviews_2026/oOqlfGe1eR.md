@@ -1,5 +1,6 @@
 # Unified Generative Modeling for Multimodal Time Series Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

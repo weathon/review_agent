@@ -1,5 +1,6 @@
 # Empirically Testing Expressivity Bounds for Neural Network Architectures
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

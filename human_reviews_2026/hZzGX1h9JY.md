@@ -1,5 +1,6 @@
 # scMoE: single-cell Multi-Modal Multi-Task Learning via Sparse Mixture-of-Experts
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

@@ -1,5 +1,6 @@
 # TAMP: Task-aware Multimodal Pre-Interaction for fine-grained Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # SIDiffAgent: Self-Improving Diffusion Agent
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 
@@ -160,7 +161,8 @@ Please read the weakness part. Additionally, some citations in the paper doesn't
 3
 
 ### Summary
-This paper proposes SIDiffAgent, a training-free multi-agent framework designed to improve text-to-image diffusion models through autonomous prompt engineering, adaptive error correction, and iterative self-improvement. SIDiffAgent coordinates a set of that are specialized in creativity analysis, intention parsing, prompt refinement, adaptive negative prompting, image generation, aesthetic and alignment evaluation, and memory-driven guidance. The system leverages the Qwen family of models and a Theory-of-Mind–inspired feedback mechanism. Experiments on GenAI-Bench and DrawBench show improvements over open-source and proprietary baselines. The system demonstrates improved text-image alignment, artifact mitigation, and compositional reasoning without training.
+This paper proposes SIDiffAgent, a training-free multi-agent framework designed to improve text-to-image diffusion models through autonomous prompt engineering, adaptive error correction, and iterative self-improvement. SIDiffAgent coordinates a set of that are specialized in creativity analysis, intention parsing, prompt refinement, adaptive negative prompting, image generation, aesthetic and alignment evaluation, and memory-driven guidance.
+The system leverages the Qwen family of models and a Theory-of-Mind–inspired feedback mechanism. Experiments on GenAI-Bench and DrawBench show improvements over open-source and proprietary baselines. The system demonstrates improved text-image alignment, artifact mitigation, and compositional reasoning without training.
 
 ### Strengths
 - SIDiffAgent improves iteratively at inference via trajectory memory. The design extends prior works such as T2I-Copilot by introducing a multi-layer agent hierarchy and adaptive negative prompt generation. 
@@ -168,8 +170,10 @@ This paper proposes SIDiffAgent, a training-free multi-agent framework designed 
 - Implementation details (such as the prompts of the sub agents, algorithms and hyperparameters) are provided in the appendix.
 
 ### Weaknesses
-- Marginal algorithmic novelty: The paper’s contribution lies primarily in system integration rather than introducing a fundamentally new self-adapting optimization algorithm for diffusion models.
-- System complexity and reproducibility: The multi-agent framework involves many interdependent agents and prompts. The training-free claim is valid, but the inference-time across multiple agent calls can be computationally heavy and difficult to replicate. 
+- Marginal algorithmic novelty:
+The paper’s contribution lies primarily in system integration rather than introducing a fundamentally new self-adapting optimization algorithm for diffusion models.
+- System complexity and reproducibility:
+The multi-agent framework involves many interdependent agents and prompts. The training-free claim is valid, but the inference-time across multiple agent calls can be computationally heavy and difficult to replicate. 
 - Evaluation: The claiming of perceptual alignment improvements are made qualitatively without human preference study, and there is no analysis of latency or cost trade-offs between the introduced computational cost versus the gains in the performance.
 
 ### Questions

@@ -1,5 +1,6 @@
 # Auto-regressive In-context Demonstration Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2
 

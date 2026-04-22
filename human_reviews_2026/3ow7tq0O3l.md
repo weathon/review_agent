@@ -1,5 +1,6 @@
 # Dr.LLM: Dynamic Layer Routing in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 
@@ -139,7 +140,8 @@ If all concerns shown in weaknesses are resolved, I would raise my score.
 4
 
 ### Summary
-The paper proposes a method for dynamically skipping, executing or repeating layers in transformer architecture per example in order to improve the model quality while preventing wasted compute on simpler queries. It can be applied to any LLM that is already trained without altering the weights, only adding per-layer routers. The routers are trained using an offline tree-based search method and use hidden layers of the previous layers as inputs. The search algorithm is monte carlo based and includes an explicit length penalty to incentivize shorter paths to favor executing less number of layers. The method is evaluated on Llama and Qwen models and has shown to improve accuracy around 3% while saving 5 layers per example on average.
+The paper proposes a method for dynamically skipping, executing or repeating layers in transformer architecture per example in order to improve the model quality while preventing wasted compute on simpler queries. It can be applied to any LLM that is already trained without altering the weights, only adding per-layer routers. The routers are trained using an offline tree-based search method and use hidden layers of the previous layers as inputs. The search algorithm is monte carlo based and includes an explicit length penalty to incentivize shorter paths to favor executing less number of layers.
+The method is evaluated on Llama and Qwen models and has shown to improve accuracy around 3% while saving 5 layers per example on average.
 
 ### Strengths
 - The method is applicable to already trained LLMs with only minimal router training
@@ -157,7 +159,8 @@ The paper proposes a method for dynamically skipping, executing or repeating lay
 
 - The router accuracy during training is 61%, which seems low. What’s the implication of this, have you tried improving the router accuracy?
 
-- “all four models gain 0.40%p accuracy on GSM8k” -> This claim on page 7 does not match the results on Table 4. Llama 3B accuracy drops on GSM8k according to table 4. 
+- “all four models gain 0.40%p accuracy on GSM8k” -> This claim on page 7 does not match the results on Table 4. Llama 3B accuracy drops on GSM8k according to table 4.
+
 
 - Why are there no baseline llama numbers in Table 5? It’d be good to add the baseline in this table as some of the tasks in this table were not shown before in the paper. The table shows Dr.LLM is better than the state of the art methods however it does not show how it’s better than the pure LLM in HumanEval, Hellaswag, MMLU tasks.
 

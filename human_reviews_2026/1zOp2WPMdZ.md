@@ -1,5 +1,6 @@
 # IWR-Bench: Can LVLMs reconstruct interactive webpage from a user interaction video?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

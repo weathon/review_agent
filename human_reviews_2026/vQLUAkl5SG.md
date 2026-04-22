@@ -1,5 +1,6 @@
 # DRAGON: Guard LLM Unlearning in Context via Negative Detection and Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

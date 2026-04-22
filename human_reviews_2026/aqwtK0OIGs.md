@@ -1,5 +1,6 @@
 # Revisiting Standard-Definition Map Based Motion Prediction in the Era of End-to-End Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

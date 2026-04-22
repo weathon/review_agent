@@ -1,5 +1,6 @@
 # Beyond Tokens: Enhancing RTL Quality Estimation via Structural Graph Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

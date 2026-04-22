@@ -1,5 +1,6 @@
 # Reproducing and Dissecting Denoising Language Models for Speech Recognition
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 4
 

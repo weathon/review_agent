@@ -1,5 +1,6 @@
 # CSAttention: Centroid-Scoring Attention for Accelerating LLM Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

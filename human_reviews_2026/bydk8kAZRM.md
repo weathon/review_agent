@@ -1,5 +1,6 @@
 # FedSycle: Mitigating Post-Unlearning Performance Inconsistency in Federated Learning via Latent Feature Decoupling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # CMT: Mid-Training for Efficient Learning of Consistency, Mean Flow, and Flow-Map Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 8
 

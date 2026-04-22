@@ -1,5 +1,6 @@
 # Bongards at the Boundary of Perception and Reasoning: Programs or Language?
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 
@@ -130,7 +131,9 @@ I provide a high-level list of my concerns, and detailed questions for clarifica
 -The statement “While this is informative, it leaves open the question of whether the stated rule actually governs the model’s predictions” (lines 410–411, section 5.4) should be clarified. What do you mean by the stated rule and the model's prediction?
 
 8. Missing Context and Comparisons
-- An additional comparison to a reasoning model would be interesting. In this regard you might want to compare to Wüst et al.’s Bongard in Wonderland study "https://ml-research.github.io/bongard-in-wonderland/" . Reasoning models (o3, GPT-5) solve 53 and 64 Bongard tasks, respectively. 
+- An additional comparison to a reasoning model would be interesting. In this regard you might want to compare to Wüst et al.’s Bongard in Wonderland study "https://ml-research.github.io/bongard-in-wonderland/"
+. Reasoning models (o3, GPT-5) solve 53 and 64 Bongard tasks, respectively.
+
 -Including this would contextualize performance. While they do outperform your methodology, it is fair to assume that model sizes and computational costs are much larger. A computational performance tradeoff might be interesting and strengthen your results.
 - An additional evaluation on other reasoning problems outside the Bongard domain would strengthen the empirical results of the paper.
 

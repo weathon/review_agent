@@ -1,5 +1,6 @@
 # FORCE: Transferable Visual Jailbreaking Attacks via Feature Over-Reliance CorrEction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Rethinking the Definition of Unlearning: Suppressive Machine Unlearning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

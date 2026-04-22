@@ -1,5 +1,6 @@
 # Enhancing Trustworthiness of Fine-Tuned LLMs via Regularized Subset Selection
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

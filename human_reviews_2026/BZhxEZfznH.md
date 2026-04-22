@@ -1,5 +1,6 @@
 # Representing Sentence Structure in a Tree Metric Space
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 
@@ -181,13 +182,17 @@ The paper is supported by experimental evaluations that demonstrate the applicab
 ### Weaknesses
 Despite its merits, several issues should be addressed to improve the paper’s clarity and impact:
 
-a. Limited applications of the proposed framework. The paper primarily focuses on tree-based representations of sentences. While a few application examples are provided, the practical utility of the sentence tree metric space remains somewhat restricted. Moreover, in natural language, many sentences exhibit incomplete or ambiguous syntactic structures, which may limit the proposed approach.
+a. Limited applications of the proposed framework.
+The paper primarily focuses on tree-based representations of sentences. While a few application examples are provided, the practical utility of the sentence tree metric space remains somewhat restricted. Moreover, in natural language, many sentences exhibit incomplete or ambiguous syntactic structures, which may limit the proposed approach.
 
-b. Insufficient comparison with classical NLP methods. Although various approaches exist for sentence representation in classical NLP, the experimental section includes only a small subset. Incorporating additional well-established methods would provide a more comprehensive evaluation and strengthen the empirical findings.
+b. Insufficient comparison with classical NLP methods.
+Although various approaches exist for sentence representation in classical NLP, the experimental section includes only a small subset. Incorporating additional well-established methods would provide a more comprehensive evaluation and strengthen the empirical findings.
 
-c. Lack of comparison with LLM-based sentence representations. Given the strong generalization capabilities of large language models (LLMs), they could serve as natural baselines for sentence representation—either through fine-tuning or prompt engineering. Including such comparisons would help contextualize the proposed method within the current NLP landscape.
+c. Lack of comparison with LLM-based sentence representations.
+Given the strong generalization capabilities of large language models (LLMs), they could serve as natural baselines for sentence representation—either through fine-tuning or prompt engineering. Including such comparisons would help contextualize the proposed method within the current NLP landscape.
 
-d. Unclear definition of the tree metric space. In Section 3.2, the formal definition of the sentence tree metric space is vague. The paper lacks a rigorous mathematical specification of the metric and does not clearly demonstrate how the metric space properties are utilized in practical applications. Clarifying this section and providing theoretical justification would enhance the paper’s rigor.
+d. Unclear definition of the tree metric space.
+In Section 3.2, the formal definition of the sentence tree metric space is vague. The paper lacks a rigorous mathematical specification of the metric and does not clearly demonstrate how the metric space properties are utilized in practical applications. Clarifying this section and providing theoretical justification would enhance the paper’s rigor.
 
 ### Questions
 To strengthen the contribution, the authors are encouraged to (1) include additional baselines encompassing both classical NLP and LLM-based approaches, (2) explore broader or more realistic applications of the proposed tree metric space, and (3) refine the formal definition and theoretical grounding of the metric space.

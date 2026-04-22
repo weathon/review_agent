@@ -1,5 +1,6 @@
 # MUSE: Model-Agnostic Tabular Watermarking via Multi-Sample Selection
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

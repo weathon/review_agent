@@ -1,5 +1,6 @@
 # Label-Free Privacy-Preserving Learning for Zero-Shot Action Recognition
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

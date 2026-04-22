@@ -1,5 +1,6 @@
 # DRMLP: Dynamic Regularized Multi-Layer Perceptron for Neural Granger Causality Discovery with Adaptive Temporal Penalties
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

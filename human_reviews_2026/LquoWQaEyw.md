@@ -1,5 +1,6 @@
 # But is it Valid? Enforcing Structural Constraints on Graph Generative Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

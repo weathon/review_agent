@@ -1,5 +1,6 @@
 # A Separable Self-attention Inspired by the State Space Model for Computer Vision
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

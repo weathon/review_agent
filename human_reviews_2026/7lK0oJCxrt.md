@@ -1,5 +1,6 @@
 # FedMomentum: Preserving LoRA Training Momentum in Federated Fine-Tuning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

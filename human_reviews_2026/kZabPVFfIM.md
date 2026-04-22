@@ -1,5 +1,6 @@
 # APlaud: Adaptive Personalized Low-Rank Decomposition for User-Specific LLM
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

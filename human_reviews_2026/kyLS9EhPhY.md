@@ -1,5 +1,6 @@
 # Threading Keyframe with Narratives: MLLMs as Strong Long Video Comprehenders
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Towards Understanding Feature Learning in Parameter Transfer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

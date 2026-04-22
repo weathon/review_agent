@@ -1,5 +1,6 @@
 # Complexity-Separated Schemes for Addressing Structured Heterogeneity in Federated Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 0, 6, 4
 

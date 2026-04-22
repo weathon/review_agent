@@ -1,5 +1,6 @@
 # FedRKMGC: Towards High-Performance Gradient Correction-based Federated Learning via Relaxation and Fast KM Iteration
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

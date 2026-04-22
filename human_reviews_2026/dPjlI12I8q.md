@@ -1,5 +1,6 @@
 # Is Random Attention Sufficient for Sequence Modeling?
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

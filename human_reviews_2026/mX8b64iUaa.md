@@ -1,5 +1,6 @@
 # ParaRNN: Unlocking Parallel Training of Nonlinear RNNs for Large Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6
 

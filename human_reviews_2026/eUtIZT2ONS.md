@@ -1,5 +1,6 @@
 # Reinforced Latent Reasoning for LLM-based Recommendation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

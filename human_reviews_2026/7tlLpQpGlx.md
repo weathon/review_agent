@@ -1,5 +1,6 @@
 # Simulation to Rules: A Dual-VLM Framework for Formal Visual Planning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 4
 

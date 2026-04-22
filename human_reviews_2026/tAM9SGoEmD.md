@@ -1,5 +1,6 @@
 # SafeMVDrive: Multi-view Safety-Critical Driving Video Generation in the Real World Domain
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 6, 4
 

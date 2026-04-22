@@ -1,5 +1,6 @@
 # Elastic-MDM: Efficient Masked Diffusion Models with Variable Sequence Lengths
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 
@@ -29,7 +30,8 @@ This paper introduced the Removed-Masked Diffusion Model that enables a variable
 ### Weaknesses
 **Core:**
 1. More baselines should be incorporated to justify the performance of this method, with both general task benchmarks and specialized tasks (i.e., math, code). The author should, for instance, evaluate Elastic-MDM on MMLU-pro for general tasks, GSM8K for math tasks, and MBPP/HumanEval for coding tasks.
-2. The baselines compared are outdated. For now, there are many new DLM models (i.e., LLaDA, DREAM, etc.) that have been introduced in recent with better performance than the MDLM, yet these evaluations are largely missing. Without LLaDA/Dream, it’s hard to tell whether Elastic-MDM’s compute reductions translate into a better quality–latency frontier relative to today’s diffusion LMs. What was expected to see was whether Elastic-MDM can generate faster with similar or even better accuracy in comparison to these baselines (given a new training method proposed). 3. On the quality-speed tradeoff experiment against MDLM with LM1B, the evaluation focused on a short context (L = 128). Please include PPL-vs-latency at larger L (GPT2 at 512, Qwen3 at 1024, and larger context, $\geq$4096), given your OWT setting already covers L=1024.
+2. The baselines compared are outdated. For now, there are many new DLM models (i.e., LLaDA, DREAM, etc.) that have been introduced in recent with better performance than the MDLM, yet these evaluations are largely missing. Without LLaDA/Dream, it’s hard to tell whether Elastic-MDM’s compute reductions translate into a better quality–latency frontier relative to today’s diffusion LMs. What was expected to see was whether Elastic-MDM can generate faster with similar or even better accuracy in comparison to these baselines (given a new training method proposed).
+3. On the quality-speed tradeoff experiment against MDLM with LM1B, the evaluation focused on a short context (L = 128). Please include PPL-vs-latency at larger L (GPT2 at 512, Qwen3 at 1024, and larger context, $\geq$4096), given your OWT setting already covers L=1024.
 4. The paper does not incorporate further details about how the lightweight gap count predictor was trained. A detailed, reproducible guidance with solid ablation is expected to address this concern.
 
 **Minor:**

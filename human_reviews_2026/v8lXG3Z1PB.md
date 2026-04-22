@@ -1,5 +1,6 @@
 # Reliable Detection of Autism Spectrum Disorder in Children Using Conformal Prediction
 
+- Avg Score: 0.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0
 

@@ -1,5 +1,6 @@
 # DADA: Dual Averaging with Distance Adaptation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

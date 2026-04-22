@@ -1,5 +1,6 @@
 # Adversarially Pretrained Transformers May Be Universally Robust In-Context Learners
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

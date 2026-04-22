@@ -1,5 +1,6 @@
 # Can Molecular Foundation Models Know What They Don't Know? A Simple Remedy with Preference Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # MemoryBench: A Benchmark for Memory and Continual Learning in LLM Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

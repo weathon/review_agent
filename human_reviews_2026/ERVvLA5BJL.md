@@ -1,5 +1,6 @@
 # HexFormer: Hyperbolic Vision Transformer with Exponential Map Aggregation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # Agentic Jigsaw Interaction Learning for Enhancing Visual Perception and Reasoning in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

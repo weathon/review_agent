@@ -1,5 +1,6 @@
 # Interpretable 3D Neural Object Volumes for Robust Conceptual Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Quantum Hamiltonian Descent for Rigid Image Registration
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 4, 2
 

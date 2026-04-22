@@ -1,5 +1,6 @@
 # From Tokens to Meaning: LLMs and LVLMs Require Semantic-Level Uncertainty
 
+- Avg Score: 1.60
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 0
 

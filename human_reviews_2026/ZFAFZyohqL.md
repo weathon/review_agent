@@ -1,5 +1,6 @@
 # CH-CEMS: A Chinese Multi-Concept Benchmark Dataset Towards Explainable Multi-Modal Sentiment Analysis
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

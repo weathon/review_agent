@@ -1,5 +1,6 @@
 # The Mutual Information Uncertainty Range: A Non-Parametric Test for Dependent Censoring
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 4, 4, 6
 

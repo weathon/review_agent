@@ -1,5 +1,6 @@
 # InvertNAS: An Invertible Architecture Performance Predictor for Neural Architecture Search
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

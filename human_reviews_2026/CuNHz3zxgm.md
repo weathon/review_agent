@@ -1,5 +1,6 @@
 # WorldPack: Compressed Memory Improves Spatial Consistency in Video World Modeling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

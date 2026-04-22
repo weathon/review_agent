@@ -1,5 +1,6 @@
 # ICMOS: Incremental Concept Mining for OS Kernel Configuration via LLMs Agentic Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

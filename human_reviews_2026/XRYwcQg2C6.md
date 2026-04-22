@@ -1,5 +1,6 @@
 # Black-box Optimization of LLM Outputs by Asking for Directions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Less Is More: Clustered Cross-Covariance Control for Offline RL
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

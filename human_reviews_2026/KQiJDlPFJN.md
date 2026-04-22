@@ -1,5 +1,6 @@
 # Fast kernel methods: Sobolev, physics-informed, and additive models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

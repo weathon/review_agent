@@ -1,5 +1,6 @@
 # How to Spin an Object: First, Get the Shape Right
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

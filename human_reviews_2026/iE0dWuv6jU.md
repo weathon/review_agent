@@ -1,5 +1,6 @@
 # Leveraging Rotation Symmetry for Efficient LoRA Merging in Large Language Models
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4, 6
 

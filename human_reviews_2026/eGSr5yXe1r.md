@@ -1,5 +1,6 @@
 # MetaDCSeg: Robust Medical Image Segmentation via Meta Dynamic Center Weighting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

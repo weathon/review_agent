@@ -1,5 +1,6 @@
 # LLM-Navi: Navigating Motion Agents in Cluttered and Dynamic Environments via LLM reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Escaping the Homophily Trap: A Threshold-free Graph Outlier Detection Framework via Clustering-guided Edge Reweighting
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 4, 8
 

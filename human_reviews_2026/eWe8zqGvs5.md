@@ -1,5 +1,6 @@
 # Cortical Policy: A Dual-Stream View Transformer for Robotic Manipulation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

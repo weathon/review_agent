@@ -1,5 +1,6 @@
 # Training Active Vision Reasoners with Multi-Turn Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

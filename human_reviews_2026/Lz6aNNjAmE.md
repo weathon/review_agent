@@ -1,5 +1,6 @@
 # Understanding SGD with Exponential Moving Average: A Case Study in Linear Regression
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

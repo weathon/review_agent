@@ -1,5 +1,6 @@
 # A Diffusion-Based Data Augmentation Approach for Synthetic Human Portraits Dataset
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0
 

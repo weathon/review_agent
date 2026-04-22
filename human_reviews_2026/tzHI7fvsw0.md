@@ -1,5 +1,6 @@
 # MOLLEO+: Towards Optimized Use of LLMs for Drug Discovery
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 4, 4
 

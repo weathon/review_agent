@@ -1,5 +1,6 @@
 # Zoom-Zero: Reinforced Coarse-to-Fine Video Understanding via Temporal Zoom-in
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

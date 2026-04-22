@@ -1,5 +1,6 @@
 # Uncovering And Correcting Perception Model Weaknesses Using VLM-Based Analysis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 2, 4
 

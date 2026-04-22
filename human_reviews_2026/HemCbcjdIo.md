@@ -1,5 +1,6 @@
 # When Human Data Runs Out: Self-Supervised Reasoning via Negotiation Self-Play
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

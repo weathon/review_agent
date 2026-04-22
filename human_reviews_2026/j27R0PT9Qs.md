@@ -1,5 +1,6 @@
 # OIG-Bench: A Multi-Agent Annotated Benchmark for Multimodal One-Image Guides Understanding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

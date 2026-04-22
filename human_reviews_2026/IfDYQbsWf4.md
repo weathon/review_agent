@@ -1,5 +1,6 @@
 # Verifier-Constrained Flow Expansion for Discovery Beyond the Data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4
 

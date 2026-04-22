@@ -1,5 +1,6 @@
 # When the Brain Sees Beyond Pixels: Creative Brain-to-Vision Reconstruction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

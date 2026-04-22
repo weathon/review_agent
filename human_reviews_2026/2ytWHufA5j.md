@@ -1,5 +1,6 @@
 # Understanding Post-Training Structural Changes in Large Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 4, 6, 8
 

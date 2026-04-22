@@ -1,5 +1,6 @@
 # MVP: Multi-scale Visual Prompt for Visual AutoRegressive Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

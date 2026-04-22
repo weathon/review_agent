@@ -1,5 +1,6 @@
 # Rustify: Towards Repository-Level C to Safer Rust via Workflow-Guided Multi-Agent Transpiler
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

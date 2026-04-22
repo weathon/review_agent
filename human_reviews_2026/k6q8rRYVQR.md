@@ -1,5 +1,6 @@
 # On the Design of One-step Diffusion via Shortcutting Flow Paths
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # MoReFlow: Motion Retargeting Learning through Unsupervised Flow Matching
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

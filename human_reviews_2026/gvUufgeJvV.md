@@ -1,5 +1,6 @@
 # Are LLMs Really Not Knowledgeable? Mining the Submerged Knowledge in LLMs' Memory
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

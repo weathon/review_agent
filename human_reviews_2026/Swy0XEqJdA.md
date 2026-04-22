@@ -1,5 +1,6 @@
 # Signature-Guided Adversarial Attacks On Healthcare LLMs: Exposing PII Leakage In RAG Systems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

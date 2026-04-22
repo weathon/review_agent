@@ -1,5 +1,6 @@
 # Cyber-Zero: Training Cybersecurity Agents without Runtime
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 2
 

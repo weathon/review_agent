@@ -1,5 +1,6 @@
 # Efficient Attention via Pre-Scoring: Prioritizing Informative Keys in Transformers
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

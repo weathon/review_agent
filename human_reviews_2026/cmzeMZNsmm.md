@@ -1,5 +1,6 @@
 # Revisiting Prompt Optimization with Large Reasoning Models---A Case Study on Event Extraction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 6, 8
 

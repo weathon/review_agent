@@ -1,5 +1,6 @@
 # Source-Free Test-Time Adaptation for Diffusion-based Virtual Try-On
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

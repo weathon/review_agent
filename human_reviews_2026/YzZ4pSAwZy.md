@@ -1,5 +1,6 @@
 # CIAR: Interval-based Collaborative Decoding for Image Generation Acceleration
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

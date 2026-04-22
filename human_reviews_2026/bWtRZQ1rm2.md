@@ -1,5 +1,6 @@
 # Pixel-Level Residual Diffusion Transformer: Scalable 3D CT Volume Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

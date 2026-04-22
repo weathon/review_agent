@@ -1,5 +1,6 @@
 # HELIOS: Hierarchical Exploration for Language-grounded Interaction in Open Scenes
 
+- Avg Score: 4.86
 - Decision: Reject
 - Scores: 6, 2, 6, 4, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Dyna-Mind: Learning to Simulate from Experience for Better AI Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Multimodal LLM-assisted Evolutionary Search for Programmatic Control Policies
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2
 

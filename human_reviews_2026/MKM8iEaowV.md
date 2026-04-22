@@ -1,5 +1,6 @@
 # Generative Trajectory Planning in Dynamic Environments: A Joint Diffusion and Reinforcement Learning Framework
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

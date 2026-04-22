@@ -1,5 +1,6 @@
 # Optimizing LLM Inference Offloading with Hierarchical Scheduling and Dynamic Sparsification
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 6
 

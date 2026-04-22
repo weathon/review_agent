@@ -1,5 +1,6 @@
 # DD-Ranking: Rethinking the Evaluation of Dataset Distillation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 
@@ -66,29 +67,42 @@ This paper first observes that existing dataset distillation approaches adopt in
 This paper introduces a new evaluation benchmark for dataset distillation (DD) in image classification, aiming to assess the effectiveness of distilled datasets compared to random selection. The benchmark focuses on two proposed metrics: label-robust score and augmentation-robust score.
 As summarized in Table 1, existing DD methods differ significantly in their use of labels (hard vs. soft labels, and whether soft labels come from a fully-trained teacher or are jointly optimized during distillation) and augmentations (e.g., resize-crop, patch-shuffle, cutmix). These differences make direct comparison of DD methods difficult. The paper argues that prior evaluations, which each use their own label and augmentation setups, are unfair and inconsistent.
 To address this, the authors propose:
-* Label-robust score: compares the accuracy of distilled data versus random selection under the same label setting (e.g., both using hard labels or the same soft labels). 
-* Augmentation-robust score: compares distilled data versus random selection under the same augmentation setting (e.g., same augmentation type or no augmentation). 
+* Label-robust score: compares the accuracy of distilled data versus random selection under the same label setting (e.g., both using hard labels or the same soft labels).
+
+* Augmentation-robust score: compares distilled data versus random selection under the same augmentation setting (e.g., same augmentation type or no augmentation).
+
 
 The proposed benchmark aims to standardize evaluation conditions and reveal the true contribution of the distilled images themselves, separate from the effects of labels or augmentations.
 
 ### Strengths
-* The paper provides a meaningful attempt to standardize the evaluation of dataset distillation methods, enabling a more controlled comparison against random selection under matched label and augmentation setups. 
+* The paper provides a meaningful attempt to standardize the evaluation of dataset distillation methods, enabling a more controlled comparison against random selection under matched label and augmentation setups.
+
 * The results highlight interesting findings: under hard-label usage, matching-based DD methods remain stronger than recent soft-label–based approaches, suggesting that much of the improvement in newer methods (e.g., SRe2L) may stem from knowledge distillation rather than from the intrinsic quality of the synthetic images.
 
 ### Weaknesses
-* Limited applicability of the metric: Although the proposed metrics allow comparisons under matched label/augmentation setups, they do not measure the ultimate achievable performance of each DD method under its best hyperparameter and setup choices. Since DD performance also depends on factors like architecture, optimizer, and training configuration, comparing distilled datasets only under uniform conditions offers limited insight into each method’s full potential. 
-* Ambiguous interpretability of the two measures: The two metrics—label-robust and augmentation-robust scores—merely quantify relative test accuracies rather than any intrinsic quality of the synthetic datasets. It is unclear how these two scores should be used jointly or whether they could be unified into a single, more interpretable evaluation measure. 
-* Limited scope beyond image classification: The paper focuses solely on image classification. Modern distillation applications extend to vision-language and language model distillation, where data efficiency is more critical. It is unclear how the proposed robustness metrics could generalize to multimodal or text-based distillation tasks, limiting the broader applicability and fundamental impact of the proposed benchmark.
+* Limited applicability of the metric:
+Although the proposed metrics allow comparisons under matched label/augmentation setups, they do not measure the ultimate achievable performance of each DD method under its best hyperparameter and setup choices. Since DD performance also depends on factors like architecture, optimizer, and training configuration, comparing distilled datasets only under uniform conditions offers limited insight into each method’s full potential.
+
+* Ambiguous interpretability of the two measures:
+The two metrics—label-robust and augmentation-robust scores—merely quantify relative test accuracies rather than any intrinsic quality of the synthetic datasets. It is unclear how these two scores should be used jointly or whether they could be unified into a single, more interpretable evaluation measure.
+
+* Limited scope beyond image classification:
+The paper focuses solely on image classification. Modern distillation applications extend to vision-language and language model distillation, where data efficiency is more critical. It is unclear how the proposed robustness metrics could generalize to multimodal or text-based distillation tasks, limiting the broader applicability and fundamental impact of the proposed benchmark.
 
 ### Questions
 1. On metric applicability:
-    * How do the proposed label-robust and augmentation-robust scores reflect the best achievable performance of each DD method? 
-    * Could the benchmark be extended to allow comparisons when each method is evaluated under its own optimal settings (e.g., best label/augmentation choices)? 
+    * How do the proposed label-robust and augmentation-robust scores reflect the best achievable performance of each DD method?
+
+    * Could the benchmark be extended to allow comparisons when each method is evaluated under its own optimal settings (e.g., best label/augmentation choices)?
+
 2. On metric design and coherence:
-    * How should users interpret the two robustness scores jointly? 
-    * Is there a principled way to combine the label-robust and augmentation-robust scores into a single unified measure that better reflects dataset quality? 
+    * How should users interpret the two robustness scores jointly?
+
+    * Is there a principled way to combine the label-robust and augmentation-robust scores into a single unified measure that better reflects dataset quality?
+
 3. On generalization beyond image classification:
-    * Can the proposed evaluation framework be adapted for multimodal or language model distillation tasks, where label and augmentation definitions are more complex? 
+    * Can the proposed evaluation framework be adapted for multimodal or language model distillation tasks, where label and augmentation definitions are more complex?
+
     * If not, how might the authors envision extending these metrics to broader domains?
 
 ### Soundness

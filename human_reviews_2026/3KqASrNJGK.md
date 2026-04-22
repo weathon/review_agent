@@ -1,5 +1,6 @@
 # But what is your honest answer? Aiding LLM-judges with honest alternatives using steering vectors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

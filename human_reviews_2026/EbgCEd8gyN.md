@@ -1,5 +1,6 @@
 # Sysformer: Safeguarding Frozen Large Language Models with Adaptive System Prompts
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

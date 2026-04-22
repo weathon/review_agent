@@ -1,5 +1,6 @@
 # Bayes Always Wins the Lottery in Monte Carlo
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 2, 2
 

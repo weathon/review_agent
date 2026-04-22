@@ -1,5 +1,6 @@
 # Verification and Co-Alignment via Heterogeneous Consistency for Preference-Aligned LLM Annotations
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Safe Exploration via Policy Priors
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

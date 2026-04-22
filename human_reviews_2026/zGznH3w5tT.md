@@ -1,5 +1,6 @@
 # Evolving DAGs with LLM: Towards Smart and Hallucination-Mitigated Causal Discovery
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

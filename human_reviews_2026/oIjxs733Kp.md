@@ -1,5 +1,6 @@
 # Memories to Maps: Mechanisms of In-Context Reinforcement Learning in Transformers
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

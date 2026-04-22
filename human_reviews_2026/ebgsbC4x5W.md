@@ -1,5 +1,6 @@
 # Online Rubrics Elicitation from Pairwise Comparisons
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 8, 6, 6, 6
 

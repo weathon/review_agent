@@ -1,5 +1,6 @@
 # Joint Learning Between Reference Image and Text Prompt for Fashion Image Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

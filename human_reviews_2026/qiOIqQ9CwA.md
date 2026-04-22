@@ -1,5 +1,6 @@
 # Optimal Stepsize for Diffusion Sampling
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

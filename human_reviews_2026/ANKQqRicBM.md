@@ -1,5 +1,6 @@
 # DiffMoE: Dynamic Token Selection for Scalable Diffusion Transformers
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

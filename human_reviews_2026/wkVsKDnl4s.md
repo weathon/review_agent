@@ -1,5 +1,6 @@
 # HighClass: Efficient Metagenomic Classification via Quality-Aware Token Mapping and Sparsified Indexing
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 0, 2, 0
 

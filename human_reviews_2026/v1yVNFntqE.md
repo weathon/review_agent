@@ -1,5 +1,6 @@
 # Conserving Fitness Evaluation in Evolutionary Algorithms with Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 2, 0
 

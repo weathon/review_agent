@@ -1,5 +1,6 @@
 # Geometry-aware 4D Video Generation for Robot Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

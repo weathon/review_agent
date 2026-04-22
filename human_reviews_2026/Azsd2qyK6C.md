@@ -1,5 +1,6 @@
 # Towards Quantization-Aware Training for Ultra-Low-Bit Reasoning LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

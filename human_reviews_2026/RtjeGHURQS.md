@@ -1,5 +1,6 @@
 # Domain Generalizable Person Re-identification via Adversarial Dual-Stream Strategy with Local Consistency
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

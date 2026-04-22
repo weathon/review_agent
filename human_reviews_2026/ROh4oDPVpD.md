@@ -1,5 +1,6 @@
 # TriC-Motion: Tri-Domain Causal Modeling Grounded Text-to-Motion Generation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

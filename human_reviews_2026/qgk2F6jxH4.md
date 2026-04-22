@@ -1,5 +1,6 @@
 # SAIR: Enabling Deep Learning for Protein-Ligand Interactions with a Synthetic Structural Dataset
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

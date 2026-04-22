@@ -1,5 +1,6 @@
 # Online learning of multidimensional distributional maps for rapid policy adaptation
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 4, 6, 0
 

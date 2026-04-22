@@ -1,5 +1,6 @@
 # Revisiting Multi-Agent Debate as Test-Time Scaling: When Does Multi-Agent Help?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

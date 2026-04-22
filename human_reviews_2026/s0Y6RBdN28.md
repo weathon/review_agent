@@ -1,5 +1,6 @@
 # Spatial Deconfounder: Interference-Aware Deconfounding for Spatial Causal Inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

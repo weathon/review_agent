@@ -1,5 +1,6 @@
 # See the World through Color-tinted Glasses for Better Hyperspectral Reconstruction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 4
 

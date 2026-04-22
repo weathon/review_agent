@@ -1,5 +1,6 @@
 # SHE-LoRA: Selective Homomorphic Encryption for Federated Tuning with Heterogeneous LoRA
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

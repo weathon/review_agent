@@ -1,5 +1,6 @@
 # Stylized Handwriting Generation of Arbitrary Structures and OOV Expressions: A Decoupled Approach via Layout-Offsets
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

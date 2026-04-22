@@ -1,5 +1,6 @@
 # Observe Anything: Human-Intervened Video Understanding with Adaptive Orbital Memory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

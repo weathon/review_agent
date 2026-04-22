@@ -1,5 +1,6 @@
 # PETRI: Learning Unified Cell Embeddings from Unpaired Modalities via Early-Fusion Joint Reconstruction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 2
 

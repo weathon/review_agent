@@ -1,5 +1,6 @@
 # Why We Need New Benchmarks for Local Intrinsic Dimension Estimation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # Towards a Collaborative Memory for Agentic Workflow: Breaking the Prefix Barrier with Segment-Level KV Cache Sharing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

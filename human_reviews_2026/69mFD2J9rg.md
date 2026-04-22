@@ -1,5 +1,6 @@
 # Link Prediction or Perdition: the Seeds of Instability in Knowledge Graph Embeddings
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

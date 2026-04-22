@@ -1,5 +1,6 @@
 # How Do Transformers Learn to Associate Tokens: Gradient Leading Terms Bring Mechanistic Interpretability
 
+- Avg Score: 7.20
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 8, 8
 

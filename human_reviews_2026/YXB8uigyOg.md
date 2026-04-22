@@ -1,5 +1,6 @@
 # Cross-Architecture Model Diffing with Crosscoders: Unsupervised Discovery of Differences Between LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 8, 0
 

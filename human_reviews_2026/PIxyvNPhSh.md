@@ -1,5 +1,6 @@
 # Go4RL: Improving the Pre-training Data Mixture of Large Language Models for Enhancing Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

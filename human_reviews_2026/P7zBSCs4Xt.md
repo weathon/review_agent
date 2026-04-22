@@ -1,5 +1,6 @@
 # FastAvatar: Towards Unified and Fast 3D Avatar Reconstruction with Large Gaussian Reconstruction Transformers
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 8
 

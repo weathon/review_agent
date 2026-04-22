@@ -1,5 +1,6 @@
 # Dynamic-anchored Preference Optimization for Human-Like Moral Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

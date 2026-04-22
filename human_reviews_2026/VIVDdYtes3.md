@@ -1,5 +1,6 @@
 # From Solo to Symphony: Orchestrating Multi-Agent Collaboration with Single-Agent Demos
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 4
 

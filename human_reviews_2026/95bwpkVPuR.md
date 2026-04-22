@@ -1,5 +1,6 @@
 # Dynamic Role-Graph Reinforcement Learning for Multi-Agent Collaborative Coding Systems
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

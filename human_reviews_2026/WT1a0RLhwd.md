@@ -1,5 +1,6 @@
 # MFRM: Masked Frequency-Refined Modeling for Multivariate Time Series Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

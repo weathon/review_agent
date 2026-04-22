@@ -1,5 +1,6 @@
 # Rethinking Continual Learning with Progressive Neural Collapse
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4
 

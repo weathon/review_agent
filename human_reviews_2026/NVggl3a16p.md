@@ -1,5 +1,6 @@
 # HiPOOD: Hierarchical Prompt-Aware Zero-Shot Out-of-Distribution Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

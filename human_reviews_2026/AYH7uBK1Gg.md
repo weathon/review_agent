@@ -1,5 +1,6 @@
 # DRIFT: Divergent Response in Filtered Transformations for Robust Adversarial Defense
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

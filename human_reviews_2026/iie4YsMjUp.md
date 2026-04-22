@@ -1,5 +1,6 @@
 # Certified Robustness Training: Closed-Form Certificates via CROWN
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 6, 2
 

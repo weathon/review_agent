@@ -1,5 +1,6 @@
 # GazeVLM: Gaze-Guided Vision-Language Models for Efficient and Robust Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Online Multi-Agent Control with Adversarial Disturbances
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

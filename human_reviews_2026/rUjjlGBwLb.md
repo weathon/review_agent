@@ -1,5 +1,6 @@
 # Yes, Q-learning Helps Offline In-Context RL
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 
@@ -83,7 +84,8 @@ Specifically, combining AD with RL objectives enhances data efficiency in both d
 * That said, I view this as a moderate rather than critical weakness; offline RL setting poses unique challenges, the paper’s analytical perspective and insights remain valuable even if the methodological novelty is limited.
 
 **W2. Scalability claims**
-* While the authors claims “this is the first work to apply RL objectives in an offline ICRL setting with a **scalable Transformer architecture**” for the use of a Transformer architecture, the experiments are limited to small-scale datasets. 
+* While the authors claims “this is the first work to apply RL objectives in an offline ICRL setting with a **scalable Transformer architecture**” for the use of a Transformer architecture, the experiments are limited to small-scale datasets.
+
 * Including experiments on larger-scale datasets (e.g., the full xland-minigrid dataset) or with larger Transformer models would provide stronger evidence for the claimed scalability.
 
 [2] Jake Grigsby et al., “AMAGO-2: Breaking the Multi-Task Barrier in Meta-Reinforcement Learning with Transformers”, NeurIPS 2024

@@ -1,5 +1,6 @@
 # Scaled Gradient Mean Subtraction: A Lightweight Method for Amplifying Underutilized Gradient Directions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Adam Can Mitigate Class Imbalance Without Element-Wise Gradient Normalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

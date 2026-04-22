@@ -1,5 +1,6 @@
 # Towards Differential Handling of Various Blur Regions for Accurate Image Deblurring
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

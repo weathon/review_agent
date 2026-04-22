@@ -1,5 +1,6 @@
 # Training Verifiably Robust Agents Using Set-Based Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

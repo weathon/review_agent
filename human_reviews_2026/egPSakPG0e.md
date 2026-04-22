@@ -1,5 +1,6 @@
 # Beyond Single Views: Achieving Significant Gains in Text Clustering via Informative Diversification
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2, 2
 

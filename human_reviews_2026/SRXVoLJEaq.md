@@ -1,5 +1,6 @@
 # RoPK: A Head-Level Key Cache Channel Pruning Method for Efficient Long-Context LLM Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

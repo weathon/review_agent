@@ -1,5 +1,6 @@
 # Federated Equilibrium Solutions for Generalized Method of Moments applied to Instrumental Variable Analysis
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

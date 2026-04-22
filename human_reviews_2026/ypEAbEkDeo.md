@@ -1,5 +1,6 @@
 # GAP3D: Geometry-Aware Adaptive Planar Representations for 3D Occupancy Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

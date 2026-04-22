@@ -1,5 +1,6 @@
 # Does Math Reasoning Improve General LLM Capabilities? Understanding Transferability of LLM Reasoning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6, 6, 4, 4
 

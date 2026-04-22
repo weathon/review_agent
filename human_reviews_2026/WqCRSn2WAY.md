@@ -1,5 +1,6 @@
 # Structural Prognostic Event Modeling for Multimodal Cancer Survival Analysis
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Geometry-Guided Adversarial Prompt Detection via Curvature and Local Intrinsic Dimension
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

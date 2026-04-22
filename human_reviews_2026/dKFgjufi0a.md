@@ -1,5 +1,6 @@
 # BinCtx: Multi-Modal Representation Learning for Robust Android App Behavior Detection
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Parameters vs. Context: Fine-Grained Control of Knowledge Reliance in Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

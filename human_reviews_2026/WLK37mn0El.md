@@ -1,5 +1,6 @@
 # DP-Fusion: Token-Level Differentially Private Inference for Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

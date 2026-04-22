@@ -1,5 +1,6 @@
 # CrystalAgent: Towards Autonomous Crystal Generation via Agentic Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 8, 2, 4, 0
 

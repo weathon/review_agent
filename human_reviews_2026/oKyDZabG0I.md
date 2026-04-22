@@ -1,5 +1,6 @@
 # More Than a Snapshot: Forcing Temporal Reasoning in Video Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

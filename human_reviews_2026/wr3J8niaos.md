@@ -1,5 +1,6 @@
 # DyRo-MCTS: A Robust Monte Carlo Tree Search Approach to Dynamic Job Shop Scheduling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

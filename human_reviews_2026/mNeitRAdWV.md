@@ -1,5 +1,6 @@
 # Toward Effective Tool-Integrated Reasoning via Self-Evolved Preference Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

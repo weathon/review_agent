@@ -1,5 +1,6 @@
 # HOIGS: Human-Object Interaction Gaussian Splatting from Monocular Videos
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

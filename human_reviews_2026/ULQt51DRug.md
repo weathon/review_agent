@@ -1,5 +1,6 @@
 # TRQA: Time Series Reasoning Question And Answering Benchmark
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

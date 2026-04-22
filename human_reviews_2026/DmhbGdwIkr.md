@@ -1,5 +1,6 @@
 # Strengthen Out-of-Distribution Detection with Uncertainty-Driven Adaptively Rectified Backpropagation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

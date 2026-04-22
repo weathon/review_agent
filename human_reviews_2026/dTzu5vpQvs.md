@@ -1,5 +1,6 @@
 # Does Your 3D Encoder Really Work? A simple yet effective pathway to real 3D scene understanding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # A Minimalist Approach for Exploring Transformer Robustness to In-Distribution and Out-Of-Distribution Samples
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # MANGO: Natural Multi-speaker 3D Talking Head Generation via 2D-Lifted Enhancement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

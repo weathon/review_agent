@@ -1,5 +1,6 @@
 # Few-Shot Class-Incremental Learning based on Hierarchical Dual-Stream Interaction and Associative Memory Fusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Test-Time Scaling for Multistep Reasoning in Small Language Models via A* Search
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 2, 4, 2
 

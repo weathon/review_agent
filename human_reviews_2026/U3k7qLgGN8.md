@@ -1,5 +1,6 @@
 # A Novel Benchmark Framework for Neural Embeddings in Earth Observation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 6, 2
 

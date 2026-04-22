@@ -1,5 +1,6 @@
 # Learning to Reason as Action Abstractions with Scalable Mid-Training RL
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Adaptive Extrapolated Proximal Gradient Methods with Variance Reduction for Composite Nonconvex Finite-Sum Minimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

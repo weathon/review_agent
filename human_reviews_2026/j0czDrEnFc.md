@@ -1,5 +1,6 @@
 # A Bayesian Nonparametric Framework for Private, Fair, and Balanced Tabular Data Synthesis
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

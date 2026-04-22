@@ -1,5 +1,6 @@
 # PATCH: Learnable Tile-level Hybrid Sparsity for LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

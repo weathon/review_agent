@@ -1,5 +1,6 @@
 # Rank-Preserving Calibration of LLMs Under Model and Distribution Shifts
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

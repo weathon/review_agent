@@ -1,5 +1,6 @@
 # MMUDA: Towards Robust Sleep Staging with Multi-Source Multi-Channel Unsupervised Domain Adaptation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

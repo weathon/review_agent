@@ -1,5 +1,6 @@
 # TeFlow:  Enabling Multi-frame Supervision for Feed-forward Scene Flow Estimation
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

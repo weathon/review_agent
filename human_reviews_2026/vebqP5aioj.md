@@ -1,5 +1,6 @@
 # Non-Asymptotic Analysis of (Sticky) Track-and-Stop
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 4, 6
 

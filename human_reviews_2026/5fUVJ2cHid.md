@@ -1,5 +1,6 @@
 # MUR: Momentum Uncertainty guided Reasoning for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

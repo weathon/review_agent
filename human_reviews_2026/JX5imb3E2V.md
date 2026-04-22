@@ -1,5 +1,6 @@
 # Improving expressivity in Link Prediction with GNNs via the Shortest Path
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

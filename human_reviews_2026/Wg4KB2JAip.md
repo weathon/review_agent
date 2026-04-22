@@ -1,5 +1,6 @@
 # Scalable Option Learning in High-Throughput Environments
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

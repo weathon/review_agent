@@ -1,5 +1,6 @@
 # Calibrated Spiking Messages for Emergent Multi-Agent Communication
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 6, 2
 

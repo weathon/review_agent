@@ -1,5 +1,6 @@
 # Why Policy Gradient Algorithms Work for Undiscounted Total-Reward MDPs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 0, 8, 6
 

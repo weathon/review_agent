@@ -1,5 +1,6 @@
 # Johnson-Lindenstrauss Lemma Guided Network for Efficient 3D Medical Segmentation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MonoCon: A general framework for learning ultra-compact high-fidelity representations using monotonicity constraints
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

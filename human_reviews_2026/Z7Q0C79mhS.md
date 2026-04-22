@@ -1,5 +1,6 @@
 # Controllable Preference Alignment for Ambiguous Medical Image Segmentation via Text and Dice Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

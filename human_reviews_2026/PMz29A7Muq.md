@@ -1,5 +1,6 @@
 # Seeing, Listening, Remembering, and Reasoning: A Multimodal Agent with Long-Term Memory
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8
 

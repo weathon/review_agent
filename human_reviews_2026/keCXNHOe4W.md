@@ -1,5 +1,6 @@
 # Reward Is Enough: LLMs Are In-Context Reinforcement Learners
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

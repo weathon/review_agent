@@ -1,5 +1,6 @@
 # A2R: An Asymmetric Two-Stage Reasoning Framework for Parallel Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

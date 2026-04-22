@@ -1,5 +1,6 @@
 # Distributed PATE and CaPC on a DIET: Private Knowledge Transfer without Public Data or Private Inference
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

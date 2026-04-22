@@ -1,5 +1,6 @@
 # STAR: Boosting Time Series Foundation Models for Anomaly Detection  Through State-aware Adapter
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

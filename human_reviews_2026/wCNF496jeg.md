@@ -1,5 +1,6 @@
 # Dynamic Prompt Evolution via Multi-Attribute Feedback for Text-to-Image Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

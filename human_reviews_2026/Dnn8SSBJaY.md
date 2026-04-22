@@ -1,5 +1,6 @@
 # Towards Understanding the Shape of Representations in Protein Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

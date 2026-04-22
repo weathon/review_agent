@@ -1,5 +1,6 @@
 # Looking Locally: Object-Centric Vision Transformers as Foundation Models for Efficient Segmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

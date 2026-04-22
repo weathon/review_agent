@@ -1,5 +1,6 @@
 # LogProber: Disentangling confidence from contamination in LLM responses
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

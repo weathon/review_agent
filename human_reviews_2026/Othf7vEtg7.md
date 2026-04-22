@@ -1,5 +1,6 @@
 # MoCA: Mixture-of-Components Attention for Scalable Compositional 3D Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

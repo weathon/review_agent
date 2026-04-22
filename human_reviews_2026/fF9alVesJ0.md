@@ -1,5 +1,6 @@
 # Mitigating Indirect Prompt Injection via Instruction-Following Intent Analysis
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

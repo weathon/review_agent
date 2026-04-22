@@ -1,5 +1,6 @@
 # ReGraP-LLaVA: Reasoning enabled Graph-based Personalized Large Language and Vision Assistant
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 2, 6, 6
 

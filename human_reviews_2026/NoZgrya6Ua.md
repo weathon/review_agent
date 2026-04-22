@@ -1,5 +1,6 @@
 # References Improve LLM Alignment in Non-Verifiable Domains
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 10, 4, 4
 

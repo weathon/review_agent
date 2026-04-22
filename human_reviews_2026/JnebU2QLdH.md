@@ -1,5 +1,6 @@
 # Pre-training LLM without Learning Rate Decay Enhances Supervised Fine-Tuning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

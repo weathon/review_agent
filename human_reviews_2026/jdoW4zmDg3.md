@@ -1,5 +1,6 @@
 # DeepVerse: 4D Autoregressive Video Generation as a World Model
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

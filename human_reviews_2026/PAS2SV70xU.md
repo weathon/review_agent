@@ -1,5 +1,6 @@
 # Echoes of the Visual Past: Test-Time Prompt Tuning with Multi-Scale Visual Memory
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

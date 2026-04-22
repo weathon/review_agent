@@ -1,5 +1,6 @@
 # Generalization Bound for GNNs on Transductive Node Classification: A View from Optimal Transport
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

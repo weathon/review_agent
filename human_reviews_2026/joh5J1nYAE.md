@@ -1,5 +1,6 @@
 # HumanVideo-MME: Benchmarking MLLMs for Human-Centric Video Understanding
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 0, 2, 4
 

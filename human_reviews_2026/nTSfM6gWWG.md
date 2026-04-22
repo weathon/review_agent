@@ -1,5 +1,6 @@
 # A Strong Diffusion-generated Image Detector via Cross-modal Representation Learning with Neighboring Pixel Relationships
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

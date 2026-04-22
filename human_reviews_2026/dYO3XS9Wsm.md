@@ -1,5 +1,6 @@
 # Faithful Simulation of User–Agent–Environment Interactions for Scalable LLM Agent Evaluation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

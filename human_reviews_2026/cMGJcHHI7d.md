@@ -1,5 +1,6 @@
 # Only Brains Align with Brains: Cross-Region Alignment Patterns Expose Limits of Normative Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

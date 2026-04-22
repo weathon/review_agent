@@ -1,5 +1,6 @@
 # PriorGuide: Test-Time Prior Adaptation for Simulation-Based Inference
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 10, 6, 8, 4
 
@@ -253,7 +254,8 @@ However, despite it’s strengths, there are also weaknesses:
 2. The paper employs two major approximations: the GMM for the ratio and a simple diagonal Gaussian for the reverse kernel. It is the combination of these (especially the latter) that biases the sampler and requires the heavy use of Langevin correction steps to achieve good results. This means the method, while "retrain-free," has a high and non-trivial per-sample inference cost.
 
 ### Questions
-Besides the Weaknesses, I have also a question: 
+Besides the Weaknesses, I have also a question:
+
 1. The GMM approximation of the prior ratio $r(\theta)$ appears to be the most critical (and fragile) part of the pipeline. How does the $L_2$ fitting procedure scale with the dimensionality of $\theta$? Have you considered replacing this heuristic fit with more robust, modern density-ratio estimators (e.g., flow-based, MINE, etc.)?
 
 ### Soundness

@@ -1,5 +1,6 @@
 # GENIE: Gaussian Encoding for Neural Radiance Field Interactive Editing
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

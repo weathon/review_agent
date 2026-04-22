@@ -1,5 +1,6 @@
 # Unsupervised Radar Point Cloud Enhancement via Arbitrary LiDAR Guided Diffusion Prior
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Cut Less, Fold More: Model Compression through the Lens of Projection Geometry
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Plan and Budget: Effective and Efficient Test-Time Scaling on Reasoning Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8, 4, 8
 

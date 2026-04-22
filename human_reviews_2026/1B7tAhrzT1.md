@@ -1,5 +1,6 @@
 # Minibatch Optimal Transport and Perplexity Bound Estimation in Discrete Flow Matching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

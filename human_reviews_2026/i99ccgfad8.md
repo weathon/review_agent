@@ -1,5 +1,6 @@
 # Disentangling the Factors of Convergence between Brains and DINOv3
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2
 

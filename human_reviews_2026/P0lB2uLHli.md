@@ -1,5 +1,6 @@
 # Guaranteed Jailbreaking Defense via Disrupt-and-Rectify Smoothing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 8, 0
 

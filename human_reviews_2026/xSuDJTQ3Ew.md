@@ -1,5 +1,6 @@
 # Codified Finite-state Machines for Role-playing
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

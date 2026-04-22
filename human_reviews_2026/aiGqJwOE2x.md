@@ -1,5 +1,6 @@
 # InfoScan: Information-Efficient Visual Scanning via Resource-Adaptive Walks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

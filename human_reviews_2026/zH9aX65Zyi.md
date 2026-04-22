@@ -1,5 +1,6 @@
 # Benchmarking Correctness and Security in Multi-Turn Code Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

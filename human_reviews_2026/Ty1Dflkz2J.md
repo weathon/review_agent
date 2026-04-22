@@ -1,5 +1,6 @@
 # Not All Experts and Tokens Matter: Selective Token-guided Expert Pruning for MoE
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

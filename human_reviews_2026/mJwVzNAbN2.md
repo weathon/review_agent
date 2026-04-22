@@ -1,5 +1,6 @@
 # Eliciting Behaviors in Multi-Turn Conversations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

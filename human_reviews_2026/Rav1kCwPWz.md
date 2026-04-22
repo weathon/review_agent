@@ -1,5 +1,6 @@
 # Programmatic Representation Learning with Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

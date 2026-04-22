@@ -1,5 +1,6 @@
 # Intermediate Representations are Strong Training-Free AI-Generated Image Detectors
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

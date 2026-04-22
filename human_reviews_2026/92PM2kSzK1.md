@@ -1,5 +1,6 @@
 # Diffusion Dataset Condensation: Training Your Diffusion Model Faster with Less Data
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2, 4
 

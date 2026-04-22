@@ -1,5 +1,6 @@
 # Constrained Diffusion Policy Optimization for Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 8, 2
 

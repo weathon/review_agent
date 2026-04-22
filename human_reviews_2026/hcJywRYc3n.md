@@ -1,5 +1,6 @@
 # Do LLMs Forget What They Should? Evaluating In-Context Forgetting in Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 8
 

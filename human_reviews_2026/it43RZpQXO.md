@@ -1,5 +1,6 @@
 # Multi-Linear Subspace Distance: A New Criterion for Tensor Feature Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

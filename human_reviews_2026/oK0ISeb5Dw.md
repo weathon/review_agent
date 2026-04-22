@@ -1,5 +1,6 @@
 # Otters: An Energy-Efficient Spiking Transformer via Optical Time-to-First-Spike Encoding
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Enabling Your Forensic Detector Know ​How Well​ It Performs on Distorted Samples
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

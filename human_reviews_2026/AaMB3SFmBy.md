@@ -1,5 +1,6 @@
 # Cost-effective Agent Test-time Scaling via Budget-Aware Thinking
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

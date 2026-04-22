@@ -1,5 +1,6 @@
 # Dual Optimistic Ascent (PI Control) is the Augmented Lagrangian Method in Disguise
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

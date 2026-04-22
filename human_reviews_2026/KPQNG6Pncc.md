@@ -1,5 +1,6 @@
 # Distill Models by Aptitude: Efficient Reasoning Capability Distillation via Adaptive Data Curation and Overthinking Mitigation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

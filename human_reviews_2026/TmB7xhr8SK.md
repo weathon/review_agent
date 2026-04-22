@@ -1,5 +1,6 @@
 # Structure-Aware Antibody Humanization via a Novel Black-box Optimization Algorithm
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 6, 2
 

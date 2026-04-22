@@ -1,5 +1,6 @@
 # GMM-TS: Gating Architecture for Multi-Modal Time Series Forecasting
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

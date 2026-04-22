@@ -1,5 +1,6 @@
 # It's all in the heads: An investigation of domain knowledge infusion into LLMs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

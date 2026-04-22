@@ -1,5 +1,6 @@
 # Online Minimization of Polarization and Disagreement via Low-Rank Matrix Bandits
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8
 

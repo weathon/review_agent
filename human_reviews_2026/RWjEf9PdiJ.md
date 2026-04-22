@@ -1,5 +1,6 @@
 # TokMem: One-Token Procedural Memory for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 0, 6
 

@@ -1,5 +1,6 @@
 # RL-SPH: Learning to Achieve Feasible Solutions for Integer Linear Programs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

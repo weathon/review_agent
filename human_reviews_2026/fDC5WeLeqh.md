@@ -1,5 +1,6 @@
 # AWM: Accurate Weight-Matrix Fingerprint for Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

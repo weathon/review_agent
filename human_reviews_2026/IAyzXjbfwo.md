@@ -1,5 +1,6 @@
 # Rolling Forcing: Autoregressive Long Video Diffusion in Real Time
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

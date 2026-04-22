@@ -1,5 +1,6 @@
 # Beyond the Linear Separability Ceiling: Aligning Representations in VLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

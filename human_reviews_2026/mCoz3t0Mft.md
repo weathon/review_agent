@@ -1,5 +1,6 @@
 # Revealing Interconnections between Diseases: from Statistical Methods to Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

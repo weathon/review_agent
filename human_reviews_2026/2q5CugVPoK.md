@@ -1,5 +1,6 @@
 # BrowseNet: Graph-Based Associative Memory for Contextual Information Retrieval
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

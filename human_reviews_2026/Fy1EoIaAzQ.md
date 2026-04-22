@@ -1,5 +1,6 @@
 # EasyTune: Efficient Step-Aware Fine-Tuning for Diffusion-Based Motion Generation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10, 6
 

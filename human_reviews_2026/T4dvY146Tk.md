@@ -1,5 +1,6 @@
 # FLEx: Personalized Federated Learning for Mixture-of-Experts LLMs via Expert Grafting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

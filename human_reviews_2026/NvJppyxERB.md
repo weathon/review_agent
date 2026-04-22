@@ -1,5 +1,6 @@
 # Towards Personalized Parameter Generation via Data-Conditioned Mapping
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Reasoning over Boundaries: Enhancing Specification Alignment via Test-time Delibration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # RETuning: Upgrading Inference-Time Scaling for Stock Movement Prediction with Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Semi-Supervised Learning for Molecular Graphs via Ensemble Consensus
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

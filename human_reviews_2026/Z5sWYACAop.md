@@ -1,5 +1,6 @@
 # Adaptive Rollout Allocation for Online Reinforcement Learning with Verifiable Rewards
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

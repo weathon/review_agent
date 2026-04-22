@@ -1,5 +1,6 @@
 # Scaling Short-Term Memory of Visuomotor Policies for Long-Horizon Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

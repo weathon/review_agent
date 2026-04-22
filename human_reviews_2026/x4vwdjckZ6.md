@@ -1,5 +1,6 @@
 # Sensitivity of Small Language Models to Fine-tuning Data Contamination
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

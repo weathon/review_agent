@@ -1,5 +1,6 @@
 # On the Ability of LLMs to Handle Character-Level Perturbations: How Well and How?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

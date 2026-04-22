@@ -1,5 +1,6 @@
 # Direction-Magnitude Decoupling for Fast Video Generation with Flow Matching Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

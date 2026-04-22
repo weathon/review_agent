@@ -1,5 +1,6 @@
 # PLanTS: Periodicity-aware Latent-state Representation Learning for Multivariate Time Series
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

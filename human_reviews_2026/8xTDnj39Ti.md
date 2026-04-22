@@ -1,5 +1,6 @@
 # Vlaser: Vision-Language-Action Model with Synergistic Embodied Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

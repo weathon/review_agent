@@ -1,5 +1,6 @@
 # Invisible Safety Threat: Malicious Finetuning for LLM via Steganography
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 6
 

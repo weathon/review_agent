@@ -1,5 +1,6 @@
 # Optimal and Efficient Link Insertion for Hitting-Time Minimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

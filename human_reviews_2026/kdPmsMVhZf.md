@@ -1,5 +1,6 @@
 # G4Splat: Geometry-Guided Gaussian Splatting with Generative Prior
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Representation Drift Compensation: A Zero-Cost Enhancement for LLM Decomposition
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

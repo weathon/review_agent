@@ -1,5 +1,6 @@
 # DroneDreamer: Multi-View Low-Altitude World Model with Adaptive Control
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 0, 4
 

@@ -1,5 +1,6 @@
 # One Reflection at a Time: Provable Compression and Denoising of Orthogonal Matrices
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 2, 6, 8
 

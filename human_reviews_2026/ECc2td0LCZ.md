@@ -1,5 +1,6 @@
 # Manifold-Constrained Gaussian Process Inference for One-shot Learning of Unknown Ordinary Differential Equations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

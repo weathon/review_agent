@@ -1,5 +1,6 @@
 # SyMerge: From Non-Interference to Synergistic Merging via Single-Layer Adaptation
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 8
 

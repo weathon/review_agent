@@ -1,5 +1,6 @@
 # Struct2Real: A Systematic Framework for Accurate and Efficient Structure-Grounded Object Image Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

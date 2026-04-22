@@ -1,5 +1,6 @@
 # INTRA: Interleaved Non-contiguous Token spaRse Attention
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

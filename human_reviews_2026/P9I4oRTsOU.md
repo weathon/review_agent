@@ -1,5 +1,6 @@
 # CoFrGeNet: Continued Fraction Architectures for Language Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

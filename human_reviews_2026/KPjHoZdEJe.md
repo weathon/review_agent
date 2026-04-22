@@ -1,5 +1,6 @@
 # Local Distribution-Conditioned Image Synthesis for One-Shot Federated Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

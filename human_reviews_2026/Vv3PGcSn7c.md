@@ -1,5 +1,6 @@
 # Fair Classification by Direct Intervention on Operating Characteristics
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

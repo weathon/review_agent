@@ -1,5 +1,6 @@
 # How Do Medical MLLMs Fail?  A Study on Visual Grounding in Medical Images
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

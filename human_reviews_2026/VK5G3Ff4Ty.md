@@ -1,5 +1,6 @@
 # Is Model Size a Barrier to Quality? Evaluating Small Language Models for  Clinical Text Summarization and Report Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 6, 0, 2
 

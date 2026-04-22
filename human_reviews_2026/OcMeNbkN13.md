@@ -1,5 +1,6 @@
 # TreeGrad-Ranker: Feature Ranking via $O(L)$-Time Gradients for Decision Trees
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

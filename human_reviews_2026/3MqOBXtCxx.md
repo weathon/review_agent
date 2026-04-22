@@ -1,5 +1,6 @@
 # Cost-Optimal Active AI Model Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

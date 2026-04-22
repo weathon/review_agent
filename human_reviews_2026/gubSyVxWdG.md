@@ -1,5 +1,6 @@
 # A Relative Error-Based Evaluation Framework of Heterogeneous Treatment Effect Estimators
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6
 

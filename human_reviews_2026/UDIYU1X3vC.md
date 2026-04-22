@@ -1,5 +1,6 @@
 # Proper Velocity Neural Networks
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Bayesian Influence Functions for Hessian-Free Data Attribution
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

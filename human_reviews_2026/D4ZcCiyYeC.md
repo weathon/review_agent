@@ -1,5 +1,6 @@
 # V2P: Visual Attention Calibration for GUI Grounding via Background Suppression and Center Peaking
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

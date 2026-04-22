@@ -1,5 +1,6 @@
 # Offline Reinforcement Learning via Action-Space Pseudo-Labeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # ECAM: Enhancing Causal Reasoning in Foundation Models with Endogenous Causal Attention Mechanism
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

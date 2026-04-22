@@ -1,5 +1,6 @@
 # CoPeP: Benchmarking Continual Pretraining for Protein Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

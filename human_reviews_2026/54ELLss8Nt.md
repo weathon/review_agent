@@ -1,5 +1,6 @@
 # DKRF: Dynamic Knowledge Reasoning for Out-of-Distribution Generalization in Mobile GUI Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

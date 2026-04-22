@@ -1,5 +1,6 @@
 # Discovering state equivalences in UCT search trees by action pruning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 4, 6
 

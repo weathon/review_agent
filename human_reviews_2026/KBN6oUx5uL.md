@@ -1,5 +1,6 @@
 # SR-Scientist: Scientific Equation Discovery With Agentic AI
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

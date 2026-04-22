@@ -1,5 +1,6 @@
 # Beyond Refusals: Fine-grained Safety Alignment for Reasoning LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # SAFER: Probing Safety in Reward Models with Sparse Autoencoder
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

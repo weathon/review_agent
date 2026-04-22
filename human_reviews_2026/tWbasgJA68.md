@@ -1,5 +1,6 @@
 # Elucidating Guidance in Variance Exploding Diffusion Models: Fast Convergence and Better Diversity
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # G-Verifier: Geometric Verifier for Robust 3D Point Cloud Semantic Search with Spatial Relation Reasoning
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # The interplay between domain specialization and model size
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

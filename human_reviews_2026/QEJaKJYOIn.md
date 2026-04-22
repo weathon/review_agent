@@ -1,5 +1,6 @@
 # DiffVax: Optimization-Free Image Immunization Against Diffusion-Based Editing
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

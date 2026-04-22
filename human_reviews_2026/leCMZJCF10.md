@@ -1,5 +1,6 @@
 # Robust Classification with Noisy Labels Based on Posterior Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Compositional Visual Planning via Inference-Time Diffusion Scaling
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6, 8
 

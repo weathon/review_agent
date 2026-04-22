@@ -1,5 +1,6 @@
 # Unknown Unknowns: Why Hidden Intentions in LLMs Evade Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 2, 10
 

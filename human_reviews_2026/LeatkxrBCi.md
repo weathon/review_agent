@@ -1,5 +1,6 @@
 # Cache-to-Cache: Direct Semantic Communication Between Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

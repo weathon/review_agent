@@ -1,5 +1,6 @@
 # Convergence of Adam in Deep ReLU Networks via Directional Complexity and Kakeya Bounds
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 4
 

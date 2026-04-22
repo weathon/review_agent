@@ -1,5 +1,6 @@
 # Video-LevelGauge: Investigating Contextual Positional Bias in Video Language Models.
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 
@@ -128,7 +129,8 @@ This paper introduces Video-LevelGauge, a benchmark exploring positional bias in
 - The paper primarily identifies the problem of positional bias but does not propose or discuss concrete directions for mitigation. Including such discussion would make the contribution more complete and valuable for future work.
 - (Minor) Discussing inconsistent and biased video understanding found in prior works [1, 2] could also strengthen this analysis.
 
-**References** 
+**References**
+
 
 [1] A Closer Look at Temporal Sentence Grounding in Videos: Dataset and Metric, arxiv 2021
 

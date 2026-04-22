@@ -1,5 +1,6 @@
 # TSDINO: Teacher–Student Self-Distillation Framework for Robust Pre-training of Time-Series Foundation Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

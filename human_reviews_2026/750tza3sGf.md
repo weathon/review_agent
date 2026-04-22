@@ -1,5 +1,6 @@
 # BoreaRL: A Multi-Objective Reinforcement Learning Environment for Climate-Adaptive Boreal Forest Management
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # DASH: Deterministic Attention Scheduling for High-throughput Reproducible LLM Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

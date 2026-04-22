@@ -1,5 +1,6 @@
 # CAR-LoRA: Training Compression-Aware and Robust LoRA Adapters for Evolving LLMs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

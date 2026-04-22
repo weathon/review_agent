@@ -1,5 +1,6 @@
 # Do All Individual Layers Help? An Empirical Study of Task-Interfering Layers in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

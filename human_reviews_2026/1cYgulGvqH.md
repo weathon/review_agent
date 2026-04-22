@@ -1,5 +1,6 @@
 # AD-Reasoning: Multimodal Guideline-Guided Reasoning for Alzheimer’s Disease Diagnosis
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

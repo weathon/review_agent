@@ -1,5 +1,6 @@
 # Preference-based Policy Optimization from Sparse-reward Offline Dataset
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

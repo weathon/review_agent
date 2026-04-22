@@ -1,5 +1,6 @@
 # Kernel-based Robust Markov Subsampling for Regularized Nonparametric Regression with Contaminated Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Progressive Coarse-graining and Deep Neural Networks (DNNs)
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

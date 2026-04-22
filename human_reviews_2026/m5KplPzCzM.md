@@ -1,5 +1,6 @@
 # Learning Pseudorandom Numbers with Transformers: Permuted Congruential Generators, Curricula, and Interpretability
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

@@ -1,5 +1,6 @@
 # The Power of Small Initialization in Noisy Low-Tubal-Rank Tensor Recovery
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

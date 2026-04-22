@@ -1,5 +1,6 @@
 # Align and Adapt: Enhancing LLM Format Alignment and Knowledge Adaptation via Reverse Constraints Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 0, 6, 4
 

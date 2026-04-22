@@ -1,5 +1,6 @@
 # GLEE: A Unified Framework and Benchmark for Language-based Economic Environments
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

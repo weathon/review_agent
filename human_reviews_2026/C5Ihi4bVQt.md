@@ -1,5 +1,6 @@
 # LLMS ON TRIAL: Evaluating Judicial Fairness For Large Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Gradient-Based Diversity Optimization with Differentiable Top-$k$ Objective
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

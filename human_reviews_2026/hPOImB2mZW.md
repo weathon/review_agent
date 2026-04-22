@@ -1,5 +1,6 @@
 # Operator Theory-Driven Autoformulation of MDPs for Control of Queueing Systems
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 10, 8, 2
 

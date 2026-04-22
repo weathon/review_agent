@@ -1,5 +1,6 @@
 # Discovery of Adversarial Endgame Chess Positions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

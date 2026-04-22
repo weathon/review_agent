@@ -1,5 +1,6 @@
 # Matching Multiple Experts: On the Exploitability of Multi-Agent Imitation Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

@@ -1,5 +1,6 @@
 # CoDA: Agentic Systems for Collaborative Data Visualization
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6
 

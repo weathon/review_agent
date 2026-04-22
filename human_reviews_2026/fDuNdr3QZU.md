@@ -1,5 +1,6 @@
 # ExPLAIND: Unifying Model, Data, and Training Attribution to Study Model Behavior
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 8, 2, 2
 

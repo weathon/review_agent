@@ -1,5 +1,6 @@
 # RoboTransfer: Geometry-Consistent Video Diffusion for Robotic Visual Policy Transfer
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

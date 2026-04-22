@@ -1,5 +1,6 @@
 # Animal behavioral analysis and neural encoding with transformer-based self-supervised pretraining
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

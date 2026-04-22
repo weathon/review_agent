@@ -1,5 +1,6 @@
 # Drop or Merge? Hybrid MoE LLMs Compressors via Metric-Driven Adaptive Allocation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

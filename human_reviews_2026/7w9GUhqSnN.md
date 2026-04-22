@@ -1,5 +1,6 @@
 # BayesENDS: Bayesian Electrophysiological Neural Dynamical Systems for Alzheimer’s Disease Diagnosis
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 2, 6, 2
 

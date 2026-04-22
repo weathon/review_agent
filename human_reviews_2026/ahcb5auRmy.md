@@ -1,5 +1,6 @@
 # Revive and Recouple: Mitigating Plasticity Loss in Transformer Architectures
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

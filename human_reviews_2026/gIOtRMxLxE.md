@@ -1,5 +1,6 @@
 # Exploring the Trade-off between Quality and Diversity of Language Models during Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 2, 8
 

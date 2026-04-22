@@ -1,5 +1,6 @@
 # RoboInter: A Holistic Intermediate Representation Suite Towards Robotic Manipulation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

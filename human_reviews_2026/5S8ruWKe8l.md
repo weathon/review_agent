@@ -1,5 +1,6 @@
 # Fast and Stable Riemannian Metrics on SPD Manifolds via Cholesky Product Geometry
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 4
 

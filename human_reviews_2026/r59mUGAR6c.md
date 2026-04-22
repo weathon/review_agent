@@ -1,5 +1,6 @@
 # Keep Refining Your Discrete Diffusion Model: A Mixture of Absorbing and Uniform Processes
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

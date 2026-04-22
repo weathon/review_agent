@@ -1,5 +1,6 @@
 # Metacognitive Reuse: Turning Recurring LLM Reasoning Into Concise Behaviors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

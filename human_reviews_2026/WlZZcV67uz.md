@@ -1,5 +1,6 @@
 # Physics Aware Neural Networks : Denoising for Magnetic Navigation
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

@@ -1,5 +1,6 @@
 # LDT: Layer-Decomposition Training Makes Networks More Generalizable
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2, 6
 

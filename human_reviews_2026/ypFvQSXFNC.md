@@ -1,5 +1,6 @@
 # Generative Blocks World: Moving Things Around in Pictures
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

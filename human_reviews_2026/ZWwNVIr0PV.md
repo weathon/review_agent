@@ -1,5 +1,6 @@
 # DiSA: Diffusion Step Annealing in Autoregressive Image Generation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

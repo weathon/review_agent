@@ -1,5 +1,6 @@
 # MuBench: Assessment of Multilingual Capabilities of Large Language Models Across 61 Languages
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

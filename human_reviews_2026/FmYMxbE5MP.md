@@ -1,5 +1,6 @@
 # Why Music Moves Us: A Computational Model of Aesthetic Experience and Creativity via Meta-Learned Active Inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 8, 2, 0
 

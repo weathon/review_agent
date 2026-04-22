@@ -1,5 +1,6 @@
 # Language Matters: How Do Multilingual Input and Reasoning Paths Affect Large Reasoning Models?
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

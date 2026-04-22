@@ -1,5 +1,6 @@
 # Discovering alternative solutions beyond the simplicity bias in recurrent neural networks
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

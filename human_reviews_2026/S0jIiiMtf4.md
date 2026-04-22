@@ -1,5 +1,6 @@
 # Infinite Horizon Markov Economies
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

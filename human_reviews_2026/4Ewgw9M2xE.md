@@ -1,5 +1,6 @@
 # R1-Reward: Training Multimodal Reward Model Through Stable Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

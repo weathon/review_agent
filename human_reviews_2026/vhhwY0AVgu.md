@@ -1,5 +1,6 @@
 # Layerwise Learning Rate in the Era of Large Language Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 6, 4
 

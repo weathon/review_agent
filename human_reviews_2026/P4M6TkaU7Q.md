@@ -1,5 +1,6 @@
 # HashPose: Memory-Efficient Human Pose Estimation via Progressive Hash Codes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

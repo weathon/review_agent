@@ -1,5 +1,6 @@
 # AuxVLA: Auxiliary Task Learning and Multi-Modal Enhancement for Vision-Language-Action Models in Mobile Manipulation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

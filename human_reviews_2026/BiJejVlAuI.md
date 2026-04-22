@@ -1,5 +1,6 @@
 # Learning from Mistakes: Negative Reasoning Samples Enhance Out-of-Domain Generalization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

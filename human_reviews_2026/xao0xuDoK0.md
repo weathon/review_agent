@@ -1,5 +1,6 @@
 # Accuracy Law for the Future of Deep Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 4, 2, 2
 

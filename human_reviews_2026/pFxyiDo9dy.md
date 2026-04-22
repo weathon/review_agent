@@ -1,5 +1,6 @@
 # A LoD of Gaussians: Unified Training and Rendering for Ultra-Large Scale Reconstruction with External Memory
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 0, 6, 6
 

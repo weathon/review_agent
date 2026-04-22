@@ -1,5 +1,6 @@
 # SpectraLLM: Uncovering the Ability of LLMs for Molecule Structure Elucidation from Multi-Spectra
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # MMR-V: What's Left Unsaid? A Benchmark for Multimodal Deep Reasoning in Videos
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

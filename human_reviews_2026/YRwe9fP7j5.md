@@ -1,5 +1,6 @@
 # Fewer Weights, More Problems: A Practical Attack on LLM Pruning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Structural Error Patterns Matter: Towards More Structure-aware GNN Evaluation and Training
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 2
 

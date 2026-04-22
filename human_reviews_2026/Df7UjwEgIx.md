@@ -1,5 +1,6 @@
 # SpaCE-10: A Comprehensive Benchmark for Multimodal Large Language Models in Compositional Spatial Intelligence
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

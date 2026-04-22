@@ -1,5 +1,6 @@
 # Arithmetic-Bench: Evaluating Multi-Step Reasoning in LLMs with Basic Arithmetic
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Learning Hamiltonian Dynamics at Scale:  A Differential-Geometric Approach
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

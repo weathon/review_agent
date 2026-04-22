@@ -1,5 +1,6 @@
 # Z0-Inf: Zeroth Order Approximation for Data Influence
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

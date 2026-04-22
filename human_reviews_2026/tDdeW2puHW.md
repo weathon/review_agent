@@ -1,5 +1,6 @@
 # From Real to Synthetic: A Fine-grained Dataset and High-fidelity Biomechanical Model for Animal Behavior Understanding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2, 8
 

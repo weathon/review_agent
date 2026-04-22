@@ -1,5 +1,6 @@
 # Quality over Quantity: Semi-Supervised Detection of Illicit Bitcoin Flows via Feature Engineering
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 0, 2
 

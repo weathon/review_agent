@@ -1,5 +1,6 @@
 # MGHF: Multi-Granular High-Frequency Perceptual Loss for Image Super-Resolution
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2
 

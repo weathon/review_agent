@@ -1,5 +1,6 @@
 # WATS: Wavelet-Aware Temperature Scaling for Reliable Graph Neural Networks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

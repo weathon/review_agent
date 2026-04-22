@@ -1,5 +1,6 @@
 # High-Power Training Data Identification with Provable Statistical Guarantees
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

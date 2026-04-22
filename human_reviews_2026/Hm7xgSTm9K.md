@@ -1,5 +1,6 @@
 # Efficient Generative Transformer Operators for Million-Point PDEs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

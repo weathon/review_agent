@@ -1,5 +1,6 @@
 # Clip-Low Increases Entropy and Clip-High Decreases Entropy in  Reinforcement Learning of Large Language Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Concept-Based Dictionary Learning for Inference-Time Safety in Vision–Language–Action Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

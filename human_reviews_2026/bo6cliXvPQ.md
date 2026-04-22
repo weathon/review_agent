@@ -1,5 +1,6 @@
 # On Rademacher Complexity-based Generalization Bounds for the Transformer Architecture
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

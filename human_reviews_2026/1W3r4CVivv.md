@@ -1,5 +1,6 @@
 # ThinkAfford: Enhancing VLM Reasoning for Affordance Grounding in 3D Scenes
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

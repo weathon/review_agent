@@ -1,5 +1,6 @@
 # Beyond Static Snapshots: Physically-Based Deformable and Relightable 2D Gaussians
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

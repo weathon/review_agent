@@ -1,5 +1,6 @@
 # Enhancing Hallucination Detection through Noise Injection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 8
 

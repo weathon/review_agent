@@ -1,5 +1,6 @@
 # SSD: A Sparse Semantic Defense Against Semantic Adversarial Attacks to Image Classifiers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 0, 6
 

@@ -1,5 +1,6 @@
 # OKBench: Democratizing LLM Evaluation with Fully Automated, On-Demand Open Knowledge Benchmarking
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Structured Visual Landscape: Generating Preferred Representations in Multi-modal Biological and Artificial Neural Networks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

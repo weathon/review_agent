@@ -1,5 +1,6 @@
 # The Early Bird Catches the Worm: A Positional Decay Reweighting Approach to Membership Inference in Large Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

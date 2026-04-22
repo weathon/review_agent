@@ -1,5 +1,6 @@
 # PYRREGULAR: A Unified Framework for Irregular Time Series, with Classification Benchmarks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

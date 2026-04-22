@@ -1,5 +1,6 @@
 # Robust Learning of Diffusion Models with Extremely Noisy Conditions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

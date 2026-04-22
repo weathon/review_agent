@@ -1,5 +1,6 @@
 # Understanding Judge Calibration in Multi-Turn Debates
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

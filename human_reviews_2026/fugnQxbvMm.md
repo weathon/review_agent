@@ -1,5 +1,6 @@
 # REMem: Reasoning with Episodic Memory in Language Agent
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6, 4
 
@@ -40,7 +41,8 @@ The paper proposes REMem, a memory + reasoning framework for LLM agents. Offline
     * whether gist nodes and phrase/concept nodes live in a single unified graph or in two stores queried separately;
     * where timestamps/intervals reside (on gist nodes, on relation edges, or on event-instance nodes) and how overlaps/validity are represented;
     * how entity canonicalization across mentions works (e.g., “I”→“Alice”; handling other arguments like “Peter”);
-    * how synonymy links between gists interact with temporal distinctness (risk of over-merging similar but distinct events). Since retrieval operates over this graph, a precise schema is important.
+    * how synonymy links between gists interact with temporal distinctness (risk of over-merging similar but distinct events).
+Since retrieval operates over this graph, a precise schema is important.
 
 5. Redundant first-stage retrieval functions. During initial recall the system exposes both a semantic retriever (embeddings) and a lexical retriever (BM25). Both serve the same purpose, yet the paper doesn’t justify why both are needed, how they’re combined, or quantify their individual contributions. If REMem benefits from simply having two parallel high-recall channels, that should be isolated and reported.
 

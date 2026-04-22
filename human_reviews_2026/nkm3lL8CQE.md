@@ -1,5 +1,6 @@
 # Discrepancy-Aware Knowledge Distillation for Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

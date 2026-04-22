@@ -1,5 +1,6 @@
 # CACR: Reinforcing Temporal Answer Grounding in Videos via Candidate-Aware  Causal Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

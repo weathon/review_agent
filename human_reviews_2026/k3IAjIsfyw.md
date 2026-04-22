@@ -1,5 +1,6 @@
 # OracleKV: Oracle Guidance for Question-Independent KV Cache Eviction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

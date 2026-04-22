@@ -1,5 +1,6 @@
 # Beyond the Stability-Exploration Dilemma: Environmental Regularization for LLM Policy Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

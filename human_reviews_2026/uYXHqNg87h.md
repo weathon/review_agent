@@ -1,5 +1,6 @@
 # MultiViewPano: Training-Free 360° Panorama Generation via Multi-View Diffusion and Pose-Aware Stitching
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

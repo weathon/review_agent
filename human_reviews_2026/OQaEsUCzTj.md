@@ -1,5 +1,6 @@
 # Unsupervised Multi-Scale Gromov-Wasserstein Hypergraph Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4
 

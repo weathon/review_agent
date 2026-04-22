@@ -1,5 +1,6 @@
 # Optimal Stopping vs Best-Of-$N$ for Inference Time Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

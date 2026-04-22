@@ -1,5 +1,6 @@
 # X-Distill: Cross-Architecture Vision Distillation Enables Data-Efficient Visuomotor Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

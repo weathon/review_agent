@@ -1,5 +1,6 @@
 # VaseVQA-3D: Benchmarking 3D VLMs on Ancient Greek Pottery
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 8, 4, 4
 

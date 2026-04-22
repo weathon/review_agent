@@ -1,5 +1,6 @@
 # On The Surprising Effectiveness of a Single Global Merging in Decentralized Learning
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 8
 

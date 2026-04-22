@@ -1,5 +1,6 @@
 # CodecSep: Prompt-Driven Universal Sound Separation on Neural Audio Codec Latents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

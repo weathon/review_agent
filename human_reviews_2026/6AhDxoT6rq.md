@@ -1,5 +1,6 @@
 # Optimal Batched (Generalized) Linear Contextual Bandit Algorithm
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 2, 6
 

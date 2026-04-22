@@ -1,5 +1,6 @@
 # SEDiT: Mask-Free Video Subtitle Erasure with Prompt Instruction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 2, 10
 

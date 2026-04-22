@@ -1,5 +1,6 @@
 # Towards Understanding Associative Knowledge in Vision-language Models via Neuron-level Attribution
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 8, 2
 

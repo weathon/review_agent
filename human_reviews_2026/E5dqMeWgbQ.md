@@ -1,5 +1,6 @@
 # Look Less, Reason More: Rollout-Guided Adaptive Pixel-Space Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

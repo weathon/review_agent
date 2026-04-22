@@ -1,5 +1,6 @@
 # An Information Theoretic Perspective on Agentic System Design
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

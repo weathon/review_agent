@@ -1,5 +1,6 @@
 # Rethinking reasoning with Masked Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

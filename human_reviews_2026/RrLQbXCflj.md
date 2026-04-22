@@ -1,5 +1,6 @@
 # Uncertainty-Aware Tree Search for Efficient LLM Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Quartet of Diffusions: Structure-Aware Point Cloud Generation through Part and Symmetry Guidance
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

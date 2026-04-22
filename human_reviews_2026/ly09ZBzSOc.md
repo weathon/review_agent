@@ -1,5 +1,6 @@
 # ADORA: Training Reasoning Models with Dynamic Advantage Estimation on Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

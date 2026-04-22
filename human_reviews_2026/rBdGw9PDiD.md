@@ -1,5 +1,6 @@
 # Re-calibrating Progress: A Physics-Aware Benchmark to Expose the Evaluation Gap in Scientific Machine Learning
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

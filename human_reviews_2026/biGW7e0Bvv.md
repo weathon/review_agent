@@ -1,5 +1,6 @@
 # TheMCPCompany: Creating General-purpose Agents with Task-specific Tools
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 8, 2, 2
 

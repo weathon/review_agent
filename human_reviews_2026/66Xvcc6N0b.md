@@ -1,5 +1,6 @@
 # Lightweight Detection of Silent Data Corruption in Distributed Deep Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Robust Equation Structure Learning with Adaptive Refinement
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 4
 

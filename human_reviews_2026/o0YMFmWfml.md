@@ -1,5 +1,6 @@
 # MODE: Learning compositional representations of complex systems with Mixtures Of Dynamical Experts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 6
 

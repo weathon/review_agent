@@ -1,5 +1,6 @@
 # FlowNet: A Generic Independent and Interactive Model for Streamflow Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

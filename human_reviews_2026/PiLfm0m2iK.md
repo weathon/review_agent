@@ -1,5 +1,6 @@
 # EcoXplain: An Interpretable Causal-Augmented Framework for Macroeconomic Forecasting
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 6, 2
 

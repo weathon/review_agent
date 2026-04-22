@@ -1,5 +1,6 @@
 # Evolving LLMs' Self-Refinement Capability via Synergistic Training-Inference Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 2
 

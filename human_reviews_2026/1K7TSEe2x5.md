@@ -1,5 +1,6 @@
 # Achieving Subcategorical Erasure in Text-to-Image Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 
@@ -29,14 +30,21 @@ Strengths:
 
 ### Weaknesses
 Weaknesses:
-1. The method section writing can be improved. For example, it would be great to have the definition of the concept space C in Section 4.2, instead of in the Appendix. Further, it’s currently defined using a discrete CLIP vocabulary with only 100 words, which may miss fine-grained or semantically close subcategories. An analysis of coverage (e.g., recall of known hyponyms) or ablation over the size of C would strengthen this part. Also, the objective seeks concepts most different from the neutral prompt, but this can lead to the selection of entirely unrelated concepts to the target concept. Does the concept space C only consist of possibly relevant related sub-categories?  
-2. It is unclear how the Lipschitz loss in Section 4.3 contributes to unlearning. The loss is computed in VAE-encoded space, which will update the VAE encoder, instead of the diffusion UNet? Since only the VAE decoder is used at inference, updating the encoder seems irrelevant. If the goal is smoothness in the diffusion feature space, the paper should explicitly clarify where gradients flow and justify this design. 
-3. Regularizing the model output on a single “neutral” prompt may not reliably preserve semantically close but non-target concepts (e.g., “plate” when erasing “knife”). Evaluation should include such near-neighbor categories rather than random CIFAR-10 classes. 
-4. A short algorithm block summarizing the steps would be really helpful. The min–max setup in Equations 3 and 7 is missing the outer min that enforces the mapping of the related sub-categories to the neutral concept.  
-5. Evaluation:   
+1. The method section writing can be improved. For example, it would be great to have the definition of the concept space C in Section 4.2, instead of in the Appendix. Further, it’s currently defined using a discrete CLIP vocabulary with only 100 words, which may miss fine-grained or semantically close subcategories. An analysis of coverage (e.g., recall of known hyponyms) or ablation over the size of C would strengthen this part. Also, the objective seeks concepts most different from the neutral prompt, but this can lead to the selection of entirely unrelated concepts to the target concept. Does the concept space C only consist of possibly relevant related sub-categories? 
+
+2. It is unclear how the Lipschitz loss in Section 4.3 contributes to unlearning. The loss is computed in VAE-encoded space, which will update the VAE encoder, instead of the diffusion UNet? Since only the VAE decoder is used at inference, updating the encoder seems irrelevant. If the goal is smoothness in the diffusion feature space, the paper should explicitly clarify where gradients flow and justify this design.
+
+3. Regularizing the model output on a single “neutral” prompt may not reliably preserve semantically close but non-target concepts (e.g., “plate” when erasing “knife”). Evaluation should include such near-neighbor categories rather than random CIFAR-10 classes.
+
+4. A short algorithm block summarizing the steps would be really helpful. The min–max setup in Equations 3 and 7 is missing the outer min that enforces the mapping of the related sub-categories to the neutral concept. 
+
+5. Evaluation:
+  
 – To measure locality, the evaluation setup should select the closest non-target concept instead of random classes from CIFAR-10, e.g., “plates” when removing “knives”, which might be closer in the concept space of kitchen utensils.  
-  – Tests are limited to SD-1.4; extending to newer architectures (e.g., SD3, or FLUX) would show broader applicability.   
- – Additional evaluation on adversarial prompts (e.g., Ring-A-Bell (Tsai et al., 2023)) would help evaluate robustness.
+ 
+– Tests are limited to SD-1.4; extending to newer architectures (e.g., SD3, or FLUX) would show broader applicability.   
+
+– Additional evaluation on adversarial prompts (e.g., Ring-A-Bell (Tsai et al., 2023)) would help evaluate robustness.
 
 ### Questions
 please look at the weakness section.

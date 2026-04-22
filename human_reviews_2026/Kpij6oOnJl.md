@@ -1,5 +1,6 @@
 # Test-Time Poisoned Sample Detection by Exploiting Shallow Malicious Matching in Backdoored CLIP
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

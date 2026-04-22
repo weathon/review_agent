@@ -1,5 +1,6 @@
 # Concrete-to-Abstract Goal Embeddings for Self-Supervised Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

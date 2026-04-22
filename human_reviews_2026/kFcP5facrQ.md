@@ -1,5 +1,6 @@
 # Charting the Frontier: How Optimizing Performance Yields Accurate Scaling Laws on a Shoestring
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

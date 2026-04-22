@@ -1,5 +1,6 @@
 # CONTRASTIVE TIME SERIES FORECASTING WITH ANOMALIES
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

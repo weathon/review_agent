@@ -1,5 +1,6 @@
 # ImpuGen: Unified Tabular Imputation and Generation via Task-Aligned Sampling Strategies
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8
 

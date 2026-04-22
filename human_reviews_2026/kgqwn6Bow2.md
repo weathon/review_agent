@@ -1,5 +1,6 @@
 # Self-Supervision Improves Multi-Teacher Distillation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 6
 

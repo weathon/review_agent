@@ -1,5 +1,6 @@
 # ImpResDescan: Diffusion-Based Restoration for Scanned Document Images via Implicit and Ambient Training
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

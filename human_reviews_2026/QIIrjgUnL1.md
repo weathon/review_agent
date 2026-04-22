@@ -1,5 +1,6 @@
 # Position-Aware Attention Mechanism: A Mathematical Framework for Enhanced Spatial Information Processing in Transformer Architectures
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

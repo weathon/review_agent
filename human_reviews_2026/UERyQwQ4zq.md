@@ -1,5 +1,6 @@
 # Dataset Protection via Watermarked Canaries in Retrieval-Augmented LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

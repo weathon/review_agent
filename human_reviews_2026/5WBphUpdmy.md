@@ -1,5 +1,6 @@
 # $A^{4}$-MLRM: Fourfold Attention for Adaptive Hallucination Suppression in Multimodal Large Reasoning Model
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

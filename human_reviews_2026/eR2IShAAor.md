@@ -1,5 +1,6 @@
 # Analyzing Dynamic Surgical Workflows Through Multi-Scale Vision-Language Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

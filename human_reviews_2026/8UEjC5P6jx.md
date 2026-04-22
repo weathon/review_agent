@@ -1,5 +1,6 @@
 # HGWM: Hierarchical Graph-guided World Model for Zero-shot Object Navigation via Scene-Goal Graph Matching
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # DéjàQ: Open-Ended Evolution of Diverse, Learnable and Verifiable Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Balancing Precision and Richness in Image Caption Services for Enhanced Descriptive Accuracy
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Who Owns This Sample: Cross-Client Membership Inference Attack in Federated Graph Neural Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

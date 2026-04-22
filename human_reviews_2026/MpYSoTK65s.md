@@ -1,5 +1,6 @@
 # Enforcing Axioms for AI Alignment under Loss-Based Rules
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 2
 

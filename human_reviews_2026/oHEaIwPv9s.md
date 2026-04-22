@@ -1,5 +1,6 @@
 # Build-Bench: Benchmarking LLM Agents on Compiling Real-World Open Source Software
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

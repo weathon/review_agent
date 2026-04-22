@@ -1,5 +1,6 @@
 # QUTCC: Quantile Uncertainty Training and Conformal Calibration for Imaging Inverse Problems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 2, 8
 

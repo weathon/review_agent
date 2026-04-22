@@ -1,5 +1,6 @@
 # Poisoning the Inner Prediction Logic of Graph Neural Networks for Clean-Label Backdoor Attacks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

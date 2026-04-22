@@ -1,5 +1,6 @@
 # SpeechQC-Agent: A Natural Language Driven Multi-Agent System for Speech Dataset Quality
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

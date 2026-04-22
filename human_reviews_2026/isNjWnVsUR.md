@@ -1,5 +1,6 @@
 # Anchor Frame Bridging for Coherent First-Last Frame Video Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # MMSI-Bench: A Benchmark for Multi-Image Spatial Intelligence
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 

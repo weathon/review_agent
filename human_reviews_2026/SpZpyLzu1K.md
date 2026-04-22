@@ -1,5 +1,6 @@
 # Spectral Domain Neural Reconstruction for Passband FMCW Radars
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

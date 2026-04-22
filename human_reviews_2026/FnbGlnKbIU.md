@@ -1,5 +1,6 @@
 # Two-Layer Convolutional Autoencoders Trained on Normal Data Provably Detect Unseen Anomalies
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

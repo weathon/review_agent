@@ -1,5 +1,6 @@
 # STEER AWAY FROM MODE COLLISIONS: IMPROVING COMPOSITION IN DIFFUSION MODELS
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

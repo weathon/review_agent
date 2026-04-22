@@ -1,5 +1,6 @@
 # Unveiling the Basin-Like Loss Landscape in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 8
 

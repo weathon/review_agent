@@ -1,5 +1,6 @@
 # Self-Correction Bench: Uncovering and Addressing the Self-Correction Blind Spot in Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

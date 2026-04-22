@@ -1,5 +1,6 @@
 # PMark: Towards Robust and Distortion-free Semantic-level Watermarking with Channel Constraints
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

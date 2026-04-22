@@ -1,5 +1,6 @@
 # Quantum mechanical framework for quantization-based optimization: from Gradient flow to Schrödinger equation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 2, 0
 

@@ -1,5 +1,6 @@
 # Trading Carbon for Physics:  On the Resource Efficiency of Machine Learning for Spatio-Temporal Forecasting
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

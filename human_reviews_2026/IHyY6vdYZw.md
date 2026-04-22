@@ -1,5 +1,6 @@
 # VisualPRM400K: An Effective Dataset for Training Multimodal Process Reward Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

@@ -1,5 +1,6 @@
 # From Motion to Behavior: Hierarchical Modeling of Humanoid Generative Behavior Control
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

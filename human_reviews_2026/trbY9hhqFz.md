@@ -1,5 +1,6 @@
 # SpurLens: Automatic Detection of Spurious Cues in Multimodal LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

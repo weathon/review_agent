@@ -1,5 +1,6 @@
 # AXIOM: Learning to Play Games in Minutes with Expanding Object-Centric Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

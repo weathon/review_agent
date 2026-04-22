@@ -1,5 +1,6 @@
 # Characterizing and Mitigating Reasoning Drift in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6
 

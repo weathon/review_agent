@@ -1,5 +1,6 @@
 # Black-box unadjusted Hamiltonian Monte Carlo
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

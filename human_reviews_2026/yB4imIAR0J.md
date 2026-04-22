@@ -1,5 +1,6 @@
 # Interpretable Embeddings with Sparse Autoencoders: A Data Analysis Toolkit
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

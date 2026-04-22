@@ -1,5 +1,6 @@
 # Neural Classifier of Deep Brain Stimulation Evoked Emotion
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2, 2
 

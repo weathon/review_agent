@@ -1,5 +1,6 @@
 # Towards understanding multimodal in-context learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

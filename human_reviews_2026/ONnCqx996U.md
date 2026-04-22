@@ -1,5 +1,6 @@
 # CLINB: A Climate Intelligence Benchmark for Foundational Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

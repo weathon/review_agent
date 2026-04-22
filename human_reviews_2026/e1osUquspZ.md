@@ -1,5 +1,6 @@
 # Select and Schedule: An Efficient Hierarchical Optimizer for Blocking Job Shop Scheduling Problem with Massive Jobs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Critique to Verify: Accurate and Honest Test-Time Scaling with RL-Trained Verifiers
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 4
 

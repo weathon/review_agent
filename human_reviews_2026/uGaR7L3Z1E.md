@@ -1,5 +1,6 @@
 # Follow-Your-Shape: Shape-Aware Image Editing via Trajectory-Guided Region Control
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

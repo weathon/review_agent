@@ -1,5 +1,6 @@
 # Learnable Eigenfunctions for Graph Rewiring: Balancing Local Community Structure and Global Connectivity
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

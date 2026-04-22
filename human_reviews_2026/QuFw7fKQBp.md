@@ -1,5 +1,6 @@
 # SURE: Semantic Uncertainty Regularization for Test-Time Adaptation in Vision-Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 4
 

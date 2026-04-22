@@ -1,5 +1,6 @@
 # PIANO: Physics-Informed Autoregressive Networks
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2, 4
 

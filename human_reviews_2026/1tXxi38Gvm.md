@@ -1,5 +1,6 @@
 # InfoMax-based Resampling for Dataset Balance and Diversity
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

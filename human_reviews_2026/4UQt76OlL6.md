@@ -1,5 +1,6 @@
 # Merging without Forgetting: Continual Fusion of Task-Specific Models via Optimal Transport
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

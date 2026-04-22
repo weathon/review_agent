@@ -1,5 +1,6 @@
 # The Value of Information in Human-AI Decision-making
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 2, 6
 

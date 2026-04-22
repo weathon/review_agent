@@ -1,5 +1,6 @@
 # Enhancing Graph Transformers with Spectral Guidance in Attention
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

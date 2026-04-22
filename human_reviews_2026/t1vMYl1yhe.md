@@ -1,5 +1,6 @@
 # What Happens Next? Anticipating Future Motion by Generating Point Trajectories
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Connections between Schedule-Free Optimizers, AdEMAMix, and Accelerated SGD Variants
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 2, 8
 

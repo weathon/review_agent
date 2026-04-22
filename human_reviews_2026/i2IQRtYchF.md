@@ -1,5 +1,6 @@
 # The Imitation Game: Turing Machine Imitator is Length Generalizable Reasoner
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # How Explanations Leak the Decision Logic: Stealing Graph Neural Networks via Explanation Alignment
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

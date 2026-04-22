@@ -1,5 +1,6 @@
 # RAYQUAZA : Input-Conditioned Radial Basis Decomposition for Efficient Univariate Time-Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

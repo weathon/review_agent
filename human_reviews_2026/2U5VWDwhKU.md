@@ -1,5 +1,6 @@
 # Discovering Deep Chain-of-Thought Paths Across Broader QA: A General CoT-Decoding Framework for LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

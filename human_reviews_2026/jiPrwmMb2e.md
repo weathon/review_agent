@@ -1,5 +1,6 @@
 # Control Reinforcement Learning: Interpretable Token-Level Steering of LLMs via Sparse Autoencoder Features
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

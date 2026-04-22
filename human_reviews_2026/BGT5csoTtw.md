@@ -1,5 +1,6 @@
 # Domain-Specific Text-to-Image Generation: Planning, Merging, and Replacing with Training-free LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

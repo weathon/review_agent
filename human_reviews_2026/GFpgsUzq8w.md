@@ -1,5 +1,6 @@
 # DS-TG: Dynamical Systems as Accurate and Efficient Solvers for Time-Dependent Differential Equations
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0
 
@@ -27,11 +28,14 @@ The continuous-time mapping offers a highly appealing and insightful perspective
 In addition, the paper incorporates physics-aware design elements into the system, which may enhance its interpretability compared to conventional ML methods.
 
 ### Weaknesses
-1. Presentation and Clarity: The overall presentation of the paper could be improved. Many important details are missing, making it difficult for readers without domain-specific knowledge to follow the content. For example, the workflows in Figures 1 and 3 are not sufficiently informative. I recommend revising the section “Dynamical System-Based Processors” to enhance clarity, and strengthening the connection between this background section and Section 3.2 to improve the logical flow.
+1. Presentation and Clarity:
+The overall presentation of the paper could be improved. Many important details are missing, making it difficult for readers without domain-specific knowledge to follow the content. For example, the workflows in Figures 1 and 3 are not sufficiently informative. I recommend revising the section “Dynamical System-Based Processors” to enhance clarity, and strengthening the connection between this background section and Section 3.2 to improve the logical flow.
 
-2. Boundary Conditions: The paper does not provide sufficient discussion on how boundary conditions are handled, nor how different types of boundary conditions might affect the method’s implementation and performance.
+2. Boundary Conditions:
+The paper does not provide sufficient discussion on how boundary conditions are handled, nor how different types of boundary conditions might affect the method’s implementation and performance.
 
-3. Limitations and Implementation Details: A more in-depth discussion of the method’s limitations and implementation details would be valuable. For instance, how flexible is the proposed approach when applied to different systems? For more complex systems with irregular domains or diverse boundary conditions, does the architecture need to be redesigned for each case? How well does it generalize to high-dimensional systems? Finally, it would be helpful for the authors to elaborate on any observed failure modes of the model and potential solutions or mitigations.
+3. Limitations and Implementation Details:
+A more in-depth discussion of the method’s limitations and implementation details would be valuable. For instance, how flexible is the proposed approach when applied to different systems? For more complex systems with irregular domains or diverse boundary conditions, does the architecture need to be redesigned for each case? How well does it generalize to high-dimensional systems? Finally, it would be helpful for the authors to elaborate on any observed failure modes of the model and potential solutions or mitigations.
 
 ### Questions
 See comments above.

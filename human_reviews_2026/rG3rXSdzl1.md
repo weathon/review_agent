@@ -1,5 +1,6 @@
 # OPV: Outcome-based Process Verifier for Efficient Long Chain-of-Thought Verification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # EquiReg: Equivariance Regularized Diffusion for Inverse Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

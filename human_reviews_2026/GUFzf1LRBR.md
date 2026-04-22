@@ -1,5 +1,6 @@
 # Learning from Imperfection: Mistake-Aware LLM Finetuning for Robust Planning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

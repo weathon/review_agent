@@ -1,5 +1,6 @@
 # Think Before You Retrieve: Learning Test-Time Adaptive Search with Small Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

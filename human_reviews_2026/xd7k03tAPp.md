@@ -1,5 +1,6 @@
 # EviMix: Evidential Deep Learning with Latent-Space Mixing for Uncertainty Quantification and OOD Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Beyond Turn Limits: Training Deep Search Agents with Dynamic Context Window
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

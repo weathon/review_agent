@@ -1,5 +1,6 @@
 # Decoding Dynamic Visual Experience from Calcium Imaging via Cell-Pattern-Aware Pretraining
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

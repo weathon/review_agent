@@ -1,5 +1,6 @@
 # Whole-Brain Connectomic Graph Neural Network Enables Whole-Body Locomotion Control in Drosophila
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

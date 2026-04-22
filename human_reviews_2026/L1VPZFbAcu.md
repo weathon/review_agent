@@ -1,5 +1,6 @@
 # WebRAGent: Retrieval-Augmented Generation for Multimodal Web Agent Planning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

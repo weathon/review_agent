@@ -1,5 +1,6 @@
 # Robust Backdoor Removal by Reconstructing Trigger-Activated Changes in Latent Representation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

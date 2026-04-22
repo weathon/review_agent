@@ -1,5 +1,6 @@
 # Lightning Video: Building Compact Diffusion Transformers for High-Fidelity On-Device Video Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

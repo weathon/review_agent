@@ -1,5 +1,6 @@
 # HINT: Hierarchical Interaction Modeling for Autoregressive Multi-Human Motion Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

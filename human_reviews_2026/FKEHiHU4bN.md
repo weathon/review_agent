@@ -1,5 +1,6 @@
 # Revisiting Matrix Sketching in Linear  Bandits: Achieving Sublinear Regret via Dyadic Block Sketching
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

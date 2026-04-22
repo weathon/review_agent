@@ -1,5 +1,6 @@
 # CapRL: Stimulating Dense Image Caption Capabilities via Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

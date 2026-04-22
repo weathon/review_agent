@@ -1,5 +1,6 @@
 # LUMINA: Long-horizon Understanding for Multi-turn Interactive Agents
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4, 6
 

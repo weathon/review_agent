@@ -1,5 +1,6 @@
 # SEAFormer: A Spatial Proximity and Edge-Aware Transformer for Real-World Vehicle Routing Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

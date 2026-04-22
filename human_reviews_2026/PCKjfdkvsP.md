@@ -1,5 +1,6 @@
 # Safe Learning Through Controlled Expansion of Exploration Set
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

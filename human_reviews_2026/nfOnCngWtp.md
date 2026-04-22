@@ -1,5 +1,6 @@
 # Perceptual Neural Video Compression with Video Variational AutoEncoder at Low Bitrates
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 2, 6
 

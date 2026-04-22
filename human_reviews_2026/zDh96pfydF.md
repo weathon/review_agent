@@ -1,5 +1,6 @@
 # Learning Holistic-Componential Prompt Groups for Micro-Expression Recognition
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

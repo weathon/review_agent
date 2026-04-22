@@ -1,5 +1,6 @@
 # Ultra-Fast Inverse Tone Mapping via Gain Map-based LUT
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Pushing Test-Time Scaling Limits of Deep Search with Asymmetric Verification
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # AgentSynth: Scalable Task Generation for Generalist Computer-Use Agents
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

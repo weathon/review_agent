@@ -1,5 +1,6 @@
 # KnowledgeSmith: Uncovering Knowledge Updating in LLMs with Model Editing and Unlearning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8
 

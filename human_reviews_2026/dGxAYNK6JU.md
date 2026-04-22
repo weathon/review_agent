@@ -1,5 +1,6 @@
 # PoinnCARE: Hyperbolic Multi-Modal Learning for Enzyme Classification
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8
 

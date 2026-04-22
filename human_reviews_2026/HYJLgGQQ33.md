@@ -1,5 +1,6 @@
 # NR-DARTS: Node Rewiring for Differentiable Architectures with Adaptive SE-Fusion
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

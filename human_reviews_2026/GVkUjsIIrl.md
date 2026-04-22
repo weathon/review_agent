@@ -1,5 +1,6 @@
 # Ego-VGA: A Compact Multimodal Assistant for Egocentric Video–Grounded Reasoning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

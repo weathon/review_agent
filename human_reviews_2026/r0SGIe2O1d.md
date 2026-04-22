@@ -1,5 +1,6 @@
 # Diff-SSR: Diffusion Model with Structure-Modulated for Image Super-Resolution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 6, 2, 2
 

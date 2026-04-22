@@ -1,5 +1,6 @@
 # Can Large Language Models Help with Model Counting?
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # RewardAnything: Generalizable Principle-Following Reward Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # CMPhysBench: A Benchmark for Evaluating Large Language Models in Condensed Matter Physics
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

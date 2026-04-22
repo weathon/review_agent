@@ -1,5 +1,6 @@
 # ReST-KV: Robust KV Cache Eviction with Layer-wise Output Reconstruction and Spatial-Temporal Smoothing
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6, 6
 

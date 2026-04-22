@@ -1,5 +1,6 @@
 # EmbodiedGS: Reconstruct Unified Embodied Representation from RGB Stream
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # TiMi: Empowering Time Series Transformers with Multimodal Mixture of Experts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

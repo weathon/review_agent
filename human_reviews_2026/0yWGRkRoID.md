@@ -1,5 +1,6 @@
 # Massive-STEPS: Massive Semantic Trajectories for Understanding POI Check-ins
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

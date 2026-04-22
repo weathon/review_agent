@@ -1,5 +1,6 @@
 # PREMISE: Scalable and Strategic Prompt Optimization for Efficient Mathematical Reasoning in Large Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

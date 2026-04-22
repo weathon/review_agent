@@ -1,5 +1,6 @@
 # When AI Co‑Scientists Fail: SPOT—a Benchmark for Automated Verification of Scientific Research
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

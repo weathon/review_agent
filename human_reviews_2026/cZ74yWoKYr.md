@@ -1,5 +1,6 @@
 # Identify Critical KV Cache in LLM Inference from an Output Perturbation Perspective
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

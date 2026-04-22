@@ -1,5 +1,6 @@
 # Coupling Attention and Memory: A Dynamic Memory Module for Efficient Adapation with Pretrained LLMs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Distributions as Actions: A Unified Framework for Diverse Action Spaces
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

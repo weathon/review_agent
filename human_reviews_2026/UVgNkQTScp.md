@@ -1,5 +1,6 @@
 # Revisiting Conditional Whitney Forms: From Structure Preservation to Physics Recovery
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Enhancing Generative Auto-bidding with Offline Reward Evaluation and Policy Search
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 6
 

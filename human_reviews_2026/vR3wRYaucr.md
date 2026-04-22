@@ -1,5 +1,6 @@
 # Generalized Linear Markov Decision Process
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

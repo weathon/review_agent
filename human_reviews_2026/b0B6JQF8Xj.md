@@ -1,5 +1,6 @@
 # Chart2CSV: Can VLMs Faithfully Convert Complex Charts into Structured Tables?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 6
 

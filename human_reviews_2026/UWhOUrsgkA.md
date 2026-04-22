@@ -1,5 +1,6 @@
 # Welfarist Formulations for Diverse Similarity Search
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 10, 2, 8, 6
 

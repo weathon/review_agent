@@ -1,5 +1,6 @@
 # Planar Homeomorphic Embeddings of Decision Tree
 
+- Avg Score: 0.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0
 

@@ -1,5 +1,6 @@
 # ATLAS: Adaptive Topology -based Learning at Scale for Homophilic and Heterophilic Graphs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

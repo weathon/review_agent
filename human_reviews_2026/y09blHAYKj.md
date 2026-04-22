@@ -1,5 +1,6 @@
 # Efficient On-Policy Reinforcement Learning via Exploration of Sparse Parameter Space
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

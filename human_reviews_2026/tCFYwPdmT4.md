@@ -1,5 +1,6 @@
 # CatalystBench: A Comprehensive Multi-Task Benchmark for Advancing Language Models in Catalysis Science
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

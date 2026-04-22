@@ -1,5 +1,6 @@
 # EVA: Emergent Human-Like Visual Scanpaths in Hard Attention Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

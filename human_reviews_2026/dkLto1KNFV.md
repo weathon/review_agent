@@ -1,5 +1,6 @@
 # Learning Adaptive and Temporally Causal Video Tokenization in a 1D Latent Space
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

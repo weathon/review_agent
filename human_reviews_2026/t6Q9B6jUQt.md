@@ -1,5 +1,6 @@
 # MorphGen: Controllable and Morphologically Plausible Generative Cell-Imaging
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

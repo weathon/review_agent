@@ -1,5 +1,6 @@
 # PLP-RC:Point–Line–Plane Fusion for Discriminative Relation Classification with LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 4, 0
 

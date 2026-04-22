@@ -1,5 +1,6 @@
 # USimUL: Closing the Privacy Gap in Similarity-Based Weakly Supervised Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

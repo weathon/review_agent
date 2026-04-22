@@ -1,5 +1,6 @@
 # AutoBaxBench: Bootstrapping Code Security Benchmarking
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

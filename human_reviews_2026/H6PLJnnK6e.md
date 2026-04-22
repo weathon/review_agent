@@ -1,5 +1,6 @@
 # Beyond the Heatmap: A Rigorous Evaluation of Component Impact in MCTS-Based TSP Solvers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 10
 

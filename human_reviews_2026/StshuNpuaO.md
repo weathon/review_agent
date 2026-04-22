@@ -1,5 +1,6 @@
 # LayerMix Law: Scaling Law for Large Language Models on Quality-Weighted Mixture Data with Repetition
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

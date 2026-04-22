@@ -1,5 +1,6 @@
 # Analysing Representations Through Layers: Token-Level Semantic Evolution in Clinical Language Model
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

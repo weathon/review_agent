@@ -1,5 +1,6 @@
 # P$^2$-DPO: Grounding Hallucination in Perceptual Processing via Calibration Direct Preference Optimization
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

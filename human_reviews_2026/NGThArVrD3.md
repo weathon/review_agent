@@ -1,5 +1,6 @@
 # Setting up for failure: automatic discovery of the neural mechanisms of cognitive errors
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 10
 

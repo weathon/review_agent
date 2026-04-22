@@ -1,5 +1,6 @@
 # BINR-MAPF: A Bio-Inspired Neural-Reflex Architecture for Decentralized Multi-Agent Pathfinding
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6, 4
 

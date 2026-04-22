@@ -1,5 +1,6 @@
 # WonderFree: Enhancing 3D World Generation via Video Diffusion Prior with Multi-view Consistency
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

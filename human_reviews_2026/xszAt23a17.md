@@ -1,5 +1,6 @@
 # CHOrD: Synthesizing Spatially Coherent, House-Scale, Organized, and Diverse 3D Indoor Scenes via Image-Based Layout Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 4, 2
 

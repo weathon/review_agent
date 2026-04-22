@@ -1,5 +1,6 @@
 # Drug-few: A few-shot learning method for target-specific drug virtual screening with interaction-informed adaptation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

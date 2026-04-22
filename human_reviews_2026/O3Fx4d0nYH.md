@@ -1,5 +1,6 @@
 # Interactive Brain-Tumor Analysis with Model Agnostic Hybrid Augmentation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 4
 

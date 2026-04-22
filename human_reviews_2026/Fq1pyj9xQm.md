@@ -1,5 +1,6 @@
 # Length Generalization with Log-Depth Recurrent Units
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 6
 

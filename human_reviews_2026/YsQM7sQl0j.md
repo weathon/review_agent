@@ -1,5 +1,6 @@
 # Generative Human Geometry Distribution
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 2
 

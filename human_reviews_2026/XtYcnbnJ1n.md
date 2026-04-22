@@ -1,5 +1,6 @@
 # Continuous-time Analysis of Adam in Min-Max Games: Local Convergence and Implicit Gradient Regularization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 10, 4, 4
 
@@ -53,13 +54,23 @@ J. Yang, X. Li, and N. He. Nest your adaptive algorithm for parameter-agnostic n
 
 - The continuous time analysis of adaptive gradient methods (including Adam) for (stochastic) optimization has been initiated in a number of prior works in the literature, preceding even Ma et al. 2022 (which actually acknowledges that in their paper as they reuse the previously proposed dynamical systems): 
 
-  Da Silva, A. B., & Gazeau, M. (2020). A general system of differential equations to model first-order adaptive algorithms. Journal of Machine Learning Research, 21(129), 1-42.
 
-  Barakat, A., & Bianchi, P. (2021). Convergence and dynamical behavior of the ADAM algorithm for nonconvex stochastic optimization. SIAM Journal on Optimization, 31(1), 244-274.  
 
-Barakat, A., Bianchi, P., Hachem, W., & Schechtman, S. (2021). Stochastic optimization with momentum: convergence, fluctuations, and traps avoidance. Electronic Journal of Statistics, 15(2), 3892-3947.  
+Da Silva, A. B., & Gazeau, M. (2020). A general system of differential equations to model first-order adaptive algorithms. Journal of Machine Learning Research, 21(129), 1-42.
 
-Gadat, S., & Gavra, I. (2022). Asymptotic study of stochastic adaptive algorithms in non-convex landscape. Journal of Machine Learning Research, 23(228), 1-54.  
+
+
+Barakat, A., & Bianchi, P. (2021). Convergence and dynamical behavior of the ADAM algorithm for nonconvex stochastic optimization. SIAM Journal on Optimization, 31(1), 244-274.
+
+
+
+Barakat, A., Bianchi, P., Hachem, W., & Schechtman, S. (2021). Stochastic optimization with momentum: convergence, fluctuations, and traps avoidance. Electronic Journal of Statistics, 15(2), 3892-3947.
+
+
+
+Gadat, S., & Gavra, I. (2022). Asymptotic study of stochastic adaptive algorithms in non-convex landscape. Journal of Machine Learning Research, 23(228), 1-54.
+
+
 
 Not also that the continuous time analysis has a much older tradition in the literature, including in the stochastic setting (see e.g.  Borkar 2008 ‘Stochastic Approximation: A Dynamical Systems Viewpoint’ and the references therein, see also e.g. Benaim 1996 ‘A dynamical system approach to stochastic approximations’, SIAM Journal on Control and Optimization, to name a few references among others). 
 

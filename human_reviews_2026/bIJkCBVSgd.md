@@ -1,5 +1,6 @@
 # Distractor Injection Attacks on Large Reasoning Models: Characterization and Defense
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2
 

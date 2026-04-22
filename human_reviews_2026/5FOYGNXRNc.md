@@ -1,5 +1,6 @@
 # DPGNet: Modeling Dynamic Graphs and Complex Temporal Patterns for Spatiotemporal Forecasting
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0, 2
 

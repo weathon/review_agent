@@ -1,5 +1,6 @@
 # A Unifying Framework for Gradient Aggregation in Multi-Objective Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # KNOWPLAN: Knowledge-Driven AI Agents for Smart Degree Pathway Planning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 10, 4, 2
 

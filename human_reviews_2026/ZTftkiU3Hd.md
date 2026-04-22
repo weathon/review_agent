@@ -1,5 +1,6 @@
 # The Spatial Blindspot of Vision-Language Models
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 4, 4, 2
 

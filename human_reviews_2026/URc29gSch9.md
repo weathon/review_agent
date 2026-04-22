@@ -1,5 +1,6 @@
 # Factual and Musical Evaluation Metrics for Music Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

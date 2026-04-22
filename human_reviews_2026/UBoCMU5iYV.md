@@ -1,5 +1,6 @@
 # Memorizing Long-tail Data Can Help Generalization Through Composition
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

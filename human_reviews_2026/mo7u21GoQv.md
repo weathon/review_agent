@@ -1,5 +1,6 @@
 # Aligned Agents, Biased Swarm: Measuring Bias Amplification in Multi-Agent Systems
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

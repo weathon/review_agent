@@ -1,5 +1,6 @@
 # FiGuRO - Intrinsic Dimension Estimation for Multi-Modal Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

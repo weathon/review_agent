@@ -1,5 +1,6 @@
 # On the Convergence of Two-Layer Kolmogorov-Arnold Networks with First-Layer Training
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4
 

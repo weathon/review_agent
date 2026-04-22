@@ -1,5 +1,6 @@
 # Understanding Graph Self-Supervised Pre-training under Distribution Shifts: A Scaling Law Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 2, 4
 

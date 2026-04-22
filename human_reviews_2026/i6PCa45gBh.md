@@ -1,5 +1,6 @@
 # TopoWeaver-R1: Reinforcing Difficulty-Aware Topology Evolution in Multi-Agent Competition-Level Code Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

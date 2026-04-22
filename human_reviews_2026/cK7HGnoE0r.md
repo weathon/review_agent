@@ -1,5 +1,6 @@
 # DiverseAR: Boosting Diversity in Bitwise Autoregressive Image Generation
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 0, 0
 

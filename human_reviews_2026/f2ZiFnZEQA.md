@@ -1,5 +1,6 @@
 # SafeSearch: Automated Red-Teaming for the Safety of LLM-Based Search Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

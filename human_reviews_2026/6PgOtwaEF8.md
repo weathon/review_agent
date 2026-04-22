@@ -1,5 +1,6 @@
 # FedSUM Family: Efficient Federated Learning Methods under Arbitrary Client Participation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

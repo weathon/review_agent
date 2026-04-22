@@ -1,5 +1,6 @@
 # Prompts to Proxies: Emulating Human Preferences via a Compact LLM Ensemble
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

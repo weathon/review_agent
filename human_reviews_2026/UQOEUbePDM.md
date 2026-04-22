@@ -1,5 +1,6 @@
 # Exploring Hyperdimensional Computing for Anomaly-Based Intrusion Detection Systems
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

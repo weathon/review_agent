@@ -1,5 +1,6 @@
 # Context-aware self-training framework for cell type annotation using marker genes
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6, 4
 

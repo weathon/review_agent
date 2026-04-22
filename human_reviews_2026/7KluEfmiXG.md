@@ -1,5 +1,6 @@
 # Plug, Play, and Fortify: A Low-Cost Module for Robust Multimodal Image Understanding Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

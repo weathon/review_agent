@@ -1,5 +1,6 @@
 # All That Glitters Is Not Gold: Key-Secured 3D Secrets within 3D Gaussian Splatting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

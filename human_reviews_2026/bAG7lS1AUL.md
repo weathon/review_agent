@@ -1,5 +1,6 @@
 # Fused-Planes: Why Train a Thousand Tri-Planes When You Can Share?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # GTA: Graph Theory Agent and Benchmark for Algorithmic Graph Reasoning with LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

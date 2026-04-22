@@ -1,5 +1,6 @@
 # GOT-Edit: Geometry-Aware Generic Object Tracking via Online Model Editing
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # GDEGAN: Gaussian Dynamic Equivariant Graph Attention Network for Ligand Binding Site Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

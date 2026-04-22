@@ -1,5 +1,6 @@
 # Towards High Data Efficiency in Reinforcement Learning with Verifiable Reward
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

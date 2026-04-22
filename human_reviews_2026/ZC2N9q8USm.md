@@ -1,5 +1,6 @@
 # ForestPersons: A Large-Scale Dataset for Under-Canopy Missing Person Detection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

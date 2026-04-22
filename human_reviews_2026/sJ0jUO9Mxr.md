@@ -1,5 +1,6 @@
 # Measuring Audio's Impact on Correctness: Audio-Contribution-Aware Post-Training of Large Audio Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

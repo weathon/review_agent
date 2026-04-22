@@ -1,5 +1,6 @@
 # VRPAgent: LLM-Driven Discovery of Heuristic Operators for Vehicle Routing Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # QLIP: A Dynamic Quadtree Vision Prior Enhances MLLM Performance Without Retraining
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

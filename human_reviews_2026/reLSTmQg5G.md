@@ -1,5 +1,6 @@
 # LoRAGuard: An Effective Black-box Watermarking Approach for LoRAs
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0, 4
 

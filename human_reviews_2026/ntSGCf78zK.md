@@ -1,5 +1,6 @@
 # COOL: Chain-Oriented Objective Logic with Neural Networks Feedback Control for Multi-DSL Regulation
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 0
 

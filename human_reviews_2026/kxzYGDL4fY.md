@@ -1,5 +1,6 @@
 # Probing in the Dark: State Entropy Maximization for POMDPs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

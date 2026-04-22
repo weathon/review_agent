@@ -1,5 +1,6 @@
 # Pixel-Perfect Puppetry: Precision-Guided Enhancement for Face Image and Video Editing
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

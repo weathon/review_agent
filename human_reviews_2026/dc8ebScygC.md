@@ -1,5 +1,6 @@
 # Structured Uncertainty guided Clarification for LLM Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # PepTri: Tri-Guided All-Atom Diffusion for Peptide Design via Physics, Evolution, and Mutual Information
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

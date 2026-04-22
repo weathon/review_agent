@@ -1,5 +1,6 @@
 # OAR: Training Quantization-Friendly Object Detectors via Outlier-Aware Restriction
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

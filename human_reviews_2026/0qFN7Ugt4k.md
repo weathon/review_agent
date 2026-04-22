@@ -1,5 +1,6 @@
 # Multi-Source Knowledge-Fusion for Source-Free Domain Adaptation in Object Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

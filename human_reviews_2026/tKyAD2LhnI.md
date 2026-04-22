@@ -1,5 +1,6 @@
 # SIGMark: Scalable In-Generation Watermark with Blind Extraction for Video Diffusion
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

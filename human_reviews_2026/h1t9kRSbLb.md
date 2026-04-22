@@ -1,5 +1,6 @@
 # R-Stitch: Dynamic Trajectory Stitching for Efficient Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

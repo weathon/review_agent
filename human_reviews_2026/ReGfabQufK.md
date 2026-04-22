@@ -1,5 +1,6 @@
 # A New Perspective on Large Language Model Safety: From Alignment to Information Control
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

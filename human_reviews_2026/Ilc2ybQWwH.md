@@ -1,5 +1,6 @@
 # WristWorld: Generating Wrist-Views via 4D World Models for Robotic Manipulation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

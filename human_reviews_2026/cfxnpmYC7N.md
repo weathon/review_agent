@@ -1,5 +1,6 @@
 # Mark3DGS: Protecting the Intellectual Property of 3D Gaussian Splatting with Robust Watermarking
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

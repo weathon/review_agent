@@ -1,5 +1,6 @@
 # Reading Images Like Texts: Sequential Image Understanding in Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # 3D PixBrush: Image-Guided Local Texture Synthesis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

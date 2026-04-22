@@ -1,5 +1,6 @@
 # A cross-species neural foundation model for end-to-end speech decoding
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Domain Knowledge Infused Conditional Generative Models for Accelerating Drug Discovery
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 4, 2, 0
 

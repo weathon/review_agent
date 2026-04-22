@@ -1,5 +1,6 @@
 # MRAD: Zero-Shot Anomaly Detection with Memory-Driven Retrieval
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

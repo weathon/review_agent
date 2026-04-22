@@ -1,5 +1,6 @@
 # PaTSy-Neural-EM: Geometry-Aware Truth Discovery for Real-Time Multi-Agent Perception
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 0, 2
 

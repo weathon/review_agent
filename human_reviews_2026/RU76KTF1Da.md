@@ -1,5 +1,6 @@
 # How does the optimizer implicitly bias the model merging loss landscape?
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

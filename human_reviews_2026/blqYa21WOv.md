@@ -1,5 +1,6 @@
 # Unveiling the Mechanism of Continuous Representation Full-Waveform Inversion: A Wave Based Neural Tangent Kernel Framework
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

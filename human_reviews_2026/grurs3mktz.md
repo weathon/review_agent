@@ -1,5 +1,6 @@
 # Skin Lesion Phenotyping via Nested Multi-modal Contrastive Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

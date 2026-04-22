@@ -1,5 +1,6 @@
 # ReGUIDE: Data Efficient GUI Grounding via Spatial Reasoning and Search
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

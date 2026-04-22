@@ -1,5 +1,6 @@
 # PeFoo-L: A General Framework for Preconditioned Enhanced Forward-Only Optimizer in LLM Fine-tuning on the Edge
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

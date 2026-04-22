@@ -1,5 +1,6 @@
 # Consistency Beyond Contrast: Enhancing Object Detection Robustness through Scene-Augmented Feature Alignment
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 
@@ -122,7 +123,8 @@ CCL is implemented on two popular OVD models (i.e. GLIP and FIBER). Particularly
 3- Ablation study shows the effectiveness of each component. i.e., additional augmented data through CBDG can improve the performance, but the best results are achieved when fine-tuned with contrastive loss.
 
 ### Weaknesses
-1- **Lack of discussion on DA/DG methods, specifically ones that incorporate OVD methods.** The paper does not discuss domain adaptation or domain generalization methods, especially those that incorporate open-vocabulary detection (OVD). The focus is on improving generalization to unseen environment, but a comparison or discussion with OVD-related DG approaches would help clarify contribution and effectiveness of the paper 
+1- **Lack of discussion on DA/DG methods, specifically ones that incorporate OVD methods.** The paper does not discuss domain adaptation or domain generalization methods, especially those that incorporate open-vocabulary detection (OVD). The focus is on improving generalization to unseen environment, but a comparison or discussion with OVD-related DG approaches would help clarify contribution and effectiveness of the paper
+
 
 2- the background diversity is similar/identical through CBDG method, which does not effectively show the robustness to **unseen background/environment** as claimed in the paper (e.g. L093). Some additional analysis could help: e.g.,  1) split the background prompts into training and test across all categories, and/or (2) keep one category as a held-out set. i.e. train on two (e.g. Seasonal and sky) evaluate on landscape. How does the model's robustness compare to baselines and data only version? (i.e. CCL without CLLoss)
 

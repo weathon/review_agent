@@ -1,5 +1,6 @@
 # Fast SDP certification of neural networks : towards large multi-class datasets
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

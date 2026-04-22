@@ -1,5 +1,6 @@
 # Survival at Any Cost? LLMs and the Choice Between Self-Preservation and Human Harm
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

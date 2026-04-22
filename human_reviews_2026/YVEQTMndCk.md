@@ -1,5 +1,6 @@
 # Bayesian Combinatorial Lottery Ticket Machine: Bayes Meets Extremal Combinatorics
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 2, 6
 

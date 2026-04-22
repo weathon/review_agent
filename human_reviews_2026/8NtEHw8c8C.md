@@ -1,5 +1,6 @@
 # Probing Neural Topology of Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

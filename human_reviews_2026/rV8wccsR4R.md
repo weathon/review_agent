@@ -1,5 +1,6 @@
 # Automated Smart Contract Code Generation Based on Graph RAG and LLM
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

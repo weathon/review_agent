@@ -1,5 +1,6 @@
 # Resa: Efficient Reasoning Models via SAEs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

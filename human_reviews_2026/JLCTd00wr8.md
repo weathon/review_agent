@@ -1,5 +1,6 @@
 # Guarding the Meaning: Self-Supervised Training for Semantic Robustness in Guard Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

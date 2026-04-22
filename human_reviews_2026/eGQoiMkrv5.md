@@ -1,5 +1,6 @@
 # UEChecker: Detecting Unchecked External Call Vulnerabilities in DApps via Graph Analysis
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

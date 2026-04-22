@@ -1,5 +1,6 @@
 # MCP-Universe: Benchmarking Large Language Models with Real-World Model Context Protocol Servers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

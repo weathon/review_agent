@@ -1,5 +1,6 @@
 # LoRA-FA: Efficient and Effective Low Rank Representation Fine-tuning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 
@@ -131,9 +132,12 @@ The paper introduces LoRA-FA (LoRA by Fixing A), a parameter-efficient fine-tuni
 - Experimental results demonstrate that LoRA-FA achieves comparable or slightly better performance than standard LoRA across multiple LLMs (e.g., LLaMA, RoBERTa) and benchmarks.
 
 ### Weaknesses
-- Limited Related Work Discussion: The related work section focuses mainly on low-rank adaptation methods (e.g., LoRA) and omits many state-of-the-art PEFT approaches from the past two years. The discussion should be expanded to include subset-of-parameter and sparse fine-tuning methods (e.g., [1–8]). These techniques represent a major trend in recent PEFT research and would help strengthen the paper’s contextual foundation.
-* Incremental Novelty: The core idea—freezing one of the LoRA matrices (A)—is relatively incremental regards to novelty.
-* Marginal Gains: Reported improvements in performance, memory efficiency, and training speed compared to standard LoRA appear modest. The empirical advantages may not be sufficient to justify the new method as a significant advancement.
+- Limited Related Work Discussion:
+The related work section focuses mainly on low-rank adaptation methods (e.g., LoRA) and omits many state-of-the-art PEFT approaches from the past two years. The discussion should be expanded to include subset-of-parameter and sparse fine-tuning methods (e.g., [1–8]). These techniques represent a major trend in recent PEFT research and would help strengthen the paper’s contextual foundation.
+* Incremental Novelty:
+The core idea—freezing one of the LoRA matrices (A)—is relatively incremental regards to novelty.
+* Marginal Gains:
+Reported improvements in performance, memory efficiency, and training speed compared to standard LoRA appear modest. The empirical advantages may not be sufficient to justify the new method as a significant advancement.
 
 
 ### Minor Typos

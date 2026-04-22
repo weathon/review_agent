@@ -1,5 +1,6 @@
 # The Role of Learning and Memorization in Relabeling-based Unlearning for LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

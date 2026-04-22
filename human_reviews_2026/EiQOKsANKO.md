@@ -1,5 +1,6 @@
 # Programmatic Context Augmentation for LLM-based Symbolic Regression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

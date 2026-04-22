@@ -1,5 +1,6 @@
 # Multi-field sea ice data assimilation with a variational autoencoder
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2
 

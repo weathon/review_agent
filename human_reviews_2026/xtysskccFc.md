@@ -1,5 +1,6 @@
 # ProRe: A Proactive Reward System for GUI Agents via Reasoner–Actor Collaboration
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

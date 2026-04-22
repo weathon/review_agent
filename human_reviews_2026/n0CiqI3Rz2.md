@@ -1,5 +1,6 @@
 # Robust discovery of governing equations through symmetry
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 2
 

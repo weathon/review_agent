@@ -1,5 +1,6 @@
 # On the Optimization Dynamics of RLVR: Gradient Gap and Step Size Thresholds
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

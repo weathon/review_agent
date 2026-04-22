@@ -1,5 +1,6 @@
 # Towards Compressive and Scalable Recurrent Memory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

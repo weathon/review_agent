@@ -1,5 +1,6 @@
 # Alignment, Convexity and Completeness: Mechanisms Behind GroupDRO
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2
 

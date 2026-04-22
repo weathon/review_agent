@@ -1,5 +1,6 @@
 # Differentiable Simulation of Hard Contacts with Soft Gradients for Learning and Control
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

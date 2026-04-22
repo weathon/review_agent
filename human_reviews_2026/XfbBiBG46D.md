@@ -1,5 +1,6 @@
 # TAO-Attack: Toward Advanced Optimization-Based Jailbreak Attacks for Large Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Mitigating Class Imbalance in Graph-Structured Data via Hierarchical Learning: Insights from Protein Binding Site Prediction
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # DoubleGen: Debiased Generative Modeling of Counterfactuals
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 4, 6
 

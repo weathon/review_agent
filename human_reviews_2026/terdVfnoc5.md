@@ -1,5 +1,6 @@
 # RedTopic: Toward Topic-Diverse Red Teaming of Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 4, 8
 

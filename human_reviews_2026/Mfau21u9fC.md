@@ -1,5 +1,6 @@
 # Boundary on the Table: Efficient Black-Box Decision-Based Attacks for Structured Data
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

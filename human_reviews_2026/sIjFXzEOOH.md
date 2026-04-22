@@ -1,5 +1,6 @@
 # A Fair Bayesian Inference through Matched Gibbs Posterior
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Modeling Expert Interactions in Sparse Mixture of Experts via Graph Structures
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

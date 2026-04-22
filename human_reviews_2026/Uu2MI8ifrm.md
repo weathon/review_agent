@@ -1,5 +1,6 @@
 # Adversarial Robustness of Continuous Time Dynamic Graphs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # LoLoRA: Locally Fine-Tuned Low Rank Adapters
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

@@ -1,5 +1,6 @@
 # VocSim: A Training-free Benchmark for Zero-shot Content Identity in Single-source Audio
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 8, 2, 2
 

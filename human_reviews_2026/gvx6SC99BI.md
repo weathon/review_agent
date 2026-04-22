@@ -1,5 +1,6 @@
 # FarsightAlign: Early-Stage Test-Time Scaling for Prompt-Aligned Text-to-Image Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

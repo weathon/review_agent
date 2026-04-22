@@ -1,5 +1,6 @@
 # InfoTok: Adaptive Discrete Video Tokenizer via Information-Theoretic Compression
 
+- Avg Score: 7.33
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8
 

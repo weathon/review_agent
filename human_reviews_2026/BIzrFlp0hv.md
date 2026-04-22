@@ -1,5 +1,6 @@
 # PRO-MOF: Policy Optimization with Universal Atomistic Models for Controllable MOF Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

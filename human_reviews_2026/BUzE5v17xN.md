@@ -1,5 +1,6 @@
 # Deep Coupling Learning for Solving PDEs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 4, 2
 

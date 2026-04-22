@@ -1,5 +1,6 @@
 # LookaheadKV: Fast and Accurate KV Cache Eviction by Glimpsing into the Future without Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

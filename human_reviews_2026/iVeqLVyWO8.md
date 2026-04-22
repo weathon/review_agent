@@ -1,5 +1,6 @@
 # One Model to Critique Them All: Rewarding Agentic Tool-Use via Efficient Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

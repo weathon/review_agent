@@ -1,5 +1,6 @@
 # Efficient Reinforcement Learning by Guiding World Models with Non-Curated Data
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 6, 10, 8, 8
 

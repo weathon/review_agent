@@ -1,5 +1,6 @@
 # PTQ4ARVG: Post-Training Quantization for AutoRegressive Visual Generation Models
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 4
 

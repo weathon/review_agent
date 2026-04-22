@@ -1,5 +1,6 @@
 # Geometric Analysis of Token Selection in Multi-Head Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

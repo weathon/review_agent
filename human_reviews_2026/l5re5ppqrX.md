@@ -1,5 +1,6 @@
 # EchoMind: An Interrelated Multi-level Benchmark for Evaluating Empathetic Speech Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

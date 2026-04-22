@@ -1,5 +1,6 @@
 # Learning in Circles: Rotational Dynamics in Competitive Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

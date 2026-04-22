@@ -1,5 +1,6 @@
 # Pay Less Attention to Function Words for Free Robustness of Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 2
 

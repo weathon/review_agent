@@ -1,5 +1,6 @@
 # ES-dLLM: Efficient Inference for Diffusion Large Language Models by Early-Skipping
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 8
 

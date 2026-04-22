@@ -1,5 +1,6 @@
 # MoRE: Batch-Robust Multi-Omics Representations from Frozen Language Models
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2
 

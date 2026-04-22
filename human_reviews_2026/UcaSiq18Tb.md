@@ -1,5 +1,6 @@
 # Features Emerge as Discrete States: The First Application of SAEs to 3D Representations
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4
 

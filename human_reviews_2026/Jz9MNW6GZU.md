@@ -1,5 +1,6 @@
 # Clean: Curvature-Aware Memory-Efficient Optimizer via Nyström Sketching
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Generalizable Multilevel Graph Optimization via Reinforcement-Guided Diffusion from Simple Subproblems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

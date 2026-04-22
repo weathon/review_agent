@@ -1,5 +1,6 @@
 # FitLight: Federated Imitation Learning for Plug-and-Play Autonomous Traffic Signal Control
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

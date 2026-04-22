@@ -1,5 +1,6 @@
 # Beyond English-Centric Training: How Reinforcement Learning Improves Cross-Lingual Reasoning in LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

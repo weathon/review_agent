@@ -1,5 +1,6 @@
 # Principle Process Reward For Search Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

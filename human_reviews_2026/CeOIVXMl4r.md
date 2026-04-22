@@ -1,5 +1,6 @@
 # STORK: Faster Diffusion and Flow Matching Sampling by Resolving both Stiffness and Structure-Dependence
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6
 

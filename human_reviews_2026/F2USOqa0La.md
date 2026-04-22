@@ -1,5 +1,6 @@
 # What We Don't C: Manifold Disentanglement for Structured Discovery
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

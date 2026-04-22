@@ -1,5 +1,6 @@
 # Exposing and Defending the Achilles' Heel of Video Mixture-of-Experts
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Attribute-Centric Representation Learning for Interpretable Crime Scene Analysis in Video Anomaly Detection
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2
 

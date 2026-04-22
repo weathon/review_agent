@@ -1,5 +1,6 @@
 # A Scene is Worth a Thousand Features: Feed-Forward Camera Localization from a Collection of Image Features
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 2
 

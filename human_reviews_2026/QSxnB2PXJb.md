@@ -1,5 +1,6 @@
 # Collapse of Irrelevant Representations (CIR) Ensures Robust and Non-Disruptive LLM Unlearning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 0
 

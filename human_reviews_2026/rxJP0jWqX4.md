@@ -1,5 +1,6 @@
 # QuadSentinel: Sequent Safety for Machine-Checkable Control in Multi-agent Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

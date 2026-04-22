@@ -1,5 +1,6 @@
 # Error Propagation Mechanisms and Compensation Strategies for Quantized Diffusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

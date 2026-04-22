@@ -1,5 +1,6 @@
 # Pix2Plan: A Set Prediction Approach for End-to-End Wireframe Parsing using Two-Level Polygon Queries
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

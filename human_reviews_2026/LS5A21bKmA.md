@@ -1,5 +1,6 @@
 # WAREX: Web Agent Reliability Evaluation on Existing Benchmarks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

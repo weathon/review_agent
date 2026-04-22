@@ -1,5 +1,6 @@
 # We-Math 2.0: A Versatile MathBook System for Incentivizing Visual Mathematical Reasoning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

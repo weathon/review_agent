@@ -1,5 +1,6 @@
 # Exploiting Reasoning Patterns in Language Models for Indirect Targeted Poisoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

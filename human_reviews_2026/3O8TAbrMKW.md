@@ -1,5 +1,6 @@
 # Catalyst: Reveal the Geometry of Pruning by Reshaping Neural Network
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

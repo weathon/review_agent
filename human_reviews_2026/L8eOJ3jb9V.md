@@ -1,5 +1,6 @@
 # GeoBIS: Budget-Optimal Block Importance Sampling for Stochastic Riemannian Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

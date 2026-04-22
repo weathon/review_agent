@@ -1,5 +1,6 @@
 # Adaptive kernel selection for Stein Variational Gradient Descent
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

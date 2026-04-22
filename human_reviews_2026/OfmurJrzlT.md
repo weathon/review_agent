@@ -1,5 +1,6 @@
 # Beyond Structure: Invariant Crystal Property Prediction with Pseudo-Particle Ray Diffraction
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Initialize to Generalize: A Stronger Initialization Pipeline for Sparse-View 3DGS
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Kolmogorov-Arnold Hierarchical Implicit Neural Representation Model for Physical Field Reconstruction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

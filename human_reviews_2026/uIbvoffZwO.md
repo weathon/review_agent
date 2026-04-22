@@ -1,5 +1,6 @@
 # Find tailored step example for next step: A Targeted Step-wise Retrieval Framework for Guiding LLM Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

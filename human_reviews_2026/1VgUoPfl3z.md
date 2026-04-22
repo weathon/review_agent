@@ -1,5 +1,6 @@
 # KnapFormer: An Online Load Balancer for Efficient Diffusion Transformers Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

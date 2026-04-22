@@ -1,5 +1,6 @@
 # CudaForge: An Agent Framework with Hardware Feedback for CUDA Kernel Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

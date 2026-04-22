@@ -1,5 +1,6 @@
 # Human Behavior Atlas: Benchmarking Unified Psychological And Social Behavior Understanding
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 4
 

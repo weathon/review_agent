@@ -1,5 +1,6 @@
 # When Visualizing is the First Step to Reasoning: MIRA, a Benchmark for Visual Chain-of-Thought
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

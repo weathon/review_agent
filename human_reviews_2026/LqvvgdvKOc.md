@@ -1,5 +1,6 @@
 # ImplicitQA: Going beyond frames towards Implicit Video Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 2
 

@@ -1,5 +1,6 @@
 # 1S-DAug: One-Shot Data Augmentation for Robust Few-Shot Generalization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

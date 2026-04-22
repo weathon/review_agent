@@ -1,5 +1,6 @@
 # LaplacianFormer:Rethinking Linear Attention with Laplacian Kernel
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

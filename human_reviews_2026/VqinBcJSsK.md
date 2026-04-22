@@ -1,5 +1,6 @@
 # M-learner: A Flexible And Powerful Framework To Study Heterogeneous Treatment Effect In Mediation Model
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

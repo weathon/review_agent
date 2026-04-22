@@ -1,5 +1,6 @@
 # Learning to Be Uncertain: Pre-training World Models with Horizon-Calibrated Uncertainty
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # LycheeDecode: Accelerating Long-Context LLM Inference via Hybrid-Head Sparse Decoding
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 4
 

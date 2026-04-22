@@ -1,5 +1,6 @@
 # 3DCS: Datasets and Benchmark for Evaluating Conformational Sensitivity in Molecular Representations
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

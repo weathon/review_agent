@@ -1,5 +1,6 @@
 # Advancing Universal Deep Learning for Electronic-Structure Hamiltonian Prediction of Materials
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # UniDoc-Bench: A Unified Benchmark for Document-Centric Multimodal RAG
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

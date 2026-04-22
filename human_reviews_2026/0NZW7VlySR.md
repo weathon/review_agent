@@ -1,5 +1,6 @@
 # A biologically-inspired foveated interface for deep vision models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

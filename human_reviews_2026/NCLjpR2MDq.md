@@ -1,5 +1,6 @@
 # From Broad Exploration to Stable Synthesis: Entropy-Guided Optimization for Autoregressive Image Generation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

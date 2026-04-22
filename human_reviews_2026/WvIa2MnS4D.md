@@ -1,5 +1,6 @@
 # Coder-R3: Recognize, Review and Repair Defective Code with Finetuned LLMs in Practice
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 2
 

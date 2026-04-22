@@ -1,5 +1,6 @@
 # Improving the Trade-off Between Watermark Strength and Speculative Sampling Efficiency for Language Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6, 8, 6
 

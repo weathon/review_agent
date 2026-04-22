@@ -1,5 +1,6 @@
 # Exclusive Unlearning: Forgetting All Except What You Need
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 8, 2
 

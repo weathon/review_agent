@@ -1,5 +1,6 @@
 # Minimax Rates for Learning Pairwise Interactions in Attention-Style Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 10, 4, 2, 8
 

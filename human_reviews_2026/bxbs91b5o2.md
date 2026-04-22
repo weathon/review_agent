@@ -1,5 +1,6 @@
 # MCM: Multi-layer Concept Map for Efficient Concept Learning from Masked Images
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

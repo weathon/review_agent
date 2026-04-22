@@ -1,5 +1,6 @@
 # ERPV: Enhancing Visual Reinforcement Learning with Partially Reliable Knowledge from VLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

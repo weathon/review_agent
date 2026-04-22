@@ -1,5 +1,6 @@
 # Max-Speedup Speculative Sampling: A Generic Tree Construction Principle
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

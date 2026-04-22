@@ -1,5 +1,6 @@
 # Psychometric Personality Shaping Modulates Capabilities and Safety in Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

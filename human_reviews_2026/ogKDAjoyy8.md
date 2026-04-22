@@ -1,5 +1,6 @@
 # Unsupervised Dynamic Graph Multi-Model Representation Learning for Temporal Patterns Discovery: Uncovering Parkinson’s Disease Stages Using Cerebrospinal Fluid Longitudinal Profiles
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 0, 6
 

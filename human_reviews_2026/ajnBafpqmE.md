@@ -1,5 +1,6 @@
 # Aligning Visual Foundation Encoders to Tokenizers for Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

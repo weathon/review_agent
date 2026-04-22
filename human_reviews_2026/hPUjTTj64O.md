@@ -1,5 +1,6 @@
 # Path-Consistency with Prefix Enhancement for Efficient Inference in LLM
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Parameter-Efficient Reinforcement Learning using Prefix Optimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 4
 

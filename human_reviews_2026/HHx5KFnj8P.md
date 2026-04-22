@@ -1,5 +1,6 @@
 # Mitigating Forgetting Between Supervised and Reinforcement Learning Yields Stronger Reasoners
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

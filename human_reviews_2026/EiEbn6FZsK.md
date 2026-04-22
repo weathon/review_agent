@@ -1,5 +1,6 @@
 # URS: A Unified Neural Routing Solver for Cross-Problem Zero-Shot Generalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

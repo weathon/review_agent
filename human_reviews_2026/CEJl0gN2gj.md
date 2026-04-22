@@ -1,5 +1,6 @@
 # Robustness in Text-Attributed Graph Learning: Insights, Trade-offs, and New Defenses
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

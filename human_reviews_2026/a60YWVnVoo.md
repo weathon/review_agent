@@ -1,5 +1,6 @@
 # Beyond Parallel Corpora: Unlocking Autonomous Machine Translation via Autocritical Reinforcement Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

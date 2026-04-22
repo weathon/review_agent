@@ -1,5 +1,6 @@
 # MaskPro: Linear-Space Probabilistic Learning for Strict (N:M)-Sparsity on LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

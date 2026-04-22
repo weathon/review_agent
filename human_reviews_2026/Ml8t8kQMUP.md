@@ -1,5 +1,6 @@
 # Exploratory Causal Inference in SAEnce
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 4
 

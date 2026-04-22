@@ -1,5 +1,6 @@
 # Advancing LLM Safe Alignment with Safety Representation Ranking
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

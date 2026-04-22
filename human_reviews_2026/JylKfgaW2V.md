@@ -1,5 +1,6 @@
 # Reading the Room: Learning Group States Beyond Pooled Individual Signals
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

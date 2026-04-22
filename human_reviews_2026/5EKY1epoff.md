@@ -1,5 +1,6 @@
 # Seemingly Simple Planning Problems are Computationally Challenging: The Countdown Game
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 10, 6, 4, 4, 8, 0
 

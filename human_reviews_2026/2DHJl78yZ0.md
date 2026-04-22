@@ -1,5 +1,6 @@
 # Prune, Then Select: Select High-Quality, Important, and Diverse Data Using Training Trajectories
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

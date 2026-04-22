@@ -1,5 +1,6 @@
 # Ego to World: Collaborative Spatial Reasoning in Embodied Systems via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

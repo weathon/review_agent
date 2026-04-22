@@ -1,5 +1,6 @@
 # VisionLaw: Inferring Interpretable Intrinsic Dynamics from Visual Observations via Bilevel Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

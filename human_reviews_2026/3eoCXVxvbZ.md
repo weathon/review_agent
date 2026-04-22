@@ -1,5 +1,6 @@
 # AU-Harness: An Open-Source Toolkit for Holistic Evaluation of AudioLLMs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0
 

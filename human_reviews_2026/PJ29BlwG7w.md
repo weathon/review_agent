@@ -1,5 +1,6 @@
 # CausalAffect: Causal Discovery for Facial Affective Understanding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 8, 6
 

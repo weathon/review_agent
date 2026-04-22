@@ -1,5 +1,6 @@
 # ReSIP: Reinforcement Learning with Symbolic Inductive Planning for Interpretable and Generalizable Pixel-Based Control
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 6, 2
 

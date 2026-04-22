@@ -1,5 +1,6 @@
 # UDANG: Unsupervised Domain Adaptation with Neural Gating for learning invariant representation of subspaces
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

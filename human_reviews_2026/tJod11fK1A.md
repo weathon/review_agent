@@ -1,5 +1,6 @@
 # Tactic: Adaptive Sparse Attention with Clustering and Distribution Fitting for Long-Context LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

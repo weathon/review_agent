@@ -1,5 +1,6 @@
 # Follow the Path: Reasoning over Knowledge Graph Paths to Improve LLM Factuality
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

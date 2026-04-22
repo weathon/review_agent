@@ -1,5 +1,6 @@
 # Next-Scale Autoregressive Models are Zero-Shot Single-Image Object View Synthesizers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

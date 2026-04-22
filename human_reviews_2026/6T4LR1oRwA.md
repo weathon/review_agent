@@ -1,5 +1,6 @@
 # Analyzing and Evaluating Unbiased Language Model Watermark
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

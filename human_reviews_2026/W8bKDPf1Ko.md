@@ -1,5 +1,6 @@
 # Graph-Theoretic Intrinsic Reward: Guiding RL with Effective Resistance
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8
 

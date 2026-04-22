@@ -1,5 +1,6 @@
 # Specialization after Generalization: Towards Understanding Test-Time Training in Foundation Models
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8, 6
 

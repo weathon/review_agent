@@ -1,5 +1,6 @@
 # A Scalable Distributed Framework for Multimodal GigaVoxel Image Registration
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 2, 10, 6, 8
 

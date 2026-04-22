@@ -1,5 +1,6 @@
 # TreePO: Enhancing Policy Efficacy and Inference Efficiency with Tree Modeling
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 8, 4
 

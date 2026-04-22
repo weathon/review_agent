@@ -1,5 +1,6 @@
 # UniRestorer: Universal Image Restoration via Adaptively Estimating Image Degradation at Proper Granularity
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

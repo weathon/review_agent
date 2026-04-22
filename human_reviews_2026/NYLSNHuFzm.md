@@ -1,5 +1,6 @@
 # MTIR-SQL:Multi-turn Tool-Integrated  Reasoning Reinforcement Learning for Text-to-SQL
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Towards Efficient Chain-of-Thought Reasoning via Adaptive-Budgeting based Policy Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

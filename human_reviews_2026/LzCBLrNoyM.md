@@ -1,5 +1,6 @@
 # Learning What Reinforcement Learning Can't: Interleaved Online Fine-Tuning for Hardest Questions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

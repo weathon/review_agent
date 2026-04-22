@@ -1,5 +1,6 @@
 # Decoupling Primitive with Experts: Dynamic Feature Alignment for Compositional Zero-Shot Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

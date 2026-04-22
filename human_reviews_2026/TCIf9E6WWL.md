@@ -1,5 +1,6 @@
 # Selectively Extracting and Injecting Visual Attributes into Text-to-Image Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

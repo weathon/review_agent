@@ -1,5 +1,6 @@
 # Web Agents Are Still Greedy: Progress-Aware Action Generation and Selection via Meta-Plan
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2, 2, 4
 

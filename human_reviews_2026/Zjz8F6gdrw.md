@@ -1,5 +1,6 @@
 # How Stable is the Next Token? A Geometric View of LLM Prediction Stability
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

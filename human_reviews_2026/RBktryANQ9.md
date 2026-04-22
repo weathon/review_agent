@@ -1,5 +1,6 @@
 # Dataset Distillers Are Good Label Denoisers In the Wild
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

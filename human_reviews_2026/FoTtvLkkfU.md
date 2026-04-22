@@ -1,5 +1,6 @@
 # G-Merging: Graph Models Merging for Parameter-Efficient Multi-Task Knowledge Consolidation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

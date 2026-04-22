@@ -1,5 +1,6 @@
 # How Transformers Learn In-Context Recall Tasks? Optimality, Training Dynamics and Generalization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

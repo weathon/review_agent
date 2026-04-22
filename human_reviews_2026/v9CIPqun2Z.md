@@ -1,5 +1,6 @@
 # DiffKANformer: Diffusion KAN Transformer for General Time Series Analysis
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 6, 6, 0
 

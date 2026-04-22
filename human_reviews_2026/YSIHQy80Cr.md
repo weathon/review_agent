@@ -1,5 +1,6 @@
 # Efficient Differentiable Contact Model with Long-range Influence
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 8
 

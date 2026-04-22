@@ -1,5 +1,6 @@
 # FU-DWS: Effective Federated Domain Unlearning via Domain-aware Weight Surgery
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

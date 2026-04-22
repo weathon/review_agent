@@ -1,5 +1,6 @@
 # CLUE-NAS: A CLIP-Inspired Contrastive Learnable Unifying Encoder for Neural Architecture Search
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

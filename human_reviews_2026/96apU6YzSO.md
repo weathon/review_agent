@@ -1,5 +1,6 @@
 # R-Zero: Self-Evolving Reasoning LLM from Zero Data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

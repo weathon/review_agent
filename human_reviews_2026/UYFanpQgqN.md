@@ -1,5 +1,6 @@
 # Feature Attribution for Label-Specific Feature Selection in Multi-Label Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

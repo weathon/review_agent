@@ -1,5 +1,6 @@
 # MixLLM: Selecting Large Language Models with High-Quality Results and Minimum Inference Cost for Multi-Stage Complex Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

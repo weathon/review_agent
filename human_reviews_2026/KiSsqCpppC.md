@@ -1,5 +1,6 @@
 # Zooming into Comics: Region-Aware RL Improves Fine-Grained Comic Understanding in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

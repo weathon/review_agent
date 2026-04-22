@@ -1,5 +1,6 @@
 # CEED-VLA: Consistency Vision-language-action Model with Early-exit Decoding
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2, 4
 

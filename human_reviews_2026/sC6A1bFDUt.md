@@ -1,5 +1,6 @@
 # What's In My Human Feedback? Learning Interpretable Descriptions of Preference Data
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 4
 

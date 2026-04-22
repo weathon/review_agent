@@ -1,5 +1,6 @@
 # FinLoRA: Benchmarking LoRA Methods for Fine-tuning LLMs on Financial Datasets
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

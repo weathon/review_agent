@@ -1,5 +1,6 @@
 # Generalization through Discrepancy: Leveraging Distributional Fitting Gaps for AI-Generated Image Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

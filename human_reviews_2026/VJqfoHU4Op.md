@@ -1,5 +1,6 @@
 # XDex: Learning Cross-Embodiment Dexterous Grasping with 1000 Hands
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 4
 

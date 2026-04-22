@@ -1,5 +1,6 @@
 # Self-Supervised Learning with Spatiality Preserving Representation for EEG Signals
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

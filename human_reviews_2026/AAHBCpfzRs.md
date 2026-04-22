@@ -1,5 +1,6 @@
 # CE-SSL: Computation-Efficient Semi-Supervised Learning for ECG-based Cardiovascular Diseases Detection
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

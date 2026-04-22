@@ -1,5 +1,6 @@
 # SPOGW: a Score-based Preference Optimization method via Group-Wise comparison for workflows
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

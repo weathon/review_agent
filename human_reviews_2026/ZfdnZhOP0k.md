@@ -1,5 +1,6 @@
 # Hubble: a Model Suite to Advance the Study of LLM Memorization
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

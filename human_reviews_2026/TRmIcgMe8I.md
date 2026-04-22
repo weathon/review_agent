@@ -1,5 +1,6 @@
 # Concept-TRAK: Understanding how diffusion models learn concepts through concept attribution
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Gaussian Entropy Flow World Model for Streaming 3D Occupancy Predition
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2
 

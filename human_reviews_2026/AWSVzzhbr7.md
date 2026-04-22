@@ -1,5 +1,6 @@
 # LD-EnSF: Synergizing Latent Dynamics with Ensemble Score Filters for Fast Data Assimilation with Sparse Observations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # KaLM-Embedding-V2: Superior Training Techniques and Data Inspire A Versatile Embedding Model
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Improving Generalizability and Undetectability for Targeted Adversarial Attacks on Multimodal Pre-trained Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Soup Kitchen: Mixing Exotic Model Soups across Labels, Losses, and Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

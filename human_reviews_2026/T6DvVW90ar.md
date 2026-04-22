@@ -1,5 +1,6 @@
 # DKD: Directional Knowledge Distillation for One-Step Text-to-Image Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Are Time-Series Foundation Models Deployment-Ready? A Systematic Study of Adversarial Robustness Across Domains
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

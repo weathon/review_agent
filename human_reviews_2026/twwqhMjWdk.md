@@ -1,5 +1,6 @@
 # SPARC: Multi-view Spatial Transcriptomics Clustering via Prototypical Contrast and Attentional Fusion
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 4
 

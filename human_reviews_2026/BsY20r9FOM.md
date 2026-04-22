@@ -1,5 +1,6 @@
 # Continual Unlearning for Text-to-Image Diffusion Models: A Regularization Perspective
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

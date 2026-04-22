@@ -1,5 +1,6 @@
 # CocoRNA: Collective RNA Design with Cooperative Multi-agent Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Deep Learning with Learnable Product-Structured Activations
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8
 

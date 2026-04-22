@@ -1,5 +1,6 @@
 # Achieving Ultra-Low Latency and Lossless ANN-SNN Conversion through Optimal Elimination of Unevenness Error
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

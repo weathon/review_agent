@@ -1,5 +1,6 @@
 # The Effect of Attention Head Count on Transformer Approximation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

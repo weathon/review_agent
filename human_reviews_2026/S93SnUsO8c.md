@@ -1,5 +1,6 @@
 # From Code to Action: Hierarchical Learning of Diffusion-VLM Policies
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 6, 2
 

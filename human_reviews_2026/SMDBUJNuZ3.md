@@ -1,5 +1,6 @@
 # A Novel Query-Driven Multi-Stage Alternating Feature Extraction and Interaction Network for Image Manipulation Localization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

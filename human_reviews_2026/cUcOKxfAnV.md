@@ -1,5 +1,6 @@
 # ReAugment: Learning to Augment Few-Shot Time Series with Model Zoo Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

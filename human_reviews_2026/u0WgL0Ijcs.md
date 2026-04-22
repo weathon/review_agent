@@ -1,5 +1,6 @@
 # Auto-Comp: An Automated Pipeline for Scalable Compositional Probing of Contrastive Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

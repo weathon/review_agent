@@ -1,5 +1,6 @@
 # From Divergence to Normalized Similarity:A Symmetric and Scalable Topological Toolkit for Representation Analysis
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 2
 

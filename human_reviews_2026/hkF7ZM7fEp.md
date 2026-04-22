@@ -1,5 +1,6 @@
 # The False Promise of Zero-Shot Super-Resolution in Machine-Learned Operators
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

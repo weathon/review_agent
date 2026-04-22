@@ -1,5 +1,6 @@
 # LiveMoments: Reselected Key Photo Restoration in Live Photos via Reference-guided Diffusion
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

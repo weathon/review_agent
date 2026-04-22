@@ -1,5 +1,6 @@
 # Knowledge Fitness Criterion: Measure-Theoretic Knowledge Assessment via Manifolds for Multi-Agent LLM Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

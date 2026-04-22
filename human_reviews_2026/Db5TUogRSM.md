@@ -1,5 +1,6 @@
 # Provable Weak-to-Strong Generalization via Overspecified Students and Underspecified Teachers
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

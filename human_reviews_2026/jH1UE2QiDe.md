@@ -1,5 +1,6 @@
 # M$^{4}$olGen: Multi-Agent, Multi-Stage Molecular Generation under Precise Multi-Property Constraints
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

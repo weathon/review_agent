@@ -1,5 +1,6 @@
 # Factor-Wise Homogeneity of Slot-Attention for Continual Object-Centric Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

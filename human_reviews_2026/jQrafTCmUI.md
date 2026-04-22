@@ -1,5 +1,6 @@
 # PRIVDISTIL: A Unified Framework for Accurate and Differentially Private Model Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

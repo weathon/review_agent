@@ -1,5 +1,6 @@
 # Equivariant Geodesic Networks: Geometry Preserving Learning on Riemannian Manifolds
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

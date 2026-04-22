@@ -1,5 +1,6 @@
 # MapQA: A Map-Question-Answering Benchmark for Visual Language Model Reasoning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2, 2
 
@@ -214,7 +215,8 @@ This paper introduces MapQA, a  dataset to evaluate LLMs on Visual Language Mode
 
 2.The paper reports that humans achieve over 90 % accuracy while the best models reach around 50 %. However, it is unclear how human annotation was conducted—what information was presented to the annotators and models, and whether any contextual hints were given. It should also be clarified whether answers could be inferred directly from the provided context rather than the map itself.
 
-3. Although the dataset is designed to evaluate reasoning capabilities of LLMs over maps, some examples (such as in Figure 1) seem to require reasoning beyond the map image. It is difficult to answer such questions without external background knowledge. If the dataset requires reasoning or factual knowledge from outside the map, reasoning model or retrieval-augmented models (e.g. deep-research models) should also be evaluated. 
+3. Although the dataset is designed to evaluate reasoning capabilities of LLMs over maps, some examples (such as in Figure 1) seem to require reasoning beyond the map image. It is difficult to answer such questions without external background knowledge. If the dataset requires reasoning or factual knowledge from outside the map, reasoning model or retrieval-augmented models (e.g. deep-research models) should also be evaluated.
+
 
 4.The question in Figure 1 “Are the Confederates abandoning Fort Huger during the Battle of Roanoke Island?” is ambiguous. I asked GPT-5 this question, and it answers “yes” because the Confederates did abandon Fort Huger during the battle after the map. But when asked “based on the image, have the Confederates abandoned Fort Huger?”, GPT-5 correctly answers that they had not yet abandoned it at the time represented in the map. This raises concerns about the clarity and quality of the questions.
 

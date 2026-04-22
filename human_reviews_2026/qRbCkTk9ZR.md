@@ -1,5 +1,6 @@
 # Learning What Matters Now: Dynamic Preference Inference under Contextual Shifts
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4
 

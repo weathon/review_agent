@@ -1,5 +1,6 @@
 # BigO(Bench) - Can LLMs Generate Code with Controlled Time and Space Complexity?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # MedFuse: Multiplicative Embedding Fusion for Irregular Clinical Time Series
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2
 

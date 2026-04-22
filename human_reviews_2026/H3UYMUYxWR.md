@@ -1,5 +1,6 @@
 # Accelerated Likelihood Maximization for Diffusion-based Versatile Content Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

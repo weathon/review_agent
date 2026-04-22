@@ -1,5 +1,6 @@
 # Foundation Visual Encoders Are Secretly Few-Shot Anomaly Detectors
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

@@ -1,5 +1,6 @@
 # An Efficient SE(p)-Invariant Transport Metric Driven by Polar Transport Discrepancy-based Representation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Test-Time Policy Adaptation for Enhanced Multi-Turn Interactions with LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

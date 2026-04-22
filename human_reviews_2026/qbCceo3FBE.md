@@ -1,5 +1,6 @@
 # GOLDILOCS: GENERAL OBJECT-LEVEL DETECTION AND LABELING OF CHANGES IN SCENES
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

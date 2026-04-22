@@ -1,5 +1,6 @@
 # Theoretical Guarantees for Causal Discovery on Large Random Graphs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Bridging Kolmogorov Complexity and Deep Learning: Asymptotically Optimal Description Length Objectives for Transformers
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

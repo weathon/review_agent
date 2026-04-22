@@ -1,5 +1,6 @@
 # Target-Aware Video Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

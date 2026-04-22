@@ -1,5 +1,6 @@
 # Process-Level Trajectory Evaluation for Environment Configuration in Software Engineering Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # CITED: A Decision Boundary-Aware Signature for GNNs Towards Model Extraction Defense
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # MemGen: Weaving Generative Latent Memory for Self-Evolving Agents
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 8
 

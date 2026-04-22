@@ -1,5 +1,6 @@
 # SWE-Effi: Re-Evaluating Software AI Agent System Effectiveness Under Resource Constraints
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

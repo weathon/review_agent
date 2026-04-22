@@ -1,5 +1,6 @@
 # Test-time Verification via Optimal Transport: Coverage, ROC, & Sub-optimality
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

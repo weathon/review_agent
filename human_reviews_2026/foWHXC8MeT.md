@@ -1,5 +1,6 @@
 # One-step Optimal Transport via Regularized Distribution Matching Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

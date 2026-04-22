@@ -1,5 +1,6 @@
 # PatchSAGE: A Probe-Based Detector Using Saliency Alignment, Gradients, and Layer Sensitivity
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # At the Edge of Understanding: Sparse Autoencoders Trace The Limits of Transformer Generalization
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 2, 8, 6, 2
 

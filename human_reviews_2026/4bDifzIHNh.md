@@ -1,5 +1,6 @@
 # Hard2Verify: A Step-Level Verification Benchmark for Open-Ended Frontier Math
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # A Fast, Reliable, and Secure Programming Language for LLM Agents with Code Actions
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

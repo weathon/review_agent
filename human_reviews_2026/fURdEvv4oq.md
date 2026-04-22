@@ -1,5 +1,6 @@
 # Dynamic Parameter Optimization for Highly Transferable Transformation-based Attacks
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2, 4
 

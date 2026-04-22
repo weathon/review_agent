@@ -1,5 +1,6 @@
 # Understanding and Enhancing the Planning Capability of Language Models via Multi-Token Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 8, 4
 

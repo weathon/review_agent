@@ -1,5 +1,6 @@
 # GSFixer: Improving 3D Gaussian Splatting with Reference-Guided Video Diffusion Priors
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

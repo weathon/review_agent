@@ -1,5 +1,6 @@
 # VRouter: Micro-batch Level Load Balance via Inter-EP Routing for MoE Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

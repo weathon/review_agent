@@ -1,5 +1,6 @@
 # REPO: Detoxifying LLMs via Representation Erasure-based Preference Optimization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

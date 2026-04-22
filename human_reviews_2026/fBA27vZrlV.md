@@ -1,5 +1,6 @@
 # UniAero: A Unified Framework for Global Drag and Local Flow Field Prediction
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 4
 

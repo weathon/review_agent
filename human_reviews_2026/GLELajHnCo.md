@@ -1,5 +1,6 @@
 # GAPrune: Gradient-Alignment Pruning for Domain-Aware Embeddings
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4
 

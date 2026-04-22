@@ -1,5 +1,6 @@
 # FASTer: Toward Powerful and Efficient Autoregressive Vision–Language–Action Models with Learnable Action Tokenizer and Block-wise Decoding
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

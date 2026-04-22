@@ -1,5 +1,6 @@
 # BLOB-Q: Boosting Low Bit ViT Quantization via Global Optimization on Model Distortion
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

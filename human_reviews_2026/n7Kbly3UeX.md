@@ -1,5 +1,6 @@
 # SafetyFlow: An Agent-Flow System for Automated LLM Safety Benchmarking
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

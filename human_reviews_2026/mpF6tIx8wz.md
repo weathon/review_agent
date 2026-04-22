@@ -1,5 +1,6 @@
 # Graph-Guided Reconstruction Diffusion for Multivariate Time Series Anomaly Detection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

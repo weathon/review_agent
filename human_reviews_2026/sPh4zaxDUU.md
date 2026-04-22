@@ -1,5 +1,6 @@
 # Kuromi: Learning without Augmentation via Energy-based Semi-supervised Kuramoto Neurons
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

@@ -1,5 +1,6 @@
 # Grokking in LLM Pretraining? Monitor Memorization-to-Generalization without Test
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

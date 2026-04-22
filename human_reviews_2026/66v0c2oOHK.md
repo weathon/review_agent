@@ -1,5 +1,6 @@
 # KnowMT-Bench: Benchmarking Knowledge-Intensive Long-Form Question Answering In Multi-Turn Dialogues
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 8, 2, 4, 6
 

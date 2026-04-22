@@ -1,5 +1,6 @@
 # LVCap-Eval: Towards Holistic Long Video Caption Evaluation for Multimodal LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

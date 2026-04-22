@@ -1,5 +1,6 @@
 # Omni-Weather: A Unified Multimodal Model for Weather Radar Understanding and Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

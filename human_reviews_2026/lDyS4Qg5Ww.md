@@ -1,5 +1,6 @@
 # RIDER: 3D RNA Inverse Design with Reinforcement Learning-Guided Diffusion
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

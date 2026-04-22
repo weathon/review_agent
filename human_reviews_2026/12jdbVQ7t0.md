@@ -1,5 +1,6 @@
 # Lattice: Learning to Efficiently Compress the Memory
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # INFUSER: Injecting Synthetic Failures for Self-Correcting Embodied Agents
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

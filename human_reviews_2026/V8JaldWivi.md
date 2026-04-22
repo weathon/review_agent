@@ -1,5 +1,6 @@
 # The Origins of Representation Manifolds in Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

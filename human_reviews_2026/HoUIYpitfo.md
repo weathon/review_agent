@@ -1,5 +1,6 @@
 # Learning on the Job: Test-Time Curricula for Targeted Reinforcement Learning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6
 

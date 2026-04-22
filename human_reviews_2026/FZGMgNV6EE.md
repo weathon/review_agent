@@ -1,5 +1,6 @@
 # Wavelet Diffusion Posterior Sampling with Frequency Domain Guidance
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # On the Robustness of Model Edits under Fine-Tuning in Text-to-Image Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

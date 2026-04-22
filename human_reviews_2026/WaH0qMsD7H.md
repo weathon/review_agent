@@ -1,5 +1,6 @@
 # Node-wise Filtering in Graph Neural Networks: A Mixture of Experts Approach
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

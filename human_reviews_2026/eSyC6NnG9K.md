@@ -1,5 +1,6 @@
 # LG-Bench: A Graph-Structured Evaluation Benchmark for Life Sciences
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

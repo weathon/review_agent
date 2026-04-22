@@ -1,5 +1,6 @@
 # Two-Stage Coverage Expansion for Cross-Domain Offline Reinforcement Learning via Score-Based Generative Modeling
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 2
 

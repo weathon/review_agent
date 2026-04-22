@@ -1,5 +1,6 @@
 # Do Stop Me Now: Detecting Boilerplate Responses with a Single Iteration
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

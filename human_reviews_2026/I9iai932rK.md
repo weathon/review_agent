@@ -1,5 +1,6 @@
 # Scalable Energy-Based Models via Adversarial Training: Unifying Discrimination and Generation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

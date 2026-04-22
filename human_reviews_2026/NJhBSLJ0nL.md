@@ -1,5 +1,6 @@
 # Fractional-Order Spiking Neural Network
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

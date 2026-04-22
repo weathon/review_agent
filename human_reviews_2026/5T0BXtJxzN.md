@@ -1,5 +1,6 @@
 # Can LLMs Reason Soundly in Law? Auditing Inference Patterns for Legal Judgment
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

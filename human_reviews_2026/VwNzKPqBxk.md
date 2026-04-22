@@ -1,5 +1,6 @@
 # ProfBench: Multi-Domain Rubrics requiring Professional Knowledge to Answer and Judge
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

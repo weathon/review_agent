@@ -1,5 +1,6 @@
 # ToolRM: Outcome Reward Models for Tool-Calling Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

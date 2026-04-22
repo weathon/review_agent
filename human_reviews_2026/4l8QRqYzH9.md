@@ -1,5 +1,6 @@
 # GDI-Bench: A Benchmark for General Document Intelligence with Vision and Reasoning Decoupling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

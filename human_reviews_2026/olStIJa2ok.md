@@ -1,5 +1,6 @@
 # Federated Feature Transformation with Sample-Aware Calibration and Local–Global Sequence Fusion
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

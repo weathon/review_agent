@@ -1,5 +1,6 @@
 # Training Dynamics Explain Safe Early Exits in Diffusion Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 4, 2
 

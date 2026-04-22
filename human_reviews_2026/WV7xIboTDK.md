@@ -1,5 +1,6 @@
 # Reliable Weak-to-Strong Monitoring of LLM Agents
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 4
 

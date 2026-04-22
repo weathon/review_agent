@@ -1,5 +1,6 @@
 # TFMAudio: High-Fidelity Long-Form Text-to-Audio via Mamba-based Flow Matching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 
@@ -57,7 +58,8 @@ $D_{\mathrm{KL}}(p_1 \| q)  = 0.074, D_{\mathrm{KL}}(p_2 \| q)  = 0.039, D_{\mat
 
 - Latency should also be compared against other baseline TTA models, not just between TFMamba and the transformer-based version.
 
-- The idea of EAG itself is novel, but the performance improvement compared to CFG is very minor as shown in Table 5. For 30 s generation: CLAP +0.0011, IS +0.014, FAD −0.0052, KL −0.0059 (vs. CFG).
+- The idea of EAG itself is novel, but the performance improvement compared to CFG is very minor as shown in Table 5.
+For 30 s generation: CLAP +0.0011, IS +0.014, FAD −0.0052, KL −0.0059 (vs. CFG).
 
 - In conclusion, unfortunately, this paper is far from ready to meet the standards of ICLR at this stage.
 

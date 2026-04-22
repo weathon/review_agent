@@ -1,5 +1,6 @@
 # MILR: Improving Multimodal Image Generation via Test-Time Latent Reasoning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Unleashing LLMs in Bayesian Optimization: Preference-Guided Framework for Scientific Discovery
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

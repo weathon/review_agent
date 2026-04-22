@@ -1,5 +1,6 @@
 # Transductive and Learning-Augmented Online Regression
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 6
 

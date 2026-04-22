@@ -1,5 +1,6 @@
 # Neural Tangent Kernel Perspective on Parameter-Space Symmetries
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

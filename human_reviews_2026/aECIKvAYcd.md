@@ -1,5 +1,6 @@
 # HiVid: LLM-Guided Video Saliency For Content-Aware VOD And Live Streaming
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

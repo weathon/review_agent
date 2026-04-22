@@ -1,5 +1,6 @@
 # Topology and geometry of the learning space of ReLU networks: connectivity and singularities
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Skill Weaving: Efficient Self-Improvement of LLMs via Modular Skillpacks
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 6
 

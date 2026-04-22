@@ -1,5 +1,6 @@
 # Non-Convex Federated Optimization under Cost-Aware Client Selection
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 6
 

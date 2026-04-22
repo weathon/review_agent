@@ -1,5 +1,6 @@
 # Adapting and Explaining Time Series Foundation Models with Concepts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 8, 2
 

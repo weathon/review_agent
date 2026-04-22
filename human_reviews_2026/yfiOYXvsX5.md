@@ -1,5 +1,6 @@
 # Causal-Steer: Disentangled Continuous Style Control without Parallel Corpora
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2
 

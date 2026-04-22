@@ -1,5 +1,6 @@
 # Low Rank Experts Enable Specialization In Dense Transformers
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

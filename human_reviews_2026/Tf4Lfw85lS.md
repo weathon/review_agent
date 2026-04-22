@@ -1,5 +1,6 @@
 # TVTSyn: Content-Synchronous Time-Varying Timbre for Streaming Voice Conversion and Anonymization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8
 

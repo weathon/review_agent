@@ -1,5 +1,6 @@
 # Hyperparameter Trajectory Inference with Conditional Lagrangian Optimal Transport
 
+- Avg Score: 4.00
 - Decision: Accept (Oral)
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Understanding Language Prior of LVLMs by Contrasting Chain-of-Embedding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

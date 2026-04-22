@@ -1,5 +1,6 @@
 # Quantitative Bounds for Length Generalization in Transformers
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Dchi-Stencil: A Differential Privacy Mechanism for Interacting with LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

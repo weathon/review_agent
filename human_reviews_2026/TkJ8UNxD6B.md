@@ -1,5 +1,6 @@
 # ALT: Adaptive Low‑Rank Transformation for Learngene-based Transformer Initialization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

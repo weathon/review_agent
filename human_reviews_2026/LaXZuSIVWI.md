@@ -1,5 +1,6 @@
 # AutoClinician: Structured Clinical Guideline Integration for Trustworthy Diagnostic Reasoning in Healthcare
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

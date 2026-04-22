@@ -1,5 +1,6 @@
 # Lazy-Attention: Efficient Retrieval-Augmented Generation with Deferred Positional Encoding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

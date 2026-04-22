@@ -1,5 +1,6 @@
 # XGRAG: A Graph-Native Framework for Explaining KG-based Retrieval-Augmented Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

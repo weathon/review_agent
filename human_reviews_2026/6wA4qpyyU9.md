@@ -1,5 +1,6 @@
 # Directional Textual Inversion for Personalized Text-to-Image Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

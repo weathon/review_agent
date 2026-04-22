@@ -1,5 +1,6 @@
 # $\pi^3$: Permutation-Equivariant Visual Geometry Learning
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 8, 10, 6
 

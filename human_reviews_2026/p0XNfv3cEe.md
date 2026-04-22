@@ -1,5 +1,6 @@
 # Multi-Level CLIP Transfer for Open-Vocabulary Object Detection
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 8, 2, 6
 

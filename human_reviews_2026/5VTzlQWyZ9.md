@@ -1,5 +1,6 @@
 # Attention Clusters: Revealing the Inductive Bias of Attention Mechanisms
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Constrained Reinforcement Learning using Bender’s Decomposition and Exact Constraint Satisfaction
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 8
 

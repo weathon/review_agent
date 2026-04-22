@@ -1,5 +1,6 @@
 # Residual Pyramid Atrous Filtering Network with the Error Low-Rank Respresentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

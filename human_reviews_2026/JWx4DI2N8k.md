@@ -1,5 +1,6 @@
 # LongWriter-Zero: Mastering Ultra-Long Text Generation via Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 4, 6
 

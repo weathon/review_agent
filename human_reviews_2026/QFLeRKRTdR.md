@@ -1,5 +1,6 @@
 # Understanding Adversarial Transfer: Why Representation-Space Attacks Fail Where Data-Space Attacks Succeed
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

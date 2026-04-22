@@ -1,5 +1,6 @@
 # HiMoE-VLA: Hierarchical Mixture-of-Experts for Generalist Vision–Language–Action Policies
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Matting Anything 2:  Towards Video Matting for Anything
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

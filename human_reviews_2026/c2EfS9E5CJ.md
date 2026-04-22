@@ -1,5 +1,6 @@
 # AdaViewPlanner: Adapting Video Diffusion Models for Viewpoint Planning in 4D Scenes
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

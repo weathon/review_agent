@@ -1,5 +1,6 @@
 # Every Language Model Has a Forgery-Resistant Signature
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 8
 

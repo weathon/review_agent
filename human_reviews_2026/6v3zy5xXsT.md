@@ -1,5 +1,6 @@
 # Beyond Manuals and Tasks: Instance-Level Context Learning for LLM Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

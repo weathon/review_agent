@@ -1,5 +1,6 @@
 # MetaVLA: Unified Meta Co-Training for Efficient Embodied Adaptation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4
 

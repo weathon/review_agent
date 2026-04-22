@@ -1,5 +1,6 @@
 # Transfer Learning in Infinite Width Feature Learning Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

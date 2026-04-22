@@ -1,5 +1,6 @@
 # Time Conditioned Foreseeing: Temporal Generative Pretraining for EHR foundation models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 4, 2
 

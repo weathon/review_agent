@@ -1,5 +1,6 @@
 # Xihe: Scalable Zero-shot Time Series Learner via Hierarchical Interleaved Block Attention
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

@@ -1,5 +1,6 @@
 # D-CORE: Incentivizing Task Decomposition in Large Reasoning Models for Complex Tool Use
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

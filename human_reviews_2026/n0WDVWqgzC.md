@@ -1,5 +1,6 @@
 # Neuroprobe: Evaluating Intracranial Brain Responses to Naturalistic Stimuli
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

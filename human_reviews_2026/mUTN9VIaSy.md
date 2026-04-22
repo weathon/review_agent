@@ -1,5 +1,6 @@
 # Bi-directional Bias Attribution: Debiasing Large Language Models without Modifying Prompts
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

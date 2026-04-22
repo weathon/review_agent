@@ -1,5 +1,6 @@
 # Dual-Mode Cloud-Device Collaboration for Efficient Continual Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

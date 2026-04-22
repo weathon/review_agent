@@ -1,5 +1,6 @@
 # Training as Computation: A Resource-Bounded Theory of Continual Self-Play Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 0, 6, 8
 

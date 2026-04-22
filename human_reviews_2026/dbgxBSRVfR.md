@@ -1,5 +1,6 @@
 # Image-Free Zero-Shot Learning via Adaptive Semantic-Guided Classifier Injection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

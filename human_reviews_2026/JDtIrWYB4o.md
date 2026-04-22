@@ -1,5 +1,6 @@
 # JULI: Jailbreak Large Language Models by Self-Introspection
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4, 6
 

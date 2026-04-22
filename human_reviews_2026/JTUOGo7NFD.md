@@ -1,5 +1,6 @@
 # Unified Privacy Guarantees for Decentralized Learning via Matrix Factorization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

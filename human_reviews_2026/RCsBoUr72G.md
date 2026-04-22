@@ -1,5 +1,6 @@
 # A Balanced Neuro-Symbolic Approach for Commonsense Abductive Logic
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

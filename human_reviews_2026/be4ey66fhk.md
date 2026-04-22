@@ -1,5 +1,6 @@
 # SPAR: Self-supervised Placement-Aware Representation Learning for Distributed Sensing
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 6, 4, 2, 4
 

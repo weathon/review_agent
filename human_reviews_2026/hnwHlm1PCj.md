@@ -1,5 +1,6 @@
 # Boost the Identity-Preserving Embedding for Consistent Text-to-Image Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

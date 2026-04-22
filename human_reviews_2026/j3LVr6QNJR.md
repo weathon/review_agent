@@ -1,5 +1,6 @@
 # Hopformer: Homogeneity-Pursuit Transformer for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 8
 

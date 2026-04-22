@@ -1,5 +1,6 @@
 # Addition Circuit: How LLMs Add in Their Heads using State Vectors
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 6, 2, 0, 2
 

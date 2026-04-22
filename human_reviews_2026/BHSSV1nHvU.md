@@ -1,5 +1,6 @@
 # Breaking Safety Paradox with Feasible Dual Policy Iteration
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8, 6, 4
 

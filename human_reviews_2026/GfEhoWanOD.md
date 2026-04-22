@@ -1,5 +1,6 @@
 # Activity-Driven Quantile Optimization: Dynamic Exploration and Exploitation in Recommender Systems
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 
@@ -132,7 +133,8 @@ This paper provides an interesting perspective on decision making using a distri
 4. Overall, the paper feels more application-driven, with a specifically designed structure to both explore high-potential rewards for low-activity users and reduce risk for high-activity users. I initially thought this would be supported by real-world online testing, but it turns out the evaluation is based only on simulations. While I appreciate the diversity of simulation settings, it is somewhat hard to assess the generalizability of the proposed system since several components (e.g., activity score definition, mapping back to quantiles via a seemingly non-unique function form in Equation 7, joint updates of two critics and one actor) appear quite specific. The paper would benefit from more clarity on which parts of the design are generalizable, and from presenting the framework in a more standardized way to help other readers or practitioners replicate the system.
 5. A minor point: it might be better to include standard errors (or empirical confidence intervals) in Figure 5 to better compare the performance of different methods.
 
-Reference: Nam, D. W., Kim, Y., & Park, C. Y. (2021). GMAC: A distributional perspective on actor-critic framework. In International Conference on Machine Learning (pp. 7927–7936). PMLR.
+Reference:
+Nam, D. W., Kim, Y., & Park, C. Y. (2021). GMAC: A distributional perspective on actor-critic framework. In International Conference on Machine Learning (pp. 7927–7936). PMLR.
 
 ### Questions
 See Weaknesses.

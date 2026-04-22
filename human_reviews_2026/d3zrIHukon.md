@@ -1,5 +1,6 @@
 # SALT: Structure-Aligned Learning for Time-Series Forecasting
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 

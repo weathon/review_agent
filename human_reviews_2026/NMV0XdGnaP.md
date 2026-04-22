@@ -1,5 +1,6 @@
 # Faster Sampling from Gibbs Distributions with Quantum Variance Reduction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

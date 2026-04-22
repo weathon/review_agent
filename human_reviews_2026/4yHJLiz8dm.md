@@ -1,5 +1,6 @@
 # Toward Greater Autonomy in Materials Discovery Agents: Unifying Planning, Physics, and Scientists
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

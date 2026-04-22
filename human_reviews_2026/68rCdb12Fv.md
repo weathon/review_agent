@@ -1,5 +1,6 @@
 # Feedback promotes efficient-coding while attenuating bias in recurrent neural networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 0, 2
 

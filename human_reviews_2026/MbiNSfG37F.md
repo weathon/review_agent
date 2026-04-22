@@ -1,5 +1,6 @@
 # Fast Rerandomization for Balancing Covariate in Randomized Experiments: A Metropolis–Hastings Framework
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 6, 8, 2
 

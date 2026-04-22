@@ -1,5 +1,6 @@
 # A Step towards Efficient Waste Segmentation for Automated Waste Recycling in Cluttered Background
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

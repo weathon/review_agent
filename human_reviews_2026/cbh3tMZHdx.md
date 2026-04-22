@@ -1,5 +1,6 @@
 # Which English Do LLMs Prefer? Quantifying American and British English Through a Postcolonial Lens
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

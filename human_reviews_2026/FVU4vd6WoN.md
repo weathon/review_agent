@@ -1,5 +1,6 @@
 # Now you see me! Attribution Distributions Reveal What is Truly Important for a Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 4, 4
 

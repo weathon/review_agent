@@ -1,5 +1,6 @@
 # Multi-Agent Evolve: LLM Self-Improve through Multi-Agent Co-evolution
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

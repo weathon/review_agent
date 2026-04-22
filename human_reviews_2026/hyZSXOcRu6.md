@@ -1,5 +1,6 @@
 # ReTaMTSF: Retrieval-Based Multimodal Framework for Multivariate Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 4, 2
 

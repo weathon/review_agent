@@ -1,5 +1,6 @@
 # Dynamics is what you need for time-series forecasting!
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 4, 2
 

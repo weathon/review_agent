@@ -1,5 +1,6 @@
 # Inference-time Alignment with Rewards in Anisotropic Besov Spaces: Superiority of Neural Networks over Linear Estimators
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

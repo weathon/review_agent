@@ -1,5 +1,6 @@
 # CaNOCS: Category-Level 3D Correspondence from a single image
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

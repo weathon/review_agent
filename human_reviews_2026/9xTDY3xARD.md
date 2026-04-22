@@ -1,5 +1,6 @@
 # Interpretable Kernel Representation Learning at Scale: A Unified Framework Utilizing Nyström Approximation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

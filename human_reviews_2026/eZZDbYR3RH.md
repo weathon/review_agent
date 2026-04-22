@@ -1,5 +1,6 @@
 # SaLon3R: Structure-aware Long-term Generalizable 3D Reconstruction from Unposed Images
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

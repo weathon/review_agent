@@ -1,5 +1,6 @@
 # Quantum Generator Kernels
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

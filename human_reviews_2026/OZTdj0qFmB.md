@@ -1,5 +1,6 @@
 # SimReg: Achieving Higher Convergence and Generalization in the LLM Pretraining via Embedding Similarity Regularization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

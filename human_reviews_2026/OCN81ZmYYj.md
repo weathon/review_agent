@@ -1,5 +1,6 @@
 # Texture Vector-Quantization and Reconstruction Aware Prediction for Generative Super-Resolution
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 8
 

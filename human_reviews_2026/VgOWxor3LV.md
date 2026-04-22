@@ -1,5 +1,6 @@
 # Stroke3D: Lifting 2D strokes into rigged 3D model via latent diffusion models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

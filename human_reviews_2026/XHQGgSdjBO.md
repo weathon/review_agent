@@ -1,5 +1,6 @@
 # Hierarchical Cautious Optimization for Semi-Supervised Medical Image Segmentation with Limited Labeled Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

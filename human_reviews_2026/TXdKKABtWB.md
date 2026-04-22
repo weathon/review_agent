@@ -1,5 +1,6 @@
 # RelA-Diffusion: Relativistic Adversarial Diffusion for Multi-Tracer PET Synthesis from Multi-Sequence MRI
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Mamba Unchained: A Permutation-Invariant Approach to Multivariate Time Series
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

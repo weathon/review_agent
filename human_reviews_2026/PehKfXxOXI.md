@@ -1,5 +1,6 @@
 # Revisiting the Effect of Topologies on Decentralized SGD
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 4, 6
 

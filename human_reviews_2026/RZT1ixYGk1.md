@@ -1,5 +1,6 @@
 # Beyond Aggregation: Guiding Clients in Heterogeneous Federated Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

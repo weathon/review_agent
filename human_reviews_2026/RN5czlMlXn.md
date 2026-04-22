@@ -1,5 +1,6 @@
 # Deep Heterogeneity: A New Paradigm for  Time Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

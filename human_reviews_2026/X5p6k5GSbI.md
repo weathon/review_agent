@@ -1,5 +1,6 @@
 # APEX: Approximate-but-exhaustive search for ultra-large combinatorial synthesis libraries
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

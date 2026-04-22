@@ -1,5 +1,6 @@
 # CrystalSeg: Automating Synchrotron Tomographic Reconstruction Segmentation for Crystallography with Physically Guided Simulations
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

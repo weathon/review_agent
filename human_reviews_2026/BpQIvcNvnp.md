@@ -1,5 +1,6 @@
 # On Why Form Shapes Reasoning: Structuring Latent Program Networks with Category-Theoretic Constraints
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

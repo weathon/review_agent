@@ -1,5 +1,6 @@
 # GeneBreaker: Jailbreak Attacks against DNA Language Models with Pathogenicity Guidance
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

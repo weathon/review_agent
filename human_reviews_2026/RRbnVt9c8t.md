@@ -1,5 +1,6 @@
 # Pulp Motion: Framing-aware multimodal camera and human motion generation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

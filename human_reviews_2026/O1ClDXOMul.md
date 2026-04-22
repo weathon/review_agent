@@ -1,5 +1,6 @@
 # FOSL: A Foldable Sparse-and-Low-Rank Method for Efficient LLM Pre-training
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

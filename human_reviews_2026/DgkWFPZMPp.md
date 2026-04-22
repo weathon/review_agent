@@ -1,5 +1,6 @@
 # Can You Hear Me Now? A Benchmark for Long-Range Graph Propagation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

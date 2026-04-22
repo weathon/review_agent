@@ -1,5 +1,6 @@
 # TARS: MinMax Token-Adaptive Preference Strategy for MLLM Hallucination Reduction
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

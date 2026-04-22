@@ -1,5 +1,6 @@
 # USE: Enhancing Mixed-Motive Cooperation via Unified Self and Collective Rewards
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

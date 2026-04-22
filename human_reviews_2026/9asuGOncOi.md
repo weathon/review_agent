@@ -1,5 +1,6 @@
 # Fast Frank–Wolfe Algorithms with Adaptive Bregman Step-Size for Weakly Convex Functions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4, 6
 

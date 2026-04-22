@@ -1,5 +1,6 @@
 # Learning from Adversity: Semantic-Aware Mask Refinement through Adversarial Perturbation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # CoMo: Compositional Motion Customization  for Text-to-Video Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

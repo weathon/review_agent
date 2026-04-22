@@ -1,5 +1,6 @@
 # Parameter-Efficient Multi-Source Domain-Adaptive Prompt Tuning for Open-Vocabulary Object Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

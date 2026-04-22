@@ -1,5 +1,6 @@
 # PLA: The Optimal Path from Softmax Attention to Linear Models via KV Cache Compression
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

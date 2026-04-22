@@ -1,5 +1,6 @@
 # Towards All-Atom Foundation Models for Biomolecular Binding Affinity Prediction
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

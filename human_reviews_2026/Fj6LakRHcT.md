@@ -1,5 +1,6 @@
 # Safety Subspaces are Not Linearly Distinct: A Fine-Tuning Case Study
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4, 6
 

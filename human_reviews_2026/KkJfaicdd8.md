@@ -1,5 +1,6 @@
 # Symmetric Beauty of Hopfield Neural Networks with an In-Depth Analysis and Insights
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

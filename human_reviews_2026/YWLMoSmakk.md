@@ -1,5 +1,6 @@
 # CR-Guided Transformers: Coherence-Based Redundancy Identification and Regularization
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 0, 4, 2
 

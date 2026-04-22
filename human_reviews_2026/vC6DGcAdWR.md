@@ -1,5 +1,6 @@
 # Social World Models: Universal Structured Representations for Social Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

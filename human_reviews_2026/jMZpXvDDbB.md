@@ -1,5 +1,6 @@
 # Forward Target Propagation: A Forward-Only Approach to Global Error Credit Assignment via Local Losses
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 2
 

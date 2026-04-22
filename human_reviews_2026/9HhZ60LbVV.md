@@ -1,5 +1,6 @@
 # Do LLM Evaluators Prefer Themselves for a Reason?
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

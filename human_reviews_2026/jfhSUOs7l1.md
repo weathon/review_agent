@@ -1,5 +1,6 @@
 # FOCUS: A Frequency-Oriented and Class-Underrepresented Semantic Segmentation Framework for Food Images
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

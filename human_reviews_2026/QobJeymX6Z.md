@@ -1,5 +1,6 @@
 # HERON: Human-robot collaboration with Efficient and Resilient OptimizatioN for Long-horizon planning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

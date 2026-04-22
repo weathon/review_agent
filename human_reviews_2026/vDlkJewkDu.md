@@ -1,5 +1,6 @@
 # Escaping Policy Contraction: Contraction-Aware PPO (CaPPO) for Stable Language Model Fine-Tuning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 10, 4
 

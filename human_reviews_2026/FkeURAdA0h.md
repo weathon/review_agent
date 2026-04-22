@@ -1,5 +1,6 @@
 # Self-Predictive Representations for Combinatorial Generalization in Behavioral Cloning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Active Learning of 3D Gaussian Splatting with Consistent Region Partition and Robust Pose Estimation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

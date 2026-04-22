@@ -1,5 +1,6 @@
 # SMARAN: Closing the Generalization Gap with Performance Driven Optimization Method
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 8, 2
 

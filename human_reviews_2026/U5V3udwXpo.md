@@ -1,5 +1,6 @@
 # Pseudo-outcome Imputation with Post-treatment Variables for Individual Treatment Effect Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

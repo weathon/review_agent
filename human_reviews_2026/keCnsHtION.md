@@ -1,5 +1,6 @@
 # Rethinking KL Regularization in RLHF: From Value Estimation to Gradient Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 0, 6
 

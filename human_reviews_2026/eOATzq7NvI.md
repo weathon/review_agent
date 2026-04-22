@@ -1,5 +1,6 @@
 # Self-supervised Learning for Incomplete Multimodal Wearable Sensor Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

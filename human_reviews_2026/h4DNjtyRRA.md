@@ -1,5 +1,6 @@
 # ReCode: Unify Plan and Action for Universal Granularity Control
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

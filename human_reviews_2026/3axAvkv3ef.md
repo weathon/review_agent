@@ -1,5 +1,6 @@
 # ARC-Encoder: learning compressed text representations for large language models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

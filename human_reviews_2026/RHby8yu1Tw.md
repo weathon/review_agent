@@ -1,5 +1,6 @@
 # ReviewerToo: Should AI Join The Program Committee? A Look At The Future of Peer Review
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

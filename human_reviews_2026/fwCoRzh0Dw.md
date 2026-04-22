@@ -1,5 +1,6 @@
 # InfiniteHiP: Extending Language Model Context Up to 3 Million Tokens on a Single GPU
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

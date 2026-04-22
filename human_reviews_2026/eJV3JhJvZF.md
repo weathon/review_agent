@@ -1,5 +1,6 @@
 # DARE-bench: Evaluating Modeling and Instruction Fidelity of LLMs in Data Science
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

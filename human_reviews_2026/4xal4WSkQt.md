@@ -1,5 +1,6 @@
 # Lightweight and Interpretable Transformer via Unrolling of Mixed Graph Algorithms for Traffic Forecast
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

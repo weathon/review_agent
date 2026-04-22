@@ -1,5 +1,6 @@
 # FedCova: Robust Federated Covariance Learning Against Noisy Labels
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

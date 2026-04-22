@@ -1,5 +1,6 @@
 # LLM-Guided Evolutionary Program Synthesis for Quasi-Monte Carlo Design
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 2, 8
 

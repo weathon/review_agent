@@ -1,5 +1,6 @@
 # Delay Flow Matching
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 8
 

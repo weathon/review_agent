@@ -1,5 +1,6 @@
 # Learning Global Hypothesis Space for Enhancing Synergistic Reasoning Chain
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

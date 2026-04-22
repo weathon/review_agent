@@ -1,5 +1,6 @@
 # EAGLE: Enhanced Visual Grounding Minimizes Hallucinations in Instructional Multimodal Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

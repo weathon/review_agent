@@ -1,5 +1,6 @@
 # Learning Deliberately, Acting Intuitively: Unlocking Test-Time Reasoning in Multimodal LLMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 4
 

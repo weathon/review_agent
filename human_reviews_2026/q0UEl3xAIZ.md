@@ -1,5 +1,6 @@
 # Goal-oriented state reduction of unknown game dynamics to produce effective strategies
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 0, 2, 2
 

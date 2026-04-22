@@ -1,5 +1,6 @@
 # PointArena: Probing Multimodal Grounding Through Language-Guided Pointing
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 6
 

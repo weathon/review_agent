@@ -1,5 +1,6 @@
 # Adaptive Augmentation-Aware Latent Learning for Robust LiDAR Semantic Segmentation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 2
 

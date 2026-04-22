@@ -1,5 +1,6 @@
 # SCENE: Multi-Robot Active Cognition via Unified Free-Energy Minimization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

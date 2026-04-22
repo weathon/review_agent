@@ -1,5 +1,6 @@
 # Tracing LLM Reasoning Processes with Strategic Games: A Framework for Resource-Constrained Decision Making and Revision
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

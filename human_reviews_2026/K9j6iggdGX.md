@@ -1,5 +1,6 @@
 # A$^2$SG: Adaptive and Asymmetric Surrogate Gradients for Training Deep Spiking Neural Network
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

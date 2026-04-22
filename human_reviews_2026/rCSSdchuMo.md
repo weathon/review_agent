@@ -1,5 +1,6 @@
 # DuMA: Dual Matching Aggregation for Image-to-Point Cloud Registration
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 6
 

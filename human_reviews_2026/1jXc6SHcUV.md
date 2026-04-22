@@ -1,5 +1,6 @@
 # Efficient Fine-Tuning of Quantized Models via Adaptive Rank and Bitwidth
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

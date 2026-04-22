@@ -1,5 +1,6 @@
 # Robust Fine-tuning of Vision-Language-Action Robot Policies via Parameter Merging
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

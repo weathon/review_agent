@@ -1,5 +1,6 @@
 # DiffusionBlocks: Block-wise Neural Network Training via Diffusion Interpretation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

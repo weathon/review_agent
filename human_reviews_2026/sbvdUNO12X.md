@@ -1,5 +1,6 @@
 # HypoVeil: A Hypothesis-Driven Pragmatic Inference-Time Control Framework for Privacy–Utility-Aware LLM-Agent Dialogue
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4, 2
 

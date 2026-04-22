@@ -1,5 +1,6 @@
 # V2X-UniPool: Unifying Multimodal Perception and Knowledge Reasoning for Autonomous Driving
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

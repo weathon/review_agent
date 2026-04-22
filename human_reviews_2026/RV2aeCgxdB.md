@@ -1,5 +1,6 @@
 # ProPerSim: Developing Proactive and Personalized AI Assistants through User-Assistant Simulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # CaDrift: A Time-dependent Causal Generator of Drifting Data Streams
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

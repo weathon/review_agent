@@ -1,5 +1,6 @@
 # Reframing attention as a reinforcement learning problem for causal discovery
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

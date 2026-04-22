@@ -1,5 +1,6 @@
 # Alignment from Ranking and Rating Information
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

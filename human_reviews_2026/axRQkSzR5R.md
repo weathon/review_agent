@@ -1,5 +1,6 @@
 # BioDataLab: Towards Generalist Agents for Real-world Biological Data Engineering
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

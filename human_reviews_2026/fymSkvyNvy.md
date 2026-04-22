@@ -1,5 +1,6 @@
 # GraphSearch: Agentic Search-Augmented Reasoning for Zero-Shot Graph Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Memory as State Abstraction Over History
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

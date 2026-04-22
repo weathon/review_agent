@@ -1,5 +1,6 @@
 # VBA: Vector Bundle Attention for Intrinsically Geometry-Aware Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

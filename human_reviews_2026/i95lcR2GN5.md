@@ -1,5 +1,6 @@
 # Rethinking the Value of Multi-Agent Workflow: A Strong Single Agent Baseline
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Diffusion Blend: Inference-Time Multi-Preference Alignment for Diffusion Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 4
 

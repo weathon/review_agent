@@ -1,5 +1,6 @@
 # Towards Personalized Deep Research: Benchmarks and Evaluations
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

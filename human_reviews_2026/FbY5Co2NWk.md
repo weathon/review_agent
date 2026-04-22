@@ -1,5 +1,6 @@
 # Unmute the Patch Tokens: Rethinking Probing in Multi-Label Audio Classification
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4
 

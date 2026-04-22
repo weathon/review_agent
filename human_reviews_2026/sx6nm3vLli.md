@@ -1,5 +1,6 @@
 # AutoAWG: Adverse Weather Generation with Adaptive Multi-Controls for Automotive Videos
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

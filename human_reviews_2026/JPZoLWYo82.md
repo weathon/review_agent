@@ -1,5 +1,6 @@
 # WarriorMath: Empowering Mathematical Reasoning for Large Language Models via Expert Battles
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

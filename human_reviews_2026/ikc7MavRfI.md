@@ -1,5 +1,6 @@
 # Adaptive Marginal Sensitivity with Limited RCT Data for CATE Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2, 4
 

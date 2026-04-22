@@ -1,5 +1,6 @@
 # PD-FS:Surrogate-Enhanced Physical Data-Driven Framework for Rapid Deep Reinforcement Learning Control
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

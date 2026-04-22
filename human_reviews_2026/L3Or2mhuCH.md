@@ -1,5 +1,6 @@
 # A Block Coordinate Descent Method for Nonsmooth Composite Optimization under Orthogonality Constraints
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

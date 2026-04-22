@@ -1,5 +1,6 @@
 # Load Balancing Neurons: Controlling Firing Rates Improves Plasticity in Continual Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

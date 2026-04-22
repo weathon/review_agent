@@ -1,5 +1,6 @@
 # RewardMap: Tackling Sparse Rewards in Fine-grained Visual Reasoning via Multi-Stage Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

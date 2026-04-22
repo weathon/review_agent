@@ -1,5 +1,6 @@
 # ExDBSCAN: Explaining DBSCAN with Counterfactual Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

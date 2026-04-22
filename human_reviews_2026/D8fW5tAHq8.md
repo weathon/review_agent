@@ -1,5 +1,6 @@
 # COME: Advancing Representation Learning and Generative Modeling for High-Quality Text-to-Motion Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

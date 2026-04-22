@@ -1,5 +1,6 @@
 # Unique between the lines: benchmarking re-identification risk for text anonymization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

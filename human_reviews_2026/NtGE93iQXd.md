@@ -1,5 +1,6 @@
 # Towards Robust Multi-Objective Optimization: Adversarial Attack and Defense Methods for Neural Solvers
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

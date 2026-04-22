@@ -1,5 +1,6 @@
 # Improving Complex SQL Generation for Text-to-SQL by Addressing Semantic Blind Spots in Pending SQL Components
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

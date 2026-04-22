@@ -1,5 +1,6 @@
 # SINAI: Strategic Injection of Noise for Adversarial  Defense with Improved Accuracy–Robustness Tradeoffs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Instance-Dependent Continuous-Time Reinforcement Learning via Maximum Likelihood Estimation
 
+- Avg Score: 6.67
 - Decision: Reject
 - Scores: 8, 4, 8
 

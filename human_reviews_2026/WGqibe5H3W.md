@@ -1,5 +1,6 @@
 # ResCP: Reservoir Conformal Prediction for Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2
 

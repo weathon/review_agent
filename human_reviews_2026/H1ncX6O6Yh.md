@@ -1,5 +1,6 @@
 # Orak: A Foundational Benchmark for Training and Evaluating LLM Agents on Diverse Video Games
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 8
 

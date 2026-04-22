@@ -1,5 +1,6 @@
 # Adaptive Identification of Blurred Regions for Accurate Image Deblurring
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

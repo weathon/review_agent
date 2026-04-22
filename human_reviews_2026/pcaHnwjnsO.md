@@ -1,5 +1,6 @@
 # Graph Adversarial Refinement for Robust Code Fixes: Enhancing Policy Networks via Structure-Aware Contrastive Learning
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 0, 6, 0
 

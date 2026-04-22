@@ -1,5 +1,6 @@
 # Achieving Fairness-Utility Trade-offs through Decoupling Direct and Indirect Bias
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

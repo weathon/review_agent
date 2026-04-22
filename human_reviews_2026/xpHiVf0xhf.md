@@ -1,5 +1,6 @@
 # Learning Better Certified Models from Empirically-Robust Teachers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 6, 6
 

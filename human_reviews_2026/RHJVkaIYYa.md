@@ -1,5 +1,6 @@
 # Pretraining a Large Language Model using Distributed GPUs: A Memory-Efficient Decentralized Paradigm
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Benchmarking and Enhancing LLM Agents in Localizing Linux Kernel Bugs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 2
 

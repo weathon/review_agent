@@ -1,5 +1,6 @@
 # SAVE: A Generalizable Framework for Multi-Condition Single-Cell Generation with Gene Block Attention
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 6
 

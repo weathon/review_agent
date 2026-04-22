@@ -1,5 +1,6 @@
 # Learning From the Past with Cascading Eligibility Traces
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 
@@ -112,7 +113,9 @@ The paper proposes a new mechanisms for supporting temporal credit assignment in
 
 They demonstrate the proposed mechanism in a supervised experimental setting on visual classification tasks employing the MNIST/CIFAR-10 datasets (and the TinyImageNet) with delays up to seconds, where all network layers receive the same delayed error signal, on reinforcement learing tasks (namely CartPole, LunarLander, and MinAtar/SpaceInvaders), and in a retrograde signalling setting on reinforcement learning experiments, where delays stack across layers up to minutes, mimicking very slow biochemical backpropagation.
 
-They show that increasing CET order systematically improves performance and gradient alignment when compared to standard eligibility traces (whose performance deteriorates for delayed larger than 4 seconds), but does not fully close the gap to true backpropagation for long-delay settings, where the gradient alignment stops to improve.   The authors further demonstrate results against classical eligibility traces, and provide in the supplement additional analyses that study the robustness to variable values and unknown delays, provide ablation studies on cascade order, study gradient alignment across all network layers, and application to recurrent and spiking (leaky integrate and fire) networks.
+They show that increasing CET order systematically improves performance and gradient alignment when compared to standard eligibility traces (whose performance deteriorates for delayed larger than 4 seconds), but does not fully close the gap to true backpropagation for long-delay settings, where the gradient alignment stops to improve.
+
+ The authors further demonstrate results against classical eligibility traces, and provide in the supplement additional analyses that study the robustness to variable values and unknown delays, provide ablation studies on cascade order, study gradient alignment across all network layers, and application to recurrent and spiking (leaky integrate and fire) networks.
 Overall the paper provides a well-motivated, biologically grounded extension of eligibility traces, however I find that the strongest biological claim depends on extra assumptions (see below).
 
 ### Strengths
@@ -138,7 +141,8 @@ Overall the paper provides a well-motivated, biologically grounded extension of 
 ## Comments
 
 
-- In the MNIST/CIFAR experiments, the authors state that in the CIFAR dataset the performance of the classical eligibility traces deteriorates at any increasing delay value, while for the MNIST there is some robustness wrt to delays. They conclude that this indicates that “more complex visual tasks are less robust to imprecise time resolution” (lines 256-257). However I am not sure whether one can immediately state this as conclusion. The fact is that the two experiments use widely different architectures (MLP vs CNN)  
+- In the MNIST/CIFAR experiments, the authors state that in the CIFAR dataset the performance of the classical eligibility traces deteriorates at any increasing delay value, while for the MNIST there is some robustness wrt to delays. They conclude that this indicates that “more complex visual tasks are less robust to imprecise time resolution” (lines 256-257). However I am not sure whether one can immediately state this as conclusion. The fact is that the two experiments use widely different architectures (MLP vs CNN) 
+
 > We use a 3-layer MLP (input→512 →512 →10) for MNIST and a small CNN with 3 convolutional layers (input →32 →64 →128) and two linear layers (512 →10) for CIFAR-10.
 
 For the MNIST dataset the 512-512 architecture is probably on the generous side of the required size spectrum, and it can probably reach very low error even if the updates are a bit noisy or slightly wrong. The CIFAR model has moderate size for the dataset, and thus needs accurate gradients to get decent accuracy. Corrupting the gradients with temporal smearing results in performance that deteriorates right away with increasing delays in the CIFAR model, but this is not directly related to the fact that the task is complex, but rather because (probably) the model is at its expressivity threshold. While I understand that more complex tasks need larger networks, I would say that to disambiguate whether the drop in performance with increasing delays for the simple eligibility traces is directly related to the complexity of the task or the expressivity of the network for the given task, one should perform the same experiment for increasingly more/less expressive architectures and observe how results change. **I am not asking authors to perform these experiments**, I just mention this as a comment for their argument in lines 256-257. Also I don’t have good intuition on how the difference in the architecture MLP vs CNN could influence the results, but would be grateful if the authors could comment on this.

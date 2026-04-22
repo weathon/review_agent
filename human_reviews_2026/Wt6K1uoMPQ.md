@@ -1,5 +1,6 @@
 # Deep Positive-Unlabeled Anomaly Detection for Contaminated Unlabeled Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

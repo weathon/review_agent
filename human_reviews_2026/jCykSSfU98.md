@@ -1,5 +1,6 @@
 # Sense it with your eyes: Sensation Generation and Understanding for Advertisements
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Control-Augmented Auto-Regressive Diffusion for Data Assimilation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 0, 6
 

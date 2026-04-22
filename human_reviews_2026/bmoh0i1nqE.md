@@ -1,5 +1,6 @@
 # When Data is the Algorithm: A Systematic Study and Curation of Preference Optimization Datasets
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

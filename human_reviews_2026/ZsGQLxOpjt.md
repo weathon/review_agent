@@ -1,5 +1,6 @@
 # Liars' Bench: Evaluating Deception Detectors for AI Assistants
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 2, 8
 

@@ -1,5 +1,6 @@
 # ReefNet: A Large-Scale, Taxonomically Enriched Dataset and Benchmark for Hard Coral Classification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 4, 4
 
@@ -41,7 +42,8 @@ The paper introduces ReefNet, a coral reef image dataset that unifies data from 
 ### Questions
 **1.** Table 1 shows that BenthicNet already provides a larger image volume, species-level annotations, and WoRMS mapping, which suggests a higher level of taxonomic detail and scale than ReefNet. Could the authors clearly explain what advantages ReefNet offers over BenthicNet?
 
-**2.** It would be interesting to see the future work incorporating additional modalities, such as depth data, 3D reconstructions, or temporal sequences, to enhance the dataset’s relevance for representation learning.
+**2.**
+It would be interesting to see the future work incorporating additional modalities, such as depth data, 3D reconstructions, or temporal sequences, to enhance the dataset’s relevance for representation learning.
 
 **3.** Could the authors clarify the planned release timeline and accessibility details of ReefNet, including availability of preprocessing or benchmark scripts?
 

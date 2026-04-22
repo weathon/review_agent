@@ -1,5 +1,6 @@
 # Model Merging with Functional Dual Anchors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # PointRePar : SpatioTemporal Point Relation Parsing for Robust Category-Unified 3D Tracking
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

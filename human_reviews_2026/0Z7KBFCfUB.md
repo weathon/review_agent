@@ -1,5 +1,6 @@
 # LoMime: Query-Efficient Membership Inference using Model Extraction in Label-Only Settings
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

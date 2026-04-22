@@ -1,5 +1,6 @@
 # TokUR: Token-Level Uncertainty Estimation for Large Language Model Reasoning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

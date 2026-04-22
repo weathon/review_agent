@@ -1,5 +1,6 @@
 # Tree-of-Options: Temporally Extended World Modeling, Planning, and Execution with Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

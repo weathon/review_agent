@@ -1,5 +1,6 @@
 # How Do LLMs Use Their Depth?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 8, 2, 2
 

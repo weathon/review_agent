@@ -1,5 +1,6 @@
 # Closed-Loop Activation Density Control for Sparse Distributed Memory
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

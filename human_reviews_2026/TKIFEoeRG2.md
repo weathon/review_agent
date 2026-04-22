@@ -1,5 +1,6 @@
 # SNAP: Testing the Effects of Capture Conditions on Fundamental Vision Tasks
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

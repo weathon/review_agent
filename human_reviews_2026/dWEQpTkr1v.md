@@ -1,5 +1,6 @@
 # RL4SBDD: Reinforcement Learning for Preference Alignment in Structure-based Drug Design
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

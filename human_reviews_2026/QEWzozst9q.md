@@ -1,5 +1,6 @@
 # HA-PAT: Hierarchically-Adaptive Pruning-Aware Tuning for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

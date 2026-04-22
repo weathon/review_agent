@@ -1,5 +1,6 @@
 # Differential Information Distribution: A Bayesian Perspective on Direct Preference Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

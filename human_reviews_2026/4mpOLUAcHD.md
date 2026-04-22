@@ -1,5 +1,6 @@
 # FiRE: Fine-Grained Ranking Evaluation for Machine Translation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

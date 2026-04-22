@@ -1,5 +1,6 @@
 # Knowledge-guided assimilation to bridge the gap between sensing and modeling with indirect labels for global-scale carbon monitoring
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

@@ -1,5 +1,6 @@
 # LLM-Powered Agent for Dense Pedestrian Flow Path Planning in Train Stations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Online Continual Learning under Real Concept Drift: A Statistical Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

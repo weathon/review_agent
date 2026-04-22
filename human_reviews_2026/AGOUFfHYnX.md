@@ -1,5 +1,6 @@
 # CTC: The Composite Task Challenge for Cooperative Multi-Agent Reinforcement Learning
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Detecting Benchmark Contamination Through Watermarking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

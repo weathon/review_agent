@@ -1,5 +1,6 @@
 # Dynadiff: Single-stage Decoding of Images from Continuously Evolving fMRI
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

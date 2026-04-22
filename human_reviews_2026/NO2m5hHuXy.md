@@ -1,5 +1,6 @@
 # CoT-RC: Chain-of-Thought Reflection and Correction for Image Generation without Extra Training
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

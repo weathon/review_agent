@@ -1,5 +1,6 @@
 # Music Flamingo: Scaling Music Understanding in Audio Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # iFlame: Interleaving Full and Linear Attention for Efficient Mesh Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

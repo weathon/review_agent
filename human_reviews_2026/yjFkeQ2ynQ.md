@@ -1,5 +1,6 @@
 # All Code, No Thought: Language Models Struggle to Reason in Ciphered Language
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

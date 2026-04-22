@@ -1,5 +1,6 @@
 # Do MLLMs Really Understand Space? A Mathematical Reasoning Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

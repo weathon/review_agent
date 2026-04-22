@@ -1,5 +1,6 @@
 # OptimAI: Optimization from Natural Language Using LLM-Powered AI Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Adaptive Fidelity-driven Reconstruction (AFR): a realistic threat model for spectral embedding leakage
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Forging Better Rewards: A Multi-Agent LLM Framework for Automated Reward Evolution
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

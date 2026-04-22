@@ -1,5 +1,6 @@
 # Benchmarking Diversity in Image Generation via Attribute-Conditional Human Evaluation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

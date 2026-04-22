@@ -1,5 +1,6 @@
 # A Direct Second-Order Method for Solving Two-Player Zero-Sum Games
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # An Open-Ended Benchmark and Formal Framework for Adjuvant Research with MLLM
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

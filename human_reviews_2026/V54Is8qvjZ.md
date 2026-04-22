@@ -1,5 +1,6 @@
 # RTG: Reverse Trajectory Generation for Reinforcement Learning Under Sparse Reward
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

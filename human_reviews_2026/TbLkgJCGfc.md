@@ -1,5 +1,6 @@
 # TangleScore: Tangle-Guided Purge and Imprint for Unstructured Knowledge Editing
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

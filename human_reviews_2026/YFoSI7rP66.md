@@ -1,5 +1,6 @@
 # Personalized Prediction By Learning Halfspace Reference Classes Under Well-Behaved Distribution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

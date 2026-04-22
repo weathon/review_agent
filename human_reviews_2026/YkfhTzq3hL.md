@@ -1,5 +1,6 @@
 # Hallucination Benchmark for Speech Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 8, 2, 2
 

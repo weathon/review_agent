@@ -1,5 +1,6 @@
 # OML: A Primitive for Reconciling Open Access with Owner Control in AI Model Distribution
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 0, 4
 

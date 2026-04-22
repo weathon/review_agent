@@ -1,5 +1,6 @@
 # Eye of Judgement: Dissecting the Evaluation  of Russian-speaking LLMs with POLLUX
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

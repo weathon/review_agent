@@ -1,5 +1,6 @@
 # Efficient Bayesian Inference from Noisy Pairwise Comparisons
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 4, 6
 

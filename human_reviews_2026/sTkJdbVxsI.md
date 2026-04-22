@@ -1,5 +1,6 @@
 # RMAAT: Astrocyte-Inspired Memory Compression and Replay for Efficient Long-Context Transformers
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Don't Walk the Line: Boundary Guidance for Filtered Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Editing by Reconstruction: Background Preservation for Instruction-based Autoregressive Image Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

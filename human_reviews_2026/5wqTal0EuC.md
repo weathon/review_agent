@@ -1,5 +1,6 @@
 # Ringleader ASGD: The First Asynchronous SGD with Optimal Time Complexity under Data Heterogeneity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

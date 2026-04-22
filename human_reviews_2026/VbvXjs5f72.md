@@ -1,5 +1,6 @@
 # Beyond Masks: Efficient, Flexible Diffusion Language Models via Deletion-Insertion Processes
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8, 6
 

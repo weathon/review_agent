@@ -1,5 +1,6 @@
 # Beyond Safe Answers: A Benchmark for Evaluating True Risk Awareness in Large Reasoning Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

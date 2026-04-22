@@ -1,5 +1,6 @@
 # From Two to One: Harmonizing Attention and Feature Debiasing for Multivariate Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Understanding Edge of Stability in Rank-1 Linear Models for Binary Classification
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

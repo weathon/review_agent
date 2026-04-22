@@ -1,5 +1,6 @@
 # Understanding Sensitivity of Differential Attention through the Lens of Adversarial Robustness
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

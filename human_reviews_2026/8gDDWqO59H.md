@@ -1,5 +1,6 @@
 # UFO-4D: Unposed Feedforward 4D Reconstruction from Two Images
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

@@ -1,5 +1,6 @@
 # GridAR: Glimpse-and-Grow Test-Time Scaling for Autoregressive Image Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 4, 4
 

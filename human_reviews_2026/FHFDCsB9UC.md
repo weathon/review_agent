@@ -1,5 +1,6 @@
 # Flowing Through States: Neural ODE Regularization for Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

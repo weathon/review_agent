@@ -1,5 +1,6 @@
 # Composition of Memory Experts for Diffusion World Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4, 4
 

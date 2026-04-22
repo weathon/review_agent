@@ -1,5 +1,6 @@
 # A Differentiable Alignment Framework for Sequence-to-Sequence Modeling via Optimal Transport
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

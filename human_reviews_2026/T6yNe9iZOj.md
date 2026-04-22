@@ -1,5 +1,6 @@
 # Consistency-Guided Reverse Sampling for General Linear Inverse Problems
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

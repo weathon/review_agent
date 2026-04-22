@@ -1,5 +1,6 @@
 # ActiveCQ: Active Estimation of Causal Quantities
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

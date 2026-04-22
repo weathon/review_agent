@@ -1,5 +1,6 @@
 # OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # OceanGym: A Benchmark Environment for Underwater Embodied Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

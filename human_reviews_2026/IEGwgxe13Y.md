@@ -1,5 +1,6 @@
 # WiniQ: Accelerating Quantization-Aware Training of LLMs around Saddle Points
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

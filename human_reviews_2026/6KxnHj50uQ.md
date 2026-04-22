@@ -1,5 +1,6 @@
 # NeuroSketch: An Effective Framework for Neural Decoding via Systematic Architectural Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

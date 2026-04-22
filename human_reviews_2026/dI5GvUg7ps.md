@@ -1,5 +1,6 @@
 # RewardRank: Optimizing True Learning-to-Rank Utility
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 4, 4
 

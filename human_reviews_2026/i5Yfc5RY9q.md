@@ -1,5 +1,6 @@
 # Flow of Spans: Generalizing Language Models to Dynamic Span-Vocabulary via GFlowNets
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 
@@ -169,7 +170,8 @@ No questions.
 2
 
 ### Summary
-The paper introduces FoSS, a span-based language modeling framework that builds an explicit DAG over segmentations and learns a GFlowNet policy to traverse it. Concretely, span actions (length 2–8 tokens) are drawn from a dynamic, retrieval-augmented vocabulary; training uses subtrajectory balance with a hybrid online/offline regimen, a uniform backward policy over suffixes, and a composite reward combining a fine-tuned LM likelihood and a preference model. On open-ended generation (WikiText-103), FoSS improves MAUVE over strong baselines, is preferred by GPT-4 on multiple criteria, and shows gains on several knowledge-intensive multiple-choice tasks.
+The paper introduces FoSS, a span-based language modeling framework that builds an explicit DAG over segmentations and learns a GFlowNet policy to traverse it. Concretely, span actions (length 2–8 tokens) are drawn from a dynamic, retrieval-augmented vocabulary; training uses subtrajectory balance with a hybrid online/offline regimen, a uniform backward policy over suffixes, and a composite reward combining a fine-tuned LM likelihood and a preference model.
+On open-ended generation (WikiText-103), FoSS improves MAUVE over strong baselines, is preferred by GPT-4 on multiple criteria, and shows gains on several knowledge-intensive multiple-choice tasks.
 
 ### Strengths
 - Casting span generation as an explicit DAG and optimizing it with a GFlowNet is a clean way to expose multiple compositional paths, addressing a known bias of tree-structured token decoders. I find the core idea both interesting and promising.

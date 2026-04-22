@@ -1,5 +1,6 @@
 # FG-CLIP 2: A Bilingual Fine-grained Vision-language Alignment Model
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

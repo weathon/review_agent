@@ -1,5 +1,6 @@
 # Lifelong-Learning Embeddings: Incremental and Continual Representation Learning for Dynamic E-Commerce Trends
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

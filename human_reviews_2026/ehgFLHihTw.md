@@ -1,5 +1,6 @@
 # Score-based Membership Inference on Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

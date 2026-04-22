@@ -1,5 +1,6 @@
 # RAIN-Merging: A Gradient-Free Method to Enhance Instruction Following in Large Reasoning Models with Preserved Thinking Format
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 4, 8, 6
 

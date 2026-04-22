@@ -1,5 +1,6 @@
 # Revisit Model Adaptation from Parameters to Features
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

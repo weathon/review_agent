@@ -1,5 +1,6 @@
 # What is Important? Internal Interpretability of Models Processing Data with Inherent Structure
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

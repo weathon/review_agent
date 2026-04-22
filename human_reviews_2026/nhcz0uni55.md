@@ -1,5 +1,6 @@
 # QuArch: A Benchmark for Evaluating LLM Reasoning in Computer Architecture
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

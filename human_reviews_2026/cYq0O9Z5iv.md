@@ -1,5 +1,6 @@
 # Quantifying Information Disclosure During Gradient Descent Using Gradient Uniqueness
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

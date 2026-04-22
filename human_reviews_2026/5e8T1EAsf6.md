@@ -1,5 +1,6 @@
 # A Spectral Characterization of Generalization in GCN: Escaping the Curse of Dimensionality
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

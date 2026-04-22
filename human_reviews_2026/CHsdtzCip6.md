@@ -1,5 +1,6 @@
 # Energy-Regularized Sequential Model Editing on Hyperspheres
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

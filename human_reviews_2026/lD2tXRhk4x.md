@@ -1,5 +1,6 @@
 # Temporal Misinformation Detection: Simple Ways to Improve Temporal Generalization and Better Evaluate Language Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # A New Efficient Method For Combining Gradients Of Different Orders
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

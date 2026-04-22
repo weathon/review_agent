@@ -1,5 +1,6 @@
 # Efficient and Robust Behavior Policy Search for Online Off-policy Evaluation through Transition Gradients
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

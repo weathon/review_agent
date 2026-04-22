@@ -1,5 +1,6 @@
 # Dynamic Context Adaptation for Consistent Role-Playing Agents with Retrieval-Augmented Generations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

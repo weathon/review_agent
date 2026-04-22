@@ -1,5 +1,6 @@
 # COMPASS: A Multi-Turn Benchmark for Tool-Mediated Planning & Preference Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

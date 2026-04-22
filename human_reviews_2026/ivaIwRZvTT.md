@@ -1,5 +1,6 @@
 # Disentangled Pseudo-Labeling and Classification for Class-Imbalanced Semi-Supervised Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

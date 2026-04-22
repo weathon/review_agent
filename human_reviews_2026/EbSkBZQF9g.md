@@ -1,5 +1,6 @@
 # Mechanistic Interpretability analysis of a single-layer transformer on 0-1 knapsack
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

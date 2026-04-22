@@ -1,5 +1,6 @@
 # Unlocking Time Series Foundation Models with Channel Descriptions
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

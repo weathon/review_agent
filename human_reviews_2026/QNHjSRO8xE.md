@@ -1,5 +1,6 @@
 # Distributional Monte-Carlo Tree Search with Thompson Sampling in Stochastic Environments
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 6, 2
 

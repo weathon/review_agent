@@ -1,5 +1,6 @@
 # Interpretable Representation Evaluation — A Spectral Principle for Probe Reliability
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Probabilistic Robustness Analysis in High Dimensional Space: Application to Semantic Segmentation Networks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

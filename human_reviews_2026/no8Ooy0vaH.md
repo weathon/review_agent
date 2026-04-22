@@ -1,5 +1,6 @@
 # A3 : an Analytical Low-Rank Approximation Framework for Attention
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

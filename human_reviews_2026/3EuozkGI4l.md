@@ -1,5 +1,6 @@
 # Lesions, Latents, and Language: Interpreting Breast Ultrasound Features via Latent Probing and LLM-Driven Report Synthesis
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 0, 2
 

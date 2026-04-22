@@ -1,5 +1,6 @@
 # Beyond the Rosetta Stone: Unification Forces in Generalization Dynamics
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

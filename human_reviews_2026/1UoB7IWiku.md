@@ -1,5 +1,6 @@
 # Code World Models for General Game Playing
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 8, 6
 

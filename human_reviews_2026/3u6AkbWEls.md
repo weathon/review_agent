@@ -1,5 +1,6 @@
 # ManipEvalAgent: Promptable and Efficient Evaluation Framework for Robotic Manipulation Policies
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Why Variance Reduction Hurts Noisy Zeroth-Order Hard-Thresholding?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4
 

@@ -1,5 +1,6 @@
 # Mitigating Catastrophic Forgetting in Target Language Adaptation of LLMs via Source-Shielded Updates
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Incomplete Multi-View Multi-Label Classification via Shared Codebook and Fused-Teacher Self-Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

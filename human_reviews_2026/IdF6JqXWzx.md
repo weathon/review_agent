@@ -1,5 +1,6 @@
 # Stronger-MAS: Multi-Agent Reinforcement Learning for Collaborative LLMs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # NavTrust: Benchmarking Trustworthiness for Embodied Navigation
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 2, 6, 6
 

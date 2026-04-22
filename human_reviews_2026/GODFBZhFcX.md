@@ -1,5 +1,6 @@
 # From Assumptions to Actions: Turning LLM Reasoning into Uncertainty-Aware Planning for Embodied Agents
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

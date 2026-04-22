@@ -1,5 +1,6 @@
 # Scaling Linear Attention Capacity with Sparse State Expansion
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

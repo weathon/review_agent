@@ -1,5 +1,6 @@
 # Decoupling Safety into Orthogonal Subspace: Cost-Efficient and Performance-Preserving Alignment for Large Language Models
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # Does “Do Differentiable Simulators Give Better Policy Gradients?” Give Better Policy Gradients?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

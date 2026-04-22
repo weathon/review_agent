@@ -1,5 +1,6 @@
 # Order-Preserving Pattern Mining Enhances Structure-Aware Time Series Forecasting
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 0
 

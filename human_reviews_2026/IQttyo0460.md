@@ -1,5 +1,6 @@
 # E²LoRA: Efficient and Effective Low-Rank Adaptation with Entropy-Guided Adaptive Sharing
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

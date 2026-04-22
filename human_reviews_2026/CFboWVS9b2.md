@@ -1,5 +1,6 @@
 # Bridging Clinical Narratives and ACR Appropriateness Guidelines: A Multi-Agent RAG System for Medical Imaging Decisions
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

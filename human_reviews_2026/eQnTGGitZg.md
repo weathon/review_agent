@@ -1,5 +1,6 @@
 # AutoWeave: Automating Web Workflow Execution with Prompt-Adaptive Multi-Agent Orchestration
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

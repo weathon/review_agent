@@ -1,5 +1,6 @@
 # Latent Fourier Transform
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 8, 2, 4, 6
 

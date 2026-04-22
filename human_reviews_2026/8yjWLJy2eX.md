@@ -1,5 +1,6 @@
 # Improving Code Localization with Repository Memory
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

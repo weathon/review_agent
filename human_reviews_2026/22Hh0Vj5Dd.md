@@ -1,5 +1,6 @@
 # Exploring the Potential of Encoder-free Architectures in 3D LMMs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

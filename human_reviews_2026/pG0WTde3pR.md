@@ -1,5 +1,6 @@
 # Beyond Text-to-Image: Liberating Generation with a Unified Discrete Diffusion Model
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

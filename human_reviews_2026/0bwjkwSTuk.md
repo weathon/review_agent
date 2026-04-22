@@ -1,5 +1,6 @@
 # Improving Text-to-Image Generation with Input-Side Inference-Time Scaling
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

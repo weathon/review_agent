@@ -1,5 +1,6 @@
 # PathChat-SegR1: Reasoning Segmentation in Pathology via SO-GRPO
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # SAMerging: Sharpness-aware Model Merging via Multi-Teacher Knowledge Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

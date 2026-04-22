@@ -1,5 +1,6 @@
 # Hidden in the Haystack: Smaller Needles are More Difficult for LLMs to Find
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

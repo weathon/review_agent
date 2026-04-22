@@ -1,5 +1,6 @@
 # EMPIRICAL PRIORS FOR BAYESIAN NEURAL NETWORKS VIA WEIGHT PRUNING
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # ArtHOI: Articulated Human-Object Interaction Synthesis via Dynamics Distillation
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6, 4
 

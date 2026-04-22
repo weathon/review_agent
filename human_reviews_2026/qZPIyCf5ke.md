@@ -1,5 +1,6 @@
 # Unlearning That Lasts: Utility-Preserving, Robust, and Almost Irreversible Forgetting in LLMs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

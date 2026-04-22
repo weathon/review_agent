@@ -1,5 +1,6 @@
 # SafeMind: Benchmarking and Mitigating Safety Risks in Embodied LLM Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

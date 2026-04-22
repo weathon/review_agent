@@ -1,5 +1,6 @@
 # DecAEvolve: Decompose, Adapt, and Evolve, or Three Pillars of Effective LLM-based Scientific Equation Discovery
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 4, 8, 6, 4
 

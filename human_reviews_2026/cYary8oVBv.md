@@ -1,5 +1,6 @@
 # Learning without training: The implicit dynamics of in-context learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 8, 2, 2
 

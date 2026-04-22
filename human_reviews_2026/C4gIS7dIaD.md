@@ -1,5 +1,6 @@
 # TimbrePalette: A Controllable Multi-Style Generation Model for Timbre Enhancement
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 4
 

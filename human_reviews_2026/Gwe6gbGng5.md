@@ -1,5 +1,6 @@
 # Cautious Weight Decay
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 10, 6
 

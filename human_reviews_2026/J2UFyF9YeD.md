@@ -1,5 +1,6 @@
 # AutoBackdoor: Automating Backdoor Attacks via LLM Agents
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

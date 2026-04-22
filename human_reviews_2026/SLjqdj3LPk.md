@@ -1,5 +1,6 @@
 # CHAMMI-75: Pre-training multi-channel models with heterogeneous microscopy images
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

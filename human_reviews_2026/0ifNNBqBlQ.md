@@ -1,5 +1,6 @@
 # Addressing Spectral Energy Imbalance in Time-Series Forecasting with Gini-Guided Progressive Frequency Extraction
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Geometric Self-Supervised Pretraining on 3D Protein Structures using Subgraphs
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 4, 4
 

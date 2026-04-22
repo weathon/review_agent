@@ -1,5 +1,6 @@
 # Reinforcement learning for saddle-point equilibria without full state exploration
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

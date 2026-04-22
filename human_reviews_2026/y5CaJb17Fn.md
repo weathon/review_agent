@@ -1,5 +1,6 @@
 # villa-X: Enhancing Latent Action Modeling in Vision-Language-Action Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

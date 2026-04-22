@@ -1,5 +1,6 @@
 # Algorithmic Guarantees for Distilling Supervised and Offline RL Datasets
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

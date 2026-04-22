@@ -1,5 +1,6 @@
 # Dr.Mi-Bench: A Modular-integrated Benchmark for Scientific Deep Research Agent
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

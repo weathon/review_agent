@@ -1,5 +1,6 @@
 # FlowOpt: Fast Optimization Through Whole Flow Processes for Training-Free Editing
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

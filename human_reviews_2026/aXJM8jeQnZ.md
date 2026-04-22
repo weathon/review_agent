@@ -1,5 +1,6 @@
 # Your thoughts tell who you are: Characterize the reasoning patterns of LRMs
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

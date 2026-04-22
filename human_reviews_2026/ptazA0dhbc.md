@@ -1,5 +1,6 @@
 # LetheViT: Selective Machine Unlearning for Vision Transformers via Attention-Guided Contrastive Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

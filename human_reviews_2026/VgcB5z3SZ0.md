@@ -1,5 +1,6 @@
 # FeDa4Fair: Client-Level Federated Datasets for Fairness Evaluation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

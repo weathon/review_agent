@@ -1,5 +1,6 @@
 # Grounding Generative Planners in Verifiable Logic: A Hybrid Architecture for Trustworthy Embodied AI
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

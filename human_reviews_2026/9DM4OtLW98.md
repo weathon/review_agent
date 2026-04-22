@@ -1,5 +1,6 @@
 # Wearables As Graph: Personalized Health Insights via Dynamic Retrieval from Adaptive Knowledge Graphs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Beyond Shallow Behavior: Task-Efficient Value-Based Multi-Task Offline MARL via Skill Discovery
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

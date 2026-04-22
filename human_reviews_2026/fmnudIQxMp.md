@@ -1,5 +1,6 @@
 # DT-BEHRT: Disease Trajectory-aware Transformer for Interpretable Patient Representation Learning
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Benchmark of Benchmarks: Unpacking Influence and Code Repository Quality in LLM Safety Benchmarks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

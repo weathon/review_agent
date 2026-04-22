@@ -1,5 +1,6 @@
 # In-Context Learning for Esoteric Programming Languages: Evaluating and Enhancing LLM Reasoning Without Fine-Tuning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 6, 4, 0
 

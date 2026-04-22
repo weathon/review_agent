@@ -1,5 +1,6 @@
 # HBDrug3D: A Dataset and Benchmark for AI-Driven Heterobifunctional Molecule Design
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

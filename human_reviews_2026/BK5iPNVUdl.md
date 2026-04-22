@@ -1,5 +1,6 @@
 # Synthetic Image Detection via Curvature of Diffusion Probability Flows
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Scene-R1: Video-Grounded Large Language Models  for 3D Scene Reasoning without 3D Annotations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 2
 

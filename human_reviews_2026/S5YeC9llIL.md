@@ -1,5 +1,6 @@
 # Principled RL for Diffusion LLMs Emerges from a Sequence-Level Perspective
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

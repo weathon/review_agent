@@ -1,5 +1,6 @@
 # scPPDM: A Diffusion Model for Single-Cell Drug–Response Prediction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 2, 8
 

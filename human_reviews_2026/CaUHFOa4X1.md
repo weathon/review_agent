@@ -1,5 +1,6 @@
 # Scam2Prompt: A Scalable Framework for Auditing Malicious Scam Endpoints in Production LLMs
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 4, 6, 6, 6
 

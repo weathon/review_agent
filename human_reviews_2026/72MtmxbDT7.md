@@ -1,5 +1,6 @@
 # Can Language Models Compose Skills In-Context?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 6, 2, 2
 

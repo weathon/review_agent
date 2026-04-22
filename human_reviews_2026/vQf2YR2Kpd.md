@@ -1,5 +1,6 @@
 # Memory-T1: Reinforcement Learning for Temporal Reasoning in Multi-session Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

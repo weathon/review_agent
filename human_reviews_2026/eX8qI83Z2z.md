@@ -1,5 +1,6 @@
 # FN-NOW: A Communication-Efficient Newton-Type Federated Learning via Low-Rank Hessian Approximation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

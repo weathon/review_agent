@@ -1,5 +1,6 @@
 # LitExplorer: Training-Free Diffusion Guidance with Adaptive Exploration-Filtering Framework
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

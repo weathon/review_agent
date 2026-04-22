@@ -1,5 +1,6 @@
 # OSIRIS: Bridging Analog Circuit Design and Machine Learning with Scalable Dataset Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Tab-MIA: A Benchmark Dataset for Membership Inference Attacks on Tabular Data in LLMs
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 0
 

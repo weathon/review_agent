@@ -1,5 +1,6 @@
 # Automatic and Structure-Aware Sparsification of Hybrid Neural ODEs with Application to Glucose Prediction
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

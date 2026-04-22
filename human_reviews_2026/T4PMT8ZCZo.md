@@ -1,5 +1,6 @@
 # Uncertainty-aware Carbon Accounting for Large-scale AI models with Market-based Attribution
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2
 

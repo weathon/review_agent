@@ -1,5 +1,6 @@
 # P-LoRA: Posterior Knowledge Enables Training-Free Fusion of Subject and Style LoRAs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

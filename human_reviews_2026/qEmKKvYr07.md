@@ -1,5 +1,6 @@
 # Mapping Semantic & Syntactic Relationships with Geometric Rotation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # First Try Matters: Revisiting the Role of Reflection in Reasoning Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # A Novel Unified Parametric Assumption for Nonconvex Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

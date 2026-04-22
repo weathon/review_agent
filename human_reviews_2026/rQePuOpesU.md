@@ -1,5 +1,6 @@
 # AutoFold: Ultra-fast Protein Generation via Autoregressive Contact Graph Generation
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 8
 

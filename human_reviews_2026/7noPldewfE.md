@@ -1,5 +1,6 @@
 # Projective Symbolic Regression: Solving High-Dimensional PDE by Learning from Low-Dimensional Projections
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

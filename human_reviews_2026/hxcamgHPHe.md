@@ -1,5 +1,6 @@
 # Edge of Stochastic Stability: Revisiting the Edge of Stability for SGD
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

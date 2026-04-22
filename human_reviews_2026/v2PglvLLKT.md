@@ -1,5 +1,6 @@
 # The Shape of Adversarial Influence: Characterizing LLM Latent Spaces with Persistent Homology
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 4
 

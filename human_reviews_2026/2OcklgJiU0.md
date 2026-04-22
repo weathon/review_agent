@@ -1,5 +1,6 @@
 # Leveraging Data to Say No: Memory Augmented Plug-and-Play Selective Prediction
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

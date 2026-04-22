@@ -1,5 +1,6 @@
 # TCD-Arena: Assessing Robustness of Time Series Causal Discovery Methods Against Assumption Violations
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

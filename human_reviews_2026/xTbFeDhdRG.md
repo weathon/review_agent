@@ -1,5 +1,6 @@
 # RAR: Reversing Visual Attention Re-Sinking for  Unlocking Potential in Multimodal Large Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

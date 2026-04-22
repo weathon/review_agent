@@ -1,5 +1,6 @@
 # Get the GIST of Graphs with Intersection Signature
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

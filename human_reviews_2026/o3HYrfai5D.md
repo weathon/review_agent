@@ -1,5 +1,6 @@
 # RoVer: Robot Reward Model as Test-Time Verifier for Vision-Language-Action Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

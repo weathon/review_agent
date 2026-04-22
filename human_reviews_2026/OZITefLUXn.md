@@ -1,5 +1,6 @@
 # Representation Gap: Explaining the Unreasonable Effectiveness of Neural Networks from a Geometric Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 6, 2, 2
 

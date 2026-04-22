@@ -1,5 +1,6 @@
 # How Neural is a Neural Foundation Model?
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 6, 2
 

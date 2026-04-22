@@ -1,5 +1,6 @@
 # The Shape of Attraction in UMAP: Exploring the Embedding Forces in Dimensionality Reduction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

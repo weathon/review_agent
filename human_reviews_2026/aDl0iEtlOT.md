@@ -1,5 +1,6 @@
 # Outcome-based Exploration for LLM Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 8, 2, 2, 2
 

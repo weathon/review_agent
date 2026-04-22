@@ -1,5 +1,6 @@
 # Learning to Dissipate Energy in Oscillatory State-Space Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

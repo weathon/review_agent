@@ -1,5 +1,6 @@
 # Less Forgetting Learning: Memory-free Continual Learning Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # SCD: Soft $\textit{top-k}$ Contrastive Decoding for Universal LLM Detoxification
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

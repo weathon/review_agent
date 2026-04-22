@@ -1,5 +1,6 @@
 # NeuMatC: A General Neural Framework For Fast 	Parametric Matrix Operation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

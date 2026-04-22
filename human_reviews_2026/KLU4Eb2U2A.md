@@ -1,5 +1,6 @@
 # Automatic Reward Shaping from Multi-Objective Human Heuristics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

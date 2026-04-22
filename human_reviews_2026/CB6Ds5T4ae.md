@@ -1,5 +1,6 @@
 # RADAR: Reasoning-Ability and Difficulty-Aware Routing for Reasoning LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # The Impact of Post-training on Data Contamination
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

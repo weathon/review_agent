@@ -1,5 +1,6 @@
 # HiRes-GS: Hierarchical Resolution Scaling for Sparse-View High-Resolution 3D Gaussian Splatting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

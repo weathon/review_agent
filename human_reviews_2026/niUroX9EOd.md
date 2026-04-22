@@ -1,5 +1,6 @@
 # LatentQA: Teaching LLMs to Decode Activations Into Natural Language
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

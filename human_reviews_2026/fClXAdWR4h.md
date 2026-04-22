@@ -1,5 +1,6 @@
 # Stochastic Sample Approximations of (Local) Moduli of Continuity
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 2, 6, 8
 

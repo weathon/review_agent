@@ -1,5 +1,6 @@
 # Model Already Knows the Best Noise: Bayesian Active Noise Selection via Attention  in Video Diffusion Model
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

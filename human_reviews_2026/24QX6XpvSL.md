@@ -1,5 +1,6 @@
 # Histopathology-Genomics Multi-modal Structural Representation Learning for Data-Efficient Precision Oncology
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 2, 2, 4
 

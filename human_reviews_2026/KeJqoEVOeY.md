@@ -1,5 +1,6 @@
 # CoLLMLight: Cooperative Large Language Model Agents for Network-Wide Traffic Signal Control
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

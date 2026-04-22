@@ -1,5 +1,6 @@
 # Multi-View Encoders for Performance Prediction in LLM-Based Agentic Workflows
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

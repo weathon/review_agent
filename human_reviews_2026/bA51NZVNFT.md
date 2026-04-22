@@ -1,5 +1,6 @@
 # Voice Evaluation of Reasoning Ability: Diagnosing the Modality-Induced Performance Gap
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

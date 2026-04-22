@@ -1,5 +1,6 @@
 # lmgame-Bench: How Good are LLMs at Playing Games?
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4, 6
 

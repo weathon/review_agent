@@ -1,5 +1,6 @@
 # On Differentially Private String Distances
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

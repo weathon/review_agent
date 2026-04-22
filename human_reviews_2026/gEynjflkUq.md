@@ -1,5 +1,6 @@
 # Reasoning as Meta-Learning: An Optimization Perspective to Decipher Long CoT Reasoning in LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

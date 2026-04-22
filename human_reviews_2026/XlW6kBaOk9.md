@@ -1,5 +1,6 @@
 # Just-in-time and distributed task representations in language models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # ChemisTRAG: Table-based Retrieval-Augmented Generation for Chemistry Question Answering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

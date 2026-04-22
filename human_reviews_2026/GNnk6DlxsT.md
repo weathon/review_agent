@@ -1,5 +1,6 @@
 # MedBLINK: Probing Basic Perception in Multimodal Language Models for Medicine
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 2, 4, 4
 

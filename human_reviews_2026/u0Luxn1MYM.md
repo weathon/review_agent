@@ -1,5 +1,6 @@
 # Don’t Lag, RAG: Training-Free Adversarial Detection Using RAG
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Mitigating Strategy-Selection Bias in Reasoning for More Effective Test-Time Scaling
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 8, 2, 2, 6
 

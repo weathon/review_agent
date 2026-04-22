@@ -1,5 +1,6 @@
 # Long-Range Graph Wavelet Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # MAVIS: Multi-Objective Alignment via Value-Guided Inference-Time Search
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

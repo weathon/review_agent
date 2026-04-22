@@ -1,5 +1,6 @@
 # ArtifactsBench: Bridging the Visual-Interactive Gap in LLM Code Generation Evaluation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

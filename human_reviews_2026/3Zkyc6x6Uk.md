@@ -1,5 +1,6 @@
 # Sparse Canonical Correlation Analysis via Smooth Non-Convex $\ell_{0}$ Surrogates and Iterative Minorization–Maximization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 8, 2
 

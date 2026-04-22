@@ -1,5 +1,6 @@
 # Building Simulation Environments for Computational Organizational Design
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Positive Distribution Shift as a Framework for Understanding Tractable Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 2, 8
 

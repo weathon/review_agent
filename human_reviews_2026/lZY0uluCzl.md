@@ -1,5 +1,6 @@
 # Interactive Learning of Single-Index Models via Stochastic Gradient Descent
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

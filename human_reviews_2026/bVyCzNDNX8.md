@@ -1,5 +1,6 @@
 # MixtureKit: A General Framework for Composing, Training, and Visualizing Mixture-of-Experts Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

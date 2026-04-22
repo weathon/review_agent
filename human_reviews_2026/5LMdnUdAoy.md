@@ -1,5 +1,6 @@
 # Difficult Examples Hurt Unsupervised Contrastive Learning: A Theoretical Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6
 

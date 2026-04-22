@@ -1,5 +1,6 @@
 # Do Large Language Models Respect Contracts? Evaluating and Enforcing Contract-Adherence in Code Generation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

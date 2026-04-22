@@ -1,5 +1,6 @@
 # GoT-R1: Unleashing Reasoning Capability of Autoregressive Visual Generation with Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

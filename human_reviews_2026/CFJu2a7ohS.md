@@ -1,5 +1,6 @@
 # BEVCA: Effective and Transferable Camouflage Attack against Multi-View 3D Perception in Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

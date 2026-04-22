@@ -1,5 +1,6 @@
 # Spectral-inspired Operator Learning with Limited Data and Unknown Physics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

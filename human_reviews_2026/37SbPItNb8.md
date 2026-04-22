@@ -1,5 +1,6 @@
 # Adaptive Residual-Update Steering for Low-Overhead Hallucination Mitigation in Large Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

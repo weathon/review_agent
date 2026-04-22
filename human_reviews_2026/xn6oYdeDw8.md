@@ -1,5 +1,6 @@
 # Group Relative Attention Guidance for Image Editing
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Towards Foundation Models for Zero-Shot Time Series Anomaly Detection: Leveraging Synthetic Data and Relative Context Discrepancy
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

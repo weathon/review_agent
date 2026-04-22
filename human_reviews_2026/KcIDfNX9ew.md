@@ -1,5 +1,6 @@
 # All You Need Are Random Visual Tokens?  Demystifying Token Pruning in VLLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

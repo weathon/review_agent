@@ -1,5 +1,6 @@
 # LogicGuard: Improving embodied LLM agents through temporal logic based critics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

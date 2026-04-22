@@ -1,5 +1,6 @@
 # Cross-Cancer Knowledge Transfer in WSI-based Prognosis Prediction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

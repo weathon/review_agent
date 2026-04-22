@@ -1,5 +1,6 @@
 # Stealthy World Model Manipulation via Data Poisoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

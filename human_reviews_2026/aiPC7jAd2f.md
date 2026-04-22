@@ -1,5 +1,6 @@
 # Confidence Calibration in Vision-Language-Action Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

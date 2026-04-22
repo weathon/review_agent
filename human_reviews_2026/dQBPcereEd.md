@@ -1,5 +1,6 @@
 # NumMolFormer: Enhancing Transformer Numerical Reasoning for Functional-Group-Based Molecule Generation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0
 

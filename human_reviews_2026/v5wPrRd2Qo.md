@@ -1,5 +1,6 @@
 # WRF4CIR: Weight-Regularized Fine-Tuning Network for Composed Image Retrieval
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

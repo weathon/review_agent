@@ -1,5 +1,6 @@
 # DiffCont: Continual Anomaly Detection with Diffusion Models and Outlier Rejection
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 2
 

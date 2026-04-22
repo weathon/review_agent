@@ -1,5 +1,6 @@
 # Dynamics-Informed Weight Diffusion for Generalizable Prediction of  Complex Systems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 2, 6
 

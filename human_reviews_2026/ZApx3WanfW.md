@@ -1,5 +1,6 @@
 # MEGA: Message Passing Neural Networks for Multigraphs with EdGe Attributes
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

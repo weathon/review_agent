@@ -1,5 +1,6 @@
 # Can GRPO Help LLMs Transcend Their Pretraining Origin?
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

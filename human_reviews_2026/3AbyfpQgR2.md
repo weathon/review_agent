@@ -1,5 +1,6 @@
 # AEMP: Autoregressive-Enhanced Masked Pre-training for Robust Indoor Localization
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6
 

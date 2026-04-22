@@ -1,5 +1,6 @@
 # Compressed Map Priors for 3D Perception
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

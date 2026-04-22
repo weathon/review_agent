@@ -1,5 +1,6 @@
 # Mirror Speculative Decoding: Breaking the Serial Barrier in LLM Inference
 
+- Avg Score: 5.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6
 

@@ -1,5 +1,6 @@
 # AIReg-Bench: Benchmarking Language Models That Assess AI Regulation Compliance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 2, 10
 

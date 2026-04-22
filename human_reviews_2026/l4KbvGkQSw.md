@@ -1,5 +1,6 @@
 # PhysTTT: Accurate and Lightweight Cross-Domain Heart Rate Measurement with Test-Time Training
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 6, 8
 

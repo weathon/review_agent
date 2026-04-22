@@ -1,5 +1,6 @@
 # Generate What Matters: Steering Diffusion Models for Targeted Data Generation to Improve Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

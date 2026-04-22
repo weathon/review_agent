@@ -1,5 +1,6 @@
 # Separable Policy Learning for Emergency Vehicle Prioritized Traffic Signal Control
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 4
 

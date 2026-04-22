@@ -1,5 +1,6 @@
 # OmniVideoBench: Towards Audio-Visual Understanding Evaluation for Omni MLLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

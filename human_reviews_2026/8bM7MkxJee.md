@@ -1,5 +1,6 @@
 # From movement to cognitive maps: recurrent neural networks reveal how locomotor development shapes hippocampal spatial coding
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 10, 8, 2, 6
 

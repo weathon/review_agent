@@ -1,5 +1,6 @@
 # Text-Trained LLMs Can Zero-Shot Extrapolate PDE Dynamics
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

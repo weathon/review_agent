@@ -1,5 +1,6 @@
 # AstaBench: Rigorous Benchmarking of AI Agents with a Scientific Research Suite
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 6
 

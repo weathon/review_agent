@@ -1,5 +1,6 @@
 # Riemannian Variational Flow Matching for Material and Protein Design
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

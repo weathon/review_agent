@@ -1,5 +1,6 @@
 # MedReason-Dx: Benchmarking Step-by-Step Reasoning of Language Models in Medical Diagnosis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

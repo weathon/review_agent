@@ -1,5 +1,6 @@
 # Global Meta-path-level Counterfactual Explanation for Heterogeneous Graph Neural Networks by Path Exclusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

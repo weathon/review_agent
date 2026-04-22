@@ -1,5 +1,6 @@
 # Learning Label-Efficient Interpretable Medical Image Diagnosis via Semi-supervised Hypergraph Concept Bottleneck Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

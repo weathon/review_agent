@@ -1,5 +1,6 @@
 # Efficient Reasoning with Hidden Thinking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Layer-Wise High-Impact Parameter Ratio Optimization in Post-Training Quantization for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

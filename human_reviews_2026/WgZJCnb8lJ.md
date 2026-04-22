@@ -1,5 +1,6 @@
 # Fair Graph Machine Learning under Adversarial Missingness Processes
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

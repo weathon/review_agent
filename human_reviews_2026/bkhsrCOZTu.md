@@ -1,5 +1,6 @@
 # Riemannian Geometry: Speech Detection from MEG Brain Signals Towards Non-Invasive BCI
 
+- Avg Score: 0.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 0, 0
 

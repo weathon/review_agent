@@ -1,5 +1,6 @@
 # Case-Based Reasoning Enhances the Predictive Power of LLMs in Drug-Drug Interaction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

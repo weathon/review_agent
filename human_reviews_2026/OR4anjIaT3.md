@@ -1,5 +1,6 @@
 # The Attack Means Nothing: Test-time Adversarial Defense Improves Zero-shot Adversarial Robustness for Medical Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

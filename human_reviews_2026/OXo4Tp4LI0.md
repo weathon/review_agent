@@ -1,5 +1,6 @@
 # ReasonNav: Human-Inspired Global Map Reasoning for Zero-Shot Embodied Navigation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

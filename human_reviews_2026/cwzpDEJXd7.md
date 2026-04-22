@@ -1,5 +1,6 @@
 # Learning-augmented Algorithm for k-Median of Lines Clustering
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Beyond Cropping and Rotation: Automated Evolution of Powerful Task-Specific Augmentations with Generative Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

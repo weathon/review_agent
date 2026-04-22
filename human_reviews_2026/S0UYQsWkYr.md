@@ -1,5 +1,6 @@
 # Twin Evolution with Meta Preference Optimization for Semi-Supervised Learning of Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

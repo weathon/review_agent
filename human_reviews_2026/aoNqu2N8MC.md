@@ -1,5 +1,6 @@
 # Dexterous Non-Prehensile Manipulation for Ungraspable Objects via Extrinsic Dexterity
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

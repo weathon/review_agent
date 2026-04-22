@@ -1,5 +1,6 @@
 # Adaptive Scaling of Policy Constraints for Offline Reinforcement Learning
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6, 6
 

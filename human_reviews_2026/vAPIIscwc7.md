@@ -1,5 +1,6 @@
 # RoboTwin 2.0: A Scalable Data Generator and Benchmark with Strong Domain Randomization for Robust Bimanual Robotic Manipulation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 2, 6, 4, 8
 

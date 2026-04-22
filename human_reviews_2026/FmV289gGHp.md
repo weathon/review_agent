@@ -1,5 +1,6 @@
 # ParaSolver-Turbo: Accelerating Parallel Diffusion Integrator via Intrinsic Partially Linear Structure
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

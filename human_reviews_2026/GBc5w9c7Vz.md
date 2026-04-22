@@ -1,5 +1,6 @@
 # From Quantifying to Reducing Uncertainty: Diffusion Hypernetworks for Robust Medical Image Reconstruction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

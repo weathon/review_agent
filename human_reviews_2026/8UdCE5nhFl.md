@@ -1,5 +1,6 @@
 # P3D: Highly Scalable 3D Neural Surrogates for Physics Simulations with Global Context
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

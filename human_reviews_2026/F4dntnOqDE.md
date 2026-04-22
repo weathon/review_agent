@@ -1,5 +1,6 @@
 # NeuMoSync: End‑to‑End Neuromodulatory Control for Plasticity and Adaptability in Continual Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # ViewSpatial-Bench: Evaluating Multi-perspective Spatial Localization in Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # PG-VLM: A Multi-Stage Panoptic-Graph Architecture for Detailed Visual-Linguistic Grounding in Urban Scenes
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

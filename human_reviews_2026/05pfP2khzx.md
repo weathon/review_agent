@@ -1,5 +1,6 @@
 # Self-Correcting Text-to-Video Generation with Misalignment Detection and Localized Refinement
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

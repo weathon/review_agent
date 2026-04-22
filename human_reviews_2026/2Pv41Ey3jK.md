@@ -1,5 +1,6 @@
 # Learning Open-World Visual-Tactile Grasp Stability Prediction with Synthetic Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

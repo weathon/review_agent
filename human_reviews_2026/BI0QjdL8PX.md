@@ -1,5 +1,6 @@
 # $1+1<1$? Breaking the Standalone Barrier in Federated Fine-Tuning of Multimodal Large Language Models under Non-IID Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

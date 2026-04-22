@@ -1,5 +1,6 @@
 # RLBenchNet: Benchmarking Neural Architectures with PPO Across Reinforcement Learning Tasks
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2, 2
 

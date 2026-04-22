@@ -1,5 +1,6 @@
 # Balancing Extremes: Exploiting the Performance Spectrum from Best to Worst in Multi-Agent Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

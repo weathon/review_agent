@@ -1,5 +1,6 @@
 # Revisiting Visual Understanding in Multimodal Reasoning through a Lens of Image Perturbation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

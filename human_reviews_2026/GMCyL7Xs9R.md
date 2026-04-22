@@ -1,5 +1,6 @@
 # MeanCache: From Instantaneous to Average Velocity for Accelerating Flow Matching Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

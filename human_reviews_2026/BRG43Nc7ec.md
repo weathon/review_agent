@@ -1,5 +1,6 @@
 # SafeEvalAgent: Toward Agentic and Self-Evolving Safety Evaluation of LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 
@@ -80,7 +81,8 @@ Main concern:
 - Lacks sufficient novelty and miss some related literature. The concept of agent-based evaluation has been explored in prior studies, and the idea of a self-evolving evaluation loop is not new. However, the authors do not cite or discuss the relevant works [1], which weakens the paper’s positioning and contribution. Furthermore, the additional components, the regulation-to-knowledge transformation and the test suite generation, are relatively incremental and offer limited methodological innovation. Thus, this paper lacks novelty.
 
 Other concerns
-1. How do author ensure the $Q^{k+1}$ share the same semantics as $Q^{0}$? Is there a metric to quantitatively evaluate how much $Q^{k+1}$ still captures the essence of $Q^{0}$? Also, is there a metric to measure the semantic relationship between the $q_m$ and $q_{base}$? Evaluating the semantic fidelity of rephrased questions is essential to ensure that the generated variants remain faithful to the intended rule rather than drifting from the original meaning. 
+1. How do author ensure the $Q^{k+1}$ share the same semantics as $Q^{0}$? Is there a metric to quantitatively evaluate how much $Q^{k+1}$ still captures the essence of $Q^{0}$? Also, is there a metric to measure the semantic relationship between the $q_m$ and $q_{base}$? Evaluating the semantic fidelity of rephrased questions is essential to ensure that the generated variants remain faithful to the intended rule rather than drifting from the original meaning.
+
 2. The paper should include metrics to assess how effectively the proposed framework converts regulatory text into structured knowledge. Moreover, it would be valuable to evaluate the rationales behind the rules in the leaf nodes: do these indeed correspond to misbehaviors or policy mentioned in the source documents?
 3. When the model is asked to generate the adversarial perturbation, would the model refuse to follow the instructions to generate such perturbations? Also, how to ensure the q and c are correct in the deterministic probes and multimodel grounding?
 

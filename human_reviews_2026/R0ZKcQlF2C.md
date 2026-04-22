@@ -1,5 +1,6 @@
 # ArenaBencher: Automatic Benchmark Evolution via Multi-Model Competitive Evaluation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Data as a Lever: A Neighbouring Datasets Perspective on Predictive Multiplicity
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 
@@ -22,7 +23,9 @@ Building on this foundation, we extend our framework to two practical domains: a
 3
 
 ### Summary
-The paper investigates data-preprocessing-induced multiplicity, i.e. the existence of multiple “good enough” models that arise from different versions of a dataset in classification settings.  It introduces the notion of $k-$neighbouring datasets, i.e., datasets containing the same number of samples $n$ but differing in $k$ of them.  Such datasets can typically be obtained by applying different preprocessing techniques (eg different imputation techniques).
+The paper investigates data-preprocessing-induced multiplicity, i.e. the existence of multiple “good enough” models that arise from different versions of a dataset in classification settings.
+
+It introduces the notion of $k-$neighbouring datasets, i.e., datasets containing the same number of samples $n$ but differing in $k$ of them.  Such datasets can typically be obtained by applying different preprocessing techniques (eg different imputation techniques).
 
 The authors build on two key notions:
 - **Rashomon set**: the set of models achieving at most a given loss on the training set ($\approx$ the set of good enough models) 
@@ -37,7 +40,8 @@ Experiments creating $k-$neighbouring datasets via active learning or imputation
 Finally, the paper proposes and evaluates **active learning and imputation strategies designed to achieve comparable accuracy while inducing either lower or higher multiplicity** than standard baselines.
 
 ### Strengths
-I found the paper particularly clear, which is noteworthy given the number of notions introduced. I also appreciated the explicit discussion of assumptions and the careful formulation of the conjecture, reflecting a concern for transparency rather than an attempt to overstate the results.
+I found the paper particularly clear, which is noteworthy given the number of notions introduced.
+I also appreciated the explicit discussion of assumptions and the careful formulation of the conjecture, reflecting a concern for transparency rather than an attempt to overstate the results.
 
 The related work is thoroughly and appropriately covered.
 

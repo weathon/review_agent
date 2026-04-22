@@ -1,5 +1,6 @@
 # Training Feature Attribution for Vision Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 
@@ -127,7 +128,8 @@ This paper introduces a training feature attribution that links test predictions
 Specifically, they combine the gradient cosine similarity TDF with a gradient-based feature attribution methods.
 
 The paper includes a quantitative analysis of their method’s performance by comparing the loss changes after one additional training step: For this, they either mask everything apart from (i) the k most influential input pixels or (ii) k random pixels on the most influential training samples corresponding to a set of test images.
- Further, they provide evidence that their method can identify harmful examples driving misclassifications and reveal spurious correlations.
+
+Further, they provide evidence that their method can identify harmful examples driving misclassifications and reveal spurious correlations.
 
 ### Strengths
 Overall the paper is clearly written. Further, the combination of training data attribution with feature attribution seems like a useful approach to analyse image models. The two use cases show interesting possible applications of the method.

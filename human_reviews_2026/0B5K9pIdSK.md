@@ -1,5 +1,6 @@
 # TiTok: Transfer Token-level Knowledge via Contrastive Excess to Transplant LoRA
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

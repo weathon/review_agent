@@ -1,5 +1,6 @@
 # Channel-Aware Mixed-Precision Quantization for Efficient Long-Context Inference
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6
 

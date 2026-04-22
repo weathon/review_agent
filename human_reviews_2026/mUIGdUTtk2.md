@@ -1,5 +1,6 @@
 # Cross-Domain Lossy Compression via Rate- and Classification-Constrained Optimal Transport
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 2, 6, 6, 10
 

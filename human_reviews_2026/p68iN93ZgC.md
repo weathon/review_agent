@@ -1,5 +1,6 @@
 # Adaptive Neuronal Dynamics Drive Accurate and Efficient Spiking Neural Networks
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

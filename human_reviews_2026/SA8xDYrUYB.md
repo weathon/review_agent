@@ -1,5 +1,6 @@
 # Purrception: Variational Flow Matching for Vector-Quantized Image Generation
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 4
 

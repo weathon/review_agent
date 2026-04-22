@@ -1,5 +1,6 @@
 # 3D-aware Disentangled Representation for Compositional Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

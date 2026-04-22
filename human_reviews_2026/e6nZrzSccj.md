@@ -1,5 +1,6 @@
 # Robust Training of Neural Networks at Arbitrary Precision and Sparsity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

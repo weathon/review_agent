@@ -1,5 +1,6 @@
 # CrossPL: Systematic Evaluation of Large Language Models for Cross Programming Language Interoperating Code Generation
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Better Branching Policies: Leveraging the Sequential Nature of Branch-and-Bound Tree
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

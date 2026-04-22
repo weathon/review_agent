@@ -1,5 +1,6 @@
 # Do Larger Language Models Generalize Better? A Scaling Law for Implicit Reasoning at Pretraining Time
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 6
 

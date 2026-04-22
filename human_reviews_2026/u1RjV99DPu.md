@@ -1,5 +1,6 @@
 # Multi-Level Multi-Turn RL Outperforms GRPO: Reasoning with Textual Feedback
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

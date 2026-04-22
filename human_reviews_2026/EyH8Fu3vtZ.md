@@ -1,5 +1,6 @@
 # Safety at One Shot: Patching Fine-Tuned LLMs with A Single Instance
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

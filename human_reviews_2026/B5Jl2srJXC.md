@@ -1,5 +1,6 @@
 # Procedural Pretraining: Warming Up Language Models with Abstract Data
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 6, 6
 

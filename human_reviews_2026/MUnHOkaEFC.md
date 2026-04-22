@@ -1,5 +1,6 @@
 # From Uncertainty to Inconsistency: Open-Set RF Fingerprint Identification
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

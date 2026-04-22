@@ -1,5 +1,6 @@
 # Hyperspherical Latents Improve Continuous-Token Autoregressive Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Matched Data, Better Models: Target Aligned Data Filtering with Sparse Autoencoders
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

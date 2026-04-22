@@ -1,5 +1,6 @@
 # Rethinking Data Augmentation for Adversarial Distillation: An Excess Risk Perspective
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

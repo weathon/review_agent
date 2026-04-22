@@ -1,5 +1,6 @@
 # Why SGD is not Brownian Motion: A New Perspective on Stochastic Dynamics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

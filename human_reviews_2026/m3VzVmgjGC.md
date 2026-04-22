@@ -1,5 +1,6 @@
 # SpatialComposer: 3D Spatial Object Insertion via Image Gaussian Composition
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

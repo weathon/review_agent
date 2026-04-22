@@ -1,5 +1,6 @@
 # Hybrid Deep Searcher: Scalable Parallel and Sequential Search Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

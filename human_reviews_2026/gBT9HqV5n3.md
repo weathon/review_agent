@@ -1,5 +1,6 @@
 # Federated Bayesian Optimization based on Secure Distributed Gaussian Processes
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

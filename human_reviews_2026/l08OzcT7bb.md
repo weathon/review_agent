@@ -1,5 +1,6 @@
 # Trash to Treasure: Paving a New Way for Improving Video Understanding via Counterfactual Video Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

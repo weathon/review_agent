@@ -1,5 +1,6 @@
 # MIMIC-Bench: Exploring the User-Like Thinking and Mimicking Capabilities of Multimodal Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # RealEngine: Simulating Autonomous Driving in Realistic Context
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

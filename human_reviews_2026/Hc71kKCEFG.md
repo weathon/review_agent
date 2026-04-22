@@ -1,5 +1,6 @@
 # Naming to Learn: Class Incremental Learning for Vision-Language Model with Unlabeled Data
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 4
 

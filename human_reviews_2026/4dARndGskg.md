@@ -1,5 +1,6 @@
 # Test-time Uncertainty Estimation for Medical Image Registration via Transformation Equivariant
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 6, 0
 

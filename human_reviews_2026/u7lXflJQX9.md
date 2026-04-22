@@ -1,5 +1,6 @@
 # PluriHarms: Benchmarking the Full Spectrum of Human Judgments on AI Harm
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # SO-Lazy-BiO: Accelerating Bilevel Optimization with Reduced Second-Order Information Computation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

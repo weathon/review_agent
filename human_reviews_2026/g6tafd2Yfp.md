@@ -1,5 +1,6 @@
 # Learning Rate Scheduling with Matrix Factorization for Private Training
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 2
 

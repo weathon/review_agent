@@ -1,5 +1,6 @@
 # Unified 3D Scene Understanding Through Physical World Modeling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

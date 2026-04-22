@@ -1,5 +1,6 @@
 # Learn to Memorize: Optimizing LLM-based Agents with Adaptive Memory Framework
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

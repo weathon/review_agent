@@ -1,5 +1,6 @@
 # Beyond Geometry: Functionally Grounded Molecule Generation for Structure-Based Drug Design
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

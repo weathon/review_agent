@@ -1,5 +1,6 @@
 # Step-by-Step Video-to-Audio Synthesis via Negative Audio Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

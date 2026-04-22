@@ -1,5 +1,6 @@
 # Compact Yet Capable: Do Multitask-Based Multi-Teacher Distillation with Precision-Controlled Task-Specific Dynamic PTQ Outperform Static Quantization for Low-Resource Multitask NLU?
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Joint Geometry–Appearance Human Reconstruction in a Unified Latent Space via Bridge Diffusion
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

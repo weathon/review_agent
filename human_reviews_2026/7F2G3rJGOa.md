@@ -1,5 +1,6 @@
 # NexusFlow: Unifying Disparate Tasks under Partial Supervision via Invertible Flow Networks
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2, 6
 

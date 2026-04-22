@@ -1,5 +1,6 @@
 # TD-MoE: Tensor Decomposition for MoE Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 10, 4, 6
 

@@ -1,5 +1,6 @@
 # SpatialThinker: Reinforcing 3D Reasoning in Multimodal LLMs via Spatial Rewards
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 
@@ -71,12 +72,15 @@ This paper introduces SPATIALTHINKER, a 3D-aware multimodal large language model
 
 ### Weaknesses
 1.	Overall, the paper mainly contributes by introducing a reward-based framework that supervises dense spatial information through a scene-level reward, including counting and localization components. Although the dataset is generated using existing methods, the overall approach is relatively straightforward. The counting reward is a reasonable design, but the CIoU term is essentially a variant of the IoU metric, which has already been widely used in vision–language models trained with reinforcement learning.
-2.	The paper lacks a detailed analysis of individual reward components, making it difficult to assess the specific contribution of each proposed reward. In particular, the experiments only compare three training settings — Qwen2.5-VL-7B + SFT, Qwen2.5-VL-7B + Vanilla GRPO, and SpatialThinker-7B (Ours) — without conducting the key ablation studies needed to separately evaluate the Dense RL framework and the Gating reward mechanism. As a result, the performance of each individual reward term remains unclear, and it is impossible to precisely measure their respective contributions. This raises two potential concerns: (1) In many spatial reasoning scenarios with a limited number of objects, the count reward might be easily overfitted or less informative, potentially reducing its overall influence. (2) The count reward weighting (set to 0.7/0.3) appears to be heuristic and lacks sensitivity analysis to verify robustness.
+2.	The paper lacks a detailed analysis of individual reward components, making it difficult to assess the specific contribution of each proposed reward. In particular, the experiments only compare three training settings — Qwen2.5-VL-7B + SFT, Qwen2.5-VL-7B + Vanilla GRPO, and SpatialThinker-7B (Ours) — without conducting the key ablation studies needed to separately evaluate the Dense RL framework and the Gating reward mechanism. As a result, the performance of each individual reward term remains unclear, and it is impossible to precisely measure their respective contributions. This raises two potential concerns:
+(1) In many spatial reasoning scenarios with a limited number of objects, the count reward might be easily overfitted or less informative, potentially reducing its overall influence.
+(2) The count reward weighting (set to 0.7/0.3) appears to be heuristic and lacks sensitivity analysis to verify robustness.
 3.	The use of the <scene> tag encourages the model to generate scene-graph-related information and apply rewards for supervision. However, it is unclear whether this approach is actually better than simply guiding the model to describe scene relations or spatial layouts directly — that is, first encouraging perception-oriented generation (e.g., “describe the relative positions, attributes, or interactions among objects”) before reasoning. Such a design could potentially achieve a similar perception–reasoning separation without explicit reward supervision. Therefore, it remains uncertain whether the proposed scene-graph reward provides substantial advantages over more lightweight descriptive or instruction-based alternatives.
 4.	The method relies on the Hungarian algorithm for matching predicted and ground-truth objects, which could become expensive when dealing with scenes that contain many objects. This may limit scalability to real-world datasets with dense spatial layouts. The authors might consider exploring more efficient or differentiable matching strategies, or providing an analysis of the algorithm’s computational overhead in such cases.
 
 ### Questions
-1. How stable is the lexicographic gating under different hyperparameters (e.g., when accuracy gating is loosened)? 
+1. How stable is the lexicographic gating under different hyperparameters (e.g., when accuracy gating is loosened)?
+
 2. Could the authors share examples of visualization of output and some failure cases where the dense reward fails (e.g., overfitting to bounding box overlaps)?
 3.Could the authors provide an analysis of how the accuracy of scene-graph prediction impacts the final results? In particular, does better scene prediction lead to more accurate reasoning or answers, and has this correlation been quantitatively evaluated?
 

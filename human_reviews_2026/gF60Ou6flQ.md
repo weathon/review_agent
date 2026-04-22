@@ -1,5 +1,6 @@
 # Myna: Masking-Based Contrastive Learning of Musical Representations
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 2, 6, 8
 

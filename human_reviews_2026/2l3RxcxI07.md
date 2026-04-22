@@ -1,5 +1,6 @@
 # Characterising Overprecision in Black-Box LLMs: A Cognitive Science Inspired Framework
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

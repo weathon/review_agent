@@ -1,5 +1,6 @@
 # Descent-Net: Learning Descent Directions for Constrained Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 8, 2, 6
 

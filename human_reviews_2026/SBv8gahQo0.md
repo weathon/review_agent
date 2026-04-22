@@ -1,5 +1,6 @@
 # Optimizing Decoding Paths in Masked Diffusion Models by Quantifying Uncertainty
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

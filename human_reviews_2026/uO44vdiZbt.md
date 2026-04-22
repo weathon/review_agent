@@ -1,5 +1,6 @@
 # Neural Super-Resolution for Mesh-Based Simulations under Scarce Supervision
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 2, 4, 6, 6
 

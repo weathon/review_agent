@@ -1,5 +1,6 @@
 # Adversarial Attack on Tensor Ring Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

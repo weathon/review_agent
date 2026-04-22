@@ -1,5 +1,6 @@
 # AssetFormer: Modular 3D Assets Generation with Autoregressive Transformer
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

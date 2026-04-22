@@ -1,5 +1,6 @@
 # Enhancing LLM Factuality for Structured Data
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

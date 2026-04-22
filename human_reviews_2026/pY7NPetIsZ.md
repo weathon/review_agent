@@ -1,5 +1,6 @@
 # Is It Necessary to Inject Causality into Chain-of-Thought Reasoning?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

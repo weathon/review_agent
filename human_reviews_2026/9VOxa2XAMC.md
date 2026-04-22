@@ -1,5 +1,6 @@
 # Spatiotemporal distributionally robust optimization for improved cross-patient EEG seizure analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 0, 8, 6
 

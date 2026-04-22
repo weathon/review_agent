@@ -1,5 +1,6 @@
 # Mending synthetic data with MAPS: Model Agnostic Post-hoc Synthetic Data Refinement Framework
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

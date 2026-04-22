@@ -1,5 +1,6 @@
 # Uncertainty Distillation: Teaching Language Models to Express Semantic Confidence
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

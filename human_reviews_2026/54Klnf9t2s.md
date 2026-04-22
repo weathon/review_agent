@@ -1,5 +1,6 @@
 # Probing Confidence Regions for Early Exits in Chain-of-Thought
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Learning frequency domain codes for semantic vision
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 
@@ -88,7 +89,9 @@ Overall, I think with some more scaffolded exploration of the background literat
 * Potentially useful for downstream applications in the realm of human/primate vision.
 
 ### Weaknesses
-* While I generally find the saliency map-based findings compelling in showing that PsychoNets acquire semantic information more efficiently and earlier relative to CNNs, I found the lack of non-accuracy based empirical comparisons lacking.  For example, if a key claim is that PsychoNet is more aligned with human vision, we should expect it to be more aligned with humans on key failure cases for CNNs including shape bias judgements, and the actual frequency code representations should also be predictive of human neural responses (say on open fMRI datasets like THINGS, etc.) I think some experiments clearly laying out the contributions of this modeling approach beyond visualizations and accuracy is needed for this to be a valuable contribution for the field.
+* While I generally find the saliency map-based findings compelling in showing that PsychoNets acquire semantic information more efficiently and earlier relative to CNNs, I found the lack of non-accuracy based empirical comparisons lacking. 
+For example, if a key claim is that PsychoNet is more aligned with human vision, we should expect it to be more aligned with humans on key failure cases for CNNs including shape bias judgements, and the actual frequency code representations should also be predictive of human neural responses (say on open fMRI datasets like THINGS, etc.)
+I think some experiments clearly laying out the contributions of this modeling approach beyond visualizations and accuracy is needed for this to be a valuable contribution for the field.
 One could imagine reporting the effects of the ablations currently presented (Fig 6) on these related benchmarks.
 * There needs to be more background on psychovisual codes, not just on metrics used to capture these codes, especially given the audience. I think unpacking some of the ideas from Saadane et al., 1998 might be sufficient.
 * Figure 5 a should be presented in a larger resolution with clearer font

@@ -1,5 +1,6 @@
 # SRAttack: Super-Resolution as an Attack on Invisible Image Watermarking
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

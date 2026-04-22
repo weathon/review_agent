@@ -1,5 +1,6 @@
 # Memory Type Matters: Enhancing Long-Term Memory in Large Language Models with Hybrid Strategies
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

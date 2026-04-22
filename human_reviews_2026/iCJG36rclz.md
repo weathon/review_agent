@@ -1,5 +1,6 @@
 # Actively Learning Horn Envelopes from LLMs
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

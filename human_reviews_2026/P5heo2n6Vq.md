@@ -1,5 +1,6 @@
 # MCPlanner: Multi-Scale Consistency Planning for Offline Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

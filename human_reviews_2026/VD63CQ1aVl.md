@@ -1,5 +1,6 @@
 # Towards Unified Dynamic Face Landmark Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

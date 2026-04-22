@@ -1,5 +1,6 @@
 # Beyond Marginals: Capturing Dependent Returns through Joint Moments in Distributional Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

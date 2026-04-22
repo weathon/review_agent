@@ -1,5 +1,6 @@
 # Neural USD: An object-centric framework for iterative editing and control
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

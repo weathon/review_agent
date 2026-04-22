@@ -1,5 +1,6 @@
 # Rigid invariant sliced Wasserstein via independent embeddings
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

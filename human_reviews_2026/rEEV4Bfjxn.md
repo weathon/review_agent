@@ -1,5 +1,6 @@
 # On structured sparsity and dual lottery tickets for Robust Continual Multi-task Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # On the Dynamics of Coherent Memory Structures in Neural Fields
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

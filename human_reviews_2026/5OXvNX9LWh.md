@@ -1,5 +1,6 @@
 # CML-Bench: A Framework for Evaluating and Enhancing LLM-Powered Movie Scripts Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

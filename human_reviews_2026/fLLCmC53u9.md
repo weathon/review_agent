@@ -1,5 +1,6 @@
 # UltraViCo: Breaking Extrapolation Limits in Video Diffusion Transformers
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

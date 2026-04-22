@@ -1,5 +1,6 @@
 # OS-W2S: An Automatic Labeling Engine for Language-Guided Open-Set Aerial Object Detection
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 8
 

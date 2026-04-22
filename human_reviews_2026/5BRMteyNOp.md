@@ -1,5 +1,6 @@
 # Unleashing Scientific Reasoning for Bio-experimental Protocol Generation via Structured Component-based Reward Mechanism
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 8
 

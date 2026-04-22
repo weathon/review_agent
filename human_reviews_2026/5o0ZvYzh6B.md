@@ -1,5 +1,6 @@
 # UniSS: Unified Expressive Speech-to-Speech Translation with Your Voice
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Sparse Topology Pairwise Scoring for Large-Scale Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

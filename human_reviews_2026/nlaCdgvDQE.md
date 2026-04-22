@@ -1,5 +1,6 @@
 # BrainPro: Towards Large-scale Brain State-aware EEG Representation Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

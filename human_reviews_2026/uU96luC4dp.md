@@ -1,5 +1,6 @@
 # STAR: Similarity-guided Teacher-Assisted Refinement for Super-Tiny Function Calling Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 6
 

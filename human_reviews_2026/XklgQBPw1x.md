@@ -1,5 +1,6 @@
 # Latent Guided Sampling for Combinatorial Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 
@@ -20,7 +21,8 @@ Combinatorial Optimization problems are widespread in domains such as logistics,
 4
 
 ### Summary
-The paper proposes LGS-Net, a latent-space model for Neural Combinatorial Optimization (NCO). The approach trains an encoder to map a problem instance into a distribution for a latent variable.  Based on a sample of this distribution, the decoder generates a distribution over the solution space which then is sampled to obtain solutions. At inference time, the authors introduce Latent Guided Sampling (LGS) — an MCMC-based method augmented with stochastic approximation updates to the decoder parameters, allowing test-time adaptation. Theoretical analysis establishes convergence guarantees for both fixed and adaptive parameter settings. Experiments on TSP and CVRP benchmarks show that LGS-Net achieves state-of-the-art or near-optimal performance, sometimes improving upon strong baselines such as COMPASS and EAS by small margins.
+The paper proposes LGS-Net, a latent-space model for Neural Combinatorial Optimization (NCO). The approach trains an encoder to map a problem instance into a distribution for a latent variable.  Based on a sample of this distribution, the decoder generates a distribution over the solution space which then is sampled to obtain solutions. At inference time, the authors introduce Latent Guided Sampling (LGS) — an MCMC-based method augmented with stochastic approximation updates to the decoder parameters, allowing test-time adaptation.
+Theoretical analysis establishes convergence guarantees for both fixed and adaptive parameter settings. Experiments on TSP and CVRP benchmarks show that LGS-Net achieves state-of-the-art or near-optimal performance, sometimes improving upon strong baselines such as COMPASS and EAS by small margins.
 
 ### Strengths
 - The paper addresses recognized limitations of prior NCO approaches (e.g., data requirements, lack of inference-time optimization) and positions the work within a clear conceptual framework.

@@ -1,5 +1,6 @@
 # Command-V: Training-Free Representation Finetuning Transfer
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 10, 6
 

@@ -1,5 +1,6 @@
 # Aligning News and Prices: A Cross-Modal LLM-Enhanced Transformer DRL Framework for Volatility-Adaptive Stock Trading
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

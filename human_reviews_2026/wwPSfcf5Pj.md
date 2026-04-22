@@ -1,5 +1,6 @@
 # Extending Sequence Length is Not All You Need: Effective Integration of Multimodal Signals for Gene Expression Prediction
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6, 8
 

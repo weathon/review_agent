@@ -1,5 +1,6 @@
 # HDL-FixBench: A Verifiable Repository-Level Benchmark for Hardware bug repair
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 2, 6
 

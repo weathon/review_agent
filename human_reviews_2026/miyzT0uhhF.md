@@ -1,5 +1,6 @@
 # Token-Complexity based Routing Technique within Mixture of Experts Architecture for Large Language Model
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

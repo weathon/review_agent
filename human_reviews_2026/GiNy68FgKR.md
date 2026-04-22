@@ -1,5 +1,6 @@
 # Conditional Clifford-Steerable CNNs with Complete Kernel Basis for PDE Modeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

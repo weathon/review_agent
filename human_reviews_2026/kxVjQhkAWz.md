@@ -1,5 +1,6 @@
 # Dens3R: A Foundation Model for 3D Geometry Prediction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Deciphering Personalization: Towards Fine-Grained Explainability in Natural Language for Personalized Image Generation Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

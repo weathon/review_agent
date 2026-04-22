@@ -1,5 +1,6 @@
 # RHGCL: Representation-Driven Hierarchical Graph Contrastive Learning for User-Item Recommendation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

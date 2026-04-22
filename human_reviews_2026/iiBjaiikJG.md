@@ -1,5 +1,6 @@
 # SoLoPO: Unlocking Long-Context Capabilities in LLMs via Short-to-Long Preference Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

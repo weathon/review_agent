@@ -1,5 +1,6 @@
 # Distributionally Robust Classification for Multi-source Unsupervised Domain Adaptation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

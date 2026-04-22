@@ -1,5 +1,6 @@
 # GraDA: Gradient-Guided Knowledge Distillation for Domain Adaptation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6
 

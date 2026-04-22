@@ -1,5 +1,6 @@
 # Compute Where It Counts: Adaptive Compute Allocation for Large Language Models via Learned Granular Sparsity
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

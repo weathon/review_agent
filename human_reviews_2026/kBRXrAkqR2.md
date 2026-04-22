@@ -1,5 +1,6 @@
 # SplitQuant: Efficient Low-Bit Quantization for Diffusion Transformers via In-Channel Dimension Splitting
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

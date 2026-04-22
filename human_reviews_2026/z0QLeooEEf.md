@@ -1,5 +1,6 @@
 # ReconViaGen: Towards Accurate Multi-view 3D Object Reconstruction via Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

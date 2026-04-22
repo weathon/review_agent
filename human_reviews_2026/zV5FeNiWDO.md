@@ -1,5 +1,6 @@
 # Lavida-O: Elastic Large Masked Diffusion Models for Unified Multimodal Understanding and Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

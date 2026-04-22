@@ -1,5 +1,6 @@
 # DynamicTree: Interactive Real Tree Animation via Sparse Voxel Spectrum
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 4, 4
 

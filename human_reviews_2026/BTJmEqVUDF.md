@@ -1,5 +1,6 @@
 # PhysHandi: Physics-Based Reconstruction of Hand-Deformable Object Interactions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

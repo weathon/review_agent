@@ -1,5 +1,6 @@
 # See, Think, Act: Online Shopper Behavior Simulation with VLM Agents
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 2, 6
 

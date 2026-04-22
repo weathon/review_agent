@@ -1,5 +1,6 @@
 # OpenGPT-4o-Image: A Comprehensive Dataset for Advanced  Image Generation and Editing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

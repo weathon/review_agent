@@ -1,5 +1,6 @@
 # Atlas-Alignment: Making Interpretability Transferable Across Language Models
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 8, 4, 6, 4
 

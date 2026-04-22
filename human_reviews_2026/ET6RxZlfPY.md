@@ -1,5 +1,6 @@
 # Community-Aware Hard Subgraph Mining for Out-of-Distribution Generalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

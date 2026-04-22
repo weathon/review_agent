@@ -1,5 +1,6 @@
 # MobileIPL: Enhancing Mobile Agents Thinking Process via Iterative Preference Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

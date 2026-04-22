@@ -1,5 +1,6 @@
 # Dataset Color Quantization: A Training-Oriented Framework for Dataset-Level Compression
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4, 4
 

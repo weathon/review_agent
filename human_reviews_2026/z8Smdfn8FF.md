@@ -1,5 +1,6 @@
 # Enhancing Large Language Model Reasoning via Selective Critical Token Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

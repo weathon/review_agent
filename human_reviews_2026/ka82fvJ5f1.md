@@ -1,5 +1,6 @@
 # Universal Model Routing for Efficient LLM Inference
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

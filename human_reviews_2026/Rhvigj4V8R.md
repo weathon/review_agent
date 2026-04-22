@@ -1,5 +1,6 @@
 # MarkovScale: Towards Optimal Sequential Scaling at Inference Time
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

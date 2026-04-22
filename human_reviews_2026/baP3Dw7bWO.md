@@ -1,5 +1,6 @@
 # Primal-Dual Policy Optimization for Linear CMDPs with Adversarial Losses
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

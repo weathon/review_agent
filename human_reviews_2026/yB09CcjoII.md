@@ -1,5 +1,6 @@
 # Concept or Skills? Rethinking Instruction Selection for Multi-modal Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

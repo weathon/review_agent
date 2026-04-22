@@ -1,5 +1,6 @@
 # Learning Hierarchical Domain Models through Environment-Grounded Interaction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

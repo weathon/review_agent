@@ -1,5 +1,6 @@
 # MAR: Medical Asymmetric Retriever for Efficient Chinese Medical Dense Retrieval
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

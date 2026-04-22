@@ -1,5 +1,6 @@
 # Convergence and Connectivity: Asymptotic Dynamics of Multi-Agent Q-Learning in Random Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

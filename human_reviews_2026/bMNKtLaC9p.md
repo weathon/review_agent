@@ -1,5 +1,6 @@
 # Accurate and Diverse LLM Mathematical Reasoning via Automated PRM-Guided GFlowNets
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

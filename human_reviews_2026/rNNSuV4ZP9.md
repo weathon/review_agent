@@ -1,5 +1,6 @@
 # CLIQ: Contrastive Learning with XAI-guided Interpretation and Model Quantization for EEG-based Emotion Recognition
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

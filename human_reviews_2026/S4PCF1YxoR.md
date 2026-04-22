@@ -1,5 +1,6 @@
 # Representation-Based Exploration for Language Models:  From Test-Time to Post-Training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4
 

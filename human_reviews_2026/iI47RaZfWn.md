@@ -1,5 +1,6 @@
 # Enhancing LLM Reasoning for Time Series Classification by Tailored Thinking and Fused Decision
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

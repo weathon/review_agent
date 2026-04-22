@@ -1,5 +1,6 @@
 # Online Learning-guided Learning Rate Adaptation via Gradient Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

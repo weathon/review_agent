@@ -1,5 +1,6 @@
 # Stepwise High-Level Semantic Alignment for Test-Time Adaptation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

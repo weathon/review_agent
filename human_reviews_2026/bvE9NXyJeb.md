@@ -1,5 +1,6 @@
 # BADI: Black-box and Anytime-valid Dataset Identification for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # When Foundation Models are One-Liners: Limitations and Future Directions for Time Series Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

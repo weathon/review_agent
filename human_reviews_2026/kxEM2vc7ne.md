@@ -1,5 +1,6 @@
 # LingoLoop Attack: Trapping MLLMs via Linguistic Context and State Entrapment into Endless Loops
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

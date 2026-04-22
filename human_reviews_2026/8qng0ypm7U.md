@@ -1,5 +1,6 @@
 # Confidence Calibration in Source-Free Domain Adaptation based on Pseudo-Labels
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Video Scratch Removal Method Based on Guided Diffusion Generation With Locally Constrained Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

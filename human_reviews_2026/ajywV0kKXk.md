@@ -1,5 +1,6 @@
 # h-MINT: Modeling Pocket-Ligand Binding with Hierarchical Molecular Interaction Network
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 4
 

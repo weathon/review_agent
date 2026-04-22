@@ -1,5 +1,6 @@
 # VeriBench: End-to-End Formal Verification Benchmark for AI Code Generation in Lean 4
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 6, 2, 2
 

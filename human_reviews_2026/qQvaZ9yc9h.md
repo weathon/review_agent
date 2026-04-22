@@ -1,5 +1,6 @@
 # Small Vectors, Big Effects: A Mechanistic Study of RL-Induced Reasoning via Steering Vectors
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Reshaping Activation Functions: A Framework for Activation Function Optimization Based on Mollification Theory
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

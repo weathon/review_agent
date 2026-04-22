@@ -1,5 +1,6 @@
 # RNE: plug-and-play diffusion inference-time control and energy-based training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # ShadowSpeak: Is It Possible to Communicate Cross-Room Solely by Decoding Gesture Shadows?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

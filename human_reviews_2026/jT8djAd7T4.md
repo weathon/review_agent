@@ -1,5 +1,6 @@
 # BioSASANet: Self-Interpretable Shapley Attribution for Deep Genomics Sequence Modeling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

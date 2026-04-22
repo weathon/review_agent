@@ -1,5 +1,6 @@
 # Text2Arch: A Dataset for Generating Scientific Architecture Diagrams from Natural Language Descriptions
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 0
 

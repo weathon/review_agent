@@ -1,5 +1,6 @@
 # An Interpretable Contrastive GAN Approach for Identifying Heterogeneous Pathological Imaging Patterns
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

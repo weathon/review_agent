@@ -1,5 +1,6 @@
 # Cite-While-You-Generate: Training-Free Evidence Attribution for Multimodal Clinical Summarization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

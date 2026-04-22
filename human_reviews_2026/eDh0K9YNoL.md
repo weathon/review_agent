@@ -1,5 +1,6 @@
 # OneSearch: A Preliminary Exploration of the Unified End-to-End Generative Framework for E-commerce Search
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

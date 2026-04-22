@@ -1,5 +1,6 @@
 # Task Tokens: A Flexible Approach to Adapting Behavior Foundation Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 6
 

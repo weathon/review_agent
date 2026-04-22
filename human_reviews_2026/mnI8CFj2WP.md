@@ -1,5 +1,6 @@
 # Unified Cross-Scale 3D Generation and Understanding via Autoregressive Modeling
 
+- Avg Score: 7.00
 - Decision: Reject
 - Scores: 10, 6, 8, 4
 

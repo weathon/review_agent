@@ -1,5 +1,6 @@
 # ThinkMorph: Emergent Properties in Multimodal Interleaved Chain-of-Thought Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

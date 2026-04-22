@@ -1,5 +1,6 @@
 # CRSA: A Chinese Single-Domain Task-Oriented Dialogue Dataset with Contextual Rich Semantic Annotations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # PSBench: Editing Image via  GUI Agents in Photoshop
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Beyond Two-Stage Training: Cooperative SFT and RL for LLM Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

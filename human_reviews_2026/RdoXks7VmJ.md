@@ -1,5 +1,6 @@
 # Beyond Entity Correlations: Disentangling Event Causal Puzzles in Temporal Knowledge Graphs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

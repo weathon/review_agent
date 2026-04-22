@@ -1,5 +1,6 @@
 # DEBATE: A Large-Scale Benchmark for Evaluating Opinion Dynamics in Role-Playing LLM Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

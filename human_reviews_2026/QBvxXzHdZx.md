@@ -1,5 +1,6 @@
 # ATLAS: Alibaba Dataset and Benchmark for Learning-Augmented Scheduling
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4, 6
 

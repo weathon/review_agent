@@ -1,5 +1,6 @@
 # Sol2Vy : Leveraging Solidity-Trained Models for Vyper Smart Contract Analysis
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

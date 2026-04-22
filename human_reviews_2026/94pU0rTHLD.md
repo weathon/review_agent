@@ -1,5 +1,6 @@
 # Learning the Koopman Operator using Attention Free Transformers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

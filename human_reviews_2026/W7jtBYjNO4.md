@@ -1,5 +1,6 @@
 # Real-VAS: a Realworld Video Amodal Segmentation dataset
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

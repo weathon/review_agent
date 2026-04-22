@@ -1,5 +1,6 @@
 # True Self-Supervised Novel View Synthesis is Transferable
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 6, 8, 6
 

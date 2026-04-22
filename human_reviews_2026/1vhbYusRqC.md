@@ -1,5 +1,6 @@
 # Can LLMs Reason Structurally? An Evaluation via the Lens of Data Structures
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

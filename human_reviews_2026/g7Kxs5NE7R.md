@@ -1,5 +1,6 @@
 # RoomGen: Text-Driven Agentic 3D In-door Scene Synthesis and Editing
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

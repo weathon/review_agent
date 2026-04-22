@@ -1,5 +1,6 @@
 # Rethinking Prompt Design for Inference-time Scaling in Text-to-Visual Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 8, 2
 

@@ -1,5 +1,6 @@
 # Decentralized Stochastic Nonconvex Optimization under the Relaxed Smoothness
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

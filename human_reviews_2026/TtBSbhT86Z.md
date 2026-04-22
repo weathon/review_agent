@@ -1,5 +1,6 @@
 # From Trace to Line: LLM Agent for Real-World OSS Vulnerability Localization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

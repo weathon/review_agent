@@ -1,5 +1,6 @@
 # EduVerse: A User-Defined Multi-Agent Simulation Space for Education Scenario
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 4, 2, 2
 
@@ -124,12 +125,14 @@ Typos:
 5
 
 ### Summary
-This paper presents a framework, EduVerse, for user-defined multi-agent simulation in the context of AI in education. The authors deployed  EduVerse in middle school Chinese language classes with diverse educational  tasks, rich emotional expression, and complex interaction structures. The authors also conducted empirical experiment with existing frameworks.
+This paper presents a framework, EduVerse, for user-defined multi-agent simulation in the context of AI in education. The authors deployed  EduVerse in middle school Chinese language classes with diverse educational 
+tasks, rich emotional expression, and complex interaction structures. The authors also conducted empirical experiment with existing frameworks.
 
 ### Strengths
 - Timely topic focusing on the AI in education and LLM 
 - In-depth analysis of related work 
-- The proposed framework  combines the cognitive, interactive, and  evolutionary dynamics of developmental agents in the context of AI in education
+- The proposed framework  combines the cognitive, interactive, and 
+evolutionary dynamics of developmental agents in the context of AI in education
 - Deployed in classrooms showcases the practical impact
 - Human-in-the-loop interface allows real teachers and students  to enabling simulation, causal testing, and validation
 

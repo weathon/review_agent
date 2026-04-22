@@ -1,5 +1,6 @@
 # Human Uncertainty-Aware Data Selection and Automatic Labeling in Visual Question Answering
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

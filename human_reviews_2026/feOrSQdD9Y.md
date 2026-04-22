@@ -1,5 +1,6 @@
 # Convergence Analysis of Tsetlin Machines under Noise-Free and Noisy Training Conditions: From $2$ Bits to $k$ Bits
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

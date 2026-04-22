@@ -1,5 +1,6 @@
 # Turning Internal Gap into Self-Improvement: Promoting the Generation-Understanding Unification in MLLMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 8
 

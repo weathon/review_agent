@@ -1,5 +1,6 @@
 # Describe-to-Score: Text-Guided Efficient Image Complexity Assessment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

@@ -1,5 +1,6 @@
 # MCIF: Multimodal Crosslingual Instruction-Following Benchmark from Scientific Talks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

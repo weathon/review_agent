@@ -1,5 +1,6 @@
 # Cross-Modal Semantic Anchoring: Unsupervised Consistency Verification for Aerial Imagery and Maps via Multimodal LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

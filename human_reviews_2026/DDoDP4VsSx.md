@@ -1,5 +1,6 @@
 # K-PGD: Fast Discrete Projected Gradient Descent with K-Means Acceleration on GPT
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

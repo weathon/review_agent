@@ -1,5 +1,6 @@
 # Cross-modal Reflection Makes Med-VLMs Robust to Noisy User Prompts
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

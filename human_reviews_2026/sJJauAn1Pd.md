@@ -1,5 +1,6 @@
 # Graph Synthetic Out-of-Distribution Exposure with Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # LLEMA: Evolutionary Search with LLMs for Multi-Objective Materials Discovery
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

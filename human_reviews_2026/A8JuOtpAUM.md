@@ -1,5 +1,6 @@
 # Fixed Aggregation Features Can Rival GNNs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

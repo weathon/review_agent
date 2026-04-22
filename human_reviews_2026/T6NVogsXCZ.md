@@ -1,5 +1,6 @@
 # Distilling the Thought, Watermarking the Answer: A Principle Semantic Guided Watermark for Reasoning Large Language Models
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 2
 

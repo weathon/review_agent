@@ -1,5 +1,6 @@
 # Descriptive History Representations: Learning Representations by Answering Questions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

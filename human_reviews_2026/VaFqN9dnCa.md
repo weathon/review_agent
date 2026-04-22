@@ -1,5 +1,6 @@
 # Beyond Turing: Topological Closure as a Foundation for Cognitive Computation
 
+- Avg Score: 0.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0
 

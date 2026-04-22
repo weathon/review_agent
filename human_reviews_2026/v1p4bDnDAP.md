@@ -1,5 +1,6 @@
 # Two Birds with One Stone: Neural Tangent Kernel for Efficient and Robust Gradual Domain Adaptation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

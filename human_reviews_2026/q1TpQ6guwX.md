@@ -1,5 +1,6 @@
 # Integrated Forward–Inverse Network for Physics-Guided Image Reconstruction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

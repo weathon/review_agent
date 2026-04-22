@@ -1,5 +1,6 @@
 # Learning Domain-Aware Task Prompt Representations for Multi-Domain All-in-One Image Restoration
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

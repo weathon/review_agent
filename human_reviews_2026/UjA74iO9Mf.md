@@ -1,5 +1,6 @@
 # GinSign: Grounding Natural Language into System Signatures for Temporal Logic Translation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

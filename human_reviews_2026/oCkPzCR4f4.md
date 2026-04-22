@@ -1,5 +1,6 @@
 # From Charts to Code: A Hierarchical Benchmark for Multimodal Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 6
 

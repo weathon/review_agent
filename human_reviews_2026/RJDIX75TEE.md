@@ -1,5 +1,6 @@
 # Sample Complexity and Representation Ability of Test-time Scaling Paradigms
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

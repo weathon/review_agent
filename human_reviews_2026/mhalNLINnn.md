@@ -1,5 +1,6 @@
 # Dynamic Optimizations of LLM Ensembles with Two-Stage Reinforcement Learning Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

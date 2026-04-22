@@ -1,5 +1,6 @@
 # Weaving in the Clouds: Achieving Synergistic Collaboration among LLM Agents via Federated Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

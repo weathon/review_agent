@@ -1,5 +1,6 @@
 # Seeing Through the Brain: New Insights from Decoding Visual Stimuli with fMRI
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 6
 

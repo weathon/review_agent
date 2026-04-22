@@ -1,5 +1,6 @@
 # Training-Free Defense Against Adversarial Attacks In Deep Learning MRI Reconstruction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

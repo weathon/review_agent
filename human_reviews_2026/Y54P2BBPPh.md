@@ -1,5 +1,6 @@
 # High-dimensional Analysis of Synthetic Data Selection
 
+- Avg Score: 5.33
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4
 

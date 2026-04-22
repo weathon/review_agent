@@ -1,5 +1,6 @@
 # Model Theft and Inversion Attacks Against Query-free Collaborative Inference Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

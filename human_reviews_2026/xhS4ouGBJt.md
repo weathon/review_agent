@@ -1,5 +1,6 @@
 # Spectral Norm Variance Regularization for Balanced Layer-Wise Dynamics in Training Deep Neural Networks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

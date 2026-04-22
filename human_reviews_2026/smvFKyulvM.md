@@ -1,5 +1,6 @@
 # Robust Mixture Models for Algorithmic Fairness Under Latent Heterogeneity
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

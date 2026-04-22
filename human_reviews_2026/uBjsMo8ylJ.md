@@ -1,5 +1,6 @@
 # HKAN: Hierarchical Kolmogorov-Arnold Networks for Efficient and Interpretable Feature Interaction Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

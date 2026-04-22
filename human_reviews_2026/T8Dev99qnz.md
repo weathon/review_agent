@@ -1,5 +1,6 @@
 # Hierarchy-of-Groups Policy Optimization for Long-Horizon Agentic Tasks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8
 

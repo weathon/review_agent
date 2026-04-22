@@ -1,5 +1,6 @@
 # VITA-VLA: Efficiently Teaching Vision-Language Models to Act via Action Expert Distillation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

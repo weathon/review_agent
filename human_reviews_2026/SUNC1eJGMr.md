@@ -1,5 +1,6 @@
 # FictionalQA: A Dataset for Studying Memorization and Knowledge Acquisition
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8, 2
 

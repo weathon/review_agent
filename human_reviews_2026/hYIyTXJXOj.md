@@ -1,5 +1,6 @@
 # Protein Autoregressive Modeling via Multiscale Structure Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

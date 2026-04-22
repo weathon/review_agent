@@ -1,5 +1,6 @@
 # A universal compression theory for lottery ticket hypothesis and neural scaling laws
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

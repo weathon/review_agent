@@ -1,5 +1,6 @@
 # PEROV-H3: Evaluating Generative Models under Size and Symmetry Shifts in Hydrogen-Storage Perovskites
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

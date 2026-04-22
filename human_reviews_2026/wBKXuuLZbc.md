@@ -1,5 +1,6 @@
 # Beyond Grid-Locked Voxels: Neural Response Functions for Continuous Brain Encoding
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 2, 6
 

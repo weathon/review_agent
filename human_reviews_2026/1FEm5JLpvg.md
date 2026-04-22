@@ -1,5 +1,6 @@
 # Projected Coupled Diffusion for Test-Time Constrained Joint Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

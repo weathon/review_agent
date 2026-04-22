@@ -1,5 +1,6 @@
 # Identifying Partially Observed Causal Models from Heterogeneous/Nonstationary Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

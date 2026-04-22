@@ -1,5 +1,6 @@
 # Householder-Diagonalized Linear Attention (HDLA): Utilizing Enhanced Decay Mechanism for Efficient Sequence Modeling
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4, 6
 

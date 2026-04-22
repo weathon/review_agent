@@ -1,5 +1,6 @@
 # Who's Manipulating Whom? Epistemic Grounding to Break Recursive Validation Loops in Large Language Models
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 2
 

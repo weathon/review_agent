@@ -1,5 +1,6 @@
 # Steering Autoregressive Music Generation with Recursive Feature Machines
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

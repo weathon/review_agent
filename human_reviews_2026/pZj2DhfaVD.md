@@ -1,5 +1,6 @@
 # Revisiting Weight Regularization for Low-Rank Continual Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

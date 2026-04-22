@@ -1,5 +1,6 @@
 # A Universal Self-Supervised Paradigm via 3D Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Boosting Reinforcement Learning in 3D Visuospatial Tasks Through Human-Informed Curriculum Design
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Fast Autoregressive Video Generation with Diagonal Decoding
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # SENSE: $\underline{\text{SEN}}$sing Similarity $\underline{\text{SE}}$eing Structure
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 0, 4
 

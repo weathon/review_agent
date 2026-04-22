@@ -1,5 +1,6 @@
 # ECHO: A Multi-Scale Graph Learning Framework for Enhanced Molecular Representation
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 2, 2, 4, 4
 

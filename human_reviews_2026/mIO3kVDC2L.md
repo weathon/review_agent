@@ -1,5 +1,6 @@
 # Not All Documents Are What You Need for Extracting Instruction Tuning Data
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

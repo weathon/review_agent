@@ -1,5 +1,6 @@
 # QORA: A Sustainable Framework for Open-World Generative Model Attribution with Quasi-Orthogonal Representation Disentanglement
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

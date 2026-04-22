@@ -1,5 +1,6 @@
 # R2RGEN: Real-to-Real 3D Data Generation for Spatially Generalized Manipulation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

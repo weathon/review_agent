@@ -1,5 +1,6 @@
 # DISCO: Mitigating Bias in Deep Learning with Conditional Distance Correlation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

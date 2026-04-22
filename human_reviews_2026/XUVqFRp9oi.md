@@ -1,5 +1,6 @@
 # Fewer Battles, More Gain: An Information-Efficient Framework for Arena-based LLM Evaluation
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8
 

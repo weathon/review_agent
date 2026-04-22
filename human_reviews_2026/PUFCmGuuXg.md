@@ -1,5 +1,6 @@
 # FedGraph: Defending Federated Large Language Model Fine-Tuning Against Backdoor Attacks via Graph-Based Aggregation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

@@ -1,5 +1,6 @@
 # AutoSP: Unlocking Long-Context LLM Training Via Compiler-Based Sequence Parallelism
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 2
 

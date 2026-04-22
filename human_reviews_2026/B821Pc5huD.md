@@ -1,5 +1,6 @@
 # SOMA: Efficient Multi-turn LLM Serving via Small Language Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

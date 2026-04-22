@@ -1,5 +1,6 @@
 # Semantic Alignment for Effective Feature Fusion in Real-Time Object Detection
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6
 

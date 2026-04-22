@@ -1,5 +1,6 @@
 # Generalizable Geometric Image Caption Synthesis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

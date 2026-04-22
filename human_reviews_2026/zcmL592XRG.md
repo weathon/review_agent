@@ -1,5 +1,6 @@
 # VenusX: Unlocking Fine-Grained Functional Understanding of Proteins
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

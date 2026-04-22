@@ -1,5 +1,6 @@
 # Decoupling Positional and Symbolic Attention in Transformers
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

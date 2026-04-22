@@ -1,5 +1,6 @@
 # Mod-Adapter: Tuning-Free and Versatile Multi-concept Personalization via Modulation Adapter
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

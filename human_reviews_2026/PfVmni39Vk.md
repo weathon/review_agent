@@ -1,5 +1,6 @@
 # Alzheimer's scRNA-seq Data Analysis Using Multi-type Deep Autoencoders
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

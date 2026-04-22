@@ -1,5 +1,6 @@
 # A purely Quantum Generative Modeling through  Unitary Scrambling and Collapse
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 8, 4, 2, 6
 

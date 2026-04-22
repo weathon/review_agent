@@ -1,5 +1,6 @@
 # Entropy-informed Decoding: Adaptive Information-Driven Branching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

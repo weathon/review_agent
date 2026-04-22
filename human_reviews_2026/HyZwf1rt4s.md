@@ -1,5 +1,6 @@
 # Is Your Paper Being Reviewed by an LLM? Benchmarking AI Text Detection in Peer Review
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

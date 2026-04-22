@@ -1,5 +1,6 @@
 # Arithmetic-Mean $\mu$P for Modern Architectures: A Unified Learning-Rate Scale for CNNs and ResNets
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

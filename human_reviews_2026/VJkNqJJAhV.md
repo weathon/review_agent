@@ -1,5 +1,6 @@
 # FAME: Formal Abstract Minimal Explanation for Neural Networks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

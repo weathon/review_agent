@@ -1,5 +1,6 @@
 # Routing Manifold Alignment Improves Generalization of Mixture-of-Experts LLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 4
 

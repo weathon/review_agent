@@ -1,5 +1,6 @@
 # PHDME: Physics-Informed Diffusion Models without Explicit Governing Equations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

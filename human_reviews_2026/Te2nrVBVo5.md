@@ -1,5 +1,6 @@
 # Interpreting Emergent Military Tactics in a General AlphaZero Framework
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 0, 2, 2
 

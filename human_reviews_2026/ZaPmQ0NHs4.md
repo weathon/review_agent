@@ -1,5 +1,6 @@
 # Large Language Model Compression with Global Rank and Sparsity Optimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

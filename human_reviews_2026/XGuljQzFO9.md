@@ -1,5 +1,6 @@
 # Solving Reflected Diffusion Models: A PINN-based Method
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

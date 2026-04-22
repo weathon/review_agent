@@ -1,5 +1,6 @@
 # Generating Data-Driven Reasoning Rubrics for Domain-Adaptive Reward Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

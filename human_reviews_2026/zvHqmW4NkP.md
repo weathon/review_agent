@@ -1,5 +1,6 @@
 # Deep Reflection Hinting: Leveraging Offline Knowledge for Improving LLM Agents Adaptation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

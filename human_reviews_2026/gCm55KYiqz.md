@@ -1,5 +1,6 @@
 # CAGE: A Framework for Culturally Adaptive Red-Teaming Benchmark Generation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

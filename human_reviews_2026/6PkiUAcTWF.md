@@ -1,5 +1,6 @@
 # Using  maximal information auxiliary variables to improve synthetic data generation based on TabPFN foundation models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 8
 

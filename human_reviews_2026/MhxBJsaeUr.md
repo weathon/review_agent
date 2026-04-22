@@ -1,5 +1,6 @@
 # Attention is Advantage: How the Weaker Defeats the Stronger Through Cooperation
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

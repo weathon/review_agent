@@ -1,5 +1,6 @@
 # Sharper Characterization of the Global Maximizers in Bilinear Programming with Applications to Asynchronous Gradient Descent
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 4, 2, 6, 2
 

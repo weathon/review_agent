@@ -1,5 +1,6 @@
 # ChronoEdit: Towards Temporal Reasoning for In-Context Image Editing and World Simulation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4
 

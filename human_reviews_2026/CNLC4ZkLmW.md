@@ -1,5 +1,6 @@
 # Shoot from the HIP: Hessian Interatomic Potentials without derivatives
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

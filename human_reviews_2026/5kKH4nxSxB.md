@@ -1,5 +1,6 @@
 # Evidence-Free Claim Verification via Large Language Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

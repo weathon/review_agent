@@ -1,5 +1,6 @@
 # cadrille: Multi-modal CAD Reconstruction with Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 2, 6, 8, 6
 

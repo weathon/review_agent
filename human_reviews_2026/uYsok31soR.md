@@ -1,5 +1,6 @@
 # Think Before You Place: Chain-of-Thought Video Editing for Environment-Aware Custom Subject Integration
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6, 4
 

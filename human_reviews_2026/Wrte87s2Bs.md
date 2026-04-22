@@ -1,5 +1,6 @@
 # Executable Functional Abstractions: Inferring Generative Programs for Advanced Math Problems
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 6, 4
 

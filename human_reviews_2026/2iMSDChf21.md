@@ -1,5 +1,6 @@
 # Subspace Node Pruning: Revealing Structured Importance via Orthogonal Subspace Transformations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

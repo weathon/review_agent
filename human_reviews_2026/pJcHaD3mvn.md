@@ -1,5 +1,6 @@
 # Extrapolating Large Models from the Small: Optimal Learning of Scaling Laws
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

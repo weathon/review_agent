@@ -1,5 +1,6 @@
 # Mini-o3: Scaling Up Reasoning Patterns and Interaction Turns for Visual Search
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Weighted Conformal Prediction for Time-Dependent PDEs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

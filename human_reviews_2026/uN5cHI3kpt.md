@@ -1,5 +1,6 @@
 # Cronus: Efficient LLM inference on Heterogeneous GPU Clusters via Partially Disaggregated Prefill
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 6, 4
 

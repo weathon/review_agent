@@ -1,5 +1,6 @@
 # Adjusting Prediction Model Through Wasserstein Geodesic for Causal Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

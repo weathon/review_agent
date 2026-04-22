@@ -1,5 +1,6 @@
 # Feedback-driven recurrent quantum neural network universality
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 10
 

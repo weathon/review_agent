@@ -1,5 +1,6 @@
 # ProofBridge: Auto-Formalization of Natural Language Proofs in Lean via Joint Embeddings
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6, 6
 

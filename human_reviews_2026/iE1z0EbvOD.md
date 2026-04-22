@@ -1,5 +1,6 @@
 # SIFBench: An Extensive Benchmark for 3D Fatigue Analysis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

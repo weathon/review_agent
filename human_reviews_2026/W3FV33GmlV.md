@@ -1,5 +1,6 @@
 # Exploring Recursive Doubt in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

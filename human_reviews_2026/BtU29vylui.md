@@ -1,5 +1,6 @@
 # MUA-RL: Multi-turn User-interacting Agent Reinforcement Learning for agentic tool use
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

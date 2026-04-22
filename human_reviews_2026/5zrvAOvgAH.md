@@ -1,5 +1,6 @@
 # Governing Equation Discovery from Data Based on Differential Invariants
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

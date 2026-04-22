@@ -1,5 +1,6 @@
 # Learn Bullish Moves via EigenCluster Tokens
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

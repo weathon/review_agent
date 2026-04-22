@@ -1,5 +1,6 @@
 # ALETHEIA: A Multi-Frequency Eddy Current Pulsed Thermography Dataset for Neural Operator Learning in Nondestructive Testing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

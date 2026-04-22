@@ -1,5 +1,6 @@
 # Learning 3D-Gaussian Simulators from RGB Videos
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

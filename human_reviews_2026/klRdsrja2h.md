@@ -1,5 +1,6 @@
 # Perceive, Reflect and Understand Long Video: Progressive Multi-Granular Clue Exploration with Interactive Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 8, 2
 

@@ -1,5 +1,6 @@
 # CRAG-MM: Multi-modal Multi-turn Comprehensive RAG Benchmark
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

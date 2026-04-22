@@ -1,5 +1,6 @@
 # Randomized Antipodal Search Done Right for Data Pareto Improvement of LLM Unlearning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

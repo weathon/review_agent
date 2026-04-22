@@ -1,5 +1,6 @@
 # Step-Aware Policy Optimization for Reasoning in Diffusion Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

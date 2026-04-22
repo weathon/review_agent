@@ -1,5 +1,6 @@
 # Hot PATE: Private Aggregation of Distributions  for Diverse Tasks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 8
 

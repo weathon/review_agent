@@ -1,5 +1,6 @@
 # DoRAN: Stabilizing Weight-Decomposed Low-Rank Adaptation via  Noise Injection and Auxiliary Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

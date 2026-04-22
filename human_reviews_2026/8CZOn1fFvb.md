@@ -1,5 +1,6 @@
 # UR$^2$: Unify RAG and Reasoning through Reinforcement Learning
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # Towards Global Expert-Level Mixed-Precision Quantization for Mixture-of-Experts LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

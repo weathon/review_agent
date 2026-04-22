@@ -1,5 +1,6 @@
 # ScoreMix: Synthetic Data Generation by Score Composition in Diffusion Models Improves Recognition
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

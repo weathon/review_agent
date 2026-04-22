@@ -1,5 +1,6 @@
 # ARMs: Adaptive Red-Teaming Agent against Multimodal Models with Plug-and-Play Attacks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

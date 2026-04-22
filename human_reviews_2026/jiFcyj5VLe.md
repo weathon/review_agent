@@ -1,5 +1,6 @@
 # LocalV: Exploiting Information Locality for IP-level Verilog Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # R²AG: Learning to Reason, Retrieve, and Self-Evolve through a Multi-Branch Retrieval Tree
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

@@ -1,5 +1,6 @@
 # MedSentry: Understanding and Mitigating Safety Risks in Medical LLM Multi-Agent Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

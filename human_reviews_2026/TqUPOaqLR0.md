@@ -1,5 +1,6 @@
 # Noise-Adaptive Layerwise Learning Rates: Accelerating Geometry-Aware Optimization for Deep Neural Network Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

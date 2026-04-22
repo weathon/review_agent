@@ -1,5 +1,6 @@
 # Distinct Computations Emerge From Compositional Curricula In-Context
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

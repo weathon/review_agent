@@ -1,5 +1,6 @@
 # PixNerd: Pixel Neural Field Diffusion
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 8
 

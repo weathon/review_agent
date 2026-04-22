@@ -1,5 +1,6 @@
 # Policy Optimization with Experience Replay: Guiding Reasoning Models to Complete the Reasoning Path
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

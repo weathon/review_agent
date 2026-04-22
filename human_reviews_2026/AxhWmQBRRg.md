@@ -1,5 +1,6 @@
 # Similarity and Separation of Last-Iterate Convergence between Optimism and Reflected Algorithms in Time-Varying Games
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

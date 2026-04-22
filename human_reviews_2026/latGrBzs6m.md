@@ -1,5 +1,6 @@
 # MeasureNet: Polyline Detection Based Measurement for Celiac Disease Identification and Grading
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

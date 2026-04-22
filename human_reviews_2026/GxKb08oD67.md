@@ -1,5 +1,6 @@
 # Fully First-order Methods for Contextual Stochastic Bilevel Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

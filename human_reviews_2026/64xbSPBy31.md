@@ -1,5 +1,6 @@
 # DistillMatch: Leveraging Knowledge Distillation from Vision Foundation Model for Multimodal Image Matching
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 0, 6
 

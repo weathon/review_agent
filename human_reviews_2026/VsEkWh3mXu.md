@@ -1,5 +1,6 @@
 # SteeringSafety: A Systematic Safety Evaluation Framework of Representation Steering in LLMs
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 8, 2
 

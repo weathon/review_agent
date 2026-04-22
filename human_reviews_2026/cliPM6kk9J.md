@@ -1,5 +1,6 @@
 # QAProt: Enabling Sequence-to-Text Protein Function Learning with a Comprehensive QA Corpus
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

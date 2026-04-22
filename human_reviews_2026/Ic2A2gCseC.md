@@ -1,5 +1,6 @@
 # Beyond Fixed: Training-Free Variable-Length Denoising for Diffusion Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

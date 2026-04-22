@@ -1,5 +1,6 @@
 # Prototype Transformer: Towards Language Model Architectures Interpretable by Design
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4, 4
 

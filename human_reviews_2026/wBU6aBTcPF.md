@@ -1,5 +1,6 @@
 # KGQA-Star:Deliberative Reasoning for Planning on Knowledge Graphs for Question Answering
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

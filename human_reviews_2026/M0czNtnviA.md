@@ -1,5 +1,6 @@
 # PRIVET: PRIVacy metric based on Extreme value Theory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

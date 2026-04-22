@@ -1,5 +1,6 @@
 # Generalised Flow Maps for Few-Step Generative Modelling on Riemannian Manifolds
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

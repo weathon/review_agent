@@ -1,5 +1,6 @@
 # SAINT: Attention-Based Policies for Discrete Combinatorial Action Spaces
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

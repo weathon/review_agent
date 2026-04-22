@@ -1,5 +1,6 @@
 # VideoMolmo: Spatio-Temporal Grounding meets Pointing
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

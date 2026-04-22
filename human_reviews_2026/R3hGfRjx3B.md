@@ -1,5 +1,6 @@
 # Revisiting Overestimation Bias of Q-learning: Breaking Bias Propagation Chains Does Well
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

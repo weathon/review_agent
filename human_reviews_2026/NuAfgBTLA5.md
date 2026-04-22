@@ -1,5 +1,6 @@
 # DoReMi - Difficulty-Oriented Reasoning Effort Modeling of Science Problems for Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Time-Gated Multi-Scale Flow Matching for Time-Series Imputation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 4
 

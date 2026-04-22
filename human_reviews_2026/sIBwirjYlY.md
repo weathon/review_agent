@@ -1,5 +1,6 @@
 # The Hot Mess of AI: How Does Misalignment Scale With Model Intelligence and Task Complexity?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Pianist Transformer: Towards Expressive Piano Performance Rendering via Scalable Self-Supervised Pre-Training
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

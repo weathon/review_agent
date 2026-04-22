@@ -1,5 +1,6 @@
 # Through the Stealth Lens: Attention-Aware Defenses Against Poisoning in RAG
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

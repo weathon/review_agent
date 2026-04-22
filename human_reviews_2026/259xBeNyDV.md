@@ -1,5 +1,6 @@
 # Charts Are Not Images: On the Challenges of Scientific Chart Editing
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

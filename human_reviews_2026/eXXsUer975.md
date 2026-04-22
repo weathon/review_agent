@@ -1,5 +1,6 @@
 # Motion-R1: Enhancing Motion Generation with Decomposed Chain-of-Thought and RL Binding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

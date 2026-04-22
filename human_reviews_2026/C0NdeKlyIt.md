@@ -1,5 +1,6 @@
 # Imputing Incomplete Building Attribute Data Using Expert-Guided Variational Autoencoders (EGVAE)
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

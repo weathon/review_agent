@@ -1,5 +1,6 @@
 # Continuous Audio Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 
@@ -30,7 +31,8 @@ At a high level, the paper’s short-context pathway is analogous to LocDiT in D
 ### Weaknesses
 - The paper targets continuation on speech and music, but the evaluation scope is too narrow to position the method within the broader speech modality. In practice, TTS is the most common task for audio generation models. Without a TTS evaluation, it’s difficult to compare against widely used or state-of-the-art systems. Including comparisons with strong baselines (e.g., GLM-4-Voice, DiTAR) on overlapping tasks would be required. In short, the method is well-substantiated for continuation, but its position relative to on-the-shelf speech models is unclear. Adding TTS (with direct SOTA comparisons) would make the contribution much easier to compare and significantly strengthen the paper.
 
-- Lack of references: Suggest citing IMPACT [A] in line 53, which is also a MAR-style audio generation model.
+- Lack of references:
+Suggest citing IMPACT [A] in line 53, which is also a MAR-style audio generation model.
 
 [A] Huang, K. P., Yang, S. W., PHAN, H., Lu, B. R., Kim, B., Macha, S., ... & Wang, C. IMPACT: Iterative Mask-based Parallel Decoding for Text-to-Audio Generation with Diffusion Modeling. ICML 2025
 

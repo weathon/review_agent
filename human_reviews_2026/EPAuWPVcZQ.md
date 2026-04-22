@@ -1,5 +1,6 @@
 # A Plug-and-Play Agentic Framework for Text Guided Image Editing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # ActiveDPO: Active Direct Preference Optimization for Sample-Efficient Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

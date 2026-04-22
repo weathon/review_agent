@@ -1,5 +1,6 @@
 # Large Language Models Develop Novel Social Biases Through Adaptive Exploration
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

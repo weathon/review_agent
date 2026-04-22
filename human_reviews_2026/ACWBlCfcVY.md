@@ -1,5 +1,6 @@
 # DA-MergeLoRA: Hypernetwork-Based LoRA Merging for Few-Shot Test-Time Domain Adaptation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

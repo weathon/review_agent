@@ -1,5 +1,6 @@
 # A Step to Decouple Optimization in 3DGS
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

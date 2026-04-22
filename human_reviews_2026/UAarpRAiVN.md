@@ -1,5 +1,6 @@
 # Block Rotation is All You Need for MXFP4 Quantization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

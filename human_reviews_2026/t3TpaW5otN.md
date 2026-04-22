@@ -1,5 +1,6 @@
 # Linkage-Guided Genetic Variation: Overcoming Operator Blindness in Genetic Algorithms
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4, 2
 

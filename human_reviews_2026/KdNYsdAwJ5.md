@@ -1,5 +1,6 @@
 # AI Models Can Provably Hide Arbitrary Capabilities
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 4
 

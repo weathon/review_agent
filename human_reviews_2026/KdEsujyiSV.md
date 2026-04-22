@@ -1,5 +1,6 @@
 # PolySkill: Learning Generalizable Skills Through Polymorphic Abstraction For Continual Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

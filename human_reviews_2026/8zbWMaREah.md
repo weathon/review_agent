@@ -1,5 +1,6 @@
 # Neighborhood Sampling Does Not Learn the Same Graph Neural Network
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

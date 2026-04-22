@@ -1,5 +1,6 @@
 # XIMP: Cross Graph Inter-Message Passing for Molecular Property Prediction
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 4
 

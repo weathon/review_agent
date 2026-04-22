@@ -1,5 +1,6 @@
 # Exact Rates and Saturation Effect of Kernel Ridge Regression over Unbounded Input Space in Large Dimensions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

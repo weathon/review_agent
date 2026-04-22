@@ -1,5 +1,6 @@
 # Automated Benchmark Generation for Repository-Level Code Input Synthesis via Coverage-Guided Fuzzing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

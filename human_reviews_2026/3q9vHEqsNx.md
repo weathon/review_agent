@@ -1,5 +1,6 @@
 # FantasyWorld: Geometry-Consistent World Modeling via Unified Video and 3D Prediction
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

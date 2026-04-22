@@ -1,5 +1,6 @@
 # Disentangling Latent Embeddings with Sparse Linear Concept Subspaces (SLiCS)
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

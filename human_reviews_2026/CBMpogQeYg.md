@@ -1,5 +1,6 @@
 # VSSFlow: Unifying Video-conditioned Sound and Speech Generation via Joint Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

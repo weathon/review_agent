@@ -1,5 +1,6 @@
 # MultiDiffNet: A Multi-Objective Diffusion Framework for Generalizable Brain Decoding
 
+- Avg Score: 2.33
 - Decision: Reject
 - Scores: 2, 2, 4, 0, 2, 4
 

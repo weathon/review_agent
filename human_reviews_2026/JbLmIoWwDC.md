@@ -1,5 +1,6 @@
 # Gogo: Group-wise granularity-ordered codec for stable and efficient speech generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

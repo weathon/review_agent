@@ -1,5 +1,6 @@
 # Security Tensors as a Cross-Modal Bridge: Activating Text-Aligned Safety to Vision in LVLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

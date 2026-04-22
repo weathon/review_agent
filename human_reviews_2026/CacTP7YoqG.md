@@ -1,5 +1,6 @@
 # Skeleton-to-Image Encoding: Enabling Skeleton Representation Learning via Vision-Pretrained Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2, 4, 4, 6
 

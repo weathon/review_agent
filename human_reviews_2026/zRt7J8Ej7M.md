@@ -1,5 +1,6 @@
 # FAKER: Generating Frequency-based Artificial Attributes via Random Walks for Non-attribute Graph Representation Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

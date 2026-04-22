@@ -1,5 +1,6 @@
 # Collaborative Hybrid Propagator for Temporal Misalignment in Audio-Visual Segmentation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

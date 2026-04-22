@@ -1,5 +1,6 @@
 # Controllable Video Synthesis via Variational Inference
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

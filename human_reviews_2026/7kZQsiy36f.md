@@ -1,5 +1,6 @@
 # Rethinking Unsupervised Cross-modal Flow Estimation: Learning from Decoupled Optimization and Consistency Constraint
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

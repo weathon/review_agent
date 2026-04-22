@@ -1,5 +1,6 @@
 # Beyond Prompt-Induced Lies: Investigating LLM Deception on Benign Prompts
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8
 

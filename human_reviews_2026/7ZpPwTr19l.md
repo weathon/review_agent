@@ -1,5 +1,6 @@
 # SCDBench: A Benchmark for LLM-Based Smart Contract Decompilers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

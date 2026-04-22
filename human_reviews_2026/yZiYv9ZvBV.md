@@ -1,5 +1,6 @@
 # Vision Transformers Need Zoomer: Efficient ViT with Visual Intent-Guided Zoom Adapter
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

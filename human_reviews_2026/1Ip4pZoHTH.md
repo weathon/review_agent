@@ -1,5 +1,6 @@
 # PACE: Part-Wise Slow-Fast Conditioning for Dance-to-Music Generation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 4
 

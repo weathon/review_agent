@@ -1,5 +1,6 @@
 # IDAP++: Advancing Divergence-Based Pruning via Filter-Level and Layer-Level Optimization
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

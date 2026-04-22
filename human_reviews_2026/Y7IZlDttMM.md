@@ -1,5 +1,6 @@
 # CoRA: Covariate-Aware Adaptation of Time Series Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

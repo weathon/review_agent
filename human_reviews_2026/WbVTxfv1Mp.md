@@ -1,5 +1,6 @@
 # Rectified Decoupled Dataset Distillation: A Closer Look for Fair and Comprehensive Evaluation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

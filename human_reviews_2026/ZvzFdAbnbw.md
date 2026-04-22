@@ -1,5 +1,6 @@
 # Re-Densification Meets Cross-Scale Propagation: Real-Time Compression of LiDAR Point Clouds
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6
 

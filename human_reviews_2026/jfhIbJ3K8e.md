@@ -1,5 +1,6 @@
 # Survive at All Costs: Exploring LLM's Risky Behavior under Survival Pressure
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

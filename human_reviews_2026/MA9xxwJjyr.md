@@ -1,5 +1,6 @@
 # HSCodeComp: A Realistic and Expert-level Benchmark for Deep Search Agents in Hierarchical Rule Application
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 4, 0
 

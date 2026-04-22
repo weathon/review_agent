@@ -1,5 +1,6 @@
 # The Era of Real-World Human Interaction: RL from User Conversations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

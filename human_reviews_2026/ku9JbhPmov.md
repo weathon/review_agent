@@ -1,5 +1,6 @@
 # Caterpillar GNN: Replacing Message Passing with Efficient Aggregation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 8, 6, 2, 2
 

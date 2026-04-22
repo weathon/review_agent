@@ -1,5 +1,6 @@
 # A Large-Scale Atomic Interaction Model Based on Matter Wave Theory
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

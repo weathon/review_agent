@@ -1,5 +1,6 @@
 # Consistent3DGen: Bridging Stochastic Generation and Deterministic Reconstruction for Image-to-3D Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

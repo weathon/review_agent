@@ -1,5 +1,6 @@
 # Emergent Discrete Controller Modules for Symbolic Planning in Transformers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6
 

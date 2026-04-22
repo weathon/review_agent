@@ -1,5 +1,6 @@
 # GaitSnippet: Gait Recognition Beyond Unordered Sets and Ordered Sequences
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # MARS: Mamba-driven Adaptive Reordering Scheme for Semantic Occupancy Prediction in Autonomous Driving
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

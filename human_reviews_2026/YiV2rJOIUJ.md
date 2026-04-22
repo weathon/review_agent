@@ -1,5 +1,6 @@
 # Fast to Train, Fast to Sample: Stable Velocity for Flow Matching
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

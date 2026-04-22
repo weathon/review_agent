@@ -1,5 +1,6 @@
 # Unlocking Noise-Resistant Vision: Key Architectural Secrets for Robust Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2, 4
 

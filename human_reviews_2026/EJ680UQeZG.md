@@ -1,5 +1,6 @@
 # Pinet: Optimizing hard-constrained neural networks with orthogonal projection layers
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 8, 6
 

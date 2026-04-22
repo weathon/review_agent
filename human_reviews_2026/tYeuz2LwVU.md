@@ -1,5 +1,6 @@
 # Signal in the Noise: Polysemantic Interference Transfers and Predicts Cross-Model Influence
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

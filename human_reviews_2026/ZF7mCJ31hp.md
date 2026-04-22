@@ -1,5 +1,6 @@
 # Contrastive Conditional–Unconditional Alignment for Long-tailed Diffusion Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

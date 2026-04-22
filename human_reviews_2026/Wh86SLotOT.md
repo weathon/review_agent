@@ -1,5 +1,6 @@
 # Beyond End-to-End Models: Characterizing the Favorable Scaling of Coordinated Perception and Control
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

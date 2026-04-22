@@ -1,5 +1,6 @@
 # Incremental Learning in Transformers for In-Context Associative Recall
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

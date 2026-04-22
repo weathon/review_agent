@@ -1,5 +1,6 @@
 # How Does the Pretraining Distribution Shape In-Context Learning? Task Selection, Robustness and Generalization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

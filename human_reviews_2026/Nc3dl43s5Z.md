@@ -1,5 +1,6 @@
 # ST-HHOL: Spatio-Temporal Hierarchical Hypergraph Online Learning for Crime Prediction
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6, 4
 

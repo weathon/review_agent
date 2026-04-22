@@ -1,5 +1,6 @@
 # Shake the k-Center: Toward Noise-Robust Coresets via Reliability Swapping between Neighbors
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 6
 

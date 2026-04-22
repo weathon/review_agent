@@ -1,5 +1,6 @@
 # Controllable Test-Time Scaling via Sparse Autoencoder‑Based Reasoning Steering
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

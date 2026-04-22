@@ -1,5 +1,6 @@
 # UPrompt: Bidirectional Multi-granularity Learning for Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

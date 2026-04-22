@@ -1,5 +1,6 @@
 # Cross-domain Offline Policy Adaptation with Dynamics- and Value-aligned Data Filtering
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

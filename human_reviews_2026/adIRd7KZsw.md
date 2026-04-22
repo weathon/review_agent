@@ -1,5 +1,6 @@
 # The N-Body Problem: Predicting Parallel Execution from Single-Person Egocentric Video
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

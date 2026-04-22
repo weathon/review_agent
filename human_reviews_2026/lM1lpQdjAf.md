@@ -1,5 +1,6 @@
 # TimeLAVA: Learning-Agnostic Valuation for Time Series Data
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 8
 

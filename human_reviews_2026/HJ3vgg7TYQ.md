@@ -1,5 +1,6 @@
 # RePrompt: Reasoning-Augmented Reprompting for Text-to-Image Generation via Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 2
 

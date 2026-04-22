@@ -1,5 +1,6 @@
 # Object-level self-distillation with bounding-box weak supervision improves vision pretraining
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 6
 

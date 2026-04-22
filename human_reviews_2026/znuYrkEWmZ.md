@@ -1,5 +1,6 @@
 # Unpacking In-Context Learning: Underlying Mechanism and Out-of-Distribution Generalization via Blended Training on Function Mixture
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 2, 2, 4, 2, 2
 

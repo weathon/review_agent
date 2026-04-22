@@ -1,5 +1,6 @@
 # Retaining by Doing: The Role of On-Policy Data in Mitigating Forgetting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

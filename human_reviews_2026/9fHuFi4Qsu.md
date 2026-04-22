@@ -1,5 +1,6 @@
 # ConceptBot: Knowledge-Graph–Grounded Commonsense for Task Decomposition in LLM Robot Planning
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

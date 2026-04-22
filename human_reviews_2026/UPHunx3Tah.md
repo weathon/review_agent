@@ -1,5 +1,6 @@
 # Token-Shuffle: Towards High-Resolution Image Generation with Autoregressive Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

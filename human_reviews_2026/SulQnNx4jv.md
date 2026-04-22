@@ -1,5 +1,6 @@
 # Disentangled Causal Transformer: Counterfactual Prediction under Time-Varying Treatments
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

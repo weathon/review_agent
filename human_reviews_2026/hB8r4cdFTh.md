@@ -1,5 +1,6 @@
 # Cohort Squeeze: Beyond a Single Communication Round per Cohort in Cross-Device Federated Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

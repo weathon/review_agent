@@ -1,5 +1,6 @@
 # Collaborative Gym: A Framework for Enabling and Evaluating Human-Agent Collaboration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

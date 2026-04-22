@@ -1,5 +1,6 @@
 # Actions as Language: Fine-Tuning VLMs into VLAs Without Catastrophic Forgetting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

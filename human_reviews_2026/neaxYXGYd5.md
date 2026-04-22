@@ -1,5 +1,6 @@
 # DPQuant: Efficient and Private Model Training via Dynamic Quantization Scheduling
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

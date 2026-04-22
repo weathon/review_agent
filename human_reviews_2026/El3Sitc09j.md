@@ -1,5 +1,6 @@
 # Boosting Vision-and-Language Navigation in Urban Environments with a Hierarchical Spatial-Cognition Memory System
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Memory-Efficient Fine-Tuning via Low-Rank Activation Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

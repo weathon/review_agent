@@ -1,5 +1,6 @@
 # Memory-Orchestrated Multi-Prompt Learning for Infrared and Visible Image Fusion
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

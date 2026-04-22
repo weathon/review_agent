@@ -1,5 +1,6 @@
 # VideoCap-R1: Enhancing MLLMs for Video Captioning via Structured Thinking
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 0
 

@@ -1,5 +1,6 @@
 # Generative Conformal Prediction with Optimized Coverage Allocation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

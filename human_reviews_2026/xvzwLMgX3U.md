@@ -1,5 +1,6 @@
 # Soft Constraints, Strong Solutions: Optimizing Intra-Operator Parallelism for Distributed Deep Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 0, 6, 2
 

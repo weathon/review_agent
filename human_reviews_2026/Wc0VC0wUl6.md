@@ -1,5 +1,6 @@
 # Jailbreak LEGO: A Compositional Benchmark for Red-Teaming LLMs
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

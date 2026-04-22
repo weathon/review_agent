@@ -1,5 +1,6 @@
 # MARS-SQL: A Multi-Agent Reinforcement Learning Framework for Text-to-SQL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

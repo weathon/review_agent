@@ -1,5 +1,6 @@
 # Hybrid Reinforcement: when reward is sparse, better to be dense
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

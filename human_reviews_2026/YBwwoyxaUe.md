@@ -1,5 +1,6 @@
 # Scaling Laws and Complexity of Generative Models: A Multifractal Perspective
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

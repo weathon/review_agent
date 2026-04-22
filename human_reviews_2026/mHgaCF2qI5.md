@@ -1,5 +1,6 @@
 # HOIDiNi: Human-Object Interaction through Diffusion Noise Optimization
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4, 4
 

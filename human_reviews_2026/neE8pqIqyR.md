@@ -1,5 +1,6 @@
 # PRO: Enabling Precise and Robust Text Watermark for Open-Source LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

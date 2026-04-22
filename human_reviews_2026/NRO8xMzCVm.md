@@ -1,5 +1,6 @@
 # EAGER: Entropy-Aware GEneRation for Adaptive Inference-Time Scaling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

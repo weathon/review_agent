@@ -1,5 +1,6 @@
 # Relational Feature Caching for Accelerating Diffusion Transformers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

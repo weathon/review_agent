@@ -1,5 +1,6 @@
 # MetaSpatial: Reinforcing 3D Spatial Reasoning in VLMs for the Metaverse
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Beyond Behavioral Alignment: Leveraging Core Cognitive Dimensions for Enhanced Human-like MLLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # CLIP as a Prior Teacher: Breaking the Label Dependency in Semi-Supervised Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 4, 2
 

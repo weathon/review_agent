@@ -1,5 +1,6 @@
 # Functional MRI Time Series Generation via Wavelet-Based Image Transform and Spectral Flow Matching for Brain Disorder Identification
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 2
 

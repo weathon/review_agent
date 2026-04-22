@@ -1,5 +1,6 @@
 # HSG-12M: A Large-Scale Benchmark of Spatial Multigraphs from the Energy Spectra of Non-Hermitian Crystals
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

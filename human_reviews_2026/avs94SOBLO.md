@@ -1,5 +1,6 @@
 # Explaining the Reasoning of Large Language Models Using Attribution Graphs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

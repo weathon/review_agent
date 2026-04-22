@@ -1,5 +1,6 @@
 # Large EEG-U-Transformer for Time-Step-Level Detection Without Pre-Training
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 4
 

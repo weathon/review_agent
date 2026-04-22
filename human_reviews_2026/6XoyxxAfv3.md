@@ -1,5 +1,6 @@
 # ThanoRA: Task Heterogeneity-Aware Multi-Task Low-Rank Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

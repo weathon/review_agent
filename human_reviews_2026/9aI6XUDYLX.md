@@ -1,5 +1,6 @@
 # BLIP3-o: A Family of Fully Open Unified Multimodal Models—Architecture, Training and Dataset
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # PhyX: Does Your Model Have the "Wits" for Physical Reasoning?
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

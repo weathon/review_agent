@@ -1,5 +1,6 @@
 # A tale of two tails: Preferred and anti-preferred natural stimuli in visual cortex
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6, 6
 

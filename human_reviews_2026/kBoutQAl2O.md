@@ -1,5 +1,6 @@
 # Beyond Accuracy: Measuring Reward Variance as a Predictive Benchmark for RLHF
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

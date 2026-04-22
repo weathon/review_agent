@@ -1,5 +1,6 @@
 # Interactive Object Grounding Using Image-Grounded Scene Graphs and Prompt Chaining
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

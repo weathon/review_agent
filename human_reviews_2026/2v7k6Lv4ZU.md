@@ -1,5 +1,6 @@
 # Learning Structure-Semantic Evolution Trajectories for Graph Domain Adaptation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

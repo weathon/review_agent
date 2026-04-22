@@ -1,5 +1,6 @@
 # DIVER : Large Language Model Decoding with Span-Level Mutual Information Verification
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

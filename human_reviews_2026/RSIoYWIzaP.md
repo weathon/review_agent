@@ -1,5 +1,6 @@
 # The Diffusion Duality, Chapter II: $\Psi$-Samplers and Efficient Curriculum
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

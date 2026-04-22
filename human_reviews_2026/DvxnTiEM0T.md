@@ -1,5 +1,6 @@
 # Adaptive Punishment for Cooperation in Mixed-Motive Games
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

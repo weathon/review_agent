@@ -1,5 +1,6 @@
 # Efficient Algorithms for Adversarially Robust Approximate Nearest Neighbor Search
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # DBGL: Decay-aware Bipartite Graph Learning for Irregular Medical Time Series
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

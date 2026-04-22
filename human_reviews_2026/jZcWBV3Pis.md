@@ -1,5 +1,6 @@
 # Evaluating the Robustness of Chinchilla Compute-Optimal Scaling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

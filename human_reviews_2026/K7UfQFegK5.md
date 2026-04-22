@@ -1,5 +1,6 @@
 # FullFront: Benchmarking MLLMs Across the Full Front-End Engineering Workflow
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

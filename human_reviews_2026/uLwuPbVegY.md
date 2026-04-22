@@ -1,5 +1,6 @@
 # VoCap: video object captioning and segmentation from any prompt
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 8, 6, 2, 4
 

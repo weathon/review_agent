@@ -1,5 +1,6 @@
 # Define latent spaces by example: optimising over the outputs of generative models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

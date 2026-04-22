@@ -1,5 +1,6 @@
 # ARC-Decode: Risk-Bounded Acceptance for Sampling-Based Speculative Decoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 6, 4
 

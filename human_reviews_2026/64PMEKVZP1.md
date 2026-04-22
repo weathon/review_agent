@@ -1,5 +1,6 @@
 # Prediction Inconsistency Helps Generalizable Detection of Adversarial Examples
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

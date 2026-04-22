@@ -1,5 +1,6 @@
 # When LLM Meets Time Series: A Real-World Benchmark for Explicit and Implicit Multi-Step Reasoning
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

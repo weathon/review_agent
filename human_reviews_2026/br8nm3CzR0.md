@@ -1,5 +1,6 @@
 # TimeSeed: Effective Time Series Forecasting with Sparse  Endogenous Variables
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

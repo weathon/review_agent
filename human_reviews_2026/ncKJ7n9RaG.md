@@ -1,5 +1,6 @@
 # Adaptive Layer-Wise Transformations for Post-Training Quantization of Large Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

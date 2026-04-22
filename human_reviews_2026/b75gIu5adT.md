@@ -1,5 +1,6 @@
 # Warfare: Breaking the Watermark Protection of AI-Generated Content
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2
 

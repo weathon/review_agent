@@ -1,5 +1,6 @@
 # Beyond Expert-Annotated Labels: An Adaptive Label Learning Method for Knowledge Tracing
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Dynamic Chunking for End-to-End Hierarchical Sequence Modeling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

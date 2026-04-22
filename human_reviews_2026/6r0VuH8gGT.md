@@ -1,5 +1,6 @@
 # Balancing Fidelity and Diversity: Synthetic data could stand on the shoulder of the real in visual recognition
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

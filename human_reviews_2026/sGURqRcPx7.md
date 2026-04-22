@@ -1,5 +1,6 @@
 # Self-Improved Prior for All-in-One Image Restoration
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Expanding Reasoning Potential in Foundation Model by Learning Diverse Chains of Thought Patterns
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

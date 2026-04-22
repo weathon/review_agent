@@ -1,5 +1,6 @@
 # NEO — No-Optimization Test-Time Adaptation through Latent Re-Centering
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

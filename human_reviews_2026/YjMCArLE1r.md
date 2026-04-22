@@ -1,5 +1,6 @@
 # R2Q: Residual Refinement Quantization for Robust 2-Bit Large Language Models
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 0
 

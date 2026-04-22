@@ -1,5 +1,6 @@
 # FreeAdapt: Unleashing Diffusion Priors for Ultra-High-Definition Image Restoration
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

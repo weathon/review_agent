@@ -1,5 +1,6 @@
 # RDNAS: Robust Dual-Branch Neural Architecture Search
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 
@@ -90,7 +91,8 @@ This paper proposed Robust Dual-Branch NAS (RDNAS), a DARTS-based framework that
 - A fair comparison in Table 1 would also use a similar amount of flops. I’m not sure if the additional amount of flops is sufficient to justify the rather marginal improvement. 
 - Given the vast amount of NAS literature using zero-cost proxies to search for robust networks quickly, why would DARTS be necessary or can this be combined to also include the adversarial training weights? 
 
- *Missing literature*:
+
+*Missing literature*:
 
 Xiangxiang Chu, Bo Zhang, and Ruijun Xu. FairNAS: Rethinking evaluation fairness of weight sharing neural architecture search. In ICCV, 2021
 

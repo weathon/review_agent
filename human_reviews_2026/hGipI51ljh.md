@@ -1,5 +1,6 @@
 # AdaDeDup: Adaptive Hybrid Data Pruning for Efficient Object Detection Training
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6, 4
 

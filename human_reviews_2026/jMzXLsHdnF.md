@@ -1,5 +1,6 @@
 # Memory Efficient Fine-Tuning of LLMs via Forward-Only Hessian-Free Coordinate Descent
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 4, 8, 4
 

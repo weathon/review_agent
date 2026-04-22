@@ -1,5 +1,6 @@
 # DualRPO: All-in-one Visual RL with Internal and External Rewards
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

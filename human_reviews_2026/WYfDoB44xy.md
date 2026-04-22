@@ -1,5 +1,6 @@
 # More Than What Was Chosen: LLM-based Explainable Recommendation Beyond Noisy User Preferences
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

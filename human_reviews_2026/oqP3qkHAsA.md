@@ -1,5 +1,6 @@
 # Bias-mediated early linearization drives simplicity bias in ReLU networks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 2
 

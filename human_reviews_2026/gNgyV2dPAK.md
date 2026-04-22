@@ -1,5 +1,6 @@
 # Open-Set Domain Generalization for Semantic Segmentation
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 4
 

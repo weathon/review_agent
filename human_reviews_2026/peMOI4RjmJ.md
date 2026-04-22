@@ -1,5 +1,6 @@
 # Partial Soft-Matching Distance For Neural Representational Comparison With Partial Unit Correspondence
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

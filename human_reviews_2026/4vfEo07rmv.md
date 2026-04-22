@@ -1,5 +1,6 @@
 # Enhancing LLMs for Knowledge Base Question Answering by Chain-of-Decomposition
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

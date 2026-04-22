@@ -1,5 +1,6 @@
 # DRGSplat: Depth-Regularized 3D Gaussian Splatting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Learning Neural Lyapunov Functions to Characterize Stability Regions for Unknown Dynamical Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

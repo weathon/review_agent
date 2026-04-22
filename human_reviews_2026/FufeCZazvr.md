@@ -1,5 +1,6 @@
 # Fine-Tuning is Subgraph Search: A New Lens on Learning Dynamics
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 6
 

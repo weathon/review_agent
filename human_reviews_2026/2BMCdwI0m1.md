@@ -1,5 +1,6 @@
 # From Ambiguous Feedback to Verifiable Repair via Formal Synthesis in Text-to-SQL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

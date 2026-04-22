@@ -1,5 +1,6 @@
 # iTryOn: Mastering Interactive Video Virtual Try-On with Spatial-Semantic Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # SpecTr-GBV: Multi-Draft Block Verification Accelerating Speculative Decoding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 6, 8
 

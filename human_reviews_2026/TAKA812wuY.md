@@ -1,5 +1,6 @@
 # Beyond Overconfidence: Rethinking Calibration in Large-Scale Vision Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 
@@ -22,7 +23,8 @@ Reliable uncertainty calibration is crucial for the safe deployment of deep neur
 ### Summary
 The paper evaluates several state-of-the-art vision models on ImageNet-1k and its distribution-shifted variants (ImageNet-C, ImageNet-A, ImageNet-V2), assessing both calibration—measured via top-label Expected Calibration Error (ECE)—and accuracy. The six models considered are ResNet, ViT, Swin, BEiT, EVA, and ConvNeXt. The results show that **ConvNeXt, EVA, and BEiT tend to be under-confident** in-distribution but exhibit improved calibration under distribution shifts, whereas ResNet, ViT, and Swin display the opposite pattern, being better calibrated in-distribution but at the cost of lower accuracy.
 
-The authors then investigate two factors that may influence this calibration behavior. First, for a fixed ViT architecture, they show that switching the pretraining objective from supervised to contrastive learning improves accuracy but leads to under-confidence. Second, for a fixed ViT or ResNet architecture, they find that applying advanced regularization and data augmentation techniques similarly improves accuracy while creating under-confidence.
+The authors then investigate two factors that may influence this calibration behavior. First, for a fixed ViT architecture, they show that switching the pretraining objective from supervised to contrastive learning improves accuracy but leads to under-confidence.
+Second, for a fixed ViT or ResNet architecture, they find that applying advanced regularization and data augmentation techniques similarly improves accuracy while creating under-confidence.
 
 Finally, the authors demonstrate that this miscalibration can be effectively mitigated by standard post-hoc calibration methods, although these techniques remain less effective under severe distribution shifts.
 
@@ -34,7 +36,8 @@ Finally, the authors demonstrate that this miscalibration can be effectively mit
 [Cruz 2024] Cruz et al, Evaluating language models as risk scores
 
 ### Weaknesses
-I think the significance and potential impact of the paper are limited by the relatively narrow scope of the experimental study, which evaluated the ECE of 6 models + 4 variants. 
+I think the significance and potential impact of the paper are limited by the relatively narrow scope of the experimental study, which evaluated the ECE of 6 models + 4 variants.
+
 
 In line 462, the authors mention that the paper focuses on diagnostics (e.g., identifying under-confidence in certain models) rather than uncovering its causes. However, given ICLR’s standards, it would be reasonable to expect a broader experimental exploration in this direction, across architectures, model sizes, pretraining objectives, regularization strategies, fine-tuning, etc (or at least a subset of these.) I acknowledge that Section 4.3 provides preliminary insights, and they are very valuable. But again for ICLR standards, I would expect deeper insights in this direction.
 

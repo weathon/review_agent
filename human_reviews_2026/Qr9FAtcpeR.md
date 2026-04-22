@@ -1,5 +1,6 @@
 # GRPO-MA: Multi-Answer Generation in GRPO for Stable and Efficient Chain-of-Thought Training
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

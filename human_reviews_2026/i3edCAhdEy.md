@@ -1,5 +1,6 @@
 # Geometric Enhancement in 3D Gaussian Splatting for Sparse-view Scene Reconstruction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

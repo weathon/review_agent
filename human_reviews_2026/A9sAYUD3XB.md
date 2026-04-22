@@ -1,5 +1,6 @@
 # HiST: Spatial Transcriptomics Prediction via Multi-Level Hyperbolic Representation Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

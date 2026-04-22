@@ -1,5 +1,6 @@
 # Test-Time Mixture of World Models for Embodied Agents in Dynamic Environments
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

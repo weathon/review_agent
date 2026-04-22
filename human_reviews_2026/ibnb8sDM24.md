@@ -1,5 +1,6 @@
 # MultiChartQA-R: A Benchmark for Multi-Chart Question Answering in Real-World Reasoning Scenarios
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

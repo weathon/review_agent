@@ -1,5 +1,6 @@
 # Property-Driven Protein Inverse Folding with Multi-Objective Preference Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

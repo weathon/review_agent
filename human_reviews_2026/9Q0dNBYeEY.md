@@ -1,5 +1,6 @@
 # Taming Momentum: Rethinking Optimizer States Through Low-Rank Approximation
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 6
 

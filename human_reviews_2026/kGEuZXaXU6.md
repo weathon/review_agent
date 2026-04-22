@@ -1,5 +1,6 @@
 # PACEbench: A Framework for Evaluating Practical AI Cyber-Exploitation Capabilities
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 0, 4
 

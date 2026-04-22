@@ -1,5 +1,6 @@
 # DexMan: Learning Bimanual Dexterous Manipulation from Human and Generated Videos
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

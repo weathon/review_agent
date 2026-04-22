@@ -1,5 +1,6 @@
 # LRIM: a Physics-Based Benchmark for Provably Evaluating Long-Range Capabilities in Graph Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

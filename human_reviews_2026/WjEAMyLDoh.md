@@ -1,5 +1,6 @@
 # Sharp asymptotic theory for Q-learning with \texttt{LD2Z} learning rate and its generalization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 
@@ -33,11 +34,13 @@ Empirical results demonstrate the performance of LZ2D on synthetic Q-learning ex
 
     The paper provides a complete asymptotic characterization — including almost sure convergence, convergence rates for the last iterate, and uniform approximation (Section 4). This set of results is new for Q-learning with the particular step size and strengthens the theoretical foundation of this step size choice.
 
-2. **Clear theoretical presentation.** 
+2. **Clear theoretical presentation.**
+
 
     The main theorems are well organized and connected logically. The assumptions are explicitly stated, and the paper maintains consistency with the established stochastic approximation framework, which aids readability despite the technical depth.
 
-3. **Empirical validation.** 
+3. **Empirical validation.**
+
 
     Figures 1 and 3 compare different step-size rules and suggest that the proposed LZ2D schedule achieves faster or more stable convergence. The figures are clearly presented and help visualize the claimed benefits.
 
@@ -51,11 +54,13 @@ Empirical results demonstrate the performance of LZ2D on synthetic Q-learning ex
 
     From this perspective, LZ2D transforms Q-learning from an online algorithm to an offline one, which undermines its applicability in reinforcement learning.
 
-2. **Trade-off between last-iterate convergence and asymptotic normality is missing.** 
+2. **Trade-off between last-iterate convergence and asymptotic normality is missing.**
+
 
     The paper claims both fast last-iterate convergence and asymptotic efficiency, but these are known to be mutually exclusive under standard stochastic approximation theory.
     * As shown in ROOT-SGD (Li, Mou, Wainwright, Jordan, 2020), the last iterate typically converges at rate $O(1/T)$, while asymptotic normality applies to the averaged iterate with $\sqrt{T}$ scaling.
-    * In this paper, Theorem 3.5 shows that for PD2Z-$\nu$ step sizes, the scaling becomes $n^{\nu/(2(\nu+1))}$, slower than $\sqrt{n}$, except in the limit $\nu \to \infty$. This trade-off is not acknowledged. The current presentation gives the impression that LZ2D dominates all prior step-size rules, which is mathematically misleading.
+    * In this paper, Theorem 3.5 shows that for PD2Z-$\nu$ step sizes, the scaling becomes $n^{\nu/(2(\nu+1))}$, slower than $\sqrt{n}$, except in the limit $\nu \to \infty$.
+This trade-off is not acknowledged. The current presentation gives the impression that LZ2D dominates all prior step-size rules, which is mathematically misleading.
 
        **Reference:** Li C J, Mou W, Wainwright M, et al. Root-sgd: Sharp nonasymptotics and asymptotic efficiency in a single algorithm[C]//Conference on Learning Theory. PMLR, 2022: 909-981.
 
@@ -63,16 +68,22 @@ Empirical results demonstrate the performance of LZ2D on synthetic Q-learning ex
 
     * Figure 1 compares LZ2D with polynomial and constant step sizes but does not include linearly decaying step sizes ($\eta_t \propto 1/t$), which have theoretical guarantees for Q-learning (Li et al., Operations Research, 2024).
     * The paper also omits analysis of averaged iterates, which are standard when polynomial decay is used.
-    * The hyperparameters (e.g., exponent $\alpha$ in polynomial decay) are not reported. Without tuning details, the apparent dominance of LZ2D may reflect unfair parameter choices rather than intrinsic superiority. Overall, the empirical claims in Figure 1 and 3 appear “too good to be true” without further clarification or ablation.
+    * The hyperparameters (e.g., exponent $\alpha$ in polynomial decay) are not reported. Without tuning details, the apparent dominance of LZ2D may reflect unfair parameter choices rather than intrinsic superiority.
+Overall, the empirical claims in Figure 1 and 3 appear “too good to be true” without further clarification or ablation.
 
         **Reference:** Li G, Cai C, Chen Y, et al. Is Q-learning minimax optimal? a tight sample complexity analysis[J]. Operations Research, 2024, 72(1): 222-236.
 
 4. **Unexplained discrepancy in Brownian motion approximation (Figure 3).**
 
-     The right panel of Figure 3 shows a large performance gap between the LZ2D method and the Brownian motion benchmark, despite both satisfying the same functional CLT.
+    
+The right panel of Figure 3 shows a large performance gap between the LZ2D method and the Brownian motion benchmark, despite both satisfying the same functional CLT.
     * The paper does not explain why the LZ2D trajectory aligns so much better.
     * This may be due to slow convergence of remainder terms, but no quantitative discussion is given.
-    * Additionally, there is an inconsistency: Line 455 defines the measurement as $\max_{k_n \le t \le n} |\sum_{l=t}^n (Q_l^c - Q^*)|{\infty}$, while Figure 3 uses $\max_{1 \le t \le n}$. Which definition is correct, and does LZ2D introduce the $k_n$ term while the Brownian benchmark does not? Clarifying this is important, since it affects the interpretation of the approximation quality.
+    * Additionally, there is an inconsistency: Line 455 defines the measurement as
+$\max_{k_n \le t \le n} |\sum_{l=t}^n (Q_l^c - Q^*)|{\infty}$,
+while Figure 3 uses $\max_{1 \le t \le n}$.
+Which definition is correct, and does LZ2D introduce the $k_n$ term while the Brownian benchmark does not?
+Clarifying this is important, since it affects the interpretation of the approximation quality.
 
 ### Questions
 Please see the Weaknesses part. I will increase my point if the weaknesses are addressed well.

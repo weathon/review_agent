@@ -1,5 +1,6 @@
 # PodEval: A Multimodal Evaluation Framework for Podcast Audio Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 6, 4
 

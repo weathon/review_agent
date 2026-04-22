@@ -1,5 +1,6 @@
 # Unrolled Networks are Conditional Probability Flows in MRI Reconstruction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 8, 2, 2
 

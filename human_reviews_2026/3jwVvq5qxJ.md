@@ -1,5 +1,6 @@
 # Quantifying Statistical Significance in Diffusion-Based Anomaly Localization via Selective Inference
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

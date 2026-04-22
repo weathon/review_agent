@@ -1,5 +1,6 @@
 # From Forgetting to Robustness: Robust Class-Incremental Learning with CLIP
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 4, 4, 4
 

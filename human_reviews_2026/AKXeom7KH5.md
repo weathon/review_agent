@@ -1,5 +1,6 @@
 # Unrestrained Simplex Denoising for Discrete Data. A Non-Markovian Approach Applied to Graph Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

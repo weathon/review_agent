@@ -1,5 +1,6 @@
 # Machine Unlearning in Low-dimensional Feature Subspace
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # BLUR: A Benchmark for LLM Unlearning Robust to Forget-Retain Overlap
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

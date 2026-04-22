@@ -1,5 +1,6 @@
 # Train Once, Answer All: Many Pretraining Experiments for the Cost of One
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

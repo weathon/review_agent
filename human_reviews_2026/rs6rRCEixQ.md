@@ -1,5 +1,6 @@
 # Is Vibe Coding Safe? Benchmarking Vulnerability of Agent Generated Code in Real-World Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

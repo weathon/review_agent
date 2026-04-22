@@ -1,5 +1,6 @@
 # RAID: A Benchmark Dataset for Testing the Adversarial Robustness of AI-Generated Image Detectors
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

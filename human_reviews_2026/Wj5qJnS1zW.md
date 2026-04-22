@@ -1,5 +1,6 @@
 # CloDS: Visual-Only Unsupervised Cloth Dynamics Learning in Unknown Conditions
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

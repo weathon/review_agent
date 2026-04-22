@@ -1,5 +1,6 @@
 # Riemannian Stochastic Interpolants for Amorphous Particle Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

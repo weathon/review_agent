@@ -1,5 +1,6 @@
 # Mitigating Hallucination in Multimodal Reasoning via Functional Attention Control
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

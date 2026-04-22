@@ -1,5 +1,6 @@
 # Semi-Supervised Preference Optimization with Limited Feedback
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 8, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Soft-Di[M]O: Improving One-Step Discrete Image Generation with Soft Embeddings
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

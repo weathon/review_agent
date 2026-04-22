@@ -1,5 +1,6 @@
 # TutorBench: A Benchmark To Assess Tutoring Capabilities Of Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 0, 4
 

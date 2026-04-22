@@ -1,5 +1,6 @@
 # Evolving Embodied Intelligence: Graph Neural Network–Driven Co-Design of Morphology and Control in Soft Robotics
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 4, 0
 

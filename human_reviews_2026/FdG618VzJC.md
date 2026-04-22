@@ -1,5 +1,6 @@
 # On the Anisotropy of Score-Based Generative Models
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 8
 

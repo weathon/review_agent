@@ -1,5 +1,6 @@
 # Heeding the Inner Voice: Aligning ControlNet Training via Intermediate Features Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

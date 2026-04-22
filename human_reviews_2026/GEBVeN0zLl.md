@@ -1,5 +1,6 @@
 # Simultaneous Multi-objective Alignment Across Verifiable and Non-verifiable Rewards
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

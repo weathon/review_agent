@@ -1,5 +1,6 @@
 # CapTalk: Text-Guided Stylization and Speech-Driven 3D Head Animation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

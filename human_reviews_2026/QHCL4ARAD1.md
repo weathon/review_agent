@@ -1,5 +1,6 @@
 # ARGen-Dexion: Autoregressive Image Generation Made Stronger by Vision Decoder
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

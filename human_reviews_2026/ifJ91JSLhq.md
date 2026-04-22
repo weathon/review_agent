@@ -1,5 +1,6 @@
 # We'll Fix it in Post: Improving Text-to-Video Generation with Zero Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

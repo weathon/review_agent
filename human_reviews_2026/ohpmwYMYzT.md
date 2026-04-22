@@ -1,5 +1,6 @@
 # Can Large Language Models Think Like Doctors? An Interactive Approach to Evaluating Clinical Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 6, 2
 

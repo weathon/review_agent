@@ -1,5 +1,6 @@
 # FronTalk: Benchmarking Front-End Development as Conversational Code Generation with Multi-Modal Feedback
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Selection, Reflection and Self-Refinement: Revisit Reasoning Tasks via a Causal Lens
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

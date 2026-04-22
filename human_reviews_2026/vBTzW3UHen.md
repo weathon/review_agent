@@ -1,5 +1,6 @@
 # A Unified Evaluation Framework for Frozen Visual Models on Forecasting Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

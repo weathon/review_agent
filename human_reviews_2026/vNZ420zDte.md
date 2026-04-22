@@ -1,5 +1,6 @@
 # DREAM: Decoupled Reinforcement Learning with Reward Measurement for Large Language Model Test-time Training
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

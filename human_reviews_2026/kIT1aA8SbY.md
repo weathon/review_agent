@@ -1,5 +1,6 @@
 # Stability in Training PINNs for Stiff PDEs: Why Initial Conditions Matter
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

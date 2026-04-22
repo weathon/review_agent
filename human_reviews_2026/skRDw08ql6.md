@@ -1,5 +1,6 @@
 # Private and interpretable clinical prediction with quantum-inspired tensor train models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 4, 2
 

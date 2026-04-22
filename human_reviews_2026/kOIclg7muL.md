@@ -1,5 +1,6 @@
 # TimeOmni-1: Incentivizing Complex Reasoning with Time Series in Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

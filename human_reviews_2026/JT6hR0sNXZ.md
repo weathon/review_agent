@@ -1,5 +1,6 @@
 # MoCtrl4D: Precise and Efficient Motion-Guided 4D Content Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

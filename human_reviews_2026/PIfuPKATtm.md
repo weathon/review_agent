@@ -1,5 +1,6 @@
 # Station2Radar: Query‑Conditioned Gaussian Splatting for Precipitation Field
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

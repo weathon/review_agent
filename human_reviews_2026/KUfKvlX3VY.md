@@ -1,5 +1,6 @@
 # FlashDLM: Accelerating Diffusion Language Model Inference via Efficient KV Caching and Guided Diffusion
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

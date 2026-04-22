@@ -1,5 +1,6 @@
 # UProp: Investigating the Uncertainty Propagation of LLMs in Multi-Step Decision-Making
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

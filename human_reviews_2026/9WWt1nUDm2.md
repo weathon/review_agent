@@ -1,5 +1,6 @@
 # On the Inherent Vulnerability of Randomized Models to Nagging Attack
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

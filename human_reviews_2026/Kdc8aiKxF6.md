@@ -1,5 +1,6 @@
 # The Energy Cost of Reasoning: Analyzing Energy Usage in LLMs with Test-time Compute
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 10, 6, 4
 

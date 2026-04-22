@@ -1,5 +1,6 @@
 # The Invisible Leash? Why RLVR May or May Not Escape Its Origin
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 4, 10
 

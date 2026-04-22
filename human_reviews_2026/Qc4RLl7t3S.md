@@ -1,5 +1,6 @@
 # On the Mechanism and Dynamics of Modular Addition: Fourier Features, Lottery Ticket, and Grokking
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 8, 2, 0, 2
 

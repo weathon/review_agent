@@ -1,5 +1,6 @@
 # ODESteer: A Unified ODE-Based Steering Framework for LLM Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

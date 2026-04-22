@@ -1,5 +1,6 @@
 # Adaptive Budget Allocation for Orthogonal-Subspace Adapter Tuning in LLMs Continual Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

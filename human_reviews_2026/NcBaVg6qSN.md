@@ -1,5 +1,6 @@
 # TSGym: Automatic Model Design Framework for Deep Multivariate Time-Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 8
 

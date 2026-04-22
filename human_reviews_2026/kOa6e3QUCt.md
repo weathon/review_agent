@@ -1,5 +1,6 @@
 # Progressive Alignment for Robust Domain Adaptation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 2
 

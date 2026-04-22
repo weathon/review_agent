@@ -1,5 +1,6 @@
 # A Unified Framework for Quantized and Continuous Strong Lottery Tickets
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

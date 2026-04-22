@@ -1,5 +1,6 @@
 # FS-KAN: Permutation Equivariant Kolmogorov-Arnold Networks via Function Sharing
 
+- Avg Score: 4.33
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4, 6, 4
 

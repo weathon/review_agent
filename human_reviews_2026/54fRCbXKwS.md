@@ -1,5 +1,6 @@
 # Towards the Mysteries of Convergent Interaction Representations through DNNs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

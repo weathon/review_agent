@@ -1,5 +1,6 @@
 # Mitigating Reward Hacking in Inference-Time Alignment of T2I Diffusion Models via Distributional Regularization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

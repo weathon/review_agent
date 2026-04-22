@@ -1,5 +1,6 @@
 # Spiking Decision Making Bottleneck for Offline Reinforcement Learning With Spiking Neural Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 0, 4
 

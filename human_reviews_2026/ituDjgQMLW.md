@@ -1,5 +1,6 @@
 # Micro-Learning for Learning-Hard Problems
 
+- Avg Score: 3.71
 - Decision: Reject
 - Scores: 0, 6, 6, 4, 2, 4, 4
 

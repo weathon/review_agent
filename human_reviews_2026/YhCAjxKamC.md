@@ -1,5 +1,6 @@
 # L^2M^3OF: A Large Language Multimodal Model for Metal-Organic Frameworks
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 6, 2, 2, 4
 

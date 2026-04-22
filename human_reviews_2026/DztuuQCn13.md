@@ -1,5 +1,6 @@
 # Mitigating Visual Hallucinations via Semantic Curriculum Preference Optimization in MLLMs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

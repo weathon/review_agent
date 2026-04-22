@@ -1,5 +1,6 @@
 # Spectral-Aware Sparse Communication and Entropy-Balanced Tasking in Multi-Agent Systems
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 2, 0
 

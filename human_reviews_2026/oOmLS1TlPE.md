@@ -1,5 +1,6 @@
 # Toward Experiment-Guided Hypothesis Ranking via Simulated Experimental Feedback
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 4, 0
 

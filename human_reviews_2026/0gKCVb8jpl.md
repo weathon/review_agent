@@ -1,5 +1,6 @@
 # Are Large Reasoning Models Interruptible?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

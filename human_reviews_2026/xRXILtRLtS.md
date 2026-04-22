@@ -1,5 +1,6 @@
 # Prior Distribution and Model Confidence
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 4
 

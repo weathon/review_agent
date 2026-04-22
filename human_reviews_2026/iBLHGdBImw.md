@@ -1,5 +1,6 @@
 # From Numerical Solvers to Graph Surrogates: Physics-Informed Losses for Data-Efficient CFD Modeling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

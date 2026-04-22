@@ -1,5 +1,6 @@
 # MatchEx: Model-Level GNN Explanations with Multi-Granular Insights
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

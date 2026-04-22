@@ -1,5 +1,6 @@
 # Managing Solution Stability in Decision-Focused Learning with Cost Regularization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

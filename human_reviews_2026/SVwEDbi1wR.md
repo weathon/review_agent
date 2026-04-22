@@ -1,5 +1,6 @@
 # Who Routes the Router: Rethinking the Evaluation of LLM Routing Systems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

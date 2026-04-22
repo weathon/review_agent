@@ -1,5 +1,6 @@
 # Structured Thoughts For Improved Reasoning And Context Pruning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 2
 
@@ -140,7 +141,8 @@ It is unclear whether this pruning has practical benefits, especially since KV c
 [3] R-KV: Redundancy-aware KV Cache Compression for Reasoning Models, NeurIPS 2025
 
 **[W3] Limited baselines**
-In the main results, only naïve SFT is used as a baseline. More comparisons with recent reasoning-oriented training methods are needed to better contextualize the proposed method’s effectiveness.
+In the main results, only naïve SFT is used as a baseline.
+More comparisons with recent reasoning-oriented training methods are needed to better contextualize the proposed method’s effectiveness.
 
 ### Questions
 **[Q1] Comparison to naive approach, other works.**
@@ -148,10 +150,12 @@ During reasoning, one could directly generate a short summarization at each step
 Have the authors compared this with their structured training method?
 Also, comparison with existing summarization-based training such as INFTYTHINK [1] is required.
 
-[1] Yan et al., INFTYTHINK: BREAKING THE LENGTH LIMITS OFLONG-CONTEXT REASONING IN LARGE LANGUAGEMODELS, Arxiv 2025 
+[1] Yan et al., INFTYTHINK: BREAKING THE LENGTH LIMITS OFLONG-CONTEXT REASONING IN LARGE LANGUAGEMODELS, Arxiv 2025
+
 
 **[Q2] Test-time scaling**
-Structured modeling might reduce reasoning diversity and test-time scaling ability of the model. Can the proposed structured modeling preserve the scaling benefits of the original reasoning models?
+Structured modeling might reduce reasoning diversity and test-time scaling ability of the model.
+Can the proposed structured modeling preserve the scaling benefits of the original reasoning models?
 
 **[Q3] Reasoning length**
 Summarization naturally removes redundant reasoning steps, potentially reducing reasoning length.

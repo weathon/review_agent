@@ -1,5 +1,6 @@
 # Diffusion-DFL: Decision-focused Diffusion Models for Stochastic Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 0
 

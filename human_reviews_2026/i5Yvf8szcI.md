@@ -1,5 +1,6 @@
 # Improving the Effective Coverage Space for Source-Free Domain Generalization via Visual-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

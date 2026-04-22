@@ -1,5 +1,6 @@
 # Improved Regret for Decentralized Online Convex Optimization with Compressed Communication
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

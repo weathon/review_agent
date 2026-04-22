@@ -1,5 +1,6 @@
 # LangMedSAM: Scalable Adaptation of Medical Segment Anything Model (MedSAM) for Language-Prompted Medical Image Segmentation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

@@ -1,5 +1,6 @@
 # Mirror Descent-Ascent for mean-field min-max problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

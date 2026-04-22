@@ -1,5 +1,6 @@
 # PartCo: Part-Level Correspondence Priors Enhance Category Discovery
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Paradigm Shift of GNN Explainer from Label Space to Prototypical Representation Space
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

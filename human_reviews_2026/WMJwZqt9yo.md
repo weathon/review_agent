@@ -1,5 +1,6 @@
 # Unsupervised discovery of the shared and private geometry in multi-view data
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 8, 2, 8
 

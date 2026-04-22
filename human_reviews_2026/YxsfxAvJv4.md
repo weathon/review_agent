@@ -1,5 +1,6 @@
 # WorldSense: Evaluating Real-world Omnimodal Understanding for Multimodal LLMs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10, 6
 

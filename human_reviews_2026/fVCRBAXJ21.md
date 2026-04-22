@@ -1,5 +1,6 @@
 # Monocular 3D Human Pose Estimation via Euler Angles
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # One Patch Doesn’t Fit All: Adaptive Patching for Native-Resolution Multimodal Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

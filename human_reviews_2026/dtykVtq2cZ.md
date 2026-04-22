@@ -1,5 +1,6 @@
 # Variance Reduced Distributed Non-Convex Optimization Using Matrix Stepsizes
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # The Few Govern the Many:Unveiling Few-Layer Dominance for Time Series Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Adversarial Test Case Generation via Reinforcement Learning Extends Scaling Laws
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

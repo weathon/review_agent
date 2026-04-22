@@ -1,5 +1,6 @@
 # Are Medical Vision–Language Foundation Models Ready for Dermatology
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

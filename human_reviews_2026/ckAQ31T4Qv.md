@@ -1,5 +1,6 @@
 # Sample, Don't Search: Rethinking Test-Time Alignment for Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

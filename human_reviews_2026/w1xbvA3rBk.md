@@ -1,5 +1,6 @@
 # GaussGym: An open-source real-to-sim framework for learning locomotion from pixels
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

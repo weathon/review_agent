@@ -1,5 +1,6 @@
 # Learning to Generate Unit Test via Adversarial Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

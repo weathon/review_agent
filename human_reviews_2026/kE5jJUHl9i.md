@@ -1,5 +1,6 @@
 # Stable and Scalable Deep Predictive Coding Networks with Meta-Prediction Errors
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 6
 
@@ -194,13 +195,15 @@ See above. My main concern at the moment is the novelty of the work, so I'd be h
 4
 
 ### Summary
-The paper uses a dynamical mean-field theory (DMFT) analysis to diagnose two failure modes in deep predictive coding networks (PCNs): (1) an imbalance of the local energy functions (prediction errors) across depth, (2) exploding/vanishing prediction errors (EVPE). To address these, it introduces Meta-PCN, which (1) uses a meta prediction error objective that linearises the PC equilibrium map around the feed-forward state and trains errors to satisfy the PC delta relation, and (2) applies variance-based weight normalisation for efficient spectral control. In empirical results, Meta-PCN outperforms conventional PC and is competitive with backprop on CIFAR-10/100 and TinyImageNet; ablations indicate the meta-objective is critical. 
+The paper uses a dynamical mean-field theory (DMFT) analysis to diagnose two failure modes in deep predictive coding networks (PCNs): (1) an imbalance of the local energy functions (prediction errors) across depth, (2) exploding/vanishing prediction errors (EVPE). To address these, it introduces Meta-PCN, which (1) uses a meta prediction error objective that linearises the PC equilibrium map around the feed-forward state and trains errors to satisfy the PC delta relation, and (2) applies variance-based weight normalisation for efficient spectral control. In empirical results, Meta-PCN outperforms conventional PC and is competitive with backprop on CIFAR-10/100 and TinyImageNet; ablations indicate the meta-objective is critical.
+
 This paper makes a significant contribution to the predictive coding literature, both in its analysis of PCNs in terms of DMFT and the proposed Meta-PCN. I therefore recommend that this paper be accepted, under the constraint that the weaknesses highlighted below are sufficiently addressed.
 
 ### Strengths
 Clear diagnosis of PCN failure modes via DMFT. Identifying depth-wise energy imbalance and EVPE gives concrete targets for stabilisation.
 
-Simple, principled meta-objective. Linearising around the feed-forward state and training errors to satisfy the PC delta relation is elegant and leads to stable inference without heavy tuning. 
+Simple, principled meta-objective. Linearising around the feed-forward state and training errors to satisfy the PC delta relation is elegant and leads to stable inference without heavy tuning.
+
 
 Compelling empirical evidence. Consistent gains over conventional PC and competitive performance with backprop across CIFAR-10/100 and TinyImageNet, plus ablations that isolate key components.
 
@@ -221,7 +224,8 @@ Backprop baselines aren’t tuned to standard practice for the architectures/dat
 Training loop pseudocode: Provide a short, concrete algorithm box covering initialisation, T inference steps, parameter update, and when normalisation is applied.
 
 Computational overhead: The Meta-PCN framework adds multiple components (meta-objective computation, weight normalisation, blocked sweeps) that likely increase computational cost, but this isn't discussed or quantified. 
-Minor points Abstract: “demonstrates that Meta-PCN achieves statistically significant improvements …”.
+Minor points
+Abstract: “demonstrates that Meta-PCN achieves statistically significant improvements …”.
 §3: “depend critically on the variance of the weights”.
 
 EVG/VG phrasing: “are immediately reflected in the magnitude …” (or “are immediately reflected”).

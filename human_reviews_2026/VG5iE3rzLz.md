@@ -1,5 +1,6 @@
 # ReGuidance: Diffusion Steering with Strong Latent Initializations Solves Hard Inverse Problems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

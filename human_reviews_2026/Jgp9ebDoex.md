@@ -1,5 +1,6 @@
 # Private and debiased model training: A fair differential privacy gradient framework
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4, 4
 

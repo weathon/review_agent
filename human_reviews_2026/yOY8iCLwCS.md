@@ -1,5 +1,6 @@
 # X-PERICL: An Explainable Method for Personality Assessment based on Hybrid Linguistic Features and In-Context Learning LLMs
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Rational Irrationality: Evaluating LLMs In Games With Strategic Behavior Discrepancies
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

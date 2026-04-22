@@ -1,5 +1,6 @@
 # On the Dynamics of Learning Linear Functions with Neural Networks
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 4
 

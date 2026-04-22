@@ -1,5 +1,6 @@
 # THE END OF MANUAL DECODING: TOWARDS TRULY END-TO-END LANGUAGE MODELS
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

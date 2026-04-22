@@ -1,5 +1,6 @@
 # Efficiently Disentangling CLIP for Multi-Object Perception
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # ProofRM: A Scalable Pipeline to Train a Generalized Math Proof Reward Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

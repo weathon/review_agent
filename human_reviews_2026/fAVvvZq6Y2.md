@@ -1,5 +1,6 @@
 # Taming Diffusion Transformer for Efficient Mobile Video Generation in Seconds
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 8, 4, 6, 4
 

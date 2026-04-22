@@ -1,5 +1,6 @@
 # PolicyRAG: Prompt-Guided Symbolic Graph Memory for Interpretable Multi-Hop Retrieval
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # MORE: Multi-Objective Adversarial Attacks on Speech Recognition
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

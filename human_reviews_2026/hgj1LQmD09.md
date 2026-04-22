@@ -1,5 +1,6 @@
 # BLUE: Bi-layer Heterogeneous Graph Fusion Network for Avian Influenza Forecasting
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

@@ -1,5 +1,6 @@
 # DiffNCL: Diffusion-Driven Weakly-Noisy Correspondence Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

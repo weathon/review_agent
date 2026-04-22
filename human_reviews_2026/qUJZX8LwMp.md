@@ -1,5 +1,6 @@
 # Ditto: Scaling Instruction-Based Video Editing with a High-Quality Synthetic Dataset
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

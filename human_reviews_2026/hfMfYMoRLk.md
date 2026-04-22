@@ -1,5 +1,6 @@
 # A Training-Free Framework for Long Video Understanding via Video-Query-Options Similarity
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

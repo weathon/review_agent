@@ -1,5 +1,6 @@
 # High-Dimensional Analysis of Single-Layer Attention for Sparse-Token Classification
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

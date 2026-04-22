@@ -1,5 +1,6 @@
 # Fin-H2AN: Fingerprint-based Heterogeneous Hypergraph Attention Network for Molecular Property Prediction
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

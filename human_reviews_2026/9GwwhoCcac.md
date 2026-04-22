@@ -1,5 +1,6 @@
 # A Little Selection Goes A Long Way! Parameter Efficient Domain Adaptive Object Detection via Noise-Guided Layer Selection
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2, 4
 

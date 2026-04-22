@@ -1,5 +1,6 @@
 # CryoSplat: Gaussian Splatting for Cryo-EM Homogeneous Reconstruction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

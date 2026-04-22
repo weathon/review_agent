@@ -1,5 +1,6 @@
 # Are Color Trained Models Robust in Handling Binary Images: A Fingerprint Recognition Study
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 0
 

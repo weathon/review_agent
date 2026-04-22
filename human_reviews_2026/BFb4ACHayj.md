@@ -1,5 +1,6 @@
 # SafeAgentBench: A Benchmark for Safe Task Planning of Embodied LLM Agents
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

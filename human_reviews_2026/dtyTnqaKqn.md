@@ -1,5 +1,6 @@
 # FocusDiff: Advancing Fine-Grained Text-Image Alignment for Autoregressive Visual Generation through RL
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Constructing Invariant and  Equivariant Operations by Symmetric Tensor Network
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

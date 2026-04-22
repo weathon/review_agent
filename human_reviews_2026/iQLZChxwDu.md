@@ -1,5 +1,6 @@
 # Probing CLIP's Comprehension of 360-Degree Textual and Visual Semantics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

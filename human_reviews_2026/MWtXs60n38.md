@@ -1,5 +1,6 @@
 # Implicit 4D Gaussian Splatting for Fast Motion with Large Inter-Frame Displacements
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

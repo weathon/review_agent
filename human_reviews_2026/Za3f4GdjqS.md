@@ -1,5 +1,6 @@
 # Scale-Invariance in AI Representation Predicts AI-Brain Alignment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # StreamAgent: Towards Anticipatory Agents for Streaming Video Understanding
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

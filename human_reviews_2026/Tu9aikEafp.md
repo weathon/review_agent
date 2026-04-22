@@ -1,5 +1,6 @@
 # LLMs Can Get "Brain Rot"!
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

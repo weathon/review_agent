@@ -1,5 +1,6 @@
 # OmniEval: A Benchmark for Evaluating Omni-modal Models with Visual, Auditory, and Textual Inputs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

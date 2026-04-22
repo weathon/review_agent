@@ -1,5 +1,6 @@
 # Numerical Sensitivity and Robustness: Exploring the Flaws of Mathematical Reasoning in Large Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

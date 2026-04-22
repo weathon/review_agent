@@ -1,5 +1,6 @@
 # POMP: A Theoretical Approach to Mitigate Forgetting in Finetuning Multi-Modal Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

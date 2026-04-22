@@ -1,5 +1,6 @@
 # OneFlowSeq: Achieving One-Step Generation for Diffusion Language Models via Lightweight Distillation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

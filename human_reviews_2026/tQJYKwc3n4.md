@@ -1,5 +1,6 @@
 # RoboCasa365: A Large-Scale Simulation Framework for Training and Benchmarking Generalist Robots
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 10, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Distribution-Aware Active Learning for Data-Efficient Neural Architecture Predictor
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 
@@ -68,7 +69,8 @@ The authors tackle the data inefficiency in neural predictor training by combini
 The paper addresses a highly important and timely problem in Neural Architecture Search (NAS), which plays a critical role in the efficiency of deep learning systems. It introduces a novel and wellmotivated approach that combines several existing ideas in a coherent and innovative manner. While the individual components are known, the proposed integration and formulation are original.
 
 ### Weaknesses
-* Theoretical Analysis*
+*
+Theoretical Analysis*
 The analysis applies Hoeffding’s inequality under an i.i.d. sampling assumption; however, the proposed sampler is an adaptive active-learning procedure in which each selection depends on prior choices. This adaptivity violates the independence requirement underlying the stated bound, and the resulting limitation is not addressed.
 Furthermore, the substitution of the tolerance term ( t ) in a Hoeffding-style bound with an empirical “diversity” score—defined as the average ( (1 - \cos(X_i, X_j)) )—is asserted without proof. Higher pairwise diversity does not, in general, guarantee that the empirical mean of a selected subset is closer to the population mean. Consequently, the claim that “higher diversity ⇒ smaller required sample size” is not substantiated
 under the stated assumptions.
@@ -87,9 +89,11 @@ The evaluation part — which is central to the paper’s contribution — is in
 ### Questions
 Q1) The theoretical section, in its current form, makes overreaching claims. It cites Hoeffding-style guarantees under assumptions (i.i.d. bounded scalars) that are inconsistent with the adaptive two-stage selection involving pseudo-label retraining, and it informally substitutes “pairwise cosine diversity” into a generalization-style bound without proof. This part should either be reframed as an intuitive explanation (rather than a formal theorem) or strengthened with rigorous justification and clearly stated assumptions.
 
- Q2) The empirical evidence, while promising to some degree, requires stronger baselines highlighted in the main text, clearer reporting of statistical significance and variability, and a more comprehensive disclosure of experimental details to enable full reproducibility of the claimed gains.
 
- Please refer to these questions in the rebuttal and how you will specifically improve the paper in these respects (as reviewers we are not interested in some private education but in improvements of the manuscripts only).
+Q2) The empirical evidence, while promising to some degree, requires stronger baselines highlighted in the main text, clearer reporting of statistical significance and variability, and a more comprehensive disclosure of experimental details to enable full reproducibility of the claimed gains.
+
+
+Please refer to these questions in the rebuttal and how you will specifically improve the paper in these respects (as reviewers we are not interested in some private education but in improvements of the manuscripts only).
 
 ### Soundness
 2

@@ -1,5 +1,6 @@
 # Indoor 3.6M : A Dataset and Benchmark for Indoor Image Geolocation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

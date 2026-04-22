@@ -1,5 +1,6 @@
 # Purifying Generative LLMs from Backdoors  without Prior Knowledge or Clean Reference
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # SciLitBench: Benchmark and Design Principles for LLM-Powered Systematic Literature Reviews
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

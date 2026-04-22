@@ -1,5 +1,6 @@
 # A Spectral Framework for Evaluating Geodesic Distances Between Graphs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 0, 2
 

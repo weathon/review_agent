@@ -1,5 +1,6 @@
 # Hold Onto That Thought: Assessing KV Cache Compression On Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

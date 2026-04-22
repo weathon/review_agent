@@ -1,5 +1,6 @@
 # Towards Robust Out-of-Distribution Generalization for Deep Neural Networks with Tailored Data Regularization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

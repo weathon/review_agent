@@ -1,5 +1,6 @@
 # Last-iterate Convergence of ADMM on Multi-affine Quadratic Equality Constrained Problem
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

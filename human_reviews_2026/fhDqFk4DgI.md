@@ -1,5 +1,6 @@
 # Micro-Macro Coupled Koopman Modeling on Graph for Traffic Flow Prediction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

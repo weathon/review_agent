@@ -1,5 +1,6 @@
 # Athena: Enhancing Multimodal Reasoning with Data-efficient Process Reward Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

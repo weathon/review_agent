@@ -1,5 +1,6 @@
 # DiffuCoder: Understanding and Improving Masked Diffusion Models for Code Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

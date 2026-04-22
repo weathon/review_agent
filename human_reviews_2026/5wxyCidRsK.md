@@ -1,5 +1,6 @@
 # Controllable Exploration in Hybrid-Policy RLVR for Multi-Modal Reasoning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 6
 

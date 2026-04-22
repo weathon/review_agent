@@ -1,5 +1,6 @@
 # PhyMix: Towards Physically Consistent Single-Image 3D Indoor Scene Generation with Implicit–Explicit Optimization
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 8, 2
 

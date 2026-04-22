@@ -1,5 +1,6 @@
 # DTO-KD: Dynamic Trade-off Optimization for Effective Knowledge Distillation
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6
 

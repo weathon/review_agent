@@ -1,5 +1,6 @@
 # Dynamic Retrieval AugmentedGeneration Based on The Knowledge-Aware of Large Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

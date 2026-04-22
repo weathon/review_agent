@@ -1,5 +1,6 @@
 # ReSpace: Text-Driven 3D Indoor Scene Synthesis and Editing with Preference Alignment
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # DeStyle2Style: Scalable Destylization-Driven Data Generation for Artistic Style Transfer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

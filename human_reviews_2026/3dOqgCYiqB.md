@@ -1,5 +1,6 @@
 # LlavaCode: Compressed Code Representations for Retrieval-Augmented Code Generation
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 6
 

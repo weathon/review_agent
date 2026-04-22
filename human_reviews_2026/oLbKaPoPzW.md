@@ -1,5 +1,6 @@
 # MIGA: Make Train-Free Infinite Frame Generation Great Again for Consistent Long Videos
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

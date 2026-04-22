@@ -1,5 +1,6 @@
 # On-the-Fly Data Augmentation via Gradient-Guided and Sample-Aware Influence Estimation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 0, 4, 6
 

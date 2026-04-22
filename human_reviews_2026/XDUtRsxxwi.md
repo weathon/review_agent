@@ -1,5 +1,6 @@
 # Target-Aware Normalized Distillation: A Principled Framework for Robust Knowledge Transfer
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Predicting Kernel Regression Learning Curves from Only Raw Data Statistics
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 0, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # Training-Free Stein Diffusion Guidance: Posterior Correction for Sampling Beyond High-Density Regions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

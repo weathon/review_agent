@@ -1,5 +1,6 @@
 # LatentEvolve: Self-Evolving Test-Time Scaling in Latent Space
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # DefNTaxS: The Inevitable Need for Context in Classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

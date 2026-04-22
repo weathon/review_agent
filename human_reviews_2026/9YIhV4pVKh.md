@@ -1,5 +1,6 @@
 # Controllable Representation Learning for Time-series Analysis
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

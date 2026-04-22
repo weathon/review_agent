@@ -1,5 +1,6 @@
 # CerCE: Towards Certifiable Continual Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

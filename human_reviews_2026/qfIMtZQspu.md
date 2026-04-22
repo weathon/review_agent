@@ -1,5 +1,6 @@
 # Recall-First Moderation via Distribution-Preserving Augmentation and Committee-Diverse Retrieval
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

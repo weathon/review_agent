@@ -1,5 +1,6 @@
 # UpSkill: Mutual Information Skill learning for Structured Response Diversity in LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

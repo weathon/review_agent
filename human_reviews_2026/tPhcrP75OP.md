@@ -1,5 +1,6 @@
 # FLoC: Facility Location-Based Efficient Visual Token Compression for Long Video Understanding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Deception in Large Language Models: An Audit Game–Theoretic Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

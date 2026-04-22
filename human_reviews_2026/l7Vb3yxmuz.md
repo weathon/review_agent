@@ -1,5 +1,6 @@
 # WINA: Weight Informed Neuron Activation for Accelerating Large Language Model Inference
 
+- Avg Score: 5.14
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 6, 6, 2
 

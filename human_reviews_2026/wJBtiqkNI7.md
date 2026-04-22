@@ -1,5 +1,6 @@
 # Fine-Grained Mixture of Experts for Medical Multimodal Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

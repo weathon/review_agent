@@ -1,5 +1,6 @@
 # Exposing Mixture and Annotating Confusion for Active Universal Test-Time Adaptation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

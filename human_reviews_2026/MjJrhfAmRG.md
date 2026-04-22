@@ -1,5 +1,6 @@
 # From Answer to Think: Multidimensional Supervision of Reasoning Process for LLM Optimization
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

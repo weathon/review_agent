@@ -1,5 +1,6 @@
 # Lumos-1: On Autoregressive Video Generation with Discrete Diffusion from a Unified Model Perspective
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

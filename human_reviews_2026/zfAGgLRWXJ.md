@@ -1,5 +1,6 @@
 # Hierarchical One-Class Data Description via Probabilistic Granular-ball Computing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

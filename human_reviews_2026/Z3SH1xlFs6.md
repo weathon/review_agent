@@ -1,5 +1,6 @@
 # Beware Untrusted Simulators -- Reward-Free Backdoor Attacks in Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 10
 

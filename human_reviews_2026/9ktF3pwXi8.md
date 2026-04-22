@@ -1,5 +1,6 @@
 # From End-to-End to Step-by-Step: learning Composable Navigation Primitives for Vision-Language Navigation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

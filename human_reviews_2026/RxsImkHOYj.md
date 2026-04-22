@@ -1,5 +1,6 @@
 # DialectGen: Benchmarking and Improving Dialect Robustness in Multimodal Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # REAL: Reading Out Transformer Activations for Precise Localization in Language Model Steering
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 2, 6
 

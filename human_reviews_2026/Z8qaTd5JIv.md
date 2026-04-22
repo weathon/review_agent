@@ -1,5 +1,6 @@
 # Intriguing Bias-Variance Tradeoff in Diffusion Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

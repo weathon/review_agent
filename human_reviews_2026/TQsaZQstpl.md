@@ -1,5 +1,6 @@
 # Cross-Domain Pre-training of Transformers on Text-Attributed Graphs via Random Walks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

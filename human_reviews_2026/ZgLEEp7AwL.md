@@ -1,5 +1,6 @@
 # Towards Sampling Data Structures for Tensor Products in Turnstile Streams
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

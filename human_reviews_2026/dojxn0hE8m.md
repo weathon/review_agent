@@ -1,5 +1,6 @@
 # Rolling Ball Optimizer: Learning by ironing out loss landscape wrinkles
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

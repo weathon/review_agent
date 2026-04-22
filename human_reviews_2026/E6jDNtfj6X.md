@@ -1,5 +1,6 @@
 # Discrete Diffusion Models with MLLMs for Unified Medical Multimodal Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

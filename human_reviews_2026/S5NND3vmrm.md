@@ -1,5 +1,6 @@
 # RT-Remover: A Real-Time Video Object Removal by Composing Tracking and Removal in Auto-Regressive Diffusion Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

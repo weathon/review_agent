@@ -1,5 +1,6 @@
 # AttriLens-Mol: Attribute Guided Reinforcement Learning for  Molecular Property Prediction with Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 
@@ -30,8 +31,10 @@ Pros:
 
 ### Weaknesses
 Cons:
-- The rationality reward is not self-contained. It relies on judgment from advanced LLMs like GPT-4O and DeepSeek-R1. This way may creates a dependency, meaning the performance is tied to the accuracy and knowledge of external models. 
-- More benchmark datasets are encouraged to added and tested. Currently, the model is only tested on six datasets in MoleculeNet. Why other benchmark datasets is not included, e.g., HIV, and Tox21. 
+- The rationality reward is not self-contained. It relies on judgment from advanced LLMs like GPT-4O and DeepSeek-R1. This way may creates a dependency, meaning the performance is tied to the accuracy and knowledge of external models.
+
+- More benchmark datasets are encouraged to added and tested. Currently, the model is only tested on six datasets in MoleculeNet. Why other benchmark datasets is not included, e.g., HIV, and Tox21.
+
 - Compared to standard supervised fine-tuning, the reinforcement learning approach is computationally expensive. For each training sample, the model must generate a group of 8 candidate responses. Each of these 8 responses must then be evaluated by the four separate reward functions
 
 ### Questions

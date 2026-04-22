@@ -1,5 +1,6 @@
 # HS-SFT: Hybrid Sparse Supervised Fine-tuning for Offline LLM KV Cache Eviction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

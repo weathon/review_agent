@@ -1,5 +1,6 @@
 # SCMF: Lightweight Retrieval-Augmented Generation via Retrieval Vector Compression
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2
 

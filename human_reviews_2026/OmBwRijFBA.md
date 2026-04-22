@@ -1,5 +1,6 @@
 # Multivariate Time Series Imputation with Signal-Noise Disentangled Graph Propagation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Compactness and Consistency: A Conjoint Framework for Deep Graph Clustering
 
+- Avg Score: 6.80
 - Decision: Accept (Oral)
 - Scores: 4, 8, 8, 8, 6
 

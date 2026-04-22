@@ -1,5 +1,6 @@
 # OVid: Open Large-Scale Video Dataset as a Novel Source for Image-Text Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 6, 2
 

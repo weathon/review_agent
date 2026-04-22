@@ -1,5 +1,6 @@
 # Exposing Hidden Biases in Text-to-Image Models via Automated Prompt Search
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Federated Learning with Binary Neural Networks: Competitive Accuracy at a Fraction of the Cost
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 6, 2, 0
 

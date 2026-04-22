@@ -1,5 +1,6 @@
 # TAME: A Task-Agnostic Framework for Robust Graph Neural Network Explanations via Structural Mixup
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

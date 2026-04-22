@@ -1,5 +1,6 @@
 # VideoVerse: How Far is Your T2V Generator from a World Model?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

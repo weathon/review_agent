@@ -1,5 +1,6 @@
 # MARAGE: Multi-Model Adversarial Attack for Retrieval-Augmented Generation Database Extraction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

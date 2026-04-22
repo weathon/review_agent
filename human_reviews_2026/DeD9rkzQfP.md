@@ -1,5 +1,6 @@
 # Understanding Compositional Generalization via Hierarchical Concept Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 
@@ -140,7 +141,8 @@ This on its own indicates to me that there is a misalignment between what the au
 ### **Minor weaknesses**
 
 
-* There are a few parts of the manuscript that I found needing further motivation. For example the sentence on line 134: “Humans understand and envision concept compositions through comparison and analogy..…?”,
+* There are a few parts of the manuscript that I found needing further motivation. For example the sentence on line 134:
+“Humans understand and envision concept compositions through comparison and analogy..…?”,
 should either be motivated further or include some sort of citation. Namely, given that this is the motivation for the authors main assumptions, I believe the claim should be substantiated further
 
 * I also believe that it would be useful for the authors to relate their attention sparsity regularizer to the one proposed by Brady et. al 2024 [3], to better clarify the novelty/contribution here.

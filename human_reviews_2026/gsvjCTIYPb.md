@@ -1,5 +1,6 @@
 # Vidarc: Low Latency Embodied Video Diffusion Model with Closed-loop Control
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

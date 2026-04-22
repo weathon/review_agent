@@ -1,5 +1,6 @@
 # SALVE: Sparse Autoencoder-Latent Vector Editing for Mechanistic Control of Neural Networks
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

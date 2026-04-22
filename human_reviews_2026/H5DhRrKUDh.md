@@ -1,5 +1,6 @@
 # MedAlign: Clinician-Centered Federated Meta-Learning for Medical IoT with Privacy and Interpretability Guarantees
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

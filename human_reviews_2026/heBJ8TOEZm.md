@@ -1,5 +1,6 @@
 # ComMat: Datasets and Benchmarks from complex materials for graph machine learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

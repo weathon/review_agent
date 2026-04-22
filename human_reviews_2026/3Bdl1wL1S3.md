@@ -1,5 +1,6 @@
 # Can LLMs Move Beyond Short Exchanges to Realistic Therapy Conversations?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

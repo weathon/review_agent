@@ -1,5 +1,6 @@
 # Empirically Investigating the Trade-Offs in Deterministic Certified Training
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

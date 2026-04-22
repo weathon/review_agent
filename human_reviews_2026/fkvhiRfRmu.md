@@ -1,5 +1,6 @@
 # CUES: Bottom-Up Exploration and Top-Down Guidance for Agentic Data Synthesis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

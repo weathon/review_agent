@@ -1,5 +1,6 @@
 # Reward Model Overoptimisation in Iterated RLHF
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

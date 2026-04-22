@@ -1,5 +1,6 @@
 # Subjective Depth and Timescale Transformers: Learning Where and When to Compute
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

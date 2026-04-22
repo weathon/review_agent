@@ -1,5 +1,6 @@
 # BiNoMaP: Learning Category-Level Bimanual Non-Prehensile Manipulation Primitives
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

@@ -1,5 +1,6 @@
 # DISCO: Dynamic Scheduling for CPU Offload in ML Workloads
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 2, 8, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Energy-Aware Imitation Learning for Steering Prediction Using Events and Frames
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

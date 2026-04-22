@@ -1,5 +1,6 @@
 # Executable Counterfactuals: Improving LLMs' Causal Reasoning Through Code
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

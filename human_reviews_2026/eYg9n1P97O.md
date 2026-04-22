@@ -1,5 +1,6 @@
 # Towards Efficient SNNs: Sensitivity-Guided Pruning for Deep Spiking Architectures
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

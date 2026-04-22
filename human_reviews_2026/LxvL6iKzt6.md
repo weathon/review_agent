@@ -1,5 +1,6 @@
 # Aligning Reasoning LLMs for Materials Discovery with Physics-aware Rejection Sampling
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

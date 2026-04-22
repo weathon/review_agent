@@ -1,5 +1,6 @@
 # MetaModelSelect: A Lightweight Post-hoc Metamodel for Selective Classification
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

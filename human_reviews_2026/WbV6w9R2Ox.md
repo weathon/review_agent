@@ -1,5 +1,6 @@
 # Reference-Specific Unlearning Metrics Can Hide the Truth: A Reality Check
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

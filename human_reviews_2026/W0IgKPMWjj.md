@@ -1,5 +1,6 @@
 # NeuroLifting: Neural Inference on Markov Random Fields at Scale
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

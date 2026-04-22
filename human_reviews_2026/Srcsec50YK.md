@@ -1,5 +1,6 @@
 # Latent Sketchpad:  Sketching Visual Thoughts to Elicit Multimodal Reasoning in MLLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

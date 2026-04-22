@@ -1,5 +1,6 @@
 # GeoArena: An Open Platform for Benchmarking Large Vision-language Models on WorldWide Image Geolocalization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

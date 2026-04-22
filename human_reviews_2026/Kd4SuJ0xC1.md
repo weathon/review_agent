@@ -1,5 +1,6 @@
 # Intriguing Properties of Deep Neural Policy Manifold: Intrinsic Correlation and Deep Neural Policy Curvature
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 2, 6
 

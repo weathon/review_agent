@@ -1,5 +1,6 @@
 # Unlocking Exploration in RLVR: Uncertainty-aware Advantage Shaping for Deeper Reasoning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6
 

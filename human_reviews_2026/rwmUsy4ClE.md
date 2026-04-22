@@ -1,5 +1,6 @@
 # Which transformers components are the most sensitive to distribution shifts?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

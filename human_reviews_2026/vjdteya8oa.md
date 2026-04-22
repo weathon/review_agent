@@ -1,5 +1,6 @@
 # CARE: Contextual Affinity Exploration with Twin Concordance for Graph Out-Of-Distribution Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

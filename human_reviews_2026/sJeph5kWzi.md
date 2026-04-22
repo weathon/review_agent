@@ -1,5 +1,6 @@
 # MeMoSORT: Memory-Assisted Filtering and Motion-Adaptive Association Metric for Multi-Person Tracking
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

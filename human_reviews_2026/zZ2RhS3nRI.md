@@ -1,5 +1,6 @@
 # MIAU: Membership Inference Attack Unlearning Score for Quantifying the Forgetting Quality of Unlearning Methods
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

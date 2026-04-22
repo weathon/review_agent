@@ -1,5 +1,6 @@
 # The Agent's Marathon: Probing the Limits of Endurance in Long-Horizon Tasks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

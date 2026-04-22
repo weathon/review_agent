@@ -1,5 +1,6 @@
 # Probabilistic Kernel Function for Fast Angle Testing
 
+- Avg Score: 8.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 8
 

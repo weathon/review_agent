@@ -1,5 +1,6 @@
 # Generative Diffusion Prior Distillation for Long-Context Knowledge Transfer
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # PRISM: A Paradigm for Controllable 3D Generation Driven by Structural Concept Prior
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

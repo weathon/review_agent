@@ -1,5 +1,6 @@
 # Towards Robust Multimodal Learning via Adaptive Model Assembly
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

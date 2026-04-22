@@ -1,5 +1,6 @@
 # SwiftMax: Reducing Training Time for Learnable Softmax Alternative in Customized Acceleration
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

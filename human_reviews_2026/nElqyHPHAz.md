@@ -1,5 +1,6 @@
 # MLE-RL: Reinforcement Learning for Self-Improvement in Machine Learning Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

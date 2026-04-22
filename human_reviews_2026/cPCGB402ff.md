@@ -1,5 +1,6 @@
 # SportR: A Benchmark for Multimodal Large Language Model Reasoning in Sports
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

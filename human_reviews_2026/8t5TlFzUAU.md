@@ -1,5 +1,6 @@
 # When Names Disappear: Revealing What LLMs Actually Understand About Code
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

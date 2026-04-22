@@ -1,5 +1,6 @@
 # AppoloConv: Multi-Scale Frequency-Aware Convolutions for Robust Multivariate Time Series Forecasting
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

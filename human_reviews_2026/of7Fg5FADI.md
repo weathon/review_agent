@@ -1,5 +1,6 @@
 # CascadeFormer: A Family of Two-stage Cascading Transformers for Skeleton-based Human Action Recognition
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # hDRIVE: HDR Image Visual Evaluation Metric for SDR to HDR Upconversion Quality Assessment
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

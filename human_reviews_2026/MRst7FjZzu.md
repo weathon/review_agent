@@ -1,5 +1,6 @@
 # ReTAG: A Retrieved Cellular Topologies-Augmented Graph Learning Framework
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

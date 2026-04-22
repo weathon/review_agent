@@ -1,5 +1,6 @@
 # Diffusion Autoencoders with Perceivers for Long, Irregular and Multimodal Sequences
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

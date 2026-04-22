@@ -1,5 +1,6 @@
 # Attention Needs to Focus: A Unified Perspective on Attention Allocation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

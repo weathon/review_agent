@@ -1,5 +1,6 @@
 # M²F-PINN: A Multi-Scale Frequency-Domain Multi-Physics-Informed Neural Network for Ocean Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

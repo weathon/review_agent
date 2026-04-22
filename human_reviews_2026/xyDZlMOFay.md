@@ -1,5 +1,6 @@
 # Large Language Models as Improvement Operators: Better Reasoning by Iteration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # CATS: Cost-Augmented Tree Search for LLM-Assisted Planning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 2, 4
 

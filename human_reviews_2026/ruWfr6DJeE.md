@@ -1,5 +1,6 @@
 # DiffEM: Learning from Corrupted Data with Diffusion Models via Expectation Maximization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

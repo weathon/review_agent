@@ -1,5 +1,6 @@
 # HEX: Merging Heavy-Hitters and Expanders for Adaptive KV Cache Optimization in Long-Context Inference
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

@@ -1,5 +1,6 @@
 # AccLoRT: Efficient Large Language Models Pretraining through Low-Rank Accumulation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

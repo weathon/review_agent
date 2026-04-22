@@ -1,5 +1,6 @@
 # XBOUND: Exploring Capability Boundaries of Device-Control Agents at the State Level
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 2
 

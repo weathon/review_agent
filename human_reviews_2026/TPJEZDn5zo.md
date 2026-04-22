@@ -1,5 +1,6 @@
 # Constructing a 3D Scene from a Single Image
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

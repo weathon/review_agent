@@ -1,5 +1,6 @@
 # Landing with the Score: Riemannian Optimization through Denoising
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 10
 

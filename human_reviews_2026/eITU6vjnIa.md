@@ -1,5 +1,6 @@
 # PERSISTENCE SPHERES: BI-CONTINUOUS REPRESENTATIONS OF PERSISTENCE DIAGRAMS.
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 0, 6
 

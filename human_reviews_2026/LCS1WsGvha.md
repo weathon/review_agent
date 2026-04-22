@@ -1,5 +1,6 @@
 # SimuHome: A Temporal- and Environment-Aware Benchmark for Smart Home LLM Agents
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Framing the Game: How Context Shapes LLM Decision-Making
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

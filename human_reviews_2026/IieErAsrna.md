@@ -1,5 +1,6 @@
 # Steerable Generative Modeling of Playing Style at Scale
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # READER: Retrieval-Assisted Drafter for Efficient LLM Inference
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

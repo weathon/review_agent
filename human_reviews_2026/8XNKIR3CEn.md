@@ -1,5 +1,6 @@
 # From MNIST to ImageNet: Understanding the Scalability Boundaries of Differentiable Logic Gate Networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2, 2
 

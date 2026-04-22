@@ -1,5 +1,6 @@
 # Fairness-Aware EHR Analysis via Structured Missing Pattern Modeling and Adversarial Low-Rank Adaptation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 4
 

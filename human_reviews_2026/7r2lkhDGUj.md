@@ -1,5 +1,6 @@
 # Towards Greater Leverage: Scaling Laws for Efficient Mixture-of-Experts Language Models
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Seeing What’s Not There: Negation Understanding Needs More Than Training
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 2, 8
 

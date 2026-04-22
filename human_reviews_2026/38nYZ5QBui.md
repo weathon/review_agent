@@ -1,5 +1,6 @@
 # Learning from Synthetic Data Improves Multi-hop Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

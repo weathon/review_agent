@@ -1,5 +1,6 @@
 # 3D Scene Prompting for Scene-Consistent Camera-Controllable Video Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

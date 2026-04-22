@@ -1,5 +1,6 @@
 # UnLoc: Leveraging Depth Uncertainties for Floorplan Localization
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 6
 

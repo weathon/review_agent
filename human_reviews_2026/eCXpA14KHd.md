@@ -1,5 +1,6 @@
 # Nasty Adversarial Training:  A Probability Sparsity Perspective for Robustness Enhancement
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

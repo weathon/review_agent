@@ -1,5 +1,6 @@
 # Incentivizing LLM Reasoning via Reinforcement Learning with Functional Monte Carlo Tree Search
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

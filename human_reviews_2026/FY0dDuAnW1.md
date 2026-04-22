@@ -1,5 +1,6 @@
 # ​ImmunoGraph: Accelerated and Equitable Representation Learning for Large-Scale Immune Networks​
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0
 

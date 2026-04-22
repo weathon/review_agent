@@ -1,5 +1,6 @@
 # $\psi$DAG: Projected Stochastic Approximation Iteration for Linear DAG Structure Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

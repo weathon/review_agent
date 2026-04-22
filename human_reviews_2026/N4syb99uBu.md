@@ -1,5 +1,6 @@
 # Safe Autoregressive Image Generation with Iterative Self-Improving Codebooks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

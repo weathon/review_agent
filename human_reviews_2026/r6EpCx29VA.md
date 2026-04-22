@@ -1,5 +1,6 @@
 # LLEOT: A Privacy-Enhancing Offsite Tuning Framework via Loss Landscape Elevation
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

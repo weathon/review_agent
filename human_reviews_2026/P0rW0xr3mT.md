@@ -1,5 +1,6 @@
 # Modern Hopfield Networks Cannot Solve $\mathsf{NC}^1$-Hard Problems
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Dynamic Drone-Assisted Pickup and Delivery Routing
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # LoopFormer: Elastic-Depth Looped Transformers for Latent Reasoning via Shortcut Modulation
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8, 4
 

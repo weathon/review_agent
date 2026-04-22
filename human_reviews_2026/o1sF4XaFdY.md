@@ -1,5 +1,6 @@
 # SurfSplat: Conquering Feedforward 2D Gaussian Splatting with Surface Continuity Priors
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

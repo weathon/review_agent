@@ -1,5 +1,6 @@
 # Bimodality of Sparse Autoencoder Features is Still There and Can Be Fixed
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

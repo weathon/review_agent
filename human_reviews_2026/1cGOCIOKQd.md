@@ -1,5 +1,6 @@
 # Flock: A Knowledge Graph Foundation Model via Learning on Random Walks
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

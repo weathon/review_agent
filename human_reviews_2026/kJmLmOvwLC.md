@@ -1,5 +1,6 @@
 # SAFER: Risk-Constrained Sample-then-Filter in Large Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

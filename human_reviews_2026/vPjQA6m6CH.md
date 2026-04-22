@@ -1,5 +1,6 @@
 # Self-Reflective Reinforcement Learning for Diffusion-based Image Reasoning Generation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

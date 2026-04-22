@@ -1,5 +1,6 @@
 # Learning More by Seeing Less: Structure-First Learning for Efficient, Transferable, and Human-Aligned Vision
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

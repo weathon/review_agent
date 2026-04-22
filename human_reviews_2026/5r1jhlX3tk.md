@@ -1,5 +1,6 @@
 # High Dimensional Sparse Canonical Correlation Analysis for Elliptical Symmetric Distributions
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4, 4
 

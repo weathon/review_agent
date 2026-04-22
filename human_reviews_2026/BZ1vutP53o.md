@@ -1,5 +1,6 @@
 # TEN-DM: Topology-Enhanced Diffusion Model for Spatio-Temporal Event Prediction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6
 

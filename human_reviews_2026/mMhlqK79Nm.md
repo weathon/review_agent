@@ -1,5 +1,6 @@
 # Learning Interpretable Representations Leads to Semantically Faithful EEG-to-Text Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

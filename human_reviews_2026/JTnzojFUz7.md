@@ -1,5 +1,6 @@
 # Mask What Matters: Controllable Text-Guided Masking for Self-Supervised Medical Image Analysis
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

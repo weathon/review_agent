@@ -1,5 +1,6 @@
 # ChatAni: Language-Driven Multi-Actor Animation Generation  in Street Scenes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

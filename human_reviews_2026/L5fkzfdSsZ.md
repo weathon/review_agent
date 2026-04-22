@@ -1,5 +1,6 @@
 # Entrophy: User Interaction Data from Live Enterprise Workflows for Realistic Model Evaluation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # A Geometric Analysis of Logit Embeddings for Out-of-Distribution Detection
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 6, 0, 2
 

@@ -1,5 +1,6 @@
 # A Survey of LLM-based Multi-agent Systems in Medicine
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2, 4
 

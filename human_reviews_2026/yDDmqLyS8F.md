@@ -1,5 +1,6 @@
 # A Survey of Optimizing ICU Sepsis Treatment Techniques in Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 4, 2, 0
 

@@ -1,5 +1,6 @@
 # Train on Validation (ToV): Fast data selection with applications to fine-tuning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

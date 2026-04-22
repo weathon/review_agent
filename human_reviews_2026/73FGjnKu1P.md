@@ -1,5 +1,6 @@
 # Seeing What’s Wrong: A Trajectory-Guided Approach to Caption Error Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

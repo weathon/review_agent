@@ -1,5 +1,6 @@
 # Is Bidirectionality Necessary in Mamba for Time Series Forecasting?
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 
@@ -65,7 +66,8 @@ The paper studies whether bidirectionality is necessary for Mamba in multivariat
 This paper proposes FSMamba, a unidirectional Mamba model for time series forecasting that addresses the "sequential order bias" found in bidirectional models. It uses a "Flipped Siamese" regularization strategy to enforce robustness to channel order and removes the 1D-convolution layer from the Mamba block, arguing it is unsuited for non-sequential channel data. The authors also introduce Channel Similarity Modeling (CSM), a pretraining task designed to preserve channel correlations from the data space to the latent space.
 
 ### Strengths
-1. Principled Bias Correction: The paper clearly identifies the sequential order bias from applying Mamba to non-sequential channels. The proposed "Flipped Siamese" regularization is an intuitive and effective method to enforce order robustness using a single, shared-weight unidirectional model, avoiding the inefficiency of two-model bidirectional approaches. 
+1. Principled Bias Correction: The paper clearly identifies the sequential order bias from applying Mamba to non-sequential channels. The proposed "Flipped Siamese" regularization is an intuitive and effective method to enforce order robustness using a single, shared-weight unidirectional model, avoiding the inefficiency of two-model bidirectional approaches.
+
 2. Computational Efficiency: FSMamba achieves state-of-the-art performance while being significantly more efficient than bidirectional baselines like S-Mamba. It uses 37.6%–38.1% fewer parameters, consumes less GPU memory, and demonstrates faster training and inference times.
 3. Thorough Validation: The method is validated on 13 diverse datasets against numerous strong baselines. The paper includes extensive ablation studies (Section 6) that confirm the benefits of the regularization, 1D-conv removal, and CSM pretraining.
 

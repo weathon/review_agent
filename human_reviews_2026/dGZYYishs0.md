@@ -1,5 +1,6 @@
 # TopoGuide: A Finetuning Framework for Topologically-Consistent 3D Molecule Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # GREPO: A Benchmark for Graph Neural Networks on Repository-Level Bug Localization
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

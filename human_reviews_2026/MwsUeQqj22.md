@@ -1,5 +1,6 @@
 # Off-Policy Learning in Large Action Spaces: Optimization Matters More Than Estimation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Multi-Condition Conformal Selection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Temperature-Driven Escape Explains Critical Learning Rates in Adaptive Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 6, 2
 

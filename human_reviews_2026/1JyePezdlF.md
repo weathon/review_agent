@@ -1,5 +1,6 @@
 # Efficient and Workload-Aware LLM Serving via Runtime Layer Swapping and KV Cache Resizing
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

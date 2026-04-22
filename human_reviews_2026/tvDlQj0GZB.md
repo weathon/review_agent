@@ -1,5 +1,6 @@
 # Learning is Forgetting; LLM Training As Lossy Compression
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 0
 

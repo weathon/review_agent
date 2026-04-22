@@ -1,5 +1,6 @@
 # $\ell_1$ Latent Distance based Continuous-time Graph Representation
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8, 6
 

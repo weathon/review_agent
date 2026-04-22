@@ -1,5 +1,6 @@
 # Teacher Ascent: Robust and Efficient Machine Unlearning via Knowledge Distillation and Continual Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

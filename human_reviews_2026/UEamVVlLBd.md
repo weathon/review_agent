@@ -1,5 +1,6 @@
 # Chain-of-Learngene: A Scalable Learngene-based Paradigm for Building and Initializing Variable-Sized Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

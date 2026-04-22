@@ -1,5 +1,6 @@
 # Sequential Enumeration in Large Language Models
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 6, 2
 

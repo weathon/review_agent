@@ -1,5 +1,6 @@
 # SIGMA-Gen: Structure and Identity Guided Multi-Subject Assembly for Image Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

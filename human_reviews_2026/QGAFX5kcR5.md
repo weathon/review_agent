@@ -1,5 +1,6 @@
 # Dolph2Vec: Self-Supervised Representations of Dolphin Vocalizations
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0, 2
 

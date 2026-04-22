@@ -1,5 +1,6 @@
 # TDRM: Smooth Reward Models with Temporal Difference for LLM RL and Inference
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

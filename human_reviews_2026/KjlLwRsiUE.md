@@ -1,5 +1,6 @@
 # MotionWeaver: Holistic 4D-Anchored Framework for Multi-Humanoid Image Animation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

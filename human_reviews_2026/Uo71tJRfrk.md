@@ -1,5 +1,6 @@
 # IDEAL-RAG: Instruction-driven Dual-standpoint Elicitation and Alignment Linking for Retrieval Augmented Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

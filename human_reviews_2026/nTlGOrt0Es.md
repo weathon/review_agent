@@ -1,5 +1,6 @@
 # Equivariant Latent Alignment via Flow Matching under Group Symmetries
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # A Lightweight Explainable Guardrail for Prompt Safety
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

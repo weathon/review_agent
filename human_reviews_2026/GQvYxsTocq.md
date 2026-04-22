@@ -1,5 +1,6 @@
 # Free Lunch at Inference: Test-Time Refinement for Diffusion Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

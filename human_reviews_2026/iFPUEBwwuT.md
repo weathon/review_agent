@@ -1,5 +1,6 @@
 # Topology-Preserved Auto-regressive Mesh Generation in the Manner of Weaving Silk
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

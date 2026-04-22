@@ -1,5 +1,6 @@
 # VTool-R1: VLMs Learn to Think with Images via Reinforcement Learning on Multimodal Tool Use
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

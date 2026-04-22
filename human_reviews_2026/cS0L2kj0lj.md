@@ -1,5 +1,6 @@
 # Bayesian Parameter Shift Rules in Variational Quantum Eigensolvers
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

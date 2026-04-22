@@ -1,5 +1,6 @@
 # Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

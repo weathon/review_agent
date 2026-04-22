@@ -1,5 +1,6 @@
 # Object-Consistent Distillation for Text-to-3D Generation
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

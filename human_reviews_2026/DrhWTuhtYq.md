@@ -1,5 +1,6 @@
 # QuRL: Rubrics As Judge For Open-Ended Question Answering
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

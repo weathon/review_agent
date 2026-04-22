@@ -1,5 +1,6 @@
 # Deep Cognition: A Multi-Agent Framework for Collaborative Research with Real-Time Cognitive Oversight
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

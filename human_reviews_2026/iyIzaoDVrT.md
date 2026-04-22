@@ -1,5 +1,6 @@
 # LoopServe:  An Adaptive Dual-phase LLM Inference Acceleration System for Multi-Turn Dialogues
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # TAME the BALROG: Task-Adaptative Modular Emergent framework for Game Agents
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 2, 6, 4
 

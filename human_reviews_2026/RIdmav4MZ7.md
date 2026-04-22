@@ -1,5 +1,6 @@
 # Freeze, Prompt, and Adapt: A Framework for Source-free Unsupervised GNN Prompting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 2, 8
 

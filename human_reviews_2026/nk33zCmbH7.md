@@ -1,5 +1,6 @@
 # Scale-DiT: Ultra-High-Resolution Image Generation with Hierarchical Local Attention
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

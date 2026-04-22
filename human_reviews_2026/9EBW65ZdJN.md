@@ -1,5 +1,6 @@
 # Structure-Aligned Protein Language Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

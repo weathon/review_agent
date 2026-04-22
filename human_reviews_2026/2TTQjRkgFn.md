@@ -1,5 +1,6 @@
 # Adaptive gradient descent on Riemannian manifolds and its applications to Gaussian variational inference
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # Bayesian-Informed Diverse Sampling for Calibration of Fine-Tuned Foundation Models with Evidential Ensembles
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

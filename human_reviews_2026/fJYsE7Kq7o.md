@@ -1,5 +1,6 @@
 # Quantifying the noise sensitivity of the Wasserstein metric for images
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 0, 4
 

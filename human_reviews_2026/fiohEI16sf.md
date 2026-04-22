@@ -1,5 +1,6 @@
 # Counterfactual LLM-based Framework for Measuring Rhetorical Style
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 

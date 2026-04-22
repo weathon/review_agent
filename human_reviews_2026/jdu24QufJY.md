@@ -1,5 +1,6 @@
 # Token Reduction in Vision Transformers via Discrete Wavelet Decomposition
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # WebChoreArena: Evaluating Web Browsing Agents on Realistic Tedious Web Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

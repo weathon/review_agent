@@ -1,5 +1,6 @@
 # Trail Mix: Adaptive Interpolation of Optimizers with Convergence Guarantees
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

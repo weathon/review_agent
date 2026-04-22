@@ -1,5 +1,6 @@
 # Locality-Aware Multiresolution Graph Spectral Filtering to Mitigate Oversmoothing and Oversquashing.
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4, 2
 

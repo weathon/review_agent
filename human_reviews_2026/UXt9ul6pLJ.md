@@ -1,5 +1,6 @@
 # PSPO: Trainable Potential-Based Reward Shaping with Internal Model Signals for Post-Training Policy Optimization of Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

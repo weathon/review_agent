@@ -1,5 +1,6 @@
 # Encode, Think, Decode: Scaling test-time reasoning with recursive latent thoughts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

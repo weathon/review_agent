@@ -1,5 +1,6 @@
 # Large Language Model Prompt Datasets: An In-depth Analysis and Insights
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

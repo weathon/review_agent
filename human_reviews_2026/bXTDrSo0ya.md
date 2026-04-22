@@ -1,5 +1,6 @@
 # TAP: Two-Stage Adaptive Personalization of Multi-task and Multi-Modal Foundation Models in Federated Learning
 
+- Avg Score: 4.57
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 4, 6, 6
 

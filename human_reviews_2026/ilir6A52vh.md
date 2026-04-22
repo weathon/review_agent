@@ -1,5 +1,6 @@
 # Planning at Inference: MCTS Test-Time Scaling for Long Video Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

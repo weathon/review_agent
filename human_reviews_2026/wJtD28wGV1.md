@@ -1,5 +1,6 @@
 # Knowledge Fusion of Large Language Models via Modular SkillPacks
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 4, 6
 

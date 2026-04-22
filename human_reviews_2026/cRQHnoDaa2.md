@@ -1,5 +1,6 @@
 # MoveFM-R: Advancing Mobility Foundation Models via Language-driven Semantic Reasoning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

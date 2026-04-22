@@ -1,5 +1,6 @@
 # Model-Based Reinforcement Learning under Random Observation Delays
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

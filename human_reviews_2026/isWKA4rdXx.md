@@ -1,5 +1,6 @@
 # Multi-Task Sequence Models Generalize in Offline Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # AGOF: A GFlowNet-Guided 2-Opt Framework for Vehicle Routing Problems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

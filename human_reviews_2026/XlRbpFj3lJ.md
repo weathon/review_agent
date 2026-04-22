@@ -1,5 +1,6 @@
 # ODE-GS: Latent ODEs for Dynamic Scene Extrapolation with 3D Gaussian Splatting
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

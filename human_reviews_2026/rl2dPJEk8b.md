@@ -1,5 +1,6 @@
 # Bi-Lipschitz Autoencoder With Injectivity Guarantee
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

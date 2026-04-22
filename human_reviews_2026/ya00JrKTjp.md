@@ -1,5 +1,6 @@
 # Reducing Semantic Mismatch in Brain-to-Text Decoding Through Personalized Multimodal Masking
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 4
 

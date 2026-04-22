@@ -1,5 +1,6 @@
 # Leveraging Self-Supervised and Supervised Embeddings for Memory-Efficient Experience-Replay Continual Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

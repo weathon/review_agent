@@ -1,5 +1,6 @@
 # Multimodal Masked Polymer Autoencoder for Unified Polymer Informatics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

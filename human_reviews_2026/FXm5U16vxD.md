@@ -1,5 +1,6 @@
 # Generative Adversarial Post-Training Mitigates Reward Hacking in Live Human-AI Music Interaction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

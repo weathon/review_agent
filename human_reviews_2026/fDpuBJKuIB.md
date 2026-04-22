@@ -1,5 +1,6 @@
 # WorldPM: Understanding Scaling Patterns in Human Preference Modeling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

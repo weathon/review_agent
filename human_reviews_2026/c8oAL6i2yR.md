@@ -1,5 +1,6 @@
 # A Probabilistic Basis for Low-Rank Matrix Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

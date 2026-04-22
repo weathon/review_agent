@@ -1,5 +1,6 @@
 # Focus Directions Make Your Language Models Pay More Attention to Relevant Contexts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

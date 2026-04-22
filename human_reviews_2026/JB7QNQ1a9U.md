@@ -1,5 +1,6 @@
 # MSEarth: A Multimodal Scientific Dataset and Benchmark for Phenomena Uncovering in Earth Science
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

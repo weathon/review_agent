@@ -1,5 +1,6 @@
 # Strategic Filtering for Content Moderation: Free Speech or Free of Distortion?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 
@@ -116,12 +117,15 @@ Strengths:
 
 ### Weaknesses
 Weaknesses:
-While this paper provides strong theoretical results, the motivation and contextual framing related to content moderation raise some concerns: 
+While this paper provides strong theoretical results, the motivation and contextual framing related to content moderation raise some concerns:
+
 1. Lack of discussion of related work:
     * The paper does not reference existing research on content moderation and game theory (even more specifically stackelberg games), despite there being relevant prior work. For example:
         * Optimal Signaling of Content Accuracy: Engagement vs. Misinformation – Ozan Candogan
         * A Persuasive Approach to Combating Misinformation – Safwan Hossain et al.
-    * It seems that the whole section comparing the proposed approach with these prior works is missing. Even if the setting differs, referencing, commenting and contrasting relevant literature should be part of this paper.   
+    * It seems that the whole section comparing the proposed approach with these prior works is missing. Even if the setting differs, referencing, commenting and contrasting relevant literature should be part of this paper. 
+
+
 2. Lack of a coherent story connecting theory to content moderation:
            While the paper is motivated by reducing distortion on social media, and hence the whole proposed model is framed around this motivation, the connection between the theoretical results and their practical relevance is not clearly maintained throughout the paper. As a result, the paper reads more like a purely theoretical work. This seems to be a major weakness given the stated motivation and the immediate social significance of the topic. Since a completely new setting is proposed, it would have been valuable to include more interpretation and commentary on the results that describe their relevance beyond abstract understanding. On the other hand, this would strongly justify the newly proposed setting and the results obtained.
 

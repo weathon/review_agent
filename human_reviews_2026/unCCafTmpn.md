@@ -1,5 +1,6 @@
 # Prompt-SSLC: A Unified Framework for Dual Prompt-Augmented Semi-Supervised Sequential Leader Clustering in On-the-Fly Category Discovery
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

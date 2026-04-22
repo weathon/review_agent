@@ -1,5 +1,6 @@
 # MomaGraph: State-Aware Unified Scene Graphs with Vision-Language Models for Embodied Task Planning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6, 6
 

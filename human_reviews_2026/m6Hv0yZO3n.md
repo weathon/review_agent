@@ -1,5 +1,6 @@
 # Discount Model Search for Quality Diversity Optimization in High-Dimensional Measure Spaces
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 4, 8, 6
 

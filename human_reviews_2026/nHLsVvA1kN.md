@@ -1,5 +1,6 @@
 # From Slots to Masks: Rethinking OCL
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6, 4
 

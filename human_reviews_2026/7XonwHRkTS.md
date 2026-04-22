@@ -1,5 +1,6 @@
 # Geo-Mamba: Dual-Path Riemannian State-Space Models for Functional Dynamics
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # UniFast-HGR: Scalable and Efficient Maximal Correlation for Multimodal Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

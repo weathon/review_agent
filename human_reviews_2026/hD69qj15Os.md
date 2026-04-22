@@ -1,5 +1,6 @@
 # Cross-Tokenizer Likelihood Scoring Algorithms for Language Model Distillation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 2
 

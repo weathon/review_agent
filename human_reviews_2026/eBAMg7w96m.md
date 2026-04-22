@@ -1,5 +1,6 @@
 # Understanding the Emergence of Seemingly Useless Features in Next-Token Predictors
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MMHU: A Massive-Scale Multimodal Benchmark for Human Behavior Understanding in Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Functional Form For Segmentation Accuracy Prediction for Comparing Architectures and Estimating Cost-Optimal Training Dataset
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 

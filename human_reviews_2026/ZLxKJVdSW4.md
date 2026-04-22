@@ -1,5 +1,6 @@
 # Reducing Cognitive Overhead in Tool Use via Multi-Small-Agent Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

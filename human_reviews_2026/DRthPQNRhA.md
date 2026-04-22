@@ -1,5 +1,6 @@
 # RoboMoRe: LLM-based Robot Co-design via Joint Optimization of Morphology and Reward
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 8, 4, 4
 

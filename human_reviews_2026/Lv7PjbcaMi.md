@@ -1,5 +1,6 @@
 # On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

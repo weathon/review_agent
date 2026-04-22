@@ -1,5 +1,6 @@
 # Into the Rabbit Hull: From Task-Relevant Concepts in DINO to Minkowski Geometry
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 6
 

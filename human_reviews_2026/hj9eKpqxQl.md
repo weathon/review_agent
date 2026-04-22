@@ -1,5 +1,6 @@
 # Learn to Reason Efficiently with Adaptive Length-based Reward Shaping
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

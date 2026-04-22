@@ -1,5 +1,6 @@
 # Mobility-Embedded POIs: Learning What a Place Is and How It’s Used from Human Movement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

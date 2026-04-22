@@ -1,5 +1,6 @@
 # Executable Networks of Thought: Scaling Reasoning with LLM Workflow Template
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

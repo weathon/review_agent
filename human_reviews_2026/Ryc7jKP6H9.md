@@ -1,5 +1,6 @@
 # Co-occurring Associated REtained concepts in Diffusion Unlearning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4, 4
 

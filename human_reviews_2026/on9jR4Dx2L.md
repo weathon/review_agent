@@ -1,5 +1,6 @@
 # Model Parallelism With Subnetwork Data Parallelism
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

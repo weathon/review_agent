@@ -1,5 +1,6 @@
 # Fresh in memory: Training-order recency is linearly encoded in language model activations
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

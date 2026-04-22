@@ -1,5 +1,6 @@
 # GUI-PRA: Process Reward Agent for GUI Tasks
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 4
 

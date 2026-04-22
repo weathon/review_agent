@@ -1,5 +1,6 @@
 # Geometry-aware Policy Imitation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

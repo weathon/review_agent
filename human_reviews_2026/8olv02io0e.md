@@ -1,5 +1,6 @@
 # Background Matters Too: A Language-Enhanced Adversarial Framework for Person Re-Identification
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Synergizing Large Language Models and Task-specific Models for Time Series Anomaly Detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

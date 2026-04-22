@@ -1,5 +1,6 @@
 # Rethinking Bottlenecks in Safety Fine-Tuning of Vision Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 4
 

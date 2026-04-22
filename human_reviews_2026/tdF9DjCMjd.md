@@ -1,5 +1,6 @@
 # Dual-Route Mental Imagery for Robust VLM-based Medical Image Diagnosis
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

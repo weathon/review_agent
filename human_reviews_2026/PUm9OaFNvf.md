@@ -1,5 +1,6 @@
 # Rethinking Traffic Representation: Pre-training Model with Flowlets for Traffic Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 6
 

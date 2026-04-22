@@ -1,5 +1,6 @@
 # AHA! Animating Human Avatars in Diverse Scenes with Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

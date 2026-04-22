@@ -1,5 +1,6 @@
 # Entropy-Driven Scanning Optimization for Near Real-Time Earth Observation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 8, 2
 

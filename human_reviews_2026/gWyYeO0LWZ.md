@@ -1,5 +1,6 @@
 # Dynamic–Static Representation Learning with Mamba-Enhanced Diffusion for Temporal Knowledge Graph Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

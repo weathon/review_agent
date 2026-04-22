@@ -1,5 +1,6 @@
 # Delta-XAI: A Unified Framework for Explaining Prediction Changes in Online Time Series Monitoring
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

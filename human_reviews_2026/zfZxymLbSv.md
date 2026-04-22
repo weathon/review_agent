@@ -1,5 +1,6 @@
 # Anatomy of a Hybrid Mind: Deconstructing Hybrid Reasoning in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

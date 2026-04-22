@@ -1,5 +1,6 @@
 # Strong Correlations Induce Cause Only Predictions in Transformer Training
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 2, 6
 

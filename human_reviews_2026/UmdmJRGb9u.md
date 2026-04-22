@@ -1,5 +1,6 @@
 # DLLMQuant: A Post-Training Quantization Framework Tailored for Diffusion-Based Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

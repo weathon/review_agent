@@ -1,5 +1,6 @@
 # GPT-IMAGE-EDIT-1.5M: A Million-Scale, GPT-Generated Image Dataset
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 2, 6, 8
 

@@ -1,5 +1,6 @@
 # MAAT: Multi-timestep Alternating Adversarial Training Against Personalized Content Security in Diffusion Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

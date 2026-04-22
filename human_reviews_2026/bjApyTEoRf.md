@@ -1,5 +1,6 @@
 # MoTVLA: A Vision-Language-Action Model with Unified Fast-Slow Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

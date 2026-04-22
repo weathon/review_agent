@@ -1,5 +1,6 @@
 # ICE-Coder: Integrating White-box and Black-box Testing in Execution-guided Multi-agent Code Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

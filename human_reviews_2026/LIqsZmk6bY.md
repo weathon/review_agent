@@ -1,5 +1,6 @@
 # Nearly Space-Optimal Graph and Hypergraph Sparsification in Insertion-Only Data Streams
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

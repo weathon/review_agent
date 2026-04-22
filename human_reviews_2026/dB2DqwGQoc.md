@@ -1,5 +1,6 @@
 # Partial Trace-Class Bayesian Neural Networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

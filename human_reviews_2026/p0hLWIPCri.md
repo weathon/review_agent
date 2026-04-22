@@ -1,5 +1,6 @@
 # GRID: Scalable Task-Agnostic Prompt-Based Continual Learning for Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

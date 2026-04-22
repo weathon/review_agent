@@ -1,5 +1,6 @@
 # Softmax Transformers are Turing-Complete
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 2, 4, 10
 

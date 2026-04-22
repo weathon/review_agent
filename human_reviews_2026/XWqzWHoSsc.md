@@ -1,5 +1,6 @@
 # UniAG: Unified Anomaly Generation via Local Spatial-Texture Alignment Diffusion Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

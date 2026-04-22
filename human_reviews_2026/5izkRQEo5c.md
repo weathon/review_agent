@@ -1,5 +1,6 @@
 # Leveraging Visual Embeddings from Instagram for Credit Scoring of Informal Microbusinesses
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

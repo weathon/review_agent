@@ -1,5 +1,6 @@
 # GraphSpa: Self-supervised Graph Sparsification for robust generalization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 
@@ -71,7 +72,8 @@ Does the method apply to graph classification and link prediction tasks and indu
 This paper proposes a self-supervised graph sparsification framework named GRAPHSPA, aiming to address two major challenges faced by existing sparsification methods: 1) dependence on task labels; 2) the negative impact of residual noise. Experiments were conducted on the Cora, Citeseer, and Pubmed datasets. The results show that at different sparsification rates, the accuracy of GRAPHSPA is superior to other baselines.
 
 ### Strengths
-1. Addressing dual key issues: This paper simultaneously addresses two core challenges in graph sparsification: label dependency and residual noise. This is an important and practical contribution.  
+1. Addressing dual key issues: This paper simultaneously addresses two core challenges in graph sparsification: label dependency and residual noise. This is an important and practical contribution. 
+
 2. Novel Framework Design: The paper ingeniously integrates three techniques (self-supervised mutual information, augmented Lagrangian constraint optimization, and SAM flatness-aware training) into a unified framework. This combination exhibits strong innovation, and the motivation behind each component is clear.
 
 ### Weaknesses

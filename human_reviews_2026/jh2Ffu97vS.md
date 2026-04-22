@@ -1,5 +1,6 @@
 # Solving Imperfect-Recall Games via Sum-of-Squares Optimization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

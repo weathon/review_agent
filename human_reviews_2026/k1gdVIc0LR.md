@@ -1,5 +1,6 @@
 # Evaluating Inductive Parameter-Based Transfer Learning with Deep Neural Networks for Wind Forecasting in Corsica
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

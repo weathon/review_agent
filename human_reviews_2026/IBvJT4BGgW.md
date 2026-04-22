@@ -1,5 +1,6 @@
 # Efficient Multimodal Planning Agent for Visual Question-Answering
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

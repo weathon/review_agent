@@ -1,5 +1,6 @@
 # On the Adversarial Robustness of Discrete Image Tokenizers
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

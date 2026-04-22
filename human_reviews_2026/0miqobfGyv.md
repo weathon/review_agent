@@ -1,5 +1,6 @@
 # AnomalyLMM: Bridging Generative Knowledge and Discriminative Retrieval for Text-based Person Anomaly Search
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

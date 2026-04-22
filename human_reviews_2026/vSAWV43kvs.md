@@ -1,5 +1,6 @@
 # Towards a Foundation Model Approach for Causal Graph Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

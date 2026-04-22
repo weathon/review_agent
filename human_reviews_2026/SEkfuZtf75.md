@@ -1,5 +1,6 @@
 # EHR2Path: Scalable Modeling of Longitudinal Health Trajectories with LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

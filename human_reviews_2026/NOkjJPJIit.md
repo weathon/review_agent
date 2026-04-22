@@ -1,5 +1,6 @@
 # Active Learning for Decision Trees with Provable Guarantees
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

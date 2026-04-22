@@ -1,5 +1,6 @@
 # FineFed: Forward-Only Federated Fine-Tuning for Many-Class Tasks under Non-IID Heterogeneity
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

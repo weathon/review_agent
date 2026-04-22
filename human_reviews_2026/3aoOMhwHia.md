@@ -1,5 +1,6 @@
 # FedMuon: Accelerating Federated Learning with Matrix Orthogonalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

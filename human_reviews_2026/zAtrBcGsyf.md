@@ -1,5 +1,6 @@
 # Multimodal Representation Learning Conditioned on Semantic Relations
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

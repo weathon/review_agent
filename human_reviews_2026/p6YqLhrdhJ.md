@@ -1,5 +1,6 @@
 # CountsDiff: A diffusion model on the natural numbers for generation and imputation of count-based data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

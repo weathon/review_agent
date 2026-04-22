@@ -1,5 +1,6 @@
 # Provable and Practical In-Context Policy Optimization for Self-Improvement
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # LoD: Unlocking Performance Gains in Compression via Differential Analysis
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4, 0
 

@@ -1,5 +1,6 @@
 # Training Multi-Layer Transformers in Almost Linear Time
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 0
 

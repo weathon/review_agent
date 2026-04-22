@@ -1,5 +1,6 @@
 # AdaST: Adaptive Semantic Transformation of Visual Representation for Training-free Zero-shot Composed Image Retrieval
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

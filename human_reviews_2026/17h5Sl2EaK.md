@@ -1,5 +1,6 @@
 # Distributed Algorithms for Euclidean Clustering
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

@@ -1,5 +1,6 @@
 # DuoLLM: A Dual-Stream Decoupled Visual Language Model for 3D Spatial Reasoning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

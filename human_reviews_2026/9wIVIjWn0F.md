@@ -1,5 +1,6 @@
 # Regression-based Test-Time Adaptation of Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 6, 6
 

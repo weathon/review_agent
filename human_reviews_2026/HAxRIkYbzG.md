@@ -1,5 +1,6 @@
 # MolGA: Molecular Graph Adaptation with Pre-trained 2D Graph Encoder
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4, 2, 2
 

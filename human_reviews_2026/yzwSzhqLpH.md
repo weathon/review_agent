@@ -1,5 +1,6 @@
 # Entropy-Guided Dynamic Tokens for Graph-LLM Alignment in Molecular Understanding
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 2
 

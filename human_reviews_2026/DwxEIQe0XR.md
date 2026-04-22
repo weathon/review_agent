@@ -1,5 +1,6 @@
 # Language Bottleneck Models: A Framework for Qualitative Cognitive Diagnosis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

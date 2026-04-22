@@ -1,5 +1,6 @@
 # Personalized Feature Translation for Expression Recognition: An Efficient Source-Free Domain Adaptation Method
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

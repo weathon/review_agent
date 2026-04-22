@@ -1,5 +1,6 @@
 # video-SALMONN S: Streaming Audio-Visual LLMs Beyond Length Limits via Memory
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

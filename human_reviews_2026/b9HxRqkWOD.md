@@ -1,5 +1,6 @@
 # Leveraging MLLMs for Zero-Shot Action Recognition: Concise, Discriminative and anti-Hallucination Prompting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

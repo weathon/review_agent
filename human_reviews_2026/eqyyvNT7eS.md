@@ -1,5 +1,6 @@
 # Gym4ReaL: Towards Real-World Reference Environments for Reinforcement Learning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 6
 

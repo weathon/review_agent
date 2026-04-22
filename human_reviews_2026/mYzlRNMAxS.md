@@ -1,5 +1,6 @@
 # Why Attention Fails: The Degeneration of Transformers into MLPs in Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

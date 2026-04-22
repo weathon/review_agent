@@ -1,5 +1,6 @@
 # GarmentPainter: Efficient 3D Garment Texture Synthesis with Character-Guided Diffusion Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

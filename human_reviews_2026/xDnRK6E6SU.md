@@ -1,5 +1,6 @@
 # Inference-time Correction of Errors in AI-Generated Chest X-ray Radiology Reports
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 0, 4
 

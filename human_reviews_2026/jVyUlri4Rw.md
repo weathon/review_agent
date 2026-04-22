@@ -1,5 +1,6 @@
 # Judge's Verdict: A Comprehensive Analysis of LLM Judge Capability Through Human Agreement
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

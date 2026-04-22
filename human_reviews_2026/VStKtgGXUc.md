@@ -1,5 +1,6 @@
 # jqBench: a benchmark for reading and editing JSON from natural language and/or examples
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

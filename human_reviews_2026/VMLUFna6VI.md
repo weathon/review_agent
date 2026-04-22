@@ -1,5 +1,6 @@
 # Reasoning Under Uncertainty: Exploring Probabilistic Reasoning Capabilities of LLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

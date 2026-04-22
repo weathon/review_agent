@@ -1,5 +1,6 @@
 # Think Out Loud, Pause in Silence: Confidence-Guided Reflect–Pause–Abort for Robust  Audio Perceptual Understanding
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 0
 

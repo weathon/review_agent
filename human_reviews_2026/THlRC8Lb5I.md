@@ -1,5 +1,6 @@
 # An Image Is Worth Ten Thousand Words: Verbose-Text Induction Attacks on VLMs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

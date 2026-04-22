@@ -1,5 +1,6 @@
 # Test-Time Anchoring for Discrete Diffusion Posterior Sampling
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 8, 2, 2
 

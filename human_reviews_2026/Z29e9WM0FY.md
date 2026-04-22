@@ -1,5 +1,6 @@
 # MME-Reasoning: A Comprehensive Benchmark for Logical Reasoning in MLLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # EucliFold: Probing 3D Euclidean Prior in VLMs via Cognitively-Stratified Folding Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

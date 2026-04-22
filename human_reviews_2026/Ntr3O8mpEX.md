@@ -1,5 +1,6 @@
 # In Their Own Words: Reasoning Traces Tailored for Small Models Make Them Better Reasoners
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

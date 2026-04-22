@@ -1,5 +1,6 @@
 # Enhancing Reasoning for Diffusion LLMs via Distribution Matching Policy Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

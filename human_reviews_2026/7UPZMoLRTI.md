@@ -1,5 +1,6 @@
 # Policy transfer ensures fast learning for continuous-time LQR with entropy regularization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

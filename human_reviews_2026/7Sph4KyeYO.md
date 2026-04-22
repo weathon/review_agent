@@ -1,5 +1,6 @@
 # Constrained Decoding of Diffusion LLMs with Context-Free Grammars
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 
@@ -76,23 +77,29 @@ OTHER COMMENTS:
 This paper introduces the constrained decoding method for diffusion language models, enabling them to generate text that adheres to formal grammars like context-free grammars. Unlike traditional left-to-right generation, diffusion models generate tokens in arbitrary order, which existing constrained decoding methods cannot handle. The paper solves this by formulating an "additive infilling problem" that checks whether partial outputs with holes can be completed into a valid grammar-compliant text, reducing it to testing if the intersection of the target CFG and a regular language is empty. The method achieves strong results on syntactic correctness on tasks like C++ code generation and JSON extraction while maintaining or improving functional correctness, with reasonable computational overhead.
 
 ### Strengths
-* The paper is the first work in ensuring CFG-constrained generation with diffusion LLMs. 
+* The paper is the first work in ensuring CFG-constrained generation with diffusion LLMs.
 
-* The paper is well-written and easy to follow. The formalism is solid, and the problem is presented with great detail.  
 
-* The paper addressed a challenging technical problem. Additionally, there are several non-trivial technical contributions such as heuristics to reduce the size of the normalized CFG.  
+* The paper is well-written and easy to follow. The formalism is solid, and the problem is presented with great detail. 
+
+
+* The paper addressed a challenging technical problem. Additionally, there are several non-trivial technical contributions such as heuristics to reduce the size of the normalized CFG. 
+
 
 * The empirical results are consistently strong, showing syntactical and. Functional improvement. And I appreciate the inclusion of confidence intervals.
 
 ### Weaknesses
-* The MRI task is not natural. Removing the arbitrary character spans is not a realistic scenario in which one would expect to use an LLM. A more realistic code will remove semantically meaningful parts of the code.  
+* The MRI task is not natural. Removing the arbitrary character spans is not a realistic scenario in which one would expect to use an LLM. A more realistic code will remove semantically meaningful parts of the code. 
+
 
 * The overhead of constraining can be large in some cases
 
 ### Questions
 DINGO [Suresh et. al.] work ensures optimal decoding with regular grammar. How would the proposed approach compare against DINGO when using a regular grammar, both in terms of overhead and accuracy? 
 
-> All MRI models were sampled with temperature 1 and greedy decoding.  
+> All MRI models were sampled with temperature 1 and greedy decoding.
+
+
 
 If you are using greedy decoding, shouldn’t the temp be set to 0?
 

@@ -1,5 +1,6 @@
 # Test-time Generalization for Physics through Neural Operator Splitting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

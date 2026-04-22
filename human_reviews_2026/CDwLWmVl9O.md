@@ -1,5 +1,6 @@
 # C$^2$-AFCL: Cross-task Calibration for Asynchronous Federated Continual Learning
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 0, 2, 6
 

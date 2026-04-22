@@ -1,5 +1,6 @@
 # CTODS: Polynomial-Time Construction of Hypergraphs via Constrained Overlapping Densest Subgraphs for Enhanced Neural Network Performance
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

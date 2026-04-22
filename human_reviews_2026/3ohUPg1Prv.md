@@ -1,5 +1,6 @@
 # Task-Agnostic Federated Continual Learning via Replay-Free Gradient Projection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

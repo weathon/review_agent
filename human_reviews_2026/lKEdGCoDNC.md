@@ -1,5 +1,6 @@
 # ShinkaEvolve: Towards Open-Ended and Sample-Efficient Program Evolution
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 0, 6, 6, 4
 

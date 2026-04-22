@@ -1,5 +1,6 @@
 # Dual-Objective Reinforcement Learning with Novel Hamilton-Jacobi-Bellman Formulations
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

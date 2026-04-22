@@ -1,5 +1,6 @@
 # PQGAN: Product-Quantised Image Representation for High-Quality Image Synthesis
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

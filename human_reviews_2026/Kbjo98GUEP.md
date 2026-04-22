@@ -1,5 +1,6 @@
 # Feature Learning for the High Dimensional Stationary Sch\"odinger Equation with Deep Ritz Method
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

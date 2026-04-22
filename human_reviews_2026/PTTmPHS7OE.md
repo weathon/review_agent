@@ -1,5 +1,6 @@
 # LocationReasoner: Evaluating LLMs on Real-World Site Selection Reasoning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 8, 4, 6, 2
 

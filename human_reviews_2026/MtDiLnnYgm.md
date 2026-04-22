@@ -1,5 +1,6 @@
 # HippoTune: A Hippocampal Associative Loop–Inspired Fine-Tuning Method for Continual Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

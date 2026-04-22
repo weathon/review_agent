@@ -1,5 +1,6 @@
 # DATS: Distance-Aware Temperature Scaling for Calibrated Class-Incremental Learning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 2
 

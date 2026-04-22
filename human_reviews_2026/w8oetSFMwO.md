@@ -1,5 +1,6 @@
 # MMSeg: Multi-Modal and Multi-View Driven Semantic Enrichment for Training-Free Image Prompt Segmentation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

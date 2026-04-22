@@ -1,5 +1,6 @@
 # Memory Retrieval and Consolidation in Large Language Models through Function Tokens
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

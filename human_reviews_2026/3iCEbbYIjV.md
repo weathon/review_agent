@@ -1,5 +1,6 @@
 # MoLD: Fine-Grained Multimodal Risk Assessment via Dynamic Analysis Weights
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

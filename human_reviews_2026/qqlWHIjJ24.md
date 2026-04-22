@@ -1,5 +1,6 @@
 # DCR$^2$-AD: Dynamic Context Routing and Reasoning Multi-Modal Large Language Model for Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

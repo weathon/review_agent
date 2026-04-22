@@ -1,5 +1,6 @@
 # Beyond Skeletons: Learning Animation Directly from Driving Videos with Same2X Training Strategy
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

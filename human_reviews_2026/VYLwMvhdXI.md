@@ -1,5 +1,6 @@
 # Scaling Laws for Generative Reward Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Towards Decision Focused Learning for Sparse and Weakly Supervised Environments
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Lions and Muons: Optimization via Stochastic Frank-Wolfe
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

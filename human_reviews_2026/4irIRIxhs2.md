@@ -1,5 +1,6 @@
 # Quantum Speedups for Sampling and Non-convex Optimization with Stochastic Zeroth Oracles
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

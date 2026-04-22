@@ -1,5 +1,6 @@
 # AnimeShooter: A Multi-Shot Animation Dataset for Reference-Guided Video Generation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

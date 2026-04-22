@@ -1,5 +1,6 @@
 # DynamicBias: Sequence-Aware Calibrated Watermarking for Large Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

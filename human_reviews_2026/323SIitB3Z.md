@@ -1,5 +1,6 @@
 # WatchLog: From a Glimpse to Decision—Rapid Event Reasoning in Endpoint Detection and Response Logs with Multimodal LLMs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

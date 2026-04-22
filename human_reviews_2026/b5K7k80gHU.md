@@ -1,5 +1,6 @@
 # A Unified and Data-Efficient Framework for Out-of-Distribution and Generalization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # XOXO: Stealthy Cross-Origin Context Poisoning Attacks against AI Coding Assistants
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

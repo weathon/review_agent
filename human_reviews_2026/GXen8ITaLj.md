@@ -1,5 +1,6 @@
 # It's the Thought that Counts: Evaluating the Attempts of Frontier LLMs to Persuade on Harmful Topics
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

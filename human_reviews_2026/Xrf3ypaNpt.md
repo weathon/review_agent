@@ -1,5 +1,6 @@
 # Fixed Point Explainability
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 4, 2, 2, 2
 

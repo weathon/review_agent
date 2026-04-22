@@ -1,5 +1,6 @@
 # SCRAPL: Scattering Transform with Random Paths for Machine Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

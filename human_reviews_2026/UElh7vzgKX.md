@@ -1,5 +1,6 @@
 # Scaling Goal-conditioned Reinforcement Learning with Multistep Quasimetric Distances
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 6, 4
 

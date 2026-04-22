@@ -1,5 +1,6 @@
 # A New Class of Benchmarks for Federated Multi-Objective Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

@@ -1,5 +1,6 @@
 # VTBench: Comprehensive Benchmark Suite Towards Real-World Virtual Try-on Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 4
 

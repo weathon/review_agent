@@ -1,5 +1,6 @@
 # Moving Beyond Diffusion: Hierarchy-to-Hierarchy Autoregression for fMRI-to-Image Reconstruction
 
+- Avg Score: 4.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2, 4, 6
 

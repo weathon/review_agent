@@ -1,5 +1,6 @@
 # UniF$^2$ace: A $\underline{Uni}$fied $\underline{F}$ine-grained $\underline{Face}$ Understanding and Generation Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

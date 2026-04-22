@@ -1,5 +1,6 @@
 # R$^2$AG: Rethinking Retrieval-Augmented Generation via Multimodal Coherence Understanding
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

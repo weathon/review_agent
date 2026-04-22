@@ -1,5 +1,6 @@
 # GeoBA: Stealthy Geometric Poisoning on 3D Point Cloud
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

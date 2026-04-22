@@ -1,5 +1,6 @@
 # LoPRo: Enhancing Low-Rank Quantization via Permuted Block-Wise Rotation
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

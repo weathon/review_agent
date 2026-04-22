@@ -1,5 +1,6 @@
 # Adaptive Symmetrization of the KL Divergence
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

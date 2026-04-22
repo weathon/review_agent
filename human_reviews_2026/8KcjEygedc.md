@@ -1,5 +1,6 @@
 # Why Less is More (Sometimes): A Theory of Data Curation
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 8
 

@@ -1,5 +1,6 @@
 # Routing Matters in MoE: Scaling Diffusion Transformers with Explicit Routing Guidance
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

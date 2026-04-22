@@ -1,5 +1,6 @@
 # Truthful or Fabricated? Using Causal Attribution to Mitigate Reward Hacking in Explanations
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

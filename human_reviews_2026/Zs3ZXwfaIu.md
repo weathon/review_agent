@@ -1,5 +1,6 @@
 # Evolutionary Alpha Factor Discovery with Large Language Models for Sparse Portfolio Optimization
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

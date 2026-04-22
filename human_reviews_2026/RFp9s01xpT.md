@@ -1,5 +1,6 @@
 # SARE: Semantic-Aware Reconstruction Error for Generalizable AI-Generated Image Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

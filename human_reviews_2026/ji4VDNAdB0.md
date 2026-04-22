@@ -1,5 +1,6 @@
 # Rethinking the Actor-Critic Networks using Hybrid Quantum-Classical Paradigm
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

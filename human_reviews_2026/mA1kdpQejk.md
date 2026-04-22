@@ -1,5 +1,6 @@
 # Look the Other Way: Designing 'Positive' Molecules with Negative Data via Task Arithmetic
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

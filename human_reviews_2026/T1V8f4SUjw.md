@@ -1,5 +1,6 @@
 # Neighborhood Learning in Weighted Beeping Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 0, 6
 

@@ -1,5 +1,6 @@
 # Bongard-RWR+: Real-World Representations of Fine-Grained Concepts in Bongard Problems
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 8
 

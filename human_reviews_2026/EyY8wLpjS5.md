@@ -1,5 +1,6 @@
 # Kolmogorov-Arnold Attention: Is Learnable Attention Better For Vision Transformers?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

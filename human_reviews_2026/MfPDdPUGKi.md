@@ -1,5 +1,6 @@
 # Unlocking Long-Horizon Agentic Search with Large-Scale End-to-End RL
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

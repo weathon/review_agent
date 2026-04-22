@@ -1,5 +1,6 @@
 # SCAD: Super-Class-Aware Debiasing for Long-Tailed Semi-Supervised Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

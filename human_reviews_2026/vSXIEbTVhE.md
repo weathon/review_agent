@@ -1,5 +1,6 @@
 # Censoring with Plausible Deniability: Asymmetric Local Privacy for Multi-Category CDF Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

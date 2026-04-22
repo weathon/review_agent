@@ -1,5 +1,6 @@
 # Focus on Likely Classes for Test-Time Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

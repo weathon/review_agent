@@ -1,5 +1,6 @@
 # Context parroting: A simple but tough-to-beat baseline for foundation models in scientific machine learning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 10, 6, 4
 

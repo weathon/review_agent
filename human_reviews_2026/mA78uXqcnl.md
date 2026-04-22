@@ -1,5 +1,6 @@
 # Causal Structure Learning in Hawkes Processes with Complex Latent Confounder Networks
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Much Ado About Noising: Dispelling the Myths of Generative Robotic Control
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

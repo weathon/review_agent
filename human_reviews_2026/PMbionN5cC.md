@@ -1,5 +1,6 @@
 # VowelPrompt: Hearing Speech Emotions from Text via Vowel-level Prosodic Augmentation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

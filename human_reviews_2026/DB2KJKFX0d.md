@@ -1,5 +1,6 @@
 # BDSB: Brain Disk Schrödinger Bridge for Enhancing 3T BOLD fMRI using Unpaired 7T Data for Visual Retinotopic Decoding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Kolmogorov-Arnold Networks for Time Series Granger Causality Inference
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 8, 2
 

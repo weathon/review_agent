@@ -1,5 +1,6 @@
 # Signal Preserving Weight Initialization for Odd-Sigmoid Activations
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

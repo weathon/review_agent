@@ -1,5 +1,6 @@
 # VisualThinker: First ever R1-Zero's Aha Moment on just a 2B non-SFT Model
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 8, 4, 2, 2, 2
 

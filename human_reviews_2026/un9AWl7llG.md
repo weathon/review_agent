@@ -1,5 +1,6 @@
 # An Exploration of Non-Euclidean Gradient Descent: Muon and its Many Variants
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 6, 6, 2, 4
 

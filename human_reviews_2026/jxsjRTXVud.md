@@ -1,5 +1,6 @@
 # ToMAP: Training Opponent-Aware LLM Persuaders with Theory of Mind
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Improving LLM Reasoning via Symbolic Inference over Logic Graphs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # No LLM Solved Yu Tsumura's 554th Problem
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 0, 2
 

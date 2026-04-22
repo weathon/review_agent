@@ -1,5 +1,6 @@
 # Robust Reward Sequence Modeling with Multi-Scale Consistency for Model-Based Reinforcement Learning
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

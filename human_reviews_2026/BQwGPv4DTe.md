@@ -1,5 +1,6 @@
 # Flashback: Memory-Driven Zero-shot, Real-time Video Anomaly Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

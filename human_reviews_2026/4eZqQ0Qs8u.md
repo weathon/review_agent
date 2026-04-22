@@ -1,5 +1,6 @@
 # DeepOPF-GAF: Graph Self-Attention Framework for N-1 Security-Constrained Optimal Power Flow
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

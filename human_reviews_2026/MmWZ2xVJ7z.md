@@ -1,5 +1,6 @@
 # Biologically Plausible Learning via Bidirectional Spike-Based Distillation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 8
 

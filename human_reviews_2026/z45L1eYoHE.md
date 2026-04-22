@@ -1,5 +1,6 @@
 # Towards Expanding-Node Spatial-Temporal Forecasting: A Structured Node Interaction Prompting Perspective
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

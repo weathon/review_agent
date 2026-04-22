@@ -1,5 +1,6 @@
 # Any-Subgroup Equivariant Networks via Symmetry Breaking
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 8
 

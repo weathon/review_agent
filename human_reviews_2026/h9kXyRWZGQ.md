@@ -1,5 +1,6 @@
 # Sublinear iterations can suffice even for DDPMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

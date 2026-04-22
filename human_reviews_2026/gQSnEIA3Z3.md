@@ -1,5 +1,6 @@
 # SCRIBES: Web-Scale Script-Based Semi-Structured Data Extraction with Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

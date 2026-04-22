@@ -1,5 +1,6 @@
 # Graph Guided Diffusion: Unified Guidance for Conditional Graph Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

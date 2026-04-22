@@ -1,5 +1,6 @@
 # A Scalable Inter-edge Correlation Modeling in CopulaGNN for Link Sign Prediction
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

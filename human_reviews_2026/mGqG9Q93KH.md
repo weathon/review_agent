@@ -1,5 +1,6 @@
 # DiT360: High-Fidelity Panoramic Image Generation via Hybrid Training
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8
 

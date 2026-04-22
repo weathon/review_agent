@@ -1,5 +1,6 @@
 # Scorpio: Serving the Right Requests at the Right Time for Heterogeneous SLOs in LLM Inference
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

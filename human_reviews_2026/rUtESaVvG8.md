@@ -1,5 +1,6 @@
 # Patch Rebirth: Toward Fast and Transferable Model Inversion of Vision Transformers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # MRVF: Multi-Round Value Factorization with Guaranteed Iterative Improvement for Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 4, 4
 

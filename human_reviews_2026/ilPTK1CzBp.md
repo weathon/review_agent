@@ -1,5 +1,6 @@
 # FedFuse: Selective Knowledge Distillation with Expert-Guided Fusion for Heterogeneous Federated
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4, 2
 

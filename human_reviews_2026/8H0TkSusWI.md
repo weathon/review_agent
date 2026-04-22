@@ -1,5 +1,6 @@
 # NePTune: A Neuro-Pythonic Framework for Tunable Compositional Reasoning on Vision-Language
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

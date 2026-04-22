@@ -1,5 +1,6 @@
 # Optimizer Choice Matters For The Emergence of Neural Collapse
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6
 

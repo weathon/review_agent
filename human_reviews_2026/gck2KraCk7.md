@@ -1,5 +1,6 @@
 # GRIT: Graph-Biased Transformers for Hardware-Aware Quantum Layout via Reinforcement Learning Search
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

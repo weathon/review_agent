@@ -1,5 +1,6 @@
 # Learning Flow-Guided Registration for RGB–Event Semantic Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

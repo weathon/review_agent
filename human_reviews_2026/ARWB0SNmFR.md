@@ -1,5 +1,6 @@
 # LLM-ERM: Sample-Efficient Program Learning via LLM-Guided Search
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

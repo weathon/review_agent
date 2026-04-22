@@ -1,5 +1,6 @@
 # Decentralized Byzantine-Resilient Multi-Agent Reinforcement Learning with Reward Machines in Temporally Extended Tasks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Mamba Integrated with Physics Principles Masters Long-term Chaotic System Forecasting
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 
@@ -70,7 +71,8 @@ I found the paper clear, well-structured, and easy-to-follow. The related work s
 The experiments are careful and the baselines are appropriate: multiple metrics are used to assess the quality of the forecasts over both long- and short- term intervals, and the authors ablate many of their custom architecture’s components to determine how much they contribute to the model.
 
 ### Weaknesses
-1. The architecture seems ad hoc, like a collection of methods combined together, and I do not feel that it inherits the simplicity or theoretical advantages of Mamba2 and other models like it. The methods section describes a very complicated architecture and multistage training loop. The authors first perform multi-patch next step prediction with teacher forcing. They then perform student forcing, checking that the model’s own predictions capture long-term structure. During the latter loop, the authors enforce regularization terms that ensure history-prediction consistency, as well as prediction-ground-truth consistency. All of these choices introduce substantial complexity into the training loop, including hyperparameters like the number of time delays, the patch size, embedding dimension, mamba depth, multi-patch depth, and the size of the various regularization terms. 
+1. The architecture seems ad hoc, like a collection of methods combined together, and I do not feel that it inherits the simplicity or theoretical advantages of Mamba2 and other models like it. The methods section describes a very complicated architecture and multistage training loop. The authors first perform multi-patch next step prediction with teacher forcing. They then perform student forcing, checking that the model’s own predictions capture long-term structure. During the latter loop, the authors enforce regularization terms that ensure history-prediction consistency, as well as prediction-ground-truth consistency. All of these choices introduce substantial complexity into the training loop, including hyperparameters like the number of time delays, the patch size, embedding dimension, mamba depth, multi-patch depth, and the size of the various regularization terms.
+
 
 2. Several architectural and methods choices do not fully make sense to me. The authors provide ablations showing that both time delay embedding and patching improve the model. But that doesn’t seem possible, since the two featurizations are redundant:  Since w are going to flatten into an embedding of shape N x (D*V*m), the patch size duplicates the time delays and vice versa. Additionally, my understanding is that Mamba is an SSM architecture that modifies an earlier time series SSM (S4) to work with language data. But the authors are now using Mamba for time series. This seems like an unusual choice, compared to using the S-series models, an RNN with spectral initialization, or a reservoir computer.
 

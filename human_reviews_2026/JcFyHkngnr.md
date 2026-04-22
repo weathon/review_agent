@@ -1,5 +1,6 @@
 # Fed-ARPL: Adaptive and Reciprocal Prototype Learning for Semi-supervised Federated Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Bridging Quantitative Optimization and Qualitative Reasoning: LLM-Enhanced Neural Architecture Search with Synergistic Weights
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # SealQA: Raising the Bar for Reasoning in Search-Augmented Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 0, 8, 2
 

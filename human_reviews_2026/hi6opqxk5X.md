@@ -1,5 +1,6 @@
 # Provably Fast Density-Based Clustering in High Dimensions
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 4, 2, 2, 4
 

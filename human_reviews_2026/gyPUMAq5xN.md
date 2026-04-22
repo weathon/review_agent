@@ -1,5 +1,6 @@
 # Steering Risk Preferences in Large Language Models by Aligning Behavioral and Neural Representations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

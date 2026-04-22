@@ -1,5 +1,6 @@
 # Physically-Guided Optical Inversion Enable Non-Contact Side-Channel Attack on Isolated Screens
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Physics-Informed Graph Convolutional Network for Data-Free Learning of Channel Flow Fields
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 2
 

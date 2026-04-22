@@ -1,5 +1,6 @@
 # Deciphering Invariant Feature Decoupling in Source-free Time Series Forecasting with Proxy Denoising
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

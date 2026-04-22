@@ -1,5 +1,6 @@
 # Provably Learning Representations under Generalized Dependency Structure
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

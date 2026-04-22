@@ -1,5 +1,6 @@
 # Smoothing Binary Optimization: A Primal-Dual Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

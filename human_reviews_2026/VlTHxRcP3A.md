@@ -1,5 +1,6 @@
 # Representational and Temporal Dynamics in Neural Decoding: Linear and Nonlinear Models for Position and Velocity Prediction
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 0, 2, 0
 

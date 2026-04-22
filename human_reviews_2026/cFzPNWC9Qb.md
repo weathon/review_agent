@@ -1,5 +1,6 @@
 # Stackelberg Coupling of Online Representation  Learning and Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

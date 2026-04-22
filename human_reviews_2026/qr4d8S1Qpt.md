@@ -1,5 +1,6 @@
 # Towards Scalable Web Browsing via Tool-Augmented Programmatic Agent Pair
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

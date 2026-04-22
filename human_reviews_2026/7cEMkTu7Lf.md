@@ -1,5 +1,6 @@
 # Unlearning Isn't Deletion: Investigating Reversibility of Machine Unlearning in LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

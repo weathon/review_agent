@@ -1,5 +1,6 @@
 # Lost in the Non-convex Loss Landscape: How to Fine-tune the Large Time Series Model?
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

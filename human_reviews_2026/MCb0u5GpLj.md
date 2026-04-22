@@ -1,5 +1,6 @@
 # Self-Calibrated Consistency can Fight Back for Adversarial Robustness in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

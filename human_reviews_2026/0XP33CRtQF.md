@@ -1,5 +1,6 @@
 # IBGraphRAG: Enhancing Medical Knowledge Graph Retrieval Based on Semantic Consistency and Information Bottleneck
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

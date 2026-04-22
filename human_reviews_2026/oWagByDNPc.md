@@ -1,5 +1,6 @@
 # MIRA: Memory-Integrated Reinforcement Learning Agent  with Limited LLM Guidance
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

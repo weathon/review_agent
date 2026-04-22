@@ -1,5 +1,6 @@
 # Any-to-Bokeh: Arbitrary-Subject Video Refocusing with Video Diffusion Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

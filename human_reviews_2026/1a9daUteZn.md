@@ -1,5 +1,6 @@
 # Testing Most Influential Sets
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 4, 6
 

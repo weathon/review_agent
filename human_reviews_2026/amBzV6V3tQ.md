@@ -1,5 +1,6 @@
 # LAMP: Long-tailed Multimodal Prompt Learning for Vision-Language Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

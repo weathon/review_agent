@@ -1,5 +1,6 @@
 # Radiant Triangle Soup with Soft Connectivity Forces for 3D Reconstruction and Novel View Synthesis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

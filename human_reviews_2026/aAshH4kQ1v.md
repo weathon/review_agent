@@ -1,5 +1,6 @@
 # Path Channels and Plan Extension Kernels: a Mechanistic Description of Planning in a Sokoban RNN
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Spot the Critical Words: Text-Guided Visual Token Pruning for Efficient Large Vision-Language Model Inference
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # LoRA meets Riemannion: Muon Optimizer for Parametrization-independent Low-Rank Adapters
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 6, 4
 

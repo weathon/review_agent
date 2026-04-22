@@ -1,5 +1,6 @@
 # Multi-Instance Learning for Whole-Slide Image Classification Using  Higher-Order Moments
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

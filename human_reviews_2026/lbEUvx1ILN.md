@@ -1,5 +1,6 @@
 # OVA-LP: A Simple and Efficient Framework for Federated Learning on Non-IID Data
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

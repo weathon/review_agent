@@ -1,5 +1,6 @@
 # DeepResearchGuard: Deep Research with Open Domain Evaluation and Multi-Stage Guardrails for Safety
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

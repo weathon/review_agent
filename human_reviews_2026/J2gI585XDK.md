@@ -1,5 +1,6 @@
 # Learnability and Privacy Vulnerability are Entangled in a Few Critical Weights
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4, 6
 

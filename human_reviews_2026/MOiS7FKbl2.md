@@ -1,5 +1,6 @@
 # Microscope: Efficient Diffusion with Two-Stage Dynamics Compression for High-Quality Talking Head Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

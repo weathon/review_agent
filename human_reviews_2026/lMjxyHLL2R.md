@@ -1,5 +1,6 @@
 # ABBEL: LLM Agents Acting Through Belief Bottlenecks Expressed in Language
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

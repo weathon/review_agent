@@ -1,5 +1,6 @@
 # Bee: A High-Quality Corpus and Full-Stack Suite to Unlock Advanced Fully Open MLLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Strategic Dishonesty Can Undermine AI Safety Evaluations of Frontier LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

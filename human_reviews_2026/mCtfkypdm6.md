@@ -1,5 +1,6 @@
 # LinearRAG: Linear Graph Retrieval Augmented Generation on Large-scale Corpora
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # ABS: Enforcing Constraint Satisfaction on Generated Sequences via Automata-Guided Beam Search
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 4, 0
 

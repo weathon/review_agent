@@ -1,5 +1,6 @@
 # HypBrain: Hyperbolic Space Guided Cross-Subject Vision-Brain Representation Learning Framework
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # ByteMorph: Benchmarking Instruction-Guided Image Editing with Non-Rigid Motions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

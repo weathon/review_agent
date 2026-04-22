@@ -1,5 +1,6 @@
 # Expressive Graph Neural Networks via Equivariant Use of Noise
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

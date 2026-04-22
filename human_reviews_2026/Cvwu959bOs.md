@@ -1,5 +1,6 @@
 # Peeking inside the Black-Box: Reinforcement Learning for Explainable and Accurate Relation Extraction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

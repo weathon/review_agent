@@ -1,5 +1,6 @@
 # PairBench: Are Vision-Language Models Reliable at Comparing What They See?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Token Alignment Heads: Unveiling Attention's Role in LLM Multilingual Translation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

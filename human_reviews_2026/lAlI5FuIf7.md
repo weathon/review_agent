@@ -1,5 +1,6 @@
 # Planner Aware Path Learning in Diffusion Language Models Training
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 4
 

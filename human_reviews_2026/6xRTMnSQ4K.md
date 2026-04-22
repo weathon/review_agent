@@ -1,5 +1,6 @@
 # Learning What Matters: Prioritized Concept Learning via Relative Error-driven Sample Selection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6, 4
 

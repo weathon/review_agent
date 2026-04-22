@@ -1,5 +1,6 @@
 # Reducing Spurious Correlations in CNNs via Attention-Based Feature Aggregation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 2
 

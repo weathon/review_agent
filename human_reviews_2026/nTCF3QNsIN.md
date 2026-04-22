@@ -1,5 +1,6 @@
 # AlignFlow: Improving Flow-based Generative Models with Semi-Discrete Optimal Transport
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

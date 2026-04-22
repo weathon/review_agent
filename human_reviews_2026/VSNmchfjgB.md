@@ -1,5 +1,6 @@
 # Harnessing Uncertainty: Entropy-Modulated Policy Gradients for Long-Horizon LLM Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

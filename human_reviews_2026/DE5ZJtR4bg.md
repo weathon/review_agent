@@ -1,5 +1,6 @@
 # On the Generalization Capacities of MLLMs for Spatial Intelligence
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 6
 

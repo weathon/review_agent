@@ -1,5 +1,6 @@
 # Understanding Multimodal Learning: A Loss Landscape Smoothness Perspective
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

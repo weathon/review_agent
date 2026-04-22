@@ -1,5 +1,6 @@
 # Inoculation Prompting: Instructing LLMs to misbehave at train-time improves test-time alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

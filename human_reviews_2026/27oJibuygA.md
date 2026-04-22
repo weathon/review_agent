@@ -1,5 +1,6 @@
 # Robust Adversarial Quantification via Conflict-Aware Evidential Deep Learning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 6, 6
 

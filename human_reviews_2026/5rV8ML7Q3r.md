@@ -1,5 +1,6 @@
 # LLM as an Algorithmist: Enhancing Anomaly Detectors via Programmatic Synthesis
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

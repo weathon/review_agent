@@ -1,5 +1,6 @@
 # Hedonic Neurons: A Mechanistic Mapping of Latent Coalitions in Transformer MLPs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

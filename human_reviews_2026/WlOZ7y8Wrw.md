@@ -1,5 +1,6 @@
 # Exploiting Fine-Tuning Structures to Improve Adversarial Transferability on Downstream SAM
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

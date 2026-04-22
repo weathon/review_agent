@@ -1,5 +1,6 @@
 # Joint Distillation for Fast Likelihood Evaluation and Sampling in Flow-based Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 

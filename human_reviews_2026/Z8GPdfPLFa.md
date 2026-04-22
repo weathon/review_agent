@@ -1,5 +1,6 @@
 # Epistemic-Aware Vision–Language Foundation Model for Fetal Ultrasound Interpretation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

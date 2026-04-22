@@ -1,5 +1,6 @@
 # Approximation of the Gompertz trend with a multilogistic function
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2
 

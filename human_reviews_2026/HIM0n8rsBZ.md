@@ -1,5 +1,6 @@
 # PAX-TS: Model-agnostic multi-granular explanations for time series forecasting via localized perturbations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

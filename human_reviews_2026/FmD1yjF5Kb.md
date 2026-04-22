@@ -1,5 +1,6 @@
 # From Minutes to Days: Scaling Intracranial Speech Decoding with Supervised Pretraining
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

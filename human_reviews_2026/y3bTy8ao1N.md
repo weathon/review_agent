@@ -1,5 +1,6 @@
 # A Contrastive Learning Approach for Unsupervised Discovery of Interpretable Steering Vectors in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

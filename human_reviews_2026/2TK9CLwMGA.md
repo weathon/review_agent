@@ -1,5 +1,6 @@
 # PREP: Pre-inference Guided Token Pruning for Efficient Vision-Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

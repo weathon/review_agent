@@ -1,5 +1,6 @@
 # Exploring Training Time Modality Incompleteness and Learning from Diverse Modalities
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Coded-Smoothing Module: Coding Theory Helps Generalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

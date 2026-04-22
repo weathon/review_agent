@@ -1,5 +1,6 @@
 # TOGA: Trigger Optimization for Clean Data Ordering Backdoor Attack
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

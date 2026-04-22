@@ -1,5 +1,6 @@
 # Untargeted Jailbreak Attack
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 6, 4, 0
 

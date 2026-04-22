@@ -1,5 +1,6 @@
 # Sequential Emergence of Phonemic, Syntactic, and Semantic Representations in Neural Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 4, 2, 6
 

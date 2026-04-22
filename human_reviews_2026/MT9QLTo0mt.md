@@ -1,5 +1,6 @@
 # RelitTrellis: Lightning-homogenized Structured 3D Latents For Relightable 3D Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 6, 2
 

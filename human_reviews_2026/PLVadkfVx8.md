@@ -1,5 +1,6 @@
 # CASPO: Confidence-aware Step-wise Preference Optimization for Reliable Reasoning in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

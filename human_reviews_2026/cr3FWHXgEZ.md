@@ -1,5 +1,6 @@
 # Revisiting Maximum Mean Discrepancy via Diffusion Behavior Policy in Offline RL: A Mode-Seeking Perspective
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

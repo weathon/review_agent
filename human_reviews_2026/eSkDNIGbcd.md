@@ -1,5 +1,6 @@
 # Hierarchical Value-Decomposed Offline Reinforcement Learning for Whole-Body Control
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

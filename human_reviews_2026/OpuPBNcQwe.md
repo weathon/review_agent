@@ -1,5 +1,6 @@
 # Enhancing Instruction Following of LLMs via Activation Steering with Dynamic Rejection
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

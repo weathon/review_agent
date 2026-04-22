@@ -1,5 +1,6 @@
 # IPPRO: Importance-based Pruning with PRojective Offset for Magnitude-indifferent Structural Pruning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 4, 0
 

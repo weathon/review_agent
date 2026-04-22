@@ -1,5 +1,6 @@
 # CLEAR: Consistent Labeling Enhanced by LLM-driven Automated Re-labeling for Improved Information Retrieval
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

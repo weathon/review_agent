@@ -1,5 +1,6 @@
 # Progressive Binarization with Semi-Structured Pruning for LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Mirror Mirror on the Wall, Have I Forgotten it All? A New Framework for Evaluating Machine Unlearning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

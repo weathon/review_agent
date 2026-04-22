@@ -1,5 +1,6 @@
 # Semi-Local Search for LR Schedules
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

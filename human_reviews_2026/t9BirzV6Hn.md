@@ -1,5 +1,6 @@
 # Reconstructing Humans with Articulated Hands using Transformers
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

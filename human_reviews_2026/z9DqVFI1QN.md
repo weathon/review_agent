@@ -1,5 +1,6 @@
 # VP-MonoMF: Visual Prompt Guided Monocular 3D Object Detection with Multiscale Fusion
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 6
 

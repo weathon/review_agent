@@ -1,5 +1,6 @@
 # Unfolding Spatial Cognition: Evaluating Multimodal Models on Visual Simulations
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 8
 

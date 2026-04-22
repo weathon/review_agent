@@ -1,5 +1,6 @@
 # Anchored Supervised Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

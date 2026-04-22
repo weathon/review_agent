@@ -1,5 +1,6 @@
 # Recurrent Cross-View Object Geo-Localization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

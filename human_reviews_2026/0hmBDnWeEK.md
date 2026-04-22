@@ -1,5 +1,6 @@
 # A Dual-Branch Disentanglement Diffusion for ID-Attribute Conditional Face Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Geometry-aware Euclidean Diffusion Language Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

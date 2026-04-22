@@ -1,5 +1,6 @@
 # Think in Parallel, Answer as One: Logit Averaging for Open-Ended Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

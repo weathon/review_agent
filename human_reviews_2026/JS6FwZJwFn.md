@@ -1,5 +1,6 @@
 # Simplex–FEM Networks (SiFEN): Learning a Triangulated Function Approximator
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 6
 

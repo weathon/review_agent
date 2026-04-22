@@ -1,5 +1,6 @@
 # Permutation-Consistent Variational Encoding for Incomplete Multi-View Multi-Label Classification
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

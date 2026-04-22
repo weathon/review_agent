@@ -1,5 +1,6 @@
 # Input-Time Scaling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 2, 4
 

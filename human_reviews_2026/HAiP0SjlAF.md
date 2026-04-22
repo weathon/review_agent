@@ -1,5 +1,6 @@
 # Hijacking JARVIS: Benchmarking Mobile GUI Agents against Unprivileged Third Parties
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

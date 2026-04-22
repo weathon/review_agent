@@ -1,5 +1,6 @@
 # ESNv2: Resurrecting Reservoir Computing in the Deep Learning era
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

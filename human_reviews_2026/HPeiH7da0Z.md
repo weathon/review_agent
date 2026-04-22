@@ -1,5 +1,6 @@
 # Sculptor: Empowering LLMs with Cognitive Agency via Active Context Management
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # TARG: Training-Free Adaptive Retrieval Gating for Efficient RAG
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

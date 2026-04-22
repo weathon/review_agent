@@ -1,5 +1,6 @@
 # EmoPrefer: Can Large Language Models Understand Human Emotion Preferences?
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4, 8
 

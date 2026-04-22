@@ -1,5 +1,6 @@
 # Building Data Framework and Shifting Perspectives for First-Person Exploration of Social Intelligence in LLMs
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2, 4
 

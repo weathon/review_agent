@@ -1,5 +1,6 @@
 # RAEE: A Robust Retrieval-Augmented Early Exit Framework for Efficient Inference
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2
 

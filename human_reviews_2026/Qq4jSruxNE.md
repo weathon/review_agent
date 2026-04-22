@@ -1,5 +1,6 @@
 # LLM-GC: Temporal-Semantic Disentanglement with Retrieval Augmentation to Activate LLM's Ability for Multimodal Granger Causal Discovery
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

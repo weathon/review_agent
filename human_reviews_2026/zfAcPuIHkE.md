@@ -1,5 +1,6 @@
 # Logic Channel Validation and Enhancement of Zero-Shot Vision-Language Comprehension on Vision Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

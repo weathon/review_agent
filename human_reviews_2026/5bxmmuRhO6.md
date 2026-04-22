@@ -1,5 +1,6 @@
 # Supporting Multimodal Intermediate Fusion with Informatic Constraint and Distribution Coherence
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

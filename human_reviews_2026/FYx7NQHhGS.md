@@ -1,5 +1,6 @@
 # Learning Interpretable Options by Identifying Reward Diffusion Bottlenecks in Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

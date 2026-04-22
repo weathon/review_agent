@@ -1,5 +1,6 @@
 # Runge-Kutta Approximation and Decoupled Attention for Rectified Flow Inversion and Semantic Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # DATR: DDI-Aware Therapeutic Structure Reconstruction for Safer Medication Recommendation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Neuronal Network Modularity Determines Multi-Task Learning Capability
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

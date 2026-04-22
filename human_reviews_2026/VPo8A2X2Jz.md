@@ -1,5 +1,6 @@
 # ESLM: Risk-Averse Selective Language Modeling with Hierarchical Batch Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

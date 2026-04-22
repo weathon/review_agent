@@ -1,5 +1,6 @@
 # PhyloTextDiff: Text-Based Discrete Diffusion for Generative Phylogenetic Inference
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 
@@ -50,7 +51,9 @@ There are some points that I want to sort out regarding the MLL computation:
 
 How is the MLL is computed? $K$ trajectories $x_{0:T}$ and branch lengths are drawn from the samplers and then logsumexp() of the $K$ samples -$\log K$?
 
-When sampling $x_{0:T}$, how is this done? I see the phrase ”base phylogenetic sampler” which is not precised in the main text. How is $x_T$ sampled in the generation?  The reason why I am zooming in on this is because I find the results in Table 2 to be unrealistically strong — I was under the impression that the MLL scores had saturated and could not be improved (only marginally, maybe), and I have seen that other reviewers on OpenReview have had the same opinion. I.e. that potentially the true marginal log-likelihoods had been achieved via the fact that when $K \rightarrow \infty$ then the IW-ELBO goes to the true marginal log-likelihood.
+When sampling $x_{0:T}$, how is this done? I see the phrase ”base phylogenetic sampler” which is not precised in the main text. How is $x_T$ sampled in the generation?
+
+The reason why I am zooming in on this is because I find the results in Table 2 to be unrealistically strong — I was under the impression that the MLL scores had saturated and could not be improved (only marginally, maybe), and I have seen that other reviewers on OpenReview have had the same opinion. I.e. that potentially the true marginal log-likelihoods had been achieved via the fact that when $K \rightarrow \infty$ then the IW-ELBO goes to the true marginal log-likelihood.
 
 Now, the improvements in scores here are so extreme that I would like some certification that the implementation is correct. There is no code available at the moment, so that option is not available. The derivation of the IW-ELBO in the appendix looks correct, but 1) I am not an expert on diffusion models, so it would be good with inputs from other reviewers, and 2) some aspects (like how $x_{0:T}$ is actually sampled) is not described in the paper, as far as I can see.
 

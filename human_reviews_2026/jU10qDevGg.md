@@ -1,5 +1,6 @@
 # U2-BENCH: Benchmarking Large Vision-Language Models on Ultrasound Understanding
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

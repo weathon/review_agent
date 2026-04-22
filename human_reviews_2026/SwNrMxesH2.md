@@ -1,5 +1,6 @@
 # $\text{BrainM}^3$: A Multi-Task Learning Framework Based on A Multi-Level Mixture- of-Experts for Cross-Disease and Cross-Domain Dementia Diagnosis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

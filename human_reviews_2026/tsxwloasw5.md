@@ -1,5 +1,6 @@
 # Vision-Language-Action Instruction Tuning: From Understanding to Manipulation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

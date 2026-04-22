@@ -1,5 +1,6 @@
 # No Answer Needed: Predicting LLM Answer Accuracy from Question-Only Linear Probes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

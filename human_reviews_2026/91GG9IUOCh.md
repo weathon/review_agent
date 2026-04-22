@@ -1,5 +1,6 @@
 # Surf3R: Rapid Surface Reconstruction from Sparse RGB Views in Seconds
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 0, 4
 

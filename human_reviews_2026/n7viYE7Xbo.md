@@ -1,5 +1,6 @@
 # BigMaQ: A Big Macaque Motion and Animation Dataset Bridging Image and 3D Pose Representations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

@@ -1,5 +1,6 @@
 # GlobeDiff: State Diffusion Process for Partial Observability in Multi-Agent System
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

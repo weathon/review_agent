@@ -1,5 +1,6 @@
 # Training-Free Multimodal Large Language Model Orchestration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

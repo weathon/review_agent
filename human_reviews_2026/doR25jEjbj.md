@@ -1,5 +1,6 @@
 # Think Just Enough: Sequence-Level Entropy as a Confidence Signal for LLM Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

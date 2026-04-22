@@ -1,5 +1,6 @@
 # Wasserstein Distributionally Robust Minimax Regret Optimization for Multimodal Machine Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

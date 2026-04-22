@@ -1,5 +1,6 @@
 # Redefining Machine Simultaneous Interpretation: From Incremental Translation to Human-like Strategies
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

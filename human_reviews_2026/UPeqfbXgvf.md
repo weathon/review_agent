@@ -1,5 +1,6 @@
 # Online Finetuning Decision Transformers with Policy Gradients
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

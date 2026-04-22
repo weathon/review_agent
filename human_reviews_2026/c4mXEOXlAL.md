@@ -1,5 +1,6 @@
 # gLSTM: Mitigating Over-Squashing by Increasing Storage Capacity
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4, 6
 

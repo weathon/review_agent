@@ -1,5 +1,6 @@
 # Evaluating LLMs on Real-World Forecasting Against Expert Forecasters
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 0, 6
 

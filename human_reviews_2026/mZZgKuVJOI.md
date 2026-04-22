@@ -1,5 +1,6 @@
 # Bridging Local Divergence in Federated Learning via Personalized Adjustment Matrix
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

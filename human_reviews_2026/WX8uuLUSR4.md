@@ -1,5 +1,6 @@
 # Conflicting Biases at the Edge of Stability: Norm versus Sharpness Regularization
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 6, 6, 4, 0, 2
 

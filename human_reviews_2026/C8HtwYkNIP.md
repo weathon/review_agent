@@ -1,5 +1,6 @@
 # FlatPose: An Upsampling-Free Transformer for Human Pose Estimation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

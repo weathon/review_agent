@@ -1,5 +1,6 @@
 # Agent-Centric Personalized Multiple Clustering with Multi-Modal LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

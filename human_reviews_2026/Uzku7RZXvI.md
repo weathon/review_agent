@@ -1,5 +1,6 @@
 # Summaries as Centroids for Interpretable and Scalable Text Clustering
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

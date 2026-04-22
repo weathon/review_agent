@@ -1,5 +1,6 @@
 # Probing the robustness of large language models safety to latent perturbations
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

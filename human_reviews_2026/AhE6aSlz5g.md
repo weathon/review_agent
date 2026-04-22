@@ -1,5 +1,6 @@
 # Chain-of-Context Learning: Dynamic Constraint Understanding for Multi-Task VRPs
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4, 4
 

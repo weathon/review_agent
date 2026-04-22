@@ -1,5 +1,6 @@
 # ESS-Flow: Training-free guidance of flow-based models as inference in source space
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # FingerTip 20K: A Benchmark for Proactive and Personalized Mobile LLM Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

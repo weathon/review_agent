@@ -1,5 +1,6 @@
 # STDDN: A Physics-Guided Deep Learning Framework for Crowd Simulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

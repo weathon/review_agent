@@ -1,5 +1,6 @@
 # Understand, Think, and Answer: Advancing Visual Reasoning with Large Multimodal Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

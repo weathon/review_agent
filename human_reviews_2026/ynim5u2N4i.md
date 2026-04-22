@@ -1,5 +1,6 @@
 # GenCompositor: Generative Video Compositing with Diffusion Transformer
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

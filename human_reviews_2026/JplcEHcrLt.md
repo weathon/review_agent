@@ -1,5 +1,6 @@
 # Inductive Bias and Spectral Properties of Single-Head Attention in High Dimensions
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

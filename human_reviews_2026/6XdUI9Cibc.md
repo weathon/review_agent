@@ -1,5 +1,6 @@
 # ENFORCE: Nonlinear Constrained Learning with Adaptive-depth Neural Projection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 8
 

@@ -1,5 +1,6 @@
 # ATPO: ADAPTIVE TREE POLICY OPTIMIZATION FOR MULTI-TURN MEDICAL DIALOGUE
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # Autoregressive Video Generation with Learnable Memory and Consistent Decoding
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

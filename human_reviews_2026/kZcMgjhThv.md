@@ -1,5 +1,6 @@
 # ConsumerBench: Benchmarking Generative AI Applications on End-User Devices
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

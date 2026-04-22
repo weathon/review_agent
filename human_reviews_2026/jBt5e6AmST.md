@@ -1,5 +1,6 @@
 # Evading Safety Alignment in Open-source LLM Deployment by Embedding Semantic Shift
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

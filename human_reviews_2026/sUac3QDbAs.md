@@ -1,5 +1,6 @@
 # Semantic-aware Wasserstein Policy Regularization for Large Language Model Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

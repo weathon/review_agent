@@ -1,5 +1,6 @@
 # Optimal Formats for Weight Quantisation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 8, 2
 

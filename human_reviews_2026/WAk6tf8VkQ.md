@@ -1,5 +1,6 @@
 # Vinoground: Today’s LMMs Don’t Understand Short Counterfactual Videos
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

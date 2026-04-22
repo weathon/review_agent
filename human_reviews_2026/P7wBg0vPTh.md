@@ -1,5 +1,6 @@
 # RLVER: Reinforcement Learning with Verifiable Emotion Rewards for Empathetic Agents
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

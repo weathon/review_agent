@@ -1,5 +1,6 @@
 # The Gaussian-Head OFL Family: One-Shot Federated Learning from Client Global Statistics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

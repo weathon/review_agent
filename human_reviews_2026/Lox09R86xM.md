@@ -1,5 +1,6 @@
 # None to Optima in Few Shots: Bayesian Optimization with MDP Priors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

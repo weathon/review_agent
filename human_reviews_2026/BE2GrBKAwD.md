@@ -1,5 +1,6 @@
 # FPTQuant: Function-Preserving Transforms for LLM Quantization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

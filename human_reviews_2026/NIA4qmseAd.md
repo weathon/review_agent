@@ -1,5 +1,6 @@
 # A Generative Framework for Causal Estimation via Importance-Weighted Diffusion Distillation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 
@@ -162,7 +163,12 @@ The proposed idea is original. Also, the paper has a clear structure.
 ### Weaknesses
 The method relies on the core idea that we can substitute the IPWs with the randomization-based adjustment (i.e., shuffling the covariates and treatment assignment). Yet, by doing so, we cannot use the observed outcomes from the original dataset (as they originate from P(X, Z, Y) and not from P(X)P(Z)P(Y|X, Z)). The paper also does not clearly explain what sample is being used for the distillation, so I assume the pre-trained diffusion model was used to sample from both of the potential outcomes, P(Y|X, Z). If this is indeed the case, the theoretical insights in Sec. 3.3 are obsolete: There, the authors assume that the target model $G_\Theta$ minimizes the risk wrt. data from the RCT (=P(X)P(Z)P(Y|X, Z)). Yet, in reality (as far as I understood), the ground-truth P(Y|X, Z) is substituted with another diffusion model.  I encourage the authors to clarify these important details.
 
-Therefore, I question the sanity of the proposed method: To the best of my knowledge, there is no direct way to omit the inverse propensity weights (other than trimming/truncation/retargeting of the loss) if we want to use the observational data and want to incorporate the propensity score into the loss.    Furthermore, in my opinion, the paper has limited novelty (e.g., in comparison with Diff-PO [1]), and the main method is simply the implementation of a two-stage covariate-adjusted learner with diffusion models.    
+Therefore, I question the sanity of the proposed method: To the best of my knowledge, there is no direct way to omit the inverse propensity weights (other than trimming/truncation/retargeting of the loss) if we want to use the observational data and want to incorporate the propensity score into the loss.  
+
+Furthermore, in my opinion, the paper has limited novelty (e.g., in comparison with Diff-PO [1]), and the main method is simply the implementation of a two-stage covariate-adjusted learner with diffusion models. 
+
+
+
 
 I also found several minor mistakes:
 - Line 195. $\lambda(\sigma)$ was not defined.

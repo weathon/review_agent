@@ -1,5 +1,6 @@
 # Rethinking Entropy Interventions in RLVR:  An Entropy Change Perspective
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

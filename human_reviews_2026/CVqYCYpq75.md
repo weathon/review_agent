@@ -1,5 +1,6 @@
 # Dem-HEC: High-Entropy Contrastive Fine-Tuning for Countering Natural Corruptions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

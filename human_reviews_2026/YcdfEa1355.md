@@ -1,5 +1,6 @@
 # LLMSELECTOR: Towards Model Selection Optimization for Compound AI Systems
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

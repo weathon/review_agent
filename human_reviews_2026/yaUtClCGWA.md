@@ -1,5 +1,6 @@
 # Learning Where to Learn: Training Data Distribution Optimization for Scientific Machine Learning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 2, 6, 6, 4
 

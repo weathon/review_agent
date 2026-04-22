@@ -1,5 +1,6 @@
 # Unveiling Hidden Details: A RAW Data-Enhanced Paradigm for Real-World Super-Resolution
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 8
 

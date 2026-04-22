@@ -1,5 +1,6 @@
 # Beyond Reasoning Gains: Mitigating General Capabilities Forgetting in Large Reasoning Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 6, 4
 

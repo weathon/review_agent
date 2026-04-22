@@ -1,5 +1,6 @@
 # SPO: A Black-box, Unbiased, Robust Watermarking Method for Large Language Model
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

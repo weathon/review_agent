@@ -1,5 +1,6 @@
 # KO: Kinetics-inspired Neural Optimizer with PDE Simulation Approaches
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

@@ -1,5 +1,6 @@
 # VTG-Reasoner: Long Video Temporal Grounding via Reinforcement Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

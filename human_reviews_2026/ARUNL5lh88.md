@@ -1,5 +1,6 @@
 # Dissecting Larval Zebrafish Hunting Behavior using Deep Reinforcement Learning trained RNNs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

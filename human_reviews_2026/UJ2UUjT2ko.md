@@ -1,5 +1,6 @@
 # Mixing Mechanisms: How Language Models Retrieve Bound Entities In-Context
 
+- Avg Score: 8.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 8
 

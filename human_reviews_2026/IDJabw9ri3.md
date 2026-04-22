@@ -1,5 +1,6 @@
 # Gaussian Process Priors for Boundary Value Problems of Linear Partial Differential Equations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 8, 4
 

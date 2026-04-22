@@ -1,5 +1,6 @@
 # Using Clause Predictions for Learning-Augmented Constraint Satisfaction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

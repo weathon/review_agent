@@ -1,5 +1,6 @@
 # Beyond Softmax and Entropy: Convergence Rates of Policy Gradients with $\boldsymbol{f}$-SoftArgmax Parameterization $\&$ Coupled Regularization
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 0
 

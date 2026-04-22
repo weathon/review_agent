@@ -1,5 +1,6 @@
 # Scalable Multi-Agent Autonomous Learning in Complex Unpredictable Environments
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 6, 8
 
@@ -119,7 +120,8 @@ The paper reads more like a technical report than a methodological contribution.
 
 7. Is drone capability evaluated solely based on fire-extinguishing capacity?
 
-8. You mentioned testing the framework on several MARL benchmarks. Could you provide detailed results on standard benchmarks such as SMAC? This is crucial to assess the framework’s potential impact on future MARL research. I genuinely appreciate the engineering effort and real-world implementation, but practical success alone does not establish superiority. Demonstrating that existing MARL algorithms perform better under your proposed framework on well-known benchmarks like SMAC or GRF would greatly strengthen your contribution. Without such evidence, I am currently leaning toward a negative evaluation. However, if the authors can show competitive or superior benchmark performance, I would be delighted to see this work presented to the ICLR community.
+8. You mentioned testing the framework on several MARL benchmarks. Could you provide detailed results on standard benchmarks such as SMAC? This is crucial to assess the framework’s potential impact on future MARL research.
+I genuinely appreciate the engineering effort and real-world implementation, but practical success alone does not establish superiority. Demonstrating that existing MARL algorithms perform better under your proposed framework on well-known benchmarks like SMAC or GRF would greatly strengthen your contribution. Without such evidence, I am currently leaning toward a negative evaluation. However, if the authors can show competitive or superior benchmark performance, I would be delighted to see this work presented to the ICLR community.
 
 ### Soundness
 2

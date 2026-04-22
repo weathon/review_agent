@@ -1,5 +1,6 @@
 # Task2Vec Readiness: Diagnostics for Federated Learning Performance from Pre-Training Embeddings
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

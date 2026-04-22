@@ -1,5 +1,6 @@
 # Modular Multimodal Alignment using Time-Series EHR Data for Enhancing Medical Image Classification
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0, 0
 

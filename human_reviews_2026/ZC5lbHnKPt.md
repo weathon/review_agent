@@ -1,5 +1,6 @@
 # On The Difficulty of Learning in Classification Problems: Optimality and Information-Theoretic Perspectives
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

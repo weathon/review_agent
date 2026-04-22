@@ -1,5 +1,6 @@
 # EA3D: Event-Augmented 3D Diffusion for Generalizable Novel View Synthesis
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 8
 

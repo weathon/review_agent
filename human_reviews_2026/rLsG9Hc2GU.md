@@ -1,5 +1,6 @@
 # With Great Power Comes Great Adaptation: Message Tuning Outshines Prompt Tuning for Graph Foundation Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

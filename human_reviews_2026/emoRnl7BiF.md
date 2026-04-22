@@ -1,5 +1,6 @@
 # Prompt Optimization Meets Subspace Representation Learning for Few-shot Out-of-Distribution Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

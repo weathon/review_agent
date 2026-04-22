@@ -1,5 +1,6 @@
 # Untraceable DeepFakes via Traceable Fingerprint Elimination
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 4
 

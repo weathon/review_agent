@@ -1,5 +1,6 @@
 # When Glass Disappears at Night: A Novel NIR-RGB Multi-modal Solution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

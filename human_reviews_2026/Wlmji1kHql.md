@@ -1,5 +1,6 @@
 # Latent Space Learning for PDE Systems with Complex Boundary Conditions
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

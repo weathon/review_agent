@@ -1,5 +1,6 @@
 # Reasoning Models Can be Accurately Pruned Via Chain-of-Thought Reconstruction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

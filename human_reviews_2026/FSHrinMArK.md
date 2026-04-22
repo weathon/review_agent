@@ -1,5 +1,6 @@
 # Efficient Orthogonal Fine-Tuning with Principal Subspace Adaptation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

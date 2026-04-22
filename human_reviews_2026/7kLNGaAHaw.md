@@ -1,5 +1,6 @@
 # Architecture-Agnostic Test-Time Adaptation via Backprop-Free Embedding Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 10
 

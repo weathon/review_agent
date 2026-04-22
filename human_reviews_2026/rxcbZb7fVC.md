@@ -1,5 +1,6 @@
 # Towards the Three-Phase Dynamics of Generalization Power of a DNN
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 6, 6
 

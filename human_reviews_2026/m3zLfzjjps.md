@@ -1,5 +1,6 @@
 # Federated Causal Inference on Multi-Site Observational Data via Propensity Score Aggregation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

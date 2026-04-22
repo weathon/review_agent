@@ -1,5 +1,6 @@
 # Sparkle: A Robust and Versatile Representation for Point Cloud-based Human Motion Capture
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

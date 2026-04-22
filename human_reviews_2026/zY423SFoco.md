@@ -1,5 +1,6 @@
 # TREAT: A Code LLMs Trustworthiness / Reliability Evaluation and Testing Framework
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 2, 6
 

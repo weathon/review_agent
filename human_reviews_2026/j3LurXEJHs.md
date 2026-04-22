@@ -1,5 +1,6 @@
 # Interpretable Brain-Inspired Representations Improve RL Performance on Visual Navigation Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

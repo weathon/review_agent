@@ -1,5 +1,6 @@
 # BARREL: Boundary-Aware Reasoning for Factual and Reliable LRMs
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8
 

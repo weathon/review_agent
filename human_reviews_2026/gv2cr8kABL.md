@@ -1,5 +1,6 @@
 # IC-Custom: Diverse Image Customization via In-Context Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

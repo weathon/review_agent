@@ -1,5 +1,6 @@
 # Vocabulary embeddings organize linguistic structure early in language model training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

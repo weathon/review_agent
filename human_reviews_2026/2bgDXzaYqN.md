@@ -1,5 +1,6 @@
 # What Is Missing: Interpretable Ratings for Large Language Model Outputs
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

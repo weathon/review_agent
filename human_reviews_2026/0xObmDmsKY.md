@@ -1,5 +1,6 @@
 # ViscoReg: Neural Signed Distance Functions via Viscosity Solutions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

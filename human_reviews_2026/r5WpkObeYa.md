@@ -1,5 +1,6 @@
 # Test-Time Scaling in Reasoning Models Is Not Effective for Knowledge-Intensive Tasks Yet
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

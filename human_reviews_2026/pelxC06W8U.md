@@ -1,5 +1,6 @@
 # Block-Sample MAC-Bayes Generalization Bounds
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 
@@ -44,7 +45,9 @@ Advances in Neural Information Processing Systems 37, 17947-17971
 
 which - in a different setting - consider a split of the training data and incrementally update the PAC-Bayes bound.
 
-* Section 4: I was somehow not convinced by this example that should show the usefulness of the new bounds. The prior leading to (11) depends on the „batch size“ m. I accept that in PAC-Baysian analysis the prior is not necessary some form of „prior belief“ as in stared Bayesian analysis, but rather a tool to get tight performance guarantees. Still, that the prior depends on m does not feel right to me - where should such a prior come from? Could the authors discuss this in more detail?  The fact that the results are better than without blocks-sampling is then also heavily dependent on the prior (end of  Section 4). Why should this prior be used for the  m=n case? Is the prior real „prior belief“  here? If yes, where does it come from for the m-n case? If not - if it is a tool to get tight bounds- why this choice for n=m?
+* Section 4: I was somehow not convinced by this example that should show the usefulness of the new bounds. The prior leading to (11) depends on the „batch size“ m. I accept that in PAC-Baysian analysis the prior is not necessary some form of „prior belief“ as in stared Bayesian analysis, but rather a tool to get tight performance guarantees. Still, that the prior depends on m does not feel right to me - where should such a prior come from? Could the authors discuss this in more detail?
+
+The fact that the results are better than without blocks-sampling is then also heavily dependent on the prior (end of  Section 4). Why should this prior be used for the  m=n case? Is the prior real „prior belief“  here? If yes, where does it come from for the m-n case? If not - if it is a tool to get tight bounds- why this choice for n=m?
 
 
 Minor comments:

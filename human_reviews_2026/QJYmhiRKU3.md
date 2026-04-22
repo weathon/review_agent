@@ -1,5 +1,6 @@
 # Mitigating Data Heterogeneity Effect in Client-Reshuffling-Based Federated Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

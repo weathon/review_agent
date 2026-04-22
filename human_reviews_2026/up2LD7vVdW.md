@@ -1,5 +1,6 @@
 # Do Vision Language Models Rotate in Mind? Evaluating Spatial Transformation Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

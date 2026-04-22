@@ -1,5 +1,6 @@
 # Norm$\times$Direction: Restoring the Missing Query Norm in Vision Linear Attention
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

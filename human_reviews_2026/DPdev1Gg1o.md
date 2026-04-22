@@ -1,5 +1,6 @@
 # How Do Transformers Perform Two-Hop Reasoning in Context?
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

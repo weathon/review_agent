@@ -1,5 +1,6 @@
 # MemAgent: Reshaping Long-Context LLM with Multi-Conv RL-based Memory Agent
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 4
 

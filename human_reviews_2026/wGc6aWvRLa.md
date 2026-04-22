@@ -1,5 +1,6 @@
 # Convergence of Near-Linear Width ReLU Networks with Unbalanced Initialization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

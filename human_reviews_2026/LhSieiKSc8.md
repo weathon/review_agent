@@ -1,5 +1,6 @@
 # Sentiment-weighted advantage updates for portfolio optimization with reinforcement learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

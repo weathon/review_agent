@@ -1,5 +1,6 @@
 # NeuroRVQ: Multi-Scale EEG Tokenization for Generative Large Brainwave Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

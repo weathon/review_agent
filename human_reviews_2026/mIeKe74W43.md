@@ -1,5 +1,6 @@
 # Mean Flow Policy with Instantaneous Velocity Constraint for One-step Action Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 4, 8, 8
 

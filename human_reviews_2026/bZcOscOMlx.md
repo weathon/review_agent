@@ -1,5 +1,6 @@
 # Ca$^2$P: Cache-Augmented Code-as-Policies for Open-Domain Embodied Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 4, 6
 

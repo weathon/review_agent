@@ -1,5 +1,6 @@
 # Theoretical Constraints on the Expressive Power of RoPE-based Tensor Attention Transformers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

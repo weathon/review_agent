@@ -1,5 +1,6 @@
 # TAG: Tangential Amplifying Guidance for Hallucination-Resistant Diffusion Sampling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 0, 6, 4
 

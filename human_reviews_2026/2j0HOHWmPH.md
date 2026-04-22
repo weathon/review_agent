@@ -1,5 +1,6 @@
 # Memory Self-Regeneration: Uncovering Hidden Knowledge in Unlearned Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 8, 2
 

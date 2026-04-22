@@ -1,5 +1,6 @@
 # MARché: Fast Masked Autoregressive Image Generation with Cache-Aware Attention
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

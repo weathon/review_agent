@@ -1,5 +1,6 @@
 # LLM-Guided Search for Deletion-Correcting Codes
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

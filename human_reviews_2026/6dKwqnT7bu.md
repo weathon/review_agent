@@ -1,5 +1,6 @@
 # Vox-Infinity: Benchmarking the Limits of Long-Context Spoken Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

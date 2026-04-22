@@ -1,5 +1,6 @@
 # Causal Representation Meets Stochastic Modeling under Generic Geometry
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

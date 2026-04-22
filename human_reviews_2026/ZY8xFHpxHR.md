@@ -1,5 +1,6 @@
 # TREEGEAR: Learning Graph Edit Distance with Zero Ground-truth Labels
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

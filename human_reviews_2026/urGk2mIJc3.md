@@ -1,5 +1,6 @@
 # SupertonicTTS: Towards Highly Efficient and Streamlined Text-to-Speech System
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

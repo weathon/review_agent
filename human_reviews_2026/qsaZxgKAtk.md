@@ -1,5 +1,6 @@
 # Missing Pattern Recognized Diffusion Imputation Model for Missing Not at Random
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 6, 6, 6, 6, 4
 

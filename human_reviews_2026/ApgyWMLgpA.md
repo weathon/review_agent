@@ -1,5 +1,6 @@
 # Topology- and Distribution-aware Backdoor Defense Against Federated Graph Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Aligning Latent Spaces with Flow Priors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

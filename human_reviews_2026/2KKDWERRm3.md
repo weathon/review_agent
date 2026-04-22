@@ -1,5 +1,6 @@
 # DETR-ViP: Detection Transformer with Robust Discriminative Visual Prompts
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

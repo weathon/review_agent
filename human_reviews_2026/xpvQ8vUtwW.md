@@ -1,5 +1,6 @@
 # Why Language Models Lie
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

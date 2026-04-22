@@ -1,5 +1,6 @@
 # From f(x) and g(x) to f(g(x)): LLMs Learn New Skills in RL by Composing Old Ones
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

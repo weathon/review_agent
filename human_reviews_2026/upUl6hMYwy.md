@@ -1,5 +1,6 @@
 # UniHand: A Unified Model for Diverse Controlled 4D Hand Motion Modeling
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8
 

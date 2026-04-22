@@ -1,5 +1,6 @@
 # Global Pivots, Local Unknowns: Stable Federated Open-Set Semi-Supervised Learning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Guarding the Gate: ConceptGuard Battles Concept-Level Backdoors in Concept Bottleneck Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

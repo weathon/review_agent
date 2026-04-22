@@ -1,5 +1,6 @@
 # Intra-Request Branch Orchestration for Efficient LLM Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # DENSE-RAG: Measuring and Improving Context Understanding for Consistent Retrieval-Augmented Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

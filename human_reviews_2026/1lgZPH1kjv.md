@@ -1,5 +1,6 @@
 # HiddenBench: Assessing Collective Reasoning in Multi-Agent LLMs via Hidden Profile Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

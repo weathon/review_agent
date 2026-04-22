@@ -1,5 +1,6 @@
 # FinP: Fairness-in-Privacy in Federated Learning by Addressing Disparities in Privacy Risk
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

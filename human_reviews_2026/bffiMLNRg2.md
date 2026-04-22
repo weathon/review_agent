@@ -1,5 +1,6 @@
 # Theory-Inspired Task-Relevant Representation Learning for Incomplete Multi-View Multi-Label Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

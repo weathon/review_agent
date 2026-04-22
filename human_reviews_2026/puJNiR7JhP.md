@@ -1,5 +1,6 @@
 # PlantRSR: A New Plant Dataset and Method for Reference-based Super-Resolution
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

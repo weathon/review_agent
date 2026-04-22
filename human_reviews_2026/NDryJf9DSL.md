@@ -1,5 +1,6 @@
 # Aryabhata: An exam-focused language model for JEE Math
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

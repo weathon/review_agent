@@ -1,5 +1,6 @@
 # DBellQuant: Breaking the Bell with Double-Bell Transformation for LLM Post Training Binarization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

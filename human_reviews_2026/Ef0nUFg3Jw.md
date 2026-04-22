@@ -1,5 +1,6 @@
 # LoRA Users Beware: A Few Spurious Tokens Can Manipulate Your Finetuned Model
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Generalized Sobolev IPM for Graph-Based Measures
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

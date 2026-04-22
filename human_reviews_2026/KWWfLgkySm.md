@@ -1,5 +1,6 @@
 # Fast Convergence of Natural Gradient Descent for Over-parameterized Physics-Informed Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

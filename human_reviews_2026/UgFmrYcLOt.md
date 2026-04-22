@@ -1,5 +1,6 @@
 # TOUCAN: Synthesizing 1.5M Tool-Agentic Data from Real-World MCP Environments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

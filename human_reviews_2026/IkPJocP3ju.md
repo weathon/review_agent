@@ -1,5 +1,6 @@
 # Breaking the Total Variance Barrier: Sharp Sample Complexity for Linear Heteroscedastic Bandits with Fixed Action Set
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 
@@ -29,25 +30,32 @@ The paper studies linear bandits with heteroscedastic noise under a fixed action
 * VAEE (Variance-Aware Exploration with Elimination) for large/continuous action sets, which selects actions by maximizing information gain while progressively eliminating arms.
 * VAGD (Variance-Adaptive G-Optimal Design) for finite action sets, combining approximate G-optimal design with variance-adaptive sampling.
 
-Both algorithms yield harmonic-mean–type simple-regret bounds of the form 
-*  $\tilde{O}\left(d \Big[\sum_t 1/\sigma_t^2 - \sum_{i=1}^{\tilde O(d)} 1/\sigma_{(i)}^2\Big]^{-1/2}\right)$  for VAEE and 
+Both algorithms yield harmonic-mean–type simple-regret bounds of the form
+
+*  $\tilde{O}\left(d \Big[\sum_t 1/\sigma_t^2 - \sum_{i=1}^{\tilde O(d)} 1/\sigma_{(i)}^2\Big]^{-1/2}\right)$  for VAEE and
+
 
 * $\tilde{O}\left(\sqrt{d\log |{\mathcal A}|}  \Big[\sum_t 1/\sigma_t^2 - \sum_{i=1}^{\tilde O(d)} 1/\sigma_{(i)}^2\Big]^{-1/2}\right)$ for VAGD,
  
 which the authors position as breaking the classic $\sqrt{\Lambda}$ barrier in simple regret. A matching instance-dependent lower bound (Theorem 6.1) shows a $\Omega \big(d (\sum_t 1/\sigma_t^2)^{-1/2}\big)$ dependence.
 
 ### Strengths
-1. **Clear statement of contributions and rates (with concrete formulas)**. 
+1. **Clear statement of contributions and rates (with concrete formulas)**.
+
 The abstract precisely states the harmonic-mean–dependent rates (including the subtracting of the  $\tilde O(d)$ smallest variances) for both VAEE and VAGD, and emphasizes that this breaks the $\sqrt{\Lambda}$ barrier in simple regret.
 
-2. **Well-motivated setting and assumptions.** 
+2. **Well-motivated setting and assumptions.**
+
 The fixed action set requirement is explicitly justified: when contexts change adversarially, $\sqrt{\Lambda}$ remains unavoidable.
 
-3. **Accessible algorithmic presentation.** Algorithm 1 (VAEE) and Algorithm 2 (VAGD) are spelled out line-by-line, including the elimination step for VAEE (Line 8) and the variance-weighted design logic for VAGD (Lines 1–8 and estimator definition).
+3. **Accessible algorithmic presentation.**
+Algorithm 1 (VAEE) and Algorithm 2 (VAGD) are spelled out line-by-line, including the elimination step for VAEE (Line 8) and the variance-weighted design logic for VAGD (Lines 1–8 and estimator definition).
 
-4. **Thoughtful comparisons and intuition.** The case study in Section 4.1 contrasts VAEE with Weighted OFUL under a low-variance window and shows how VAEE reallocates exploration to weak coordinates; the discussion quantifies the differing simple-regret decay. Table 2 further compares simple and cumulative regrets across noise profiles.
+4. **Thoughtful comparisons and intuition.**
+The case study in Section 4.1 contrasts VAEE with Weighted OFUL under a low-variance window and shows how VAEE reallocates exploration to weak coordinates; the discussion quantifies the differing simple-regret decay. Table 2 further compares simple and cumulative regrets across noise profiles.
 
-5. **Lower bound with standard, transparent techniques.** Theorem 6.1’s proof uses Le Cam’s method and Pinsker’s inequality, clearly documented in Appendix C. This makes the paper more complete.
+5. **Lower bound with standard, transparent techniques.**
+Theorem 6.1’s proof uses Le Cam’s method and Pinsker’s inequality, clearly documented in Appendix C. This makes the paper more complete.
 
 ### Weaknesses
 1. **Lack of clear separation between settings.**

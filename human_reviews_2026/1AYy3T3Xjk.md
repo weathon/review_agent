@@ -1,5 +1,6 @@
 # A Process-Level Method for Creativity Evaluation in LLM-Assisted Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

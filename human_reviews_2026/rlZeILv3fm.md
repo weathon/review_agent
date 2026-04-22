@@ -1,5 +1,6 @@
 # $PhyWorldBench$: A Comprehensive Evaluation of Physical Realism in Text-to-Video Models
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 6, 6, 6
 

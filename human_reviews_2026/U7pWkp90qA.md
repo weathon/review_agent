@@ -1,5 +1,6 @@
 # DyCodeExplainer: Explainable Dynamic Graph Attention for Multi-Agent Reinforcement Learning in Collaborative Coding
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 6, 2
 

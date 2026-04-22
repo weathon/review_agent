@@ -1,5 +1,6 @@
 # The Art of Scaling Reinforcement Learning Compute for LLMs
 
+- Avg Score: 7.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 8
 

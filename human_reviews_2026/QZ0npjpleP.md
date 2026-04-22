@@ -1,5 +1,6 @@
 # AICrypto: A Comprehensive Benchmark for Evaluating Cryptography Capabilities of Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

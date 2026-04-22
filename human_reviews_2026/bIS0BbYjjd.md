@@ -1,5 +1,6 @@
 # Is In-Context Learning Learning?
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2, 6
 

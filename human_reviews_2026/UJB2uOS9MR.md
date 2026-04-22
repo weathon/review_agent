@@ -1,5 +1,6 @@
 # GQA-$\mu$P: The Maximal Parameterization Update for Grouped Query Attention and Fully Sharded Data Parallel
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

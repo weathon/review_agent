@@ -1,5 +1,6 @@
 # Reasoning in Space via Grounding in the World
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Making Offline Model-Based Reinforcement Learning Work on Real Robots
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

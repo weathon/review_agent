@@ -1,5 +1,6 @@
 # TabPalooza: A Benchmark Odyssey for Tabular Model Evaluation
 
+- Avg Score: 1.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 2, 2, 2
 

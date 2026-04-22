@@ -1,5 +1,6 @@
 # Sequence Length Matters in Data Scheduling for Accelerating Language Model Pretraining
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

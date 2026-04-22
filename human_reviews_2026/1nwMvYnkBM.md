@@ -1,5 +1,6 @@
 # Step-Tagging: Toward controlling the generation of Language Reasoning Models through step monitoring
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

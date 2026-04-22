@@ -1,5 +1,6 @@
 # FinThink: An LLM-based Multi-agent System for Financial Reasoning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

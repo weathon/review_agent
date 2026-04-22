@@ -1,5 +1,6 @@
 # Is Your LLM Really Mastering the Concept? A Multi-agent Benchmark
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 4, 6
 

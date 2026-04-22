@@ -1,5 +1,6 @@
 # Exponential Objective Decrease in Convex Setup is Possible! Gradient Descent Method Variants under $(L_0,L_1)$-Smoothness
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

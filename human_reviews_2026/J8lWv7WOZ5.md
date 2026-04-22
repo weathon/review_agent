@@ -1,5 +1,6 @@
 # Dyna-ViT: Parameter-Free Dynamic Token Pruning for Efficient Vision Transformers
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 0, 0
 

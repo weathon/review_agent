@@ -1,5 +1,6 @@
 # O-Forge: An LLM + Computer Algebra Framework for Asymptotic Analysis
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

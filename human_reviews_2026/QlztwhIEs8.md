@@ -1,5 +1,6 @@
 # LLM4CTI: Uncovering Security Entities and Their Interactions from Unstructured Cyber Threat Intelligence
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

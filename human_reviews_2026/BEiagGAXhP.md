@@ -1,5 +1,6 @@
 # INSEva: A Comprehensive Chinese Benchmark for Large Language Models in Insurance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

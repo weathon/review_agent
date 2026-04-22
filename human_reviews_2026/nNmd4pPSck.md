@@ -1,5 +1,6 @@
 # A Unifying Perspective on Unsupervised Reinforcement Learning Algorithms
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 2, 4, 2, 6
 

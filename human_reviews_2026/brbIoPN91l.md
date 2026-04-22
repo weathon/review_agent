@@ -1,5 +1,6 @@
 # OmniEarth-Bench: Probing Cognitive Abilities of MLLMs for Earth's Multi-sphere Observation Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # AlignDiff: Exploiting Model-Intrinsic Information for Better Preference Data Selection
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # 3DPAN-CIL: a prototype assisted network of class-incremental learning for 3D point clouds
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

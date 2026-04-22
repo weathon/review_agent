@@ -1,5 +1,6 @@
 # Unifying Perspectives: Plausible Counterfactual Explanations on Global, Group-wise, and Local Levels
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 6
 

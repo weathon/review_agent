@@ -1,5 +1,6 @@
 # SimKey: A Semantically Aware Key Module for Watermarking Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

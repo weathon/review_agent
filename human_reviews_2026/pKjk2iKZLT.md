@@ -1,5 +1,6 @@
 # Scaling Higher-Order Graph Learning with Maximal Clique Complexes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

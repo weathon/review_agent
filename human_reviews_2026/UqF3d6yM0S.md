@@ -1,5 +1,6 @@
 # GoldenStart: Q-Guided Priors and Entropy Control for Distilling Flow Policies
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 8
 

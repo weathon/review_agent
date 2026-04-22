@@ -1,5 +1,6 @@
 # Federated Hierarchical Anti-Forgetting Framework for Class-Incremental Learning with Large Pre-Trained Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # VeriWeb: Verifiable Long-Chain Web Benchmark for Agentic Information-Seeking
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

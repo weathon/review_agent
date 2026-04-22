@@ -1,5 +1,6 @@
 # Limitations on Safe, Trusted, Artificial General Intelligence
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

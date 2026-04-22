@@ -1,5 +1,6 @@
 # High-Fidelity GAN-based Vocoder with Conditioning Subband Network and Magnitude-aware Phase Loss
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2
 

@@ -1,5 +1,6 @@
 # SAFT: Structure-Aware Fine-Tuning of LLMs for AMR-to-Text Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

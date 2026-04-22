@@ -1,5 +1,6 @@
 # TiEBe: Tracking Language Model Recall of Notable Worldwide Events Through Time
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Nemotron-CC-Math: A 133 Billion-Token-Scale High Quality Math Pretraining Dataset
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8
 

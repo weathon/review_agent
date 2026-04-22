@@ -1,5 +1,6 @@
 # Curing the Transitivity Curse: Shortcut Logical Reasoning via A Priori Knowledge Compilation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # ATOM-Bench: From Atoms to Conclusions in Objective Evaluation of Large Multimodal Models Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

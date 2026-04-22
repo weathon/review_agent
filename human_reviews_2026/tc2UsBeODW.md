@@ -1,5 +1,6 @@
 # VLM4VLA: Revisiting Vision-Language-Models in Vision-Language-Action Models
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

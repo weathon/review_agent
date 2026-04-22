@@ -1,5 +1,6 @@
 # Voyager: Real-Time Splatting City-Scale 3D Gaussians on Resource-Constrained Devices
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

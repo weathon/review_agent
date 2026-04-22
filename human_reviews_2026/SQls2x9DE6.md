@@ -1,5 +1,6 @@
 # T-3DGS: Removing Transient Objects for 3D Scene Reconstruction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

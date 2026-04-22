@@ -1,5 +1,6 @@
 # A learning- driven multi agents approach to metadata extraction from legal contracts
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 2
 

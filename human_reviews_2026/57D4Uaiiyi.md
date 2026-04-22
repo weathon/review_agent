@@ -1,5 +1,6 @@
 # Generalization and Scaling Laws for Mixture-of-Experts Transformers
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 4, 8
 

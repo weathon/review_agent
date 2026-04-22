@@ -1,5 +1,6 @@
 # Ocean-E2E: Hybrid Physics-Based and Data-Driven Global Forecasting of Marine Heatwaves with End-to-End Neural Assimilation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

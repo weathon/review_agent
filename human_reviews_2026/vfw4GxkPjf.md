@@ -1,5 +1,6 @@
 # FishNet++: Analyzing the capabilities of Multimodal Large Language Models in marine biology.
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

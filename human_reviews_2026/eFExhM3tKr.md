@@ -1,5 +1,6 @@
 # Task-Adaptive Parameter-Efficient Fine-Tuning for Weather Foundation Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 0
 

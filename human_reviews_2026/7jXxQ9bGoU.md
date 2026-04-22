@@ -1,5 +1,6 @@
 # GaussianFusion: Unified 3D Gaussian Representation for Multi-Modal Fusion Perception
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Mapping Overlaps in Benchmarks through Perplexity in the Wild
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

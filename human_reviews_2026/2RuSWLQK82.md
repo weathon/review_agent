@@ -1,5 +1,6 @@
 # Towards a Certificate of Trust: Task-Aware OOD Detection for Scientific AI
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # BranchGRPO: Stable and Efficient GRPO with Structured Branching in Diffusion Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

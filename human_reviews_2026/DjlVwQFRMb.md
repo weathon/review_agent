@@ -1,5 +1,6 @@
 # Tramba: Mamba with Adaptive Attention for Traffic Speed Forecasting
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Learning Interpretable Models Using Uncertainty Oracles
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 4, 0
 

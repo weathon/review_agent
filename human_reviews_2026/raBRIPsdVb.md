@@ -1,5 +1,6 @@
 # LLM-IQA: Standard-guided MLLM for Mix-grained Image Quality Assessment
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

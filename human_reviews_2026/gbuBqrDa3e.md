@@ -1,5 +1,6 @@
 # Flow-Matching Guided Deep Unfolding for Hyperspectral Image Reconstruction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 4, 0
 

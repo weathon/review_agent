@@ -1,5 +1,6 @@
 # Latent Reasoning with Recurrent Depth for Sequential Recommendation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

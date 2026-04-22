@@ -1,5 +1,6 @@
 # Spot the Key, Recover the Rest: Dual-Path&View Representation Learning for Text-Video Retrieval
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

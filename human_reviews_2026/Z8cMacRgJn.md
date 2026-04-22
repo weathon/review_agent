@@ -1,5 +1,6 @@
 # Mitigating Object Hallucinations in Large Vision-Language Models via multi-scale visual integration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

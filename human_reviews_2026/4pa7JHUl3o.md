@@ -1,5 +1,6 @@
 # Transcriptomics-Morphology Generation Via Treatment Conditioning With Rectified Flow
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

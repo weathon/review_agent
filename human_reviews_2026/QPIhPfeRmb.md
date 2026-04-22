@@ -1,5 +1,6 @@
 # SynSQL: Synthetic Database Generation for Robust Evaluation of Text-to-SQL Systems
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

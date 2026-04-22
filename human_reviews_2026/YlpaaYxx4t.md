@@ -1,5 +1,6 @@
 # Detecting Data Contamination in LLMs via In-Context Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

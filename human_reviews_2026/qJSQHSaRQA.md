@@ -1,5 +1,6 @@
 # Guaranteeing Conservation of Integrals with Projection in Physics-Informed Neural Networks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

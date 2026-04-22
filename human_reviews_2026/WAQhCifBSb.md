@@ -1,5 +1,6 @@
 # Learning to Summarize by Learning to Quiz: Adversarial Agentic Collaboration for Long Document Summarization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

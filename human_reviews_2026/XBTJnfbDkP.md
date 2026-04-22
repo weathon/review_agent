@@ -1,5 +1,6 @@
 # Transitive RL: Value Learning via Divide and Conquer
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

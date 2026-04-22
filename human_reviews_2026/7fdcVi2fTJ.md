@@ -1,5 +1,6 @@
 # Uncertainty-driven Embedding Convolution
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # PIC: Revisiting INR for Image Coding with Fast Encoding and Sub-Millisecond Decoding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

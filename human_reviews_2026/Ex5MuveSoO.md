@@ -1,5 +1,6 @@
 # GUARD: General Unsupervised Adversarial Robust Defense for Deep Multi-View Clustering via Information Bottleneck
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

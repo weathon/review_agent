@@ -1,5 +1,6 @@
 # Pallatom-Ligand: an All-Atom Diffusion Model for Designing Ligand-Binding Proteins
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

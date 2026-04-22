@@ -1,5 +1,6 @@
 # Universal Image Immunization against Diffusion-based Image Editing via Semantic Injection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

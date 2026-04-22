@@ -1,5 +1,6 @@
 # CrossSparse-MoE: Adaptive Sparsity and Cross-Channel Expert Routing for Time Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

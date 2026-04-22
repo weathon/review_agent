@@ -1,5 +1,6 @@
 # CAPNAV: TOWARDS ROBUST INDOOR NAVIGATION WITH DESCRIPTION-FIRST MAPS
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 6, 0
 

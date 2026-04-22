@@ -1,5 +1,6 @@
 # Multi-Scale Adaptive Hypergraph Learning for High-Order Brain Connectivity Analysis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

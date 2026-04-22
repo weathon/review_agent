@@ -1,5 +1,6 @@
 # Visual Autoregressive Models Beat Diffusion Models on Inference Time Scaling
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 6, 6, 2
 

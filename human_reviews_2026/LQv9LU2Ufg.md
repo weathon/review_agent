@@ -1,5 +1,6 @@
 # RIG: Synergizing Reasoning and Imagination in End-to-End Generalist Policy
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

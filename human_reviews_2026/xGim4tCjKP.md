@@ -1,5 +1,6 @@
 # Partially Functional Dynamic Backdoor Diffusion-based Causal Model
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

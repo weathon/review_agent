@@ -1,5 +1,6 @@
 # BRep: Graph-structured Brain Representation Learning via Parametric High-order Dependence Measures
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 2, 8, 4
 

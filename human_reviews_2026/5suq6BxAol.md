@@ -1,5 +1,6 @@
 # MOSIC: Model-Agnostic Optimal Subgroup Identification with Multi-Constraint for Improved Reliability
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

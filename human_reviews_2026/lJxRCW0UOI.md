@@ -1,5 +1,6 @@
 # Large Language Models outperform state-of-the-art methods on multiclass sentiment polarity detection
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 2, 0
 

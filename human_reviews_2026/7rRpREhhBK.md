@@ -1,5 +1,6 @@
 # Turning Shields into Swords: Leveraging Safety Policies for LLM Safety Testing
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

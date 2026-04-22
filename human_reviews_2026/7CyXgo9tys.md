@@ -1,5 +1,6 @@
 # Bioacoustic Geolocation: Species Sounds as Geographic Signals
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

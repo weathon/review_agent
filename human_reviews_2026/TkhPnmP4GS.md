@@ -1,5 +1,6 @@
 # Equilibrium flow: From Snapshots to Dynamics
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 2, 2, 8, 4
 

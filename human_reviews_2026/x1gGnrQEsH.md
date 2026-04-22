@@ -1,5 +1,6 @@
 # POPS: Recovering Unlearned Multi-Modality Knowledge in MLLMs with Fine-tuning and Prompt-based Attacks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

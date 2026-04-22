@@ -1,5 +1,6 @@
 # K²-Agent: Co-Evolving Know-What and Know-How for Hierarchical Mobile Device Control
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

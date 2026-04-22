@@ -1,5 +1,6 @@
 # SoSBench: Benchmarking Safety Alignment on Six Scientific Domains
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Teaching Values to Machines: Simulating Human-Like Behavior in LLMs with Value-Prompting
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Grounding AI Explanations in Experience: A Reflective Cognitive Architecture for Clinical Decision Support
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

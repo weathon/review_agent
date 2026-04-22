@@ -1,5 +1,6 @@
 # Part-level Semantic-guided Contrastive Learning for Fine-grained Visual Classification
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # WebFactory: Automated Compression of Foundational Language Intelligence into Grounded Web Agents
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

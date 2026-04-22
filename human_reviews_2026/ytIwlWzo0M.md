@@ -1,5 +1,6 @@
 # Pro-Trans: Progressive Tensor Ring with Attention Guided Local Smoothing Regularization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # White-Basilisk: A Hybrid Model for Code Vulnerability Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

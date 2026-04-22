@@ -1,5 +1,6 @@
 # MEGS^{2}: Memory-Efficient Gaussian Splatting via Spherical Gaussians and Unified Pruning
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6, 2
 

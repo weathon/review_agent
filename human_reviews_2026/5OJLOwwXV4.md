@@ -1,5 +1,6 @@
 # High-dimensional limit theorems for SGD: Momentum and Adaptive Step-sizes
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

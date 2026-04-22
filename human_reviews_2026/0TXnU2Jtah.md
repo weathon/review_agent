@@ -1,5 +1,6 @@
 # Modular Distillation Makes Small Models Think Like Big Ones
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

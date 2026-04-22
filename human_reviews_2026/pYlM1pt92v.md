@@ -1,5 +1,6 @@
 # Bridging Gene Expression and Text: LLMs Can Complement Single-Cell Foundation Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

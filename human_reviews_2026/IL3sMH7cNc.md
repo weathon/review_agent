@@ -1,5 +1,6 @@
 # A Descriptive and Normative Theory of Human Beliefs in RLHF
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # NFT: Bridging Supervised Learning and Reinforcement Learning in Math Reasoning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

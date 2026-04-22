@@ -1,5 +1,6 @@
 # Continuous Evolution Pool: Taming Recurring Concept Drift in Online Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

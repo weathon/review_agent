@@ -1,5 +1,6 @@
 # Divide and Abstract: Autoformalization via Decomposition and Abstraction Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

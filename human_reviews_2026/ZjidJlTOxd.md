@@ -1,5 +1,6 @@
 # Stabilizing Reinforcement Learning for Honesty Alignment in Language Models on Deductive Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # CoKV: Optimizing LLM Inference with Game-Theoretic Adaptive KV Cache
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

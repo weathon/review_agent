@@ -1,5 +1,6 @@
 # Data-Free Knowledge Exchange for Aggregation-Free Heterogeneous Federated Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

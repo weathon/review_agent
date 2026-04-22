@@ -1,5 +1,6 @@
 # Gradient-Normalized Smoothness for Optimization with Approximate Hessians
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 10, 6, 6
 

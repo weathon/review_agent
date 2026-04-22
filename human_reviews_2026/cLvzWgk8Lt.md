@@ -1,5 +1,6 @@
 # Automated Capability Discovery via Foundation Model Self-Exploration
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 8, 2, 0
 

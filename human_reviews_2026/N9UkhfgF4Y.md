@@ -1,5 +1,6 @@
 # Retrieval-Augmented Generation as Noisy In-Context Learning: A Unified Theory and Risk Bounds
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

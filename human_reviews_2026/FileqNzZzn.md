@@ -1,5 +1,6 @@
 # Fast and Interpretable Protein Substructure Alignment via Optimal Transport
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4
 

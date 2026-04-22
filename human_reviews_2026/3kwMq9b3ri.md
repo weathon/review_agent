@@ -1,5 +1,6 @@
 # CEDAR: Agent‑Orchestrated Tree Search for Goal‑Directed Optimization of Complex Systems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

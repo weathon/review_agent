@@ -1,5 +1,6 @@
 # In Praise of Stubbornness: An Empirical Case for Cognitive-Dissonance Aware Continual Update of Knowledge in LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

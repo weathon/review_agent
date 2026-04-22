@@ -1,5 +1,6 @@
 # ShadowFM: Geometric Approaches for Learning Quantum Many-Body States with Flow Matching on Classical Shadows
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

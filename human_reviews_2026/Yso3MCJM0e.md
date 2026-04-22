@@ -1,5 +1,6 @@
 # Statistically Undetectable Backdoors in Deep Neural Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Manipulate Large Language Models in Time Series Forecasting by Token Disruption
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

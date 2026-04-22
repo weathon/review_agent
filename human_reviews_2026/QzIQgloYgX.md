@@ -1,5 +1,6 @@
 # No, of Course I Can! Deeper Fine-Tuning Attacks That Bypass Token-Level Safety Mechanisms
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

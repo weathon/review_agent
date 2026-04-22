@@ -1,5 +1,6 @@
 # xLSTM Scaling Laws: Competitive Performance with Linear Time-Complexity
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

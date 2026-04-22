@@ -1,5 +1,6 @@
 # To the Best of Trust: Full-Stage Trusted Multi-modal Clustering
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 8
 

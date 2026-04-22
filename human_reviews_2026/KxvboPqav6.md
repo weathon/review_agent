@@ -1,5 +1,6 @@
 # Learning Physics-Grounded 4D Dynamics with Neural Gaussian Force Fields
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

@@ -1,5 +1,6 @@
 # Learning Compact Representations of LLM Abilities via Item Response Theory
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 6
 

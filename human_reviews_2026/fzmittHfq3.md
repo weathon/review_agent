@@ -1,5 +1,6 @@
 # From Spatial to Actions: Grounding Vision-Language-Action Model in Spatial Foundation Priors
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 8
 

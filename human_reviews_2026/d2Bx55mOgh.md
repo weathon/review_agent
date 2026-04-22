@@ -1,5 +1,6 @@
 # TerraCodec: Compressing Earth Observations
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 6
 
@@ -119,15 +120,19 @@ The paper presents TerraCodec, a family of learned codecs for multispectral and 
 ### Weaknesses
 1. The title and abstract suggest “Compressing Earth Observation” in general, but experiments are limited to Sentinel-2. The work would be more accurately described as “Sentinel-2 multispectral image compression.” Broader validation (e.g., Landsat, MODIS) would strengthen the generalization claim.
 2. The related work section omits several influential recent studies, such as C3, PnVC (INR-based), and diffusion-based compression models. In addition, recent SOTA compression methods for remote sensing imagery are not discussed. Including both general and EO-specific works would make the review more complete.
-3. Unclear contribution boundary:  TEC-FP and TEC-ELIC are adaptations of existing frameworks (Factorized Prior and ELIC) to EO imagery and should not be presented as novel contributions. The methodological innovation primarily lies in Latent Repacking/FlexTEC and in systematizing EO compression practice, not in the architectural variants themselves.
-4. Incomplete experimental comparisons:  The study lacks modern baselines—neither the latest codec standard VVC (H.266) nor contemporary learned methods (e.g., diffusion-based or INR-based) are included. It also omits compression approaches in the remote sensing domain. Extending the comparisons to these would significantly improve credibility.
+3. Unclear contribution boundary:
+ TEC-FP and TEC-ELIC are adaptations of existing frameworks (Factorized Prior and ELIC) to EO imagery and should not be presented as novel contributions. The methodological innovation primarily lies in Latent Repacking/FlexTEC and in systematizing EO compression practice, not in the architectural variants themselves.
+4. Incomplete experimental comparisons:
+ The study lacks modern baselines—neither the latest codec standard VVC (H.266) nor contemporary learned methods (e.g., diffusion-based or INR-based) are included. It also omits compression approaches in the remote sensing domain. Extending the comparisons to these would significantly improve credibility.
 
 ### Questions
 1. The title and abstract suggest general EO compression, yet all experiments use Sentinel-2. Can the authors include results from at least one additional EO source (e.g., Landsat, MODIS) to support claims of generalization?
 2. Are TEC-FP and TEC-ELIC introducing new algorithmic components or primarily applying existing compression backbones to EO data? Please delineate what is new beyond domain-specific adaptations.
 3. The Related Work section omits influential recent studies such as C3, PNVC, and diffusion-based compression frameworks. Please update this section and re-situate TerraCodec in the current research landscape.
-4.  The comparison set lacks modern codecs and neural approaches. Please include evaluations against VVC, C3, or diffusion-based compression methods, as well as recent SOTA compression methods for remote sensing imagery,  to ensure fair and up-to-date benchmarking.
-5. Analysis No runtime or complexity metrics are provided. Please add encoding/decoding latency, throughput, and resource usage comparisons among TEC-EP/ELIC/TT/FLEX variants to assess deployment feasibility.
+4. 
+The comparison set lacks modern codecs and neural approaches. Please include evaluations against VVC, C3, or diffusion-based compression methods, as well as recent SOTA compression methods for remote sensing imagery,  to ensure fair and up-to-date benchmarking.
+5. Analysis
+No runtime or complexity metrics are provided. Please add encoding/decoding latency, throughput, and resource usage comparisons among TEC-EP/ELIC/TT/FLEX variants to assess deployment feasibility.
 6. The “latent repacking” mechanism resembles existing flexible bitrate methods. Please specify the conceptual or technical differences and provide evidence of improved generality or efficiency.
 7. Figure 1 lacks TEC-ELIC visual results. Please include side-by-side reconstructions.
 8. It would be valuable to evaluate how different temporal reference settings affect reconstruction quality — including the number of reference frames, temporal intervals, degree of land-cover change, and cloud coverage ratio within the temporal context.

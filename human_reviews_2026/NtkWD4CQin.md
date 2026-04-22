@@ -1,5 +1,6 @@
 # How is Occam's Razor Realized in Symbolic Regression?: An Adaptive LLM-Enhanced Genetic Programming Approach for Efficient, Versatile, and Interpretable Representation Discovery through Simplification and Evolution
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

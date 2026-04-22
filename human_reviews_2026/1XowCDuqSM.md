@@ -1,5 +1,6 @@
 # Covariate-Guided Clusterwise Linear Regression for Generalization to Unseen Data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

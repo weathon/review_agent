@@ -1,5 +1,6 @@
 # Self-Improving Medical Visual Question Answering through Reasoning Trajectory Clustering
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 6, 2, 0
 

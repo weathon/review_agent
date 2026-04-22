@@ -1,5 +1,6 @@
 # SQLAgent: Learning to Explore Before Generating as a Data Engineer
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

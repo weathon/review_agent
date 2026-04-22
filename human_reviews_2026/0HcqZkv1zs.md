@@ -1,5 +1,6 @@
 # Clarifying Before Reasoning: A Coq Prover with Structural Context
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

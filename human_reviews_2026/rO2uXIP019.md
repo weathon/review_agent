@@ -1,5 +1,6 @@
 # OrthAlign: Orthogonal Subspace Decomposition for Non-Interfering Multi-Objective Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

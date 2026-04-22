@@ -1,5 +1,6 @@
 # SEED-SET: Scalable Evolving Experimental Design for System-level Ethical Testing
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

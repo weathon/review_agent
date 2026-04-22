@@ -1,5 +1,6 @@
 # I-DRUID: Layout to image generation via instance-disentangled representation and unpaired data
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

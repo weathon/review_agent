@@ -1,5 +1,6 @@
 # VibeVoice: Expressive Podcast Generation with Next-Token Diffusion
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 2, 8, 8, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # CTRL&SHIFT: High-quality Geometry-Aware Object Manipulation in Visual Generation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

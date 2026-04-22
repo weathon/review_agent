@@ -1,5 +1,6 @@
 # Decoupling Sign and Magnitude in Optimization with Adaptive Momentum Scaling
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 6
 

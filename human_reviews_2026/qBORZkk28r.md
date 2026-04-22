@@ -1,5 +1,6 @@
 # A High Quality Dataset and Reliable Evaluation for Interleaved Image-Text Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 8
 

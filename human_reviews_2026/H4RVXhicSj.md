@@ -1,5 +1,6 @@
 # Semi-Supervised Contrastive Learning with Orthonormal Prototypes
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

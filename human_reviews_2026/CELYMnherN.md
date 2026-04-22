@@ -1,5 +1,6 @@
 # A Federated Generalized Expectation-Maximization Algorithm for Mixture Models with an Unknown Number of Components
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # RED: Robust Event-Guided Motion Deblurring with Modality-Specific Disentangled Representation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

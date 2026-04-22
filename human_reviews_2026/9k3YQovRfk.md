@@ -1,5 +1,6 @@
 # FERA: Uncertainty-aware Federated Reasoning for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

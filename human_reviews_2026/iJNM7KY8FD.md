@@ -1,5 +1,6 @@
 # SecP-Tuning: Efficient Privacy-Preserving Prompt Tuning for Large Language Models via MPC
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Downgrade to Upgrade: Optimizer Simplification Enhances Robustness in LLM Unlearning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

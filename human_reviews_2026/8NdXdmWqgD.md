@@ -1,5 +1,6 @@
 # Soundness-Aware Level: A Microscopic Signature that Predicts LLM Reasoning Potential
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 8, 2, 2, 2
 

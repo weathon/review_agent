@@ -1,5 +1,6 @@
 # Enhancing Learning with Noisy Labels via Rockafellian Relaxation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8
 

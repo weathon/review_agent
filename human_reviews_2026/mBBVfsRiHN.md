@@ -1,5 +1,6 @@
 # Dual Contrastive Inversion with Distributional Priors for Diversity-Aware Data-Free Knowledge Distillation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 
@@ -27,8 +28,10 @@ The paper proposes a new framework, D2CIP, to enhance data diversity in data-fre
 2. Quantitative evaluations show consistent superiority in both JS divergence (0.498 vs 0.531) and FID (110.56 vs 112.32) over CMI and TA-DFKD, confirming that the dual contrastive design leads to more diverse and semantically aligned synthetic data.
 
 ### Weaknesses
-1. While the paper presents a well-organized framework, several core components, such as contrastive learning, batch normalization alignment, and adversarial distillation, are closely related to existing works like CMI and DeepInversion. As a result, the boundary between adaptation and innovation could be articulated more clearly to highlight the unique conceptual advances of D2CIP.   
-2. The paper provides strong quantitative evidence through FID and JS divergence but includes few visual examples of the generated samples. Additional visual comparisons would help readers better appreciate whether D2CIP produces more realistic and diverse images than existing methods.   
+1. While the paper presents a well-organized framework, several core components, such as contrastive learning, batch normalization alignment, and adversarial distillation, are closely related to existing works like CMI and DeepInversion. As a result, the boundary between adaptation and innovation could be articulated more clearly to highlight the unique conceptual advances of D2CIP.
+  
+2. The paper provides strong quantitative evidence through FID and JS divergence but includes few visual examples of the generated samples. Additional visual comparisons would help readers better appreciate whether D2CIP produces more realistic and diverse images than existing methods.
+  
 3. In Figure 3, the generated distributions of D2CIP and CMI appear visually similar, suggesting comparable data manifolds. A more detailed qualitative analysis or higher-resolution visualization could better illustrate the claimed improvements in diversity and distributional richness.
 
 ### Questions

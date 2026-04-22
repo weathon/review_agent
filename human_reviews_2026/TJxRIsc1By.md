@@ -1,5 +1,6 @@
 # KAN-Semi: A Semi-Supervised Approach Combining Self-Supervised Pre-training, Hierarchical Priors, and Kolmogorov-Arnold Networks for Landmark-based Biometry Estimation
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

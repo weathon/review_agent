@@ -1,5 +1,6 @@
 # XR-1: Towards Versatile Vision-Language-Action Models via Learning Unified Vision-Motion Representations
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 6, 2, 4
 

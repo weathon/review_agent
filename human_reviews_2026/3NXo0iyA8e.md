@@ -1,5 +1,6 @@
 # CataRAG: LLM-based Enzyme-Substrate Prediction with Multi-modal Optimal Transport Maps
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

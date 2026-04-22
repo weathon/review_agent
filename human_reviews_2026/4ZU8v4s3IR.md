@@ -1,5 +1,6 @@
 # Boomerang Distillation Enables Zero-Shot Model Size Interpolation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

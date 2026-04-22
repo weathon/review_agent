@@ -1,5 +1,6 @@
 # ATOM of Understanding: Information-Theoretic Decomposition for Interpretable 3D Question Answering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

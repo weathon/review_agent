@@ -1,5 +1,6 @@
 # SpecBranch: Speculative Decoding via Hybrid Drafting and Rollback-Aware Branch Parallelism
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

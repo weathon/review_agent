@@ -1,5 +1,6 @@
 # Revisiting Differential Attention: A Fine-Tuning Perspective on Practical Noise Mitigation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Multimodal Policy Internalization for Conversational Agents
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8
 

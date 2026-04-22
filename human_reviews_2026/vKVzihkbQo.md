@@ -1,5 +1,6 @@
 # DiffWind: Physics-Informed Differentiable Modeling of Wind-Driven Object Dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 8
 

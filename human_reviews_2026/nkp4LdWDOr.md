@@ -1,5 +1,6 @@
 # DiffuDETR: Rethinking Detection Transformers with Denoising Diffusion Process
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

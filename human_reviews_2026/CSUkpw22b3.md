@@ -1,5 +1,6 @@
 # RAAG: RATIO AWARE ADAPTIVE GUIDANCE
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 0, 6
 

@@ -1,5 +1,6 @@
 # ImpMIA: Leveraging Implicit Bias for Membership Inference Attack under Realistic Scenarios
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

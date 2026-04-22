@@ -1,5 +1,6 @@
 # Fighting Fire with Fire: Assessing Test Set Contamination Through Deliberate Training on Test Data
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

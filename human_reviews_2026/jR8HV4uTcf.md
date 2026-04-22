@@ -1,5 +1,6 @@
 # Exploring the Design Space of Transition Matching
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8, 8
 

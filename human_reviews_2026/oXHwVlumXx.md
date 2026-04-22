@@ -1,5 +1,6 @@
 # Learning Local Search with Theoretical Indicators for Job Shop Scheduling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

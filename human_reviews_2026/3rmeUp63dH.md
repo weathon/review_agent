@@ -1,5 +1,6 @@
 # ProJo4D: Progressive Joint Optimization for Sparse-View Inverse Physics Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

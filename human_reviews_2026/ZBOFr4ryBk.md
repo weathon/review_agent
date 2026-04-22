@@ -1,5 +1,6 @@
 # Shepherd: Pattern-Guided Trajectory Selection for Coding Agents on SWE-Bench
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

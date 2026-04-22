@@ -1,5 +1,6 @@
 # Agent Data Protocol: Unifying Datasets for Diverse, Effective Fine-tuning of LLM Agents
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 8
 

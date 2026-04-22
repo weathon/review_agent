@@ -1,5 +1,6 @@
 # Spatially Aware Linear Transformer (SAL-T) for Efficient Particle Jet Identification
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 4
 

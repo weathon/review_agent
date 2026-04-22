@@ -1,5 +1,6 @@
 # DIVER-1 : Deep Integration of Vast Electrophysiological Recordings at Scale
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 2, 6, 2
 

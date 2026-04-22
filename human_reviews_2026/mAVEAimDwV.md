@@ -1,5 +1,6 @@
 # Towards Anomaly-Aware Pre-Training and Fine-Tuning for Graph Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

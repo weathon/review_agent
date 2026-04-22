@@ -1,5 +1,6 @@
 # Structured Data Understanding: Not All Tokens Are What You Need
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 2
 

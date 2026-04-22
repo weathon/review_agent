@@ -1,5 +1,6 @@
 # Deconstructing Guidance: A Semantic Hierarchy for Precise Diffusion Model Editing
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

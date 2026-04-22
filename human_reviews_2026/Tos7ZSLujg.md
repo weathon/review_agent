@@ -1,5 +1,6 @@
 # An Investigation of Robustness of LLMs in Mathematical Reasoning: Benchmarking with Mathematically-Equivalent Transformation of Advanced Mathematical Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

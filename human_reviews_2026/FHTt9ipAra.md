@@ -1,5 +1,6 @@
 # Mitigating Hallucination in Vision-Language Model with Depth and Spatial-aware Key-Value Refinement
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

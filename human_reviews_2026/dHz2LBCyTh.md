@@ -1,5 +1,6 @@
 # How to Cure Newton for Unlearning Neural Networks? An Empirical Study from the Hessian Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

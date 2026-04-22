@@ -1,5 +1,6 @@
 # Rethinking Convergence in Deep Learning: The Predictive-Corrective Paradigm for Anatomy-Informed Brain MRI Segmentation
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 6, 2, 4
 

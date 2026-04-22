@@ -1,5 +1,6 @@
 # Learning What Matters: Toward Causally-Grounded Foundations for Contextual Time-Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

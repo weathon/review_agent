@@ -1,5 +1,6 @@
 # EPiC: Efficient Video Camera Control Learning with Precise Anchor-Video Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

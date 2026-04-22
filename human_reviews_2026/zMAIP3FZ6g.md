@@ -1,5 +1,6 @@
 # Sculpting Latent Spaces With MMD: Disentanglement With Programmable Priors
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

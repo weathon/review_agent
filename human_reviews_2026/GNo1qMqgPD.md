@@ -1,5 +1,6 @@
 # VoxPrivacy: A Benchmark for Evaluating Interactional Privacy of Speech Language Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 10, 4, 8
 

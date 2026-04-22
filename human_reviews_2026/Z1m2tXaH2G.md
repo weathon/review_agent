@@ -1,5 +1,6 @@
 # Revisiting Large Language Model Pruning using Neuron Semantic Attribution
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 6, 0, 4
 

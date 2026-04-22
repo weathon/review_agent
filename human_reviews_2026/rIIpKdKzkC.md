@@ -1,5 +1,6 @@
 # Transformer Networks Enable Robust Generalization of Source Localization for EEG Measurements
 
+- Avg Score: 1.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2, 2
 

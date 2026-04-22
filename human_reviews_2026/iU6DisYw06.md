@@ -1,5 +1,6 @@
 # Do Language Models Trust Their Own Justifications? A Study on Functional Consistency
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 0, 2, 2
 

@@ -1,5 +1,6 @@
 # OracleAgent: A Multimodal Reasoning Agent for Oracle Bone Script Research
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

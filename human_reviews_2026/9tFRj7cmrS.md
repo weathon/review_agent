@@ -1,5 +1,6 @@
 # StockBench:Can Llm Agents Trade Stocks Profitably In Real-world Markets?
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

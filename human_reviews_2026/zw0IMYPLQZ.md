@@ -1,5 +1,6 @@
 # SINGER: Leveraging Semantic Identifier Hierarchies for Generative Recommendation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

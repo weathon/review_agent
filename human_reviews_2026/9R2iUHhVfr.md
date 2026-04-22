@@ -1,5 +1,6 @@
 # SWE-Bench Pro: Can AI Agents Solve Long-Horizon Software Engineering Tasks?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

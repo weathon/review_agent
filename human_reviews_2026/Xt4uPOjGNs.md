@@ -1,5 +1,6 @@
 # Adaptive Dual Prompting: Hierarchical Debiasing for Fairness-aware Graph Neural Networks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

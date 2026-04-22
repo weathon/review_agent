@@ -1,5 +1,6 @@
 # Metis: Training LLMs with FP4 Quantization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

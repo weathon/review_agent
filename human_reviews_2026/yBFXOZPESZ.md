@@ -1,5 +1,6 @@
 # Ano : Faster is Better in Noisy Lanscapes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2, 4
 

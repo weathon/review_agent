@@ -1,5 +1,6 @@
 # LLM-based Symbolic Regression with Tool-Augmented Multi-Objective Optimization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

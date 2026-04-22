@@ -1,5 +1,6 @@
 # Discovery of Diverse and Realistic Financial Tail-Risk Using Generative Flow Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

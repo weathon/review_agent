@@ -1,5 +1,6 @@
 # Lost in the Middle: An Emergent Property from Information Retrieval Demands in LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

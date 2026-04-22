@@ -1,5 +1,6 @@
 # Exploring Conditions for Diffusion models in Robotic Control
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

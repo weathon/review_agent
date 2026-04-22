@@ -1,5 +1,6 @@
 # Penalizing Length: Uncovering Systematic Bias in Quality Estimation Metrics
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 8, 4, 8
 

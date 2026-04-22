@@ -1,5 +1,6 @@
 # LLM Unlearning via Calibrated and Tokenized Negative Preference Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

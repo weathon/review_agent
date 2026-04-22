@@ -1,5 +1,6 @@
 # GILT: An LLM-Free, Tuning-Free Graph Foundational Model for In-Context Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

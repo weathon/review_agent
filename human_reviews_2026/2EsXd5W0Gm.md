@@ -1,5 +1,6 @@
 # Bridging Protein Structure to Sequence via Local Structure for Inverse Folding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

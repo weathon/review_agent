@@ -1,5 +1,6 @@
 # AIGCoder 1.0: Locally-Enhanced Language Modeling with Explicit and Structured Knowledge Memory
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

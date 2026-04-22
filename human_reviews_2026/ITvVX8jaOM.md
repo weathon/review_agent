@@ -1,5 +1,6 @@
 # Taming Flow-based I2V Models for Creative Video Editing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

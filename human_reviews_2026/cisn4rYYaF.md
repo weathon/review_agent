@@ -1,5 +1,6 @@
 # SAM2-3dMed: Empowering SAM2 for 3D Medical Image Segmentation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

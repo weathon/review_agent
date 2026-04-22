@@ -1,5 +1,6 @@
 # IDSPACE: A Model-Guided Synthetic Identity Document Generation Framework and Dataset
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

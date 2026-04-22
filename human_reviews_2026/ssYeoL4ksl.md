@@ -1,5 +1,6 @@
 # Identification of Causal Relationships in Linear Cyclic Models with Latent Variables
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

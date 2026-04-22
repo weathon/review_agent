@@ -1,5 +1,6 @@
 # Partially Equivariant Reinforcement Learning in Symmetry-Breaking Environments
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

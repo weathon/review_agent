@@ -1,5 +1,6 @@
 # HackWorld: Evaluating Computer-Use Agents on Exploiting Web Application Vulnerabilities
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

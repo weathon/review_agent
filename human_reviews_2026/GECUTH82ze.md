@@ -1,5 +1,6 @@
 # StyliTruth : Unlocking Stylized yet Truthful LLM Generation via Disentangled Steering
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

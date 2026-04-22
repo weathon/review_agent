@@ -1,5 +1,6 @@
 # sparseGeoHOPCA: A Geometric Solution to Sparse Higher-Order PCA Without Covariance Estimation
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Visualizing Thought: Conceptual Diagrams Enable Robust Planning in LMMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

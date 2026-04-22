@@ -1,5 +1,6 @@
 # ECAttention: Adaptive and Principled Feature Expansion-Compression with Linear Efficiency
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

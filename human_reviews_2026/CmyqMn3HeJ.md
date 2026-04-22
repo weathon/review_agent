@@ -1,5 +1,6 @@
 # Process Reinforcement through Implicit Rewards
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 2, 6
 

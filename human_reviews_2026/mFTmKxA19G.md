@@ -1,5 +1,6 @@
 # Benchmarking Open-Set Recognition Beyond Vision-Language Pre-training
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 2, 6, 6
 

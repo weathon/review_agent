@@ -1,5 +1,6 @@
 # RL makes MLLMs see better than SFT
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 6
 

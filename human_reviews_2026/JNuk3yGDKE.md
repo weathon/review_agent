@@ -1,5 +1,6 @@
 # Towards a Transferable Acceleration Method for Density Functional Theory
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

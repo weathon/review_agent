@@ -1,5 +1,6 @@
 # MCP-Radar: A Multi-Dimensional Benchmark for Evaluating Tool Use Capabilities in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

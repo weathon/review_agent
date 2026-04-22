@@ -1,5 +1,6 @@
 # Multi-objective Hyperparameter Optimization in the Age of Deep Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

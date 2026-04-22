@@ -1,5 +1,6 @@
 # An Efficient Framework for Length Extension via Dynamically Growing Positional Embedding and Correlation-Aware Routing Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

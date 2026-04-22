@@ -1,5 +1,6 @@
 # Global Convergence of Four-Layer Matrix Factorization under Random Initialization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 2, 6, 8
 

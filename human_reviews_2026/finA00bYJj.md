@@ -1,5 +1,6 @@
 # Pixel Motion as Universal Representation for Robot Control
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

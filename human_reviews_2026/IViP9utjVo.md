@@ -1,5 +1,6 @@
 # PROOF: Perturbation-Robust Noise Finetune via Optimal Transport Information Bottleneck for Highly-Correlated Asset Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

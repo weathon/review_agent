@@ -1,5 +1,6 @@
 # Learning Fast and Accurate Machine Learning Force Fields via Joint Atomic Energy and Energy Hessian Distillation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

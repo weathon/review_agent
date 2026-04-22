@@ -1,5 +1,6 @@
 # 3D-ATRES: Ambiguity-Tolerant Learning for 3D Referring Expression Segmentation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

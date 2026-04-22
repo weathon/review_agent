@@ -1,5 +1,6 @@
 # SmellNet: A Dataset for Sensor-Based Smell Recognition and Mixture Prediction
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 6
 

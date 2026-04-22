@@ -1,5 +1,6 @@
 # Quantifying Cross-Attention Interaction in Transformers for Interpreting TCR-pMHC Binding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

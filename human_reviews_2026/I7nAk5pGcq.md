@@ -1,5 +1,6 @@
 # DriveAction: A Benchmark for Exploring Human-like Driving Decisions in VLA Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

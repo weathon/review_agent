@@ -1,5 +1,6 @@
 # Indirect Prompt Injections: Are Firewalls All You Need, or Stronger Benchmarks?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

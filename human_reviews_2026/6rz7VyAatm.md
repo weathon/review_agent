@@ -1,5 +1,6 @@
 # BadDet+: Robust Backdoor Attacks for Object Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # From Tokens to Thoughts: How LLMs and Humans Trade Compression for Meaning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 8
 
@@ -153,7 +154,9 @@ Reference:
 
 _Medin, D. L., & Schaffer, M. M. (1978). Context theory of classification learning. Psychological Review, 85(3), 207–238_
 
-_Wu, S., Thalmann, M., Dayan, P., Akata, Z., & Schulz, E. (2025).  Building, Reusing, and Generalizing Abstract Representations from Concrete Sequences. In The Thirteenth International Conference on Learning Representations (ICLR 2025)_
+_Wu, S., Thalmann, M., Dayan, P., Akata, Z., & Schulz, E. (2025). 
+Building, Reusing, and Generalizing Abstract Representations from Concrete Sequences.
+In The Thirteenth International Conference on Learning Representations (ICLR 2025)_
 
 ### Soundness
 2

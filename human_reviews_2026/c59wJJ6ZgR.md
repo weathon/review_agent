@@ -1,5 +1,6 @@
 # DRiFT: Differentiable Grid-Based Rigid-Fluid Coupling for Training and Control
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

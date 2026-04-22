@@ -1,5 +1,6 @@
 # Understanding the Mechanisms of Fast Hyperparameter Transfer
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

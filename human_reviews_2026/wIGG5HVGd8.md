@@ -1,5 +1,6 @@
 # Let me PASS: Formalization Driven Prompt Jailbreaking via Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # OmniMotion: Multimodal Motion Generation with Continuous Masked Autoregression
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # All in RLVR on Non-Verifiable Domains
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Self-Tooling Agent: Dynamically Extending Agent Capabilities through Scientific Tool Synthesis and Invocation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

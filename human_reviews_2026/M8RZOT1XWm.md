@@ -1,5 +1,6 @@
 # MUSS: Multilevel Subset Selection for Relevance and Diversity
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 2
 

@@ -1,5 +1,6 @@
 # Dejavu: Post-Deployment Learning for Embodied Agents via Experience Feedback
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 8
 

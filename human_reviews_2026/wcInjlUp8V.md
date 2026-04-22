@@ -1,5 +1,6 @@
 # CoTabBench: A Real-World Benchmark for Question Answering over Weakly-Structured and Heterogeneous Tables
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

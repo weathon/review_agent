@@ -1,5 +1,6 @@
 # Spectral Decomposed Variational Inference: A Principled Framework for Posterior Covariance Modeling
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

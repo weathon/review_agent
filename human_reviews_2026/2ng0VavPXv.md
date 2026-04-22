@@ -1,5 +1,6 @@
 # Training-free LLM Verification via Recycling Few-shot Examples
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

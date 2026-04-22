@@ -1,5 +1,6 @@
 # PhotoAgent: Exploratory Visual Aesthetic Planning with Large Vision Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

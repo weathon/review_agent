@@ -1,5 +1,6 @@
 # Multiple Images Distract Large Multimodal Models via Attention Fragmentation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

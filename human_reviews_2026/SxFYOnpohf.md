@@ -1,5 +1,6 @@
 # A Neural Signal Codec with Resource Efficient Encoder for Implantable Brain Machine Interface Systems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

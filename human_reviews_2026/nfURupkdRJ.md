@@ -1,5 +1,6 @@
 # Harder Is Better: Boosting Mathematical Reasoning via Difficulty-Aware GRPO and Multi-Aspect Question Reformulation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Can Speech LLMs Think while Listening?
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Lita: Light Agent Uncovers the Agentic Coding Capabilities of LLMs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

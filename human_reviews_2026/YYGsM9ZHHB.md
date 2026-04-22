@@ -1,5 +1,6 @@
 # ChainGeo: Enabling Effective Geometric Reasoning in Small VLMs through Interleaved Visual-Text Chains
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 6, 2, 4
 

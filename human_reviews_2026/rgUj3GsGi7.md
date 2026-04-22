@@ -1,5 +1,6 @@
 # Auto-Annotation from Expert-Crafted Guidelines: A Benchmark through 3D LiDAR Detection
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2, 4
 

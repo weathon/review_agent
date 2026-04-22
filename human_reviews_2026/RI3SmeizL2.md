@@ -1,5 +1,6 @@
 # Guaranteed Bounding Meshes Extraction from Neural Implicit Surfaces via Neural Network Verification
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 2
 

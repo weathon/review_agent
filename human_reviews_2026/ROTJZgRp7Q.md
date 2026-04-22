@@ -1,5 +1,6 @@
 # Embedding Trust: Semantic Isotropy Predicts Nonfactuality in Long-Form Text Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

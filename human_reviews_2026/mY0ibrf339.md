@@ -1,5 +1,6 @@
 # Confidence-Guided MCTS for Efficient Long-Horizon Web Agent Tasks
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

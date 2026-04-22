@@ -1,5 +1,6 @@
 # PD-Diag-Net: Clinical-Priors guided Network on Brain MRI for Auxiliary Diagnosis of Parkinson’s Disease
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Regressor-free Intermediate Layer Distillation via Teacher Pruning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

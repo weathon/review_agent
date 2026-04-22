@@ -1,5 +1,6 @@
 # Sharpness of Minima in Deep Matrix Factorization: Exact Expressions
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Contrastive Gradient Guidance for Test-time Preference Alignment of Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

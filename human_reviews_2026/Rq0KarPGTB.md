@@ -1,5 +1,6 @@
 # P-DROP: Poisson-Based Dropout for Graph Neural Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 0, 2
 

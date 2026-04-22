@@ -1,5 +1,6 @@
 # The Human Genomics Long-Range Benchmark: Advancing DNA Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8
 

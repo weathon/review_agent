@@ -1,5 +1,6 @@
 # FATE: A Formal Benchmark Series for Frontier Algebra of Multiple Difficulty Levels
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

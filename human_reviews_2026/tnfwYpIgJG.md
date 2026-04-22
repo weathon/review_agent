@@ -1,5 +1,6 @@
 # Real-time Echocardiography Video Segmentation via Slot Propagation, Spatiotemporal Feature Fusion, and Frequency-phase Enhancement
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

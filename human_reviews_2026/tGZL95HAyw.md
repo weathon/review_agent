@@ -1,5 +1,6 @@
 # Uncertainty-Weighted Fusion of RGB and Synthetic Motion Cues for Video Anomaly Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

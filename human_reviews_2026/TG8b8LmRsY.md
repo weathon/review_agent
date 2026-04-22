@@ -1,5 +1,6 @@
 # Evaluating Bargaining Skills in Online Second-Hand Marketplace with LLM Seller Agents
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

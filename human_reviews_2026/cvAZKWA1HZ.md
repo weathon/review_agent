@@ -1,5 +1,6 @@
 # Auto-scaling Continuous Memory for GUI Agent
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

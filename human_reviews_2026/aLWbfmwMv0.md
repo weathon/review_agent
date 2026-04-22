@@ -1,5 +1,6 @@
 # Clarification as Supervision: Reinforcement Learning for Vision-Language Interfaces
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

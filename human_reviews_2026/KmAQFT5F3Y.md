@@ -1,5 +1,6 @@
 # Hard Labels In! Rethinking the Role of Hard Labels in Mitigating Local Semantic Drift
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

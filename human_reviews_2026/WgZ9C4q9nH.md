@@ -1,5 +1,6 @@
 # ZIP-FIT: Embedding-Free Data Selection via Compression-Based Alignment for Code
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 6, 6, 4
 

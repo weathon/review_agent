@@ -1,5 +1,6 @@
 # Rethinking the Role of Dynamic Sparse Training for Scalable Deep Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

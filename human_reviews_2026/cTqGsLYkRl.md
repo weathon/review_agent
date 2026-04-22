@@ -1,5 +1,6 @@
 # VideoAgent: All-in-One Agentic Framework for Video Understanding and Editing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

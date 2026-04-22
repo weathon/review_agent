@@ -1,5 +1,6 @@
 # EMind: A Foundation Model for Multi-task Electromagnetic Signals Understanding
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

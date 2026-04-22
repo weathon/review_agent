@@ -1,5 +1,6 @@
 # Lightweight Transformer for EEG Classification via Balanced Signed Graph Algorithm Unrolling
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

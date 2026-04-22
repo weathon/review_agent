@@ -1,5 +1,6 @@
 # Treating Neural Image Compression via Modular Adversarial Optimization: From Global Distortion to Local Artifacts
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

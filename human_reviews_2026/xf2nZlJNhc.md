@@ -1,5 +1,6 @@
 # Measuring Meta-Cultural Competency: A Spectral Framework for LLM Knowledge Structures
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

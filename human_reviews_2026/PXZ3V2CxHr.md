@@ -1,5 +1,6 @@
 # Identifying Good and Bad Neurons for Task-Level Controllable LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # MobileWizard: A Data-Efficient GUI Agent with Structured Reasoning and Progressive Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

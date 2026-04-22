@@ -1,5 +1,6 @@
 # DM4CT: Benchmarking Diffusion Models for Computed Tomography Reconstruction
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

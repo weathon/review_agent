@@ -1,5 +1,6 @@
 # UniMo: Unifying 2D Video and 3D Human Motion with an Autoregressive Framework
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

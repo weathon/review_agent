@@ -1,5 +1,6 @@
 # H2IL-MBOM: A Hierarchical World Model Integrating Intent and Latent Strategy for Opponent Modeling in Multi-UAV Game
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

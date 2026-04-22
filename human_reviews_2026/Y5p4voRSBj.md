@@ -1,5 +1,6 @@
 # Learning Flexible Generalization in Video Quality Assessment by Bringing Device and Viewing Condition Distributions
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Differentially Private Synthetic Data via APIs 3: Using Simulators Instead of Foundation Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # SUBRead: Clustering Sub-Graphs for Graph-Level Readout
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

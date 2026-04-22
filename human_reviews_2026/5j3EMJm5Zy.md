@@ -1,5 +1,6 @@
 # Prompt Engineering at Scale: Provably Effective Multi-Agent Cascades for Attribute Generation in E-Commerce
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

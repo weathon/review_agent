@@ -1,5 +1,6 @@
 # MediBench: A Benchmark for VAEs in Medical Imaging Across Fidelity, Structure, and Latent Utility
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

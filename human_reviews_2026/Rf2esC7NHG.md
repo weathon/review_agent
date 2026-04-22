@@ -1,5 +1,6 @@
 # Teaching LLMs to Abstain via Fine-Grained Semantic Confidence Reward
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

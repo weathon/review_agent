@@ -1,5 +1,6 @@
 # SPOT-JS:Spectral Chebyshev Filter and Optimal Transport Fusion with Jensen-Shannon Alignment for Cross-Domain Multimodal Deception Detection
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

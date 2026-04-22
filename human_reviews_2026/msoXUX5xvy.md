@@ -1,5 +1,6 @@
 # Modeling the language cortex with form-independent and enriched representations of sentence meaning reveals remarkable semantic abstractness
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 2, 10
 

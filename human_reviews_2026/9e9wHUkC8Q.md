@@ -1,5 +1,6 @@
 # MANAR: Memory-augmented Attention with Navigational Abstract conceptual Representation
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 2, 0, 0
 

@@ -1,5 +1,6 @@
 # Measure Once, Mask Once: Delta Refined Block Sparse Attention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Computer Agent Arena: Toward Human-Centric Evaluation and Analysis of Computer-Use Agents
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 
@@ -66,15 +67,21 @@ The authors gather 2,201 high-quality votes from 1,058 users across 12 agents, i
 
 ### Strengths
 1. **Originality and significance**: CAA introduces a new evaluation paradigm for computer-use agents. It extends the “Arena” concept pioneered by Chatbot Arena into the a more complex, multimodal, and stateful domain of GUI-based computer interaction. By converting crowd-sourced, real-world tasks and pairwise human preferences into structured feedback, CAA establishes a scalable, human-centric framework for CUA assessment. This contribution is conceptually innovative and practically significant, redirecting focus from benchmark scores to real user satisfaction and behavioral quality.
-2. **Technical quality and system design**:  The system demonstrates great engineering practice. The cloud-based virtual machine infrastructure provides elastic scaling, hundreds of preset setups, and user-defined customizations for authentic computer use. Agents run in matched environments with identical AMI fingerprints and software versions, ensuring fair comparison. The ranking method is statistically sound and is supported by bootstrapping, permutation tests, and power analysis. It delivers reproducible Elo scores with confidence intervals. The paper also reports strong inter-annotator agreement and transparent filtering procedures.
+2. **Technical quality and system design**:
+ The system demonstrates great engineering practice. The cloud-based virtual machine infrastructure provides elastic scaling, hundreds of preset setups, and user-defined customizations for authentic computer use. Agents run in matched environments with identical AMI fingerprints and software versions, ensuring fair comparison. The ranking method is statistically sound and is supported by bootstrapping, permutation tests, and power analysis. It delivers reproducible Elo scores with confidence intervals. The paper also reports strong inter-annotator agreement and transparent filtering procedures.
 3. **Human-centric insight and analytical depth**: The analysis section is insightful, and I highly appreciate it. It shows that users value execution process quality —such as clarity, responsiveness, and error recovery —more than speed or execution time. The observed “inverted U-shaped” relationship between the number of CALL_USER queries and win rate offers actionable guidance for designing interactive agents. Moreover, the comparison between tool-integrated and pure GUI agents reveals an important benchmark gap. Tool-centric agents perform well on scripted benchmarks but often struggle with open-ended real-world tasks due to tool misuse and hidden failures. These findings represent valuable behavioral diagnostics for the field.
-4. **Clarity and communication**: The paper is well-written and illustrated. The methodology is described with approachable language, and the paper also offers full reproducibility details. This clarity significantly enhances the paper’s readability and utility to the community.
+4. **Clarity and communication**:
+The paper is well-written and illustrated. The methodology is described with approachable language, and the paper also offers full reproducibility details. This clarity significantly enhances the paper’s readability and utility to the community.
 
 ### Weaknesses
-1. **Limited task coverage and representativeness**: Although the authors collect over 2,000 votes, some models receive relatively few comparisons, which may affect ranking stability. Tasks are crowd-sourced and primarily English-language, so the distribution may underrepresent non-English and specialized domains such as scientific or enterprise workflows. Explicit coverage metrics for task diversity would strengthen the evaluation.
-2. **Cost and scalability**: The framework is efficient for benchmarking but remains costly for large-scale data collection (about $1.24 per vote). Scaling to preference-tuning datasets might require further automation or active sampling methods.
-3. **Human-centric definition and interactivity**: While CAA is human-judged, the evaluation is not truly interactive because raters review replays rather than engage in real-time turn-taking. This limits its scope as a “human-in-the-loop” system. Future extensions could integrate live interaction to capture dynamic feedback and adaptation.
-4. **Task bias and environmental variability**: Despite identical AMIs and matched virtual machines, minor runtime differences such as network latency or software updates could influence agent behavior. Moreover, crowd-generated tasks may skew toward common desktop operations rather than professional applications.
+1. **Limited task coverage and representativeness**:
+Although the authors collect over 2,000 votes, some models receive relatively few comparisons, which may affect ranking stability. Tasks are crowd-sourced and primarily English-language, so the distribution may underrepresent non-English and specialized domains such as scientific or enterprise workflows. Explicit coverage metrics for task diversity would strengthen the evaluation.
+2. **Cost and scalability**:
+The framework is efficient for benchmarking but remains costly for large-scale data collection (about $1.24 per vote). Scaling to preference-tuning datasets might require further automation or active sampling methods.
+3. **Human-centric definition and interactivity**:
+While CAA is human-judged, the evaluation is not truly interactive because raters review replays rather than engage in real-time turn-taking. This limits its scope as a “human-in-the-loop” system. Future extensions could integrate live interaction to capture dynamic feedback and adaptation.
+4. **Task bias and environmental variability**:
+Despite identical AMIs and matched virtual machines, minor runtime differences such as network latency or software updates could influence agent behavior. Moreover, crowd-generated tasks may skew toward common desktop operations rather than professional applications.
 
 ### Questions
 1. **Task coverage and diversity**: How do you quantify the coverage of crowd-sourced tasks across domains and difficulty? 

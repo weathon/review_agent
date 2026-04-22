@@ -1,5 +1,6 @@
 # ProcessLID: Step-wise Internal Reward in LLM Reasoning via Local Intrinsic Dimension
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2, 4
 

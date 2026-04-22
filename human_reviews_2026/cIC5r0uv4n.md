@@ -1,5 +1,6 @@
 # CoPatch: Zero-Shot Referring Image Segmentation by Leveraging Untapped Spatial Knowledge in CLIP
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

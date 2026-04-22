@@ -1,5 +1,6 @@
 # Fantastic Tractor-Dogs and How Not to Find Them With Open-Vocabulary Detectors
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

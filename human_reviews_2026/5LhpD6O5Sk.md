@@ -1,5 +1,6 @@
 # TabAgent: A Framework for Replacing Agentic Generative Components with Tabular-Textual Classifiers
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

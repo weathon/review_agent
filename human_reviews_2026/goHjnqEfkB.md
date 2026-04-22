@@ -1,5 +1,6 @@
 # SplatFont3D: Structure-Aware Text-to-3D Artistic Font Generation with Part-Level Style Control
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

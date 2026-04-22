@@ -1,5 +1,6 @@
 # ED-BFN: Electron Density Point Clouds Enable High-Fidelity 3D Molecular Generation via GeoBFN
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

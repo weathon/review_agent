@@ -1,5 +1,6 @@
 # Planning in Stochastic Environments with Awareness of Catastrophic Chance Events
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 6, 2
 

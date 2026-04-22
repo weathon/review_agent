@@ -1,5 +1,6 @@
 # Atomos: Hierarchical Reasoning From Atomic Steps
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 0, 4, 2
 

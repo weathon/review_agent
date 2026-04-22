@@ -1,5 +1,6 @@
 # Machine-Generated Text Detection Requires Fewer Machine-Human Mixed Texts
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # J1: Incentivizing Thinking in LLM-as-a-Judge via Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

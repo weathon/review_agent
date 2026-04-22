@@ -1,5 +1,6 @@
 # Safeguarding Visual Privacy in Dataset Distillation: Robust Initialization via Augmentation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

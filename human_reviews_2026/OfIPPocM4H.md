@@ -1,5 +1,6 @@
 # HAMMER: Hamiltonian Curiosity Augmented Large Language Model Reinforcement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

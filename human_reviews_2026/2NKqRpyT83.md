@@ -1,5 +1,6 @@
 # Byte Pair Encoding for Efficient Time Series Forecasting
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

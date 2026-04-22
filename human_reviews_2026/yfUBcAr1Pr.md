@@ -1,5 +1,6 @@
 # VITA-E: A Dual-Model Framework for Real-Time, Interruptible, and Concurrent Human-Robot Interaction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

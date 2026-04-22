@@ -1,5 +1,6 @@
 # MetaCaptioner: Towards Generalist Visual Captioning with Open-source Suites
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # SYNAPSE: Simulation Benchmark of Neuro-Adaptive Patient-Specific Evaluation for Episodic Decision-Making
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

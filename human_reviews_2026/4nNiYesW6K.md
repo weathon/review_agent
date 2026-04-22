@@ -1,5 +1,6 @@
 # AntiFault: A Fault-Tolerant and Self-Recoverable Floating-Point Format for Deep Neural Networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2
 

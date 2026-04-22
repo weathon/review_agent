@@ -1,5 +1,6 @@
 # TokenSculpt: Pruning with Min-Max Spatio-Temporal Duplication for Video Grounding
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

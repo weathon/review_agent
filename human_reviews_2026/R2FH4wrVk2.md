@@ -1,5 +1,6 @@
 # Rethinking LLM Ensembling from the Perspective of Mixture Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

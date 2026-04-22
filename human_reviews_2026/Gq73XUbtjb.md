@@ -1,5 +1,6 @@
 # Symbolic or Numerical? Understanding Physics Problem Solving in Reasoning LLMs
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 2
 

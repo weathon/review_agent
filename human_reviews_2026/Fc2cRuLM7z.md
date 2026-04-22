@@ -1,5 +1,6 @@
 # AstroSplat: Asset Transfer Oriented 3D Gaussian Splatting for Autonomous Driving
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

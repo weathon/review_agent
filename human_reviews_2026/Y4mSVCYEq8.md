@@ -1,5 +1,6 @@
 # ERNav: A Unified, Realistic Benchmark for Embodied AI with Exploration, Representation, and Navigation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

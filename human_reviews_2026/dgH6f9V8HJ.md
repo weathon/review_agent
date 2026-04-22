@@ -1,5 +1,6 @@
 # Golyadkin Confronts Perceptual Distance and Curvatures:  Coping with   Ambiguity
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 0
 

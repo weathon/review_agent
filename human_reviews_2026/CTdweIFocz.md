@@ -1,5 +1,6 @@
 # LINK: Learning Instance-level Knowledge from Vision-Language Models for Human-Object Interaction Detection
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Reversible Primitive–Composition Alignment for Continual Vision–Language Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

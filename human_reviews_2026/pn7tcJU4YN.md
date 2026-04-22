@@ -1,5 +1,6 @@
 # LM$^2$otifs: An Explainable Framework for Machine-Generated Texts Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

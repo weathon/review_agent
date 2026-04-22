@@ -1,5 +1,6 @@
 # Learning to Cooperate with Emergent Reputation via Multi-agent Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

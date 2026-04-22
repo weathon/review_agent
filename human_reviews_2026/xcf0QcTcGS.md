@@ -1,5 +1,6 @@
 # Deep Ignorance: Filtering Pretraining Data Builds Tamper-Resistant Safeguards into Open-Weight LLMs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4
 

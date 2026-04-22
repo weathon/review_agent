@@ -1,5 +1,6 @@
 # The Cost of Knowing: Hallucination Quest Game in Resource-Constrained Multi-Agent Systems
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

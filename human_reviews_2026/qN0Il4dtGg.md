@@ -1,5 +1,6 @@
 # HARMAP: Hierarchical Atomic Representation for Materials Property Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 4, 2, 2
 

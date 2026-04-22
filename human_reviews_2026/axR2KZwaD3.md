@@ -1,5 +1,6 @@
 # Understanding Transformers for Time Series: Rank Structure, Flow-of-ranks, and Compressibility
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

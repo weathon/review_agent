@@ -1,5 +1,6 @@
 # Automatic Moderator Discovery via SHAP Interaction Values
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 2, 4, 2, 2, 4
 

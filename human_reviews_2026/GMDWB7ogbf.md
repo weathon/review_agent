@@ -1,5 +1,6 @@
 # Achieving Noise Robustness by additive normalization of labels
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 6, 2, 2
 

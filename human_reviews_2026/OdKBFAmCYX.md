@@ -1,5 +1,6 @@
 # On the Geometric Selection of Landmarks for Low-Rank Self-Attention Approximation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 0
 

@@ -1,5 +1,6 @@
 # Stabilizing Heterogeneous Federated Learning via Feature Decorrelation and Bidirectional Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

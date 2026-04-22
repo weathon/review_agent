@@ -1,5 +1,6 @@
 # The Cognitive Bandwidth Bottleneck: Shifting Long-Horizon Agent from Planning with Actions to Planning with Schemas
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

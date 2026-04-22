@@ -1,5 +1,6 @@
 # LINA: Exploring Linear Autoregressive Image Generative Models with Continuous Tokens
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Can 3D Vision-Language Models Truly Understand Natural Language?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

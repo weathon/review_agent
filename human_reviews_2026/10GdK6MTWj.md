@@ -1,5 +1,6 @@
 # The Invisible Mind: Auditing Privacy Invocation in Latent Chain-of-Thought Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

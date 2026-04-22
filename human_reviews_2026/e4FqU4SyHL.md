@@ -1,5 +1,6 @@
 # Game-RL: Synthesizing Multimodal Verifiable Game Data to Boost VLMs' General Reasoning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 6
 

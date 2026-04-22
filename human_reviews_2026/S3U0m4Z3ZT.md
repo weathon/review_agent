@@ -1,5 +1,6 @@
 # GUI Knowledge Bench: Revealing the Knowledge Gap Behind VLM Failures in GUI Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

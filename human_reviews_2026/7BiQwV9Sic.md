@@ -1,5 +1,6 @@
 # Advancing Multi-agent Traffic Simulation via R1-Style Reinforcement Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

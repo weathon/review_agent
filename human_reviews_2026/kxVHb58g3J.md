@@ -1,5 +1,6 @@
 # Prospective Decision Learning for Safe Exploration in Model-free Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 
@@ -53,13 +54,16 @@ This paper introduces **ProSpec RL**, which applies prospective decision learnin
 * Is there a derivable lower bound or theoretical guarantee showing that optimizing the proposed objective approximates the optimal policy?
 
 **Q3. Experimental baselines (Atari100k)**
-* The Atari100k experiments include limited baselines. 
+*
+The Atari100k experiments include limited baselines. 
 * Including model-based works (e.g., DreamerV3) would provide a more comprehensive comparison, given the similarity in approach.
 
-**Q4. Value-consistency constraint Could you clarify why this is referred to as a constraint?**
+**Q4. Value-consistency constraint
+Could you clarify why this is referred to as a constraint?**
 * It seems more like a modified objective term for planning rather than an explicit constraint.
 
-**Q5. Definition of “safe” exploration I think the term safe exploration might be overstated.**
+**Q5. Definition of “safe” exploration
+I think the term safe exploration might be overstated.**
 * The proposed mechanism appears to facilitate better exploration (via state-trap avoidance), but does not explicitly address safety as typically defined in safe RL literature.
 
 ### Soundness

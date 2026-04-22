@@ -1,5 +1,6 @@
 # ATLAS: Adaptive Transfer Scaling Laws for Multilingual Pretraining, Finetuning, and Decoding the Curse of Multilinguality
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8
 

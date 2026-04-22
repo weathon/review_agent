@@ -1,5 +1,6 @@
 # CUDA-L1: Improving CUDA Optimization via  Contrastive Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 0, 2
 

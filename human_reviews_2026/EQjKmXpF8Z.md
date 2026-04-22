@@ -1,5 +1,6 @@
 # Analyzing Neural Style Representations for Unsupervised Clustering: Visual Art as a Testbed
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Interpretable Transformer Regression for Functional and Longitudinal Covariates
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 
@@ -130,7 +131,8 @@ I have outlined a couple of main concerns for the paper:
 - **Lack of assumptions for missingness**. I lacked the assumptions on the missigness (or measurement intensity), namely, whether the observation times are informative of the outcome. If yes, shouldn’t the missingness mask be included as an input itself? 
 - **Limited contribution**. I my opinion, the main method of the paper is a simple combination of multiple standard Transformer-based approaches. Yes, technically, IDAT might be new in this specific setting of scalar-on-function regression. Yet, overall, I cannot pinpoint a single non-trivial or unique approach that was used in this setting. 
 
-I am curious to hear the authors’ response, and I am open to further discussion.  
+I am curious to hear the authors’ response, and I am open to further discussion. 
+
 
 Other minor concerns include the following:
 - I found the abstract hard to read, as it is overloaded with very specific, tiny details and misses the broader picture.

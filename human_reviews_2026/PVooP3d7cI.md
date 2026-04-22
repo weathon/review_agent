@@ -1,5 +1,6 @@
 # The Price of a Second Thought: On the Evaluation of Reasoning Efficiency in Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

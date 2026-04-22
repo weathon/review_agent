@@ -1,5 +1,6 @@
 # ERA: Evidence-Based Reasoning and Augmentation for Open-Vocabulary Medical Vision
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

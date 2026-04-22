@@ -1,5 +1,6 @@
 # GT-MSMW: A Graph Transformer Framework for Multi-step Prediction of Time-domain Maxwell’s Equations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

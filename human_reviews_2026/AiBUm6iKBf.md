@@ -1,5 +1,6 @@
 # SERUM: Simple, Efficient, Robust, and Unifying Marking for Diffusion-based Image Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

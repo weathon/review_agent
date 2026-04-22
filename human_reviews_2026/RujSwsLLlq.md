@@ -1,5 +1,6 @@
 # FILOsofer: A TEE-Shielded Model Partitioning Framework Based on Fisher Information-Guided LoRA Obfuscation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 6, 2
 

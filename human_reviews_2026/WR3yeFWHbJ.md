@@ -1,5 +1,6 @@
 # Tight Robustness Certificates and Wasserstein Distributional Attacks for Deep Neural Networks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 6, 2
 

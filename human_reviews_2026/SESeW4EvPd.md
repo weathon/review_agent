@@ -1,5 +1,6 @@
 # Executable Analytic Concepts as the Missing Link Between VLM Insight and Precise Manipulation
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

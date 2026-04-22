@@ -1,5 +1,6 @@
 # Heterogeneous Graph Temporal Fusion Transformer for Time Series Forecasting in Multi-Domain Physical Systems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

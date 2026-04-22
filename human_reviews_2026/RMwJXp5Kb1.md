@@ -1,5 +1,6 @@
 # MoReBench: Evaluating Procedural and Pluralistic Moral Reasoning in Language Models, More than Outcomes
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

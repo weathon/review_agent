@@ -1,5 +1,6 @@
 # Adversarially Injected Diagnosis for Coherent Visual Autoregressive Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 0
 

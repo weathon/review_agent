@@ -1,5 +1,6 @@
 # Overtone: Cyclic Patch Modulation for Clean, Efficient, and Flexible Physics Emulators
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 2
 

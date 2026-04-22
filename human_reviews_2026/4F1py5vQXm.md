@@ -1,5 +1,6 @@
 # FHE-Coder: Benchmarking Secure Agentic Code Generation for Fully Homomorphic Encryption
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

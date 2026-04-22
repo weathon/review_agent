@@ -1,5 +1,6 @@
 # CSA-LIC: Chroma Superpixel Aggregation for Machine-Oriented Learned Image Compression
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

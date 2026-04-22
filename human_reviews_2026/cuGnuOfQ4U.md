@@ -1,5 +1,6 @@
 # Learning Patient-Specific Disease Dynamics With Latent Flow Matching For Longitudinal Imaging Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 2
 

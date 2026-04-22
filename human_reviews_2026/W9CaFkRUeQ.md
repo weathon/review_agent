@@ -1,5 +1,6 @@
 # LLMAD-mini: Efficient Distilling Hierarchical Chain-of-Thought for Interpretable Log Anomaly Reasoning and Detection using Large Language Model
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

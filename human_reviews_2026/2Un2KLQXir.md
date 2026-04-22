@@ -1,5 +1,6 @@
 # Taming Data Chaos: Agentic Knowledge Warehousing for Contextual Intelligence
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

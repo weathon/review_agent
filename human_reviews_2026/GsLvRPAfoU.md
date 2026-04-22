@@ -1,5 +1,6 @@
 # Improving Fine-Grained Control via Aggregation of Multiple Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

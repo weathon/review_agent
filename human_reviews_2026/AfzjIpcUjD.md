@@ -1,5 +1,6 @@
 # $\alpha$-PFN: Fast Entropy Search via In-Context Learning
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 4, 6, 6
 

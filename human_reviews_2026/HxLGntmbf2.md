@@ -1,5 +1,6 @@
 # The Centroid Affinity Hypothesis: How Deep Network Represent Features
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Cross-View Yaw Estimation in Location Uncertainty with Line-Aligning Yaw Scoring
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 6, 0, 2
 

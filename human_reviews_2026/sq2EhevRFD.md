@@ -1,5 +1,6 @@
 # Eliminating Steady-State Oscillations in Distributed Optimization and Learning via Adaptive Stepsize
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 6, 2
 

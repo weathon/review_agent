@@ -1,5 +1,6 @@
 # Rank-Then-Act: Reward-Free Control from Frame-Order Progress
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # LLM-as-a-Prophet: Understanding Predictive Intelligence with Prophet Arena
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

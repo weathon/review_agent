@@ -1,5 +1,6 @@
 # ForceForget: Reinforcement Concept Removal for Enhancing Safety in Text-to-Image Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

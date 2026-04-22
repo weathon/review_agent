@@ -1,5 +1,6 @@
 # Locally adaptive conformal inference for operator models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

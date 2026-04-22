@@ -1,5 +1,6 @@
 # HT-Transformer: Event Sequences Classification by Accumulating Prefix Information with History Tokens
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 2
 
@@ -76,31 +77,47 @@ Significance: I think the current scope is a little bit narrow.  Classification 
 ### Summary
 This paper presents a novel approach to improving temporal sequence prediction by introducing history tokens, dedicated tokens that accumulate and represent historical context. These tokens function as dynamic memory units, allowing the model to construct richer and more informative representations of past events during both pretraining and inference. Furthermore, the authors focus their investigation on two primary design dimensions:
 
-1. Placement: They evaluate two strategies for positioning history tokens: uniform distribution across the sequence and end-biased placement closer to the sequence's conclusion. 
+1. Placement: They evaluate two strategies for positioning history tokens: uniform distribution across the sequence and end-biased placement closer to the sequence's conclusion.
 
-2. Attention: They examine how sequence tokens should attend to history tokens, comparing last-token attention with random attention mechanisms. 
+
+2. Attention: They examine how sequence tokens should attend to history tokens, comparing last-token attention with random attention mechanisms.
+
 
 Extensive experiments on five datasets spanning finance, e-commerce, and healthcare demonstrate that the proposed HT-Transformer consistently outperforms strong baselines, including RNNs, standard Transformers, Longformer, and Recurrent Memory Transformer (RMT) in different settings. These results underscore the value of integrating history tokens into transformer-based architectures for temporal and event sequence modeling.
 
 ### Strengths
-1. Novelty and Practicality: This paper introduces a simple yet effective idea called history tokens to flexibly incorporate historical context addressing a key limitation in temporal sequence modeling.  The concept of history token is very interesting.
+1. Novelty and Practicality: This paper introduces a simple yet effective idea called history tokens to flexibly incorporate historical context addressing a key limitation in temporal sequence modeling.
+ The concept of history token is very interesting.
 
-2. Well Explored Design Choices: Authors  provide a systematic study of token placement and attention strategies with solid ablation experiments that enhance both interpretability and adaptability. 
+2. Well Explored Design Choices: Authors 
+provide a systematic study of token placement and attention strategies with solid ablation experiments that enhance both interpretability and adaptability.
 
-3. Strong Empirical Results : Experiments demonstrate consistent performance gains over RNNs Transformers Longformer and RMT across five datasets in finance healthcare and e-commerce and so on. 
 
-4. Reproducibility : Public code are available supporting transparency and facilitating future research.
+3. Strong Empirical Results
+: Experiments demonstrate consistent performance gains over RNNs Transformers Longformer and RMT across five datasets in finance healthcare and e-commerce and so on.
+
+
+4. Reproducibility
+: Public code are available supporting transparency and facilitating future research.
 
 ### Weaknesses
 While this paper presents valuable contributions, addressing the following points could further strengthen its impact and clarity:
 
-1. Clarify the Relationship with CLS Tokens:  It would be more comprehensive to include a detailed comparison between history tokens and the CLS token mechanism used in models like BERT, other than the history tokens appearing multiple times in a sequence. Elaborating on how they differ functionally and architecturally will help clarify history token's unique role. 
+1. Clarify the Relationship with CLS Tokens: 
+It would be more comprehensive to include a detailed comparison between history tokens and the CLS token mechanism used in models like BERT, other than the history tokens appearing multiple times in a sequence. Elaborating on how they differ functionally and architecturally will help clarify history token's unique role.
 
-2. Compare with Compressed Vector Methods in Long-Context Transformers:  Providing a methodological comparison between history tokens and compressed or pooled vector approaches used in long-context models such as Unlimiformer, Linformer, Reformer, sparse/blockwise attention mechanisms, and so on, would contextualize the contribution and highlight advantages of history tokens. 
 
-3. Broaden Experimental Baselines:  Incorporating additional baselines like BigBird, FlashAttention, ModernBERT, Mamba, and Structured State Space Models (SSMs) would strengthen the empirical evaluation and better position the work within the current state of the art. 
+2. Compare with Compressed Vector Methods in Long-Context Transformers:
+ Providing a methodological comparison between history tokens and compressed or pooled vector approaches used in long-context models such as Unlimiformer, Linformer, Reformer, sparse/blockwise attention mechanisms, and so on, would contextualize the contribution and highlight advantages of history tokens.
 
-4. Include Efficiency and Computational Cost Analysis:  Adding an analysis of computational efficiency and resource usage compared to other long-sequence models is important for assessing the practical applicability of the approach. Including such details in the main text will provide readers with a clearer understanding of its scalability. 
+
+3. Broaden Experimental Baselines: 
+Incorporating additional baselines like BigBird, FlashAttention, ModernBERT, Mamba, and Structured State Space Models (SSMs) would strengthen the empirical evaluation and better position the work within the current state of the art.
+
+
+4. Include Efficiency and Computational Cost Analysis:
+ Adding an analysis of computational efficiency and resource usage compared to other long-sequence models is important for assessing the practical applicability of the approach. Including such details in the main text will provide readers with a clearer understanding of its scalability.
+
 
 Addressing these points would provide greater clarity, strengthen the motivation, and improve the overall impact of the work.
 

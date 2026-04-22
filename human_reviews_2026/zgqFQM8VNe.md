@@ -1,5 +1,6 @@
 # ConsisDrive: Identity-Preserving Driving World Models for Video Generation by Instance Mask
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

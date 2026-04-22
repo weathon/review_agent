@@ -1,5 +1,6 @@
 # Flow-Guided Neural Operator For Self- Supervised Learning On Time Series Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

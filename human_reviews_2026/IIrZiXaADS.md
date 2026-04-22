@@ -1,5 +1,6 @@
 # Polyp Segmentation by Dual-Domain Reasoning: Fuzzy Spatial Control and Frequency Selection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # REA-RL: Reflection-Aware Online Reinforcement Learning for Efficient Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

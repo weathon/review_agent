@@ -1,5 +1,6 @@
 # SCOUT: Spatial-Aware Continual Scene Understanding and Switch Policy for Embodied Mobile Manipulation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

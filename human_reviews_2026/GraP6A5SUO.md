@@ -1,5 +1,6 @@
 # E-CommerceVideo: A Benchmark and approach for E-Commerce Video Generation from product Images
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

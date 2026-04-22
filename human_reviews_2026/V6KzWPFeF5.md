@@ -1,5 +1,6 @@
 # Can MLLMs Guide Me Home? A Benchmark Study on Fine-grained Visual Reasoning from Transit Maps
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

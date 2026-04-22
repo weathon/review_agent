@@ -1,5 +1,6 @@
 # Pragmatic Curiosity: Unifying Bayesian Optimization and Experimental Design via Active Inference
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Using Reinforcement Learning to Train Large Language Models to Explain Human Decisions
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6
 
@@ -167,7 +168,8 @@ The authors propose a novel way in which LLMs can be used to aid cognitive scien
 The paper has a clear goal, and that goal is well executed. I think this type of modeling and analysis efforts will be interesting for the cognitive science community. The evaluations and ablations are quite comprehensive. The Appendix, in particular, contains several insightful analyses. The two that are very important for the paper’s message are:
 
 - The ablation experiment in C.3, where the authors swap the CoT between the RL and the base models to show the importance of these traces. 
-- The experiment in D.3., where the authors show doing RL-finetuning on different datasets, that either contain random choices or choices from other data generative processes, change the CoT dramatically.  
+- The experiment in D.3., where the authors show doing RL-finetuning on different datasets, that either contain random choices or choices from other data generative processes, change the CoT dramatically. 
+
 
 I also appreciate that the authors share some failed attempts in the appendix, which will be valuable to the research community.
 

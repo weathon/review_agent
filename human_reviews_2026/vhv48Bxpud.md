@@ -1,5 +1,6 @@
 # StructZip: Compressing Large-Scale Structured Prompts to One Token via Learning Natural Language Descriptions
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4
 

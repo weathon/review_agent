@@ -1,5 +1,6 @@
 # CharLuMA: Efficient Multi-Language Chart-to-Code Generation with Low-Rank Subspace Adaptation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

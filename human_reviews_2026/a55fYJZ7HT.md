@@ -1,5 +1,6 @@
 # Watch and Learn: Learning to Use Computers from Online Videos
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

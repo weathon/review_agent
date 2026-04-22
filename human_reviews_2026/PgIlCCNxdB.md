@@ -1,5 +1,6 @@
 # The Mind's Transformer: Computational Neuroanatomy of LLM-Brain Alignment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8, 8
 

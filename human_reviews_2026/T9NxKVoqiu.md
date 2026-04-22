@@ -1,5 +1,6 @@
 # PhysCodeBench: Benchmarking Physics-Aware Symbolic Simulation of 3D Scenes via Self-Corrective Multi-Agent Refinement
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 10, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # RaBEL: Scale-Aware Radial-Basis Embeddings for Tabular Foundation Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

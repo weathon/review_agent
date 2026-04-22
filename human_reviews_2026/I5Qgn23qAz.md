@@ -1,5 +1,6 @@
 # Robust Domain Generalization under Divergent Marginal and Conditional Distributions
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

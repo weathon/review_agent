@@ -1,5 +1,6 @@
 # Model-Aware Tokenizer Transfer
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 6, 2
 
@@ -210,8 +211,10 @@ The paper proposes a method to transfer the tokenizer of a pretrained LLM to a n
 
  I could not find any comparison to language modeling objectives (i.e. next-token prediction with cross-entropy?) in the paper, could you point me to the correct Figure/Table?
 
-**W3:** In l. 137ff you write:  
-> Other work (Abagyan et al., 2025) shows that periodically resetting embeddings during pretraining makes models more robust to them, reducing the effort needed to learn new tokens afterwards. 
+**W3:** In l. 137ff you write:
+ 
+> Other work (Abagyan et al., 2025) shows that periodically resetting embeddings during pretraining makes models more robust to them, reducing the effort needed to learn new tokens afterwards.
+
 
 but I cannot find support for this claim anywhere in the paper by Abagyan et al., 2025. Could you elaborate?
 

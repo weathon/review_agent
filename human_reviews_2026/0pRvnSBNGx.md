@@ -1,5 +1,6 @@
 # Ensuring Functional Correctness of Large Code Models with Selective Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

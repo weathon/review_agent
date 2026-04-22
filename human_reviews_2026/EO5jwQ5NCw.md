@@ -1,5 +1,6 @@
 # GCGNet: Graph-Consistent Generative Network for Time Series Forecasting with Exogenous Variables
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

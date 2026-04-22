@@ -1,5 +1,6 @@
 # Mechanistic Interpretability as Statistical Estimation: A Variance Analysis of EAP-IG
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

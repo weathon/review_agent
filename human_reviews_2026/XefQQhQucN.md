@@ -1,5 +1,6 @@
 # LGR: Local Geometric Refinement in High-Fidelity Surgical Scene Reconstruction
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

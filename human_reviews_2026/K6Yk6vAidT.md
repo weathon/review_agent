@@ -1,5 +1,6 @@
 # LG-TOM: Language Grounded Theory of Mind Modeling for Multi-agent Communication
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

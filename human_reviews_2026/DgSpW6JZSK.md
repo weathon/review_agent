@@ -1,5 +1,6 @@
 # Elevating the Tradeoff between Privacy and Utility in Zeroth-Order Vertical Federated Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

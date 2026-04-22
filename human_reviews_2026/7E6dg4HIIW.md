@@ -1,5 +1,6 @@
 # CARTS: Cooperative Reinforcement Learning for Traffic Signal Control and Carbon Emission Reduction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

@@ -1,5 +1,6 @@
 # Softmax is not Enough (for Adaptive Conformal Classification)
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

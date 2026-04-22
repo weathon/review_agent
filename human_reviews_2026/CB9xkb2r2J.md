@@ -1,5 +1,6 @@
 # Motion-Aware Surface Smoothing for Monocular Avatar Representations
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

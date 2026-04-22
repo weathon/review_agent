@@ -1,5 +1,6 @@
 # Latent-DPO: Direction-Aware Preference Optimization for Reasoning Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

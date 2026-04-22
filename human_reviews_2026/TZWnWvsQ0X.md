@@ -1,5 +1,6 @@
 # TRAJECT-Bench:A Trajectory-Aware Benchmark for Evaluating Agentic Tool Use
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

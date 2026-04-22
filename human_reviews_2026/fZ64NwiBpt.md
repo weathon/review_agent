@@ -1,5 +1,6 @@
 # Beyond URLs: Metadata Diversity and Position for Efficient LLM Pretraining
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # ContextBench: Modifying Contexts for Targeted Latent Activation and Behaviour Elicitation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

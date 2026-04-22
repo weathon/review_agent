@@ -1,5 +1,6 @@
 # Quantifying Cross-Domain Knowledge Distillation in the Presence of Domain shift
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

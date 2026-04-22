@@ -1,5 +1,6 @@
 # WAFER-QA: Evaluating Vulnerabilities of Agentic Workflows with Agent-as-Judge
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

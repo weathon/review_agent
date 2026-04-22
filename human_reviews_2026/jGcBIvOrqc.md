@@ -1,5 +1,6 @@
 # To Think or Not To Think, That is The Question for LLM Reasoning in Theory of Mind Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 4
 

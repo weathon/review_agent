@@ -1,5 +1,6 @@
 # StepORLM: A Self-Evolving Framework With Generative Process Supervision For Operations Research Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

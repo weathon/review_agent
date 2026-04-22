@@ -1,5 +1,6 @@
 # VideoSearch Reasoner: Boosting Multimodal Reward Models through Think with Image Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

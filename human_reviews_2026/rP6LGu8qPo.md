@@ -1,5 +1,6 @@
 # Consistent Low-Rank Adaptation of Two-layer Neural Networks: A Nonparametric Statistics Approach
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

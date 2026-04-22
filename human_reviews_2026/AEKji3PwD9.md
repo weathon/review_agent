@@ -1,5 +1,6 @@
 # To Distill or Not to Distill: Knowledge Transfer Undermines Safety of LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

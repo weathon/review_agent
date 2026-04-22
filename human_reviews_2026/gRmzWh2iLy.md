@@ -1,5 +1,6 @@
 # IPBench: Benchmarking the Knowledge of Large Language Models in Intellectual Property
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

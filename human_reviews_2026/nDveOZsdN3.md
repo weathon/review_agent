@@ -1,5 +1,6 @@
 # $\mathrm{D^3}$: Divide, Describe, and Diffuse: Prompt-Enriched, Scene-Aware Dataset Condensation for Object Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # DenseMixer: Improving MoE Post-Training with Precise Router Gradient
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

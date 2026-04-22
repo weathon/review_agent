@@ -1,5 +1,6 @@
 # Morality is Contextual: Learning Interpretable Moral Contexts from Human Data with Probabilistic Clustering and Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 6, 0
 

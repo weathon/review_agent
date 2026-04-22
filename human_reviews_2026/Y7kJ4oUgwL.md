@@ -1,5 +1,6 @@
 # WSI-GT: Pseudo-Label Guided Graph Transformer for Whole-Slide Histology
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 0, 2
 

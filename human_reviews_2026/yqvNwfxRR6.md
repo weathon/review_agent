@@ -1,5 +1,6 @@
 # Expertise Can Be Helpful for Reinforcement Learning-based Macro Placement
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

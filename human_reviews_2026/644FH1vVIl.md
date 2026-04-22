@@ -1,5 +1,6 @@
 # DiffAdapt: Difficulty-Adaptive Reasoning for Token-Efficient LLM Inference
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

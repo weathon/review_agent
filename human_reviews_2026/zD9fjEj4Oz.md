@@ -1,5 +1,6 @@
 # Prompt-MII: Meta-Learning Instruction Induction for LLMs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

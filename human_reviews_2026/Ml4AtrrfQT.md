@@ -1,5 +1,6 @@
 # Peng's Q($\lambda$) for Conservative Value Estimation in Offline Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

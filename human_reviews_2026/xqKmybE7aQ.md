@@ -1,5 +1,6 @@
 # Protein generation with embedding learning for motif diversification
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

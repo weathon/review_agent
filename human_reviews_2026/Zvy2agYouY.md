@@ -1,5 +1,6 @@
 # TrajTok: What makes for a good trajectory tokenizer in behavior generation?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

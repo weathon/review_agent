@@ -1,5 +1,6 @@
 # Multiple-Prediction-Powered Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

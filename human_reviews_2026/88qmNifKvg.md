@@ -1,5 +1,6 @@
 # MontageAug: Enhancing Long-tail Robustness And Semantic Consistency of VLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

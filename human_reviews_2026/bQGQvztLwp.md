@@ -1,5 +1,6 @@
 # Hallucination Detection and Mitigation with Diffusion in Multi-Variate Time-Series Foundation Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 6, 0
 

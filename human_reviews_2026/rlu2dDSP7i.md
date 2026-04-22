@@ -1,5 +1,6 @@
 # Spoken Named Entity Localization as a Dense Prediction task: End-to-end Frame-Wise Entity Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

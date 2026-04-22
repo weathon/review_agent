@@ -1,5 +1,6 @@
 # OATS: Online Data Augmentation for Time Series Foundation Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

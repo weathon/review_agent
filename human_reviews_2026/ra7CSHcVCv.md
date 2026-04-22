@@ -1,5 +1,6 @@
 # Supporting High-Stakes Decision Making Through Interactive Preference Elicitation in the Latent Space
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

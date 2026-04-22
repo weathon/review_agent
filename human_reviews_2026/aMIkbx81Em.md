@@ -1,5 +1,6 @@
 # A Neurosymbolic Approach to Natural Language Formalization and Verification
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 2, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # InstructMix2Mix: Consistent Sparse-View Editing Through Multi-View Model Personalization
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 6
 

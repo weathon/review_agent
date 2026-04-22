@@ -1,5 +1,6 @@
 # K^*-means: a parameter-free clustering algorithm
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0
 

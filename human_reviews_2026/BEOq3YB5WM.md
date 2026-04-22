@@ -1,5 +1,6 @@
 # MUOT-CLIP: Enhancing Few-Shot Adaptation of CLIP via Inter- and Intra- Modality Unbalanced Optimal Transport
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Learning to Link: Incorporating Multi-hop QA Examples Improves Dispersed Knowledge Injection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

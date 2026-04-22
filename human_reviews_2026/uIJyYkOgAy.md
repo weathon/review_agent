@@ -1,5 +1,6 @@
 # Can Large Language Models Match the Conclusions of Systematic Reviews?
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

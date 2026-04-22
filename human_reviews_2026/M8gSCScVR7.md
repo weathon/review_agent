@@ -1,5 +1,6 @@
 # CTCal: Rethinking Text-to-Image Diffusion Models via Cross-Timestep Self-Calibration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

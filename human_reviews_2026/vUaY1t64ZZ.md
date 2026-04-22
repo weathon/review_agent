@@ -1,5 +1,6 @@
 # Holistic Agent Leaderboard: The Missing Infrastructure for AI Agent Evaluation
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # FlexHiNM-GP: Flexible Hierarchical Pruning via Region Allocation and Channel Permutation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

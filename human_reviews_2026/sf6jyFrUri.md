@@ -1,5 +1,6 @@
 # Beyond Chunking: Efficient Global Pooling for Holistic Long-Document Representation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

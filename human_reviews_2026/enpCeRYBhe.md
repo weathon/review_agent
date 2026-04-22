@@ -1,5 +1,6 @@
 # Refuse without Refusal: A Structural Analysis of Safety-Tuning Responses for Reducing False Refusals in Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 2, 8, 8
 

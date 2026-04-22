@@ -1,5 +1,6 @@
 # CLAMP: A Chebyshev-Weighted Multi-Gradient Approach for Multi-Objective LLM Alignment
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

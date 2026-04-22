@@ -1,5 +1,6 @@
 # Stable Basis Deep Neural Policy Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8
 

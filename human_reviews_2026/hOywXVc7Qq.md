@@ -1,5 +1,6 @@
 # Achieving $\tilde{O}(1)$ Strong Constraint Violation and Sublinear Strong Regret in Online CMDPs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

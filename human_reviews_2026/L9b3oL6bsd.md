@@ -1,5 +1,6 @@
 # Functional Distribution Networks (FDN)
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 0, 2, 4
 

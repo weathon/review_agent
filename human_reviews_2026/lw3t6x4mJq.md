@@ -1,5 +1,6 @@
 # Sample Efficient Forced Dynamics Recovery
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

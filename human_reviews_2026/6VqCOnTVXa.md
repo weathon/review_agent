@@ -1,5 +1,6 @@
 # Beyond Distributions: Geometric Action Control for Continuous Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

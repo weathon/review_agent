@@ -1,5 +1,6 @@
 # MMPD: Diverse Time Series Forecasting via Multi-Mode Patch Diffusion Loss
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

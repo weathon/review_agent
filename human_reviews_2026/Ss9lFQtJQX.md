@@ -1,5 +1,6 @@
 # Think Socially via Cognitive Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 8, 2
 

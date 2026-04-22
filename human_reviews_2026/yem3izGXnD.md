@@ -1,5 +1,6 @@
 # Learning Representations from Heterogeneous Data for Robust Heart Rate Modeling
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

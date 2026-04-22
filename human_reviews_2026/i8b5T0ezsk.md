@@ -1,5 +1,6 @@
 # ProFit: Unsupervised Fine-Tuning of Tabular Models via  Proxy Tasks for Label-Scarce Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

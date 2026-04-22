@@ -1,5 +1,6 @@
 # SoM-1K: A Thousand-Problem Benchmark Dataset for Strength of Materials
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

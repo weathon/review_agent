@@ -1,5 +1,6 @@
 # EconAgentBench: Economic Benchmarks for LLM Agents in Unknown Environments
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

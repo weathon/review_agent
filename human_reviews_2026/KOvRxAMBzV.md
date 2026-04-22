@@ -1,5 +1,6 @@
 # Densemarks: Learning Canonical Embeddings for Human Heads Images via Point Tracks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 10, 6
 

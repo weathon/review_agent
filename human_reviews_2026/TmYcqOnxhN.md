@@ -1,5 +1,6 @@
 # Exo-Plore: Exploring Exoskeleton Control Space through Human-aligned Simulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 10, 8, 4
 

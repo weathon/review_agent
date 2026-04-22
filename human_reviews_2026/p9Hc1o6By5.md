@@ -1,5 +1,6 @@
 # Sparse Shortcuts: Facilitating Efficient Fusion in Multimodal Large Language Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

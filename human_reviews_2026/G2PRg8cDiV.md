@@ -1,5 +1,6 @@
 # Barron Approximation and locally optimal weight densities for shallow neural networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

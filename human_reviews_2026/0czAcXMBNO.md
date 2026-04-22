@@ -1,5 +1,6 @@
 # $\lambda$-GRPO: Unifying the GRPO Frameworks with Learnable Token Preferences
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Prism: A Composable Pe\underlinerson Image Synthesis Model with Compositional Consistency and Unified Optimization
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 4
 

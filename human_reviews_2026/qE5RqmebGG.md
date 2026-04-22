@@ -1,5 +1,6 @@
 # Orthonormal Regularization in Low-Rank Adaptation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

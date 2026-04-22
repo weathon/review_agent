@@ -1,5 +1,6 @@
 # VLAs Are Confined yet Capable of Generalizing to Novel Tasks
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

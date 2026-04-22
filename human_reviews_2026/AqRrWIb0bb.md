@@ -1,5 +1,6 @@
 # Towards Scalable and Robust Filtration Learning for Point Clouds via Principal Persistence Measure
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

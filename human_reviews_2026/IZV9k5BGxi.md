@@ -1,5 +1,6 @@
 # Global and Local Topology-Aware Graph Generation via Dual Conditioning Diffusion
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

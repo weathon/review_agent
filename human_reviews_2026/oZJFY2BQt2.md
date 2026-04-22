@@ -1,5 +1,6 @@
 # Decentralized Attention Fails Centralized Signals: Rethinking Transformers for Medical Time Series
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 6, 8
 

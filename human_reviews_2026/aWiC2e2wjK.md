@@ -1,5 +1,6 @@
 # GRIPedge: Heterophily-aware graph learning via attentional feature-spectral neighbour propagation in dense graphs
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

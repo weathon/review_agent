@@ -1,5 +1,6 @@
 # Flow-based Conformal Prediction for Multi-dimensional Time Series
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 0
 

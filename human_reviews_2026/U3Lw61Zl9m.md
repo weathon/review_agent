@@ -1,5 +1,6 @@
 # Analysis of Fourier Neural Operators via Effective Field Theory
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

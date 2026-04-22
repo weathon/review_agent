@@ -1,5 +1,6 @@
 # Time-Varying Bayesian Optimization Without a Metronome
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

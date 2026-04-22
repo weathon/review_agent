@@ -1,5 +1,6 @@
 # SkipPipe: Partial and Reordered Pipelining Framework for Training LLMs in Heterogeneous Networks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

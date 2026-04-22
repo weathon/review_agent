@@ -1,5 +1,6 @@
 # H2OFlow: Grounding Human-Object Affordances with 3D Generative Models and Dense Diffused Flows
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

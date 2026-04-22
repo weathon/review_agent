@@ -1,5 +1,6 @@
 # Lightweight MSA Design Advances Protein Folding From Evolutionary Embeddings
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

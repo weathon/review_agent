@@ -1,5 +1,6 @@
 # Compositional Generalization from Learned Skills via CoT Training: A Theoretical and Structural Analysis for Reasoning
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6
 

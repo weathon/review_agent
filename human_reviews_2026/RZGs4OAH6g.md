@@ -1,5 +1,6 @@
 # Post Hoc Neuro-Symbolic Verification on Instruction Following of Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Boosting Medical Visual Understanding From Multi-Granular Language Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 2
 

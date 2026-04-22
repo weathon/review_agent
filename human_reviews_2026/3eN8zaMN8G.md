@@ -1,5 +1,6 @@
 # DeepPersona: A Generative Engine for Scaling Deep Synthetic Personas
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 4, 2
 

@@ -1,5 +1,6 @@
 # ReCAPA: Hierarchical Predictive Correction to Mitigate Cascading Failures
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8
 

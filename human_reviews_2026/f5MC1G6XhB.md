@@ -1,5 +1,6 @@
 # Dual Perspectives on Non-Contrastive Self-Supervised Learning
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 4
 

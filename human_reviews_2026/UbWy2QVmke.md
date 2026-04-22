@@ -1,5 +1,6 @@
 # GAA-PtrNet: Graph attention aggregation-based pointer network for one-shot DAG scheduling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Federated Timeline Synthesis: Scalable and Private Methodology For Model Training and Deployment
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

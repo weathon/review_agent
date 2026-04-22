@@ -1,5 +1,6 @@
 # On the Alignment Between Supervised and Self-Supervised Contrastive Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

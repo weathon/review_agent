@@ -1,5 +1,6 @@
 # AudioCodecBench: A Comprehensive Benchmark for Audio Codecs as Tokenizer and Detokenizer for Multimodal Large Language Models
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 2
 

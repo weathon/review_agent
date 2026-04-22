@@ -1,5 +1,6 @@
 # Performance vs interpretability trade-off of hand-crafted and language model features: The case of protein superfamily classification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

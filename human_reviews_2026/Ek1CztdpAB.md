@@ -1,5 +1,6 @@
 # CELF: A Self-Supervised Multimodal Framework for Concept-Based Interpretability
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

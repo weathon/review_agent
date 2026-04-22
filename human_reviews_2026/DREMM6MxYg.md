@@ -1,5 +1,6 @@
 # LLM Hallucination Detection: A Fast Fourier Transform Method Based on Hidden Layer Temporal Signals
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

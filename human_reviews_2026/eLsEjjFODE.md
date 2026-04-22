@@ -1,5 +1,6 @@
 # SpeechOp: Inference-Time Task Composition for Generative Speech Processing
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # RefRef: A Dataset and Benchmark for Reconstructing Refractive and Reflective Objects
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

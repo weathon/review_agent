@@ -1,5 +1,6 @@
 # SparseSSM: Efficient Selective Structured State Space Models Can Be Pruned in One-Shot
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 6, 2, 6
 

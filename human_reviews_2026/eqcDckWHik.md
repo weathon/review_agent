@@ -1,5 +1,6 @@
 # CompassNav: Steering From Path Imitation to Decision Understanding In Navigation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

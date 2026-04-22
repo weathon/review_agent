@@ -1,5 +1,6 @@
 # Learning Range-Query Selectivity under Drifting Query and Data Distributions with Provable Bounds
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 4
 

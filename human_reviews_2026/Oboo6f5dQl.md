@@ -1,5 +1,6 @@
 # EDCO: Dynamic Curriculum Orchestration for Domain-specific Large Language Model Fine-tuning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

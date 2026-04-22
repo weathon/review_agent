@@ -1,5 +1,6 @@
 # SORA: Free Second Order Attacks in Fast Adversarial Training
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 
@@ -121,7 +122,8 @@ This paper introduces and analyze Epsilon Overfitting, demonstrating its importa
 
 ### Strengths
 1.	The motivation and method are clear, and the visualization is helpful.
-2.	The authors provide sufficient evidence, including extensive experiments and ablation studies, to support the effectiveness of their proposed method. 
+2.	The authors provide sufficient evidence, including extensive experiments and ablation studies, to support the effectiveness of their proposed method.
+
 3.	This paper is well-written, making it easy to follow.
 
 ### Weaknesses

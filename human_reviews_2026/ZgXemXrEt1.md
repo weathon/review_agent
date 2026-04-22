@@ -1,5 +1,6 @@
 # InstantForget: Training-Free Functional Feature Unlearning via Subspace Projection and Inference-Time Smoothing
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

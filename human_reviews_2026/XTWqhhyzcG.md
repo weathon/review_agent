@@ -1,5 +1,6 @@
 # Let Androids Dream of Electric Sheep: A Human-Inspired Image Implication Understanding and Reasoning Framework
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

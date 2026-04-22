@@ -1,5 +1,6 @@
 # From Evaluation to Design: Using Potential Energy Surface Smoothness Metrics to Guide MLIP Architectures
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

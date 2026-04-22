@@ -1,5 +1,6 @@
 # MatRL: Provably Generalizable Iterative Algorithm Discovery via Monte-Carlo Tree Search
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 8, 4, 6, 4
 

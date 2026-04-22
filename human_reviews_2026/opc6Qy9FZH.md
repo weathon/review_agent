@@ -1,5 +1,6 @@
 # A Theoretical Analysis of Discrete Flow Matching Generative Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Private Top-$k$ Selection under Gumbel Differential Privacy Guarantees
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

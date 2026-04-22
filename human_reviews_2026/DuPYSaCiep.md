@@ -1,5 +1,6 @@
 # UDDETTS: Unifying Discrete and Dimensional Emotions for Controllable Emotional Text-to-Speech
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Scalable Bayesian Active Learning with Batch Acquisition under Distribution Shift
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

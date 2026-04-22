@@ -1,5 +1,6 @@
 # Joint Shadow Generation and Relighting via Light-Geometry Interaction Maps
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Echo State Transformer: Attention over Finite Memories
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 2, 2
 

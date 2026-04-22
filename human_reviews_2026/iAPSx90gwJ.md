@@ -1,5 +1,6 @@
 # UNDERSTANDING TRANSFORMERS FOR TIME SERIES FORECASTING: A CASE STUDY ON MOIRAI
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

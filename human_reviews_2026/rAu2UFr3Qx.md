@@ -1,5 +1,6 @@
 # AdaPM: a Partial Momentum Algorithm for  LLM Training
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

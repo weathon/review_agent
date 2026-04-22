@@ -1,5 +1,6 @@
 # STM4D: 4D Occupancy Forecasting with 2D and 3D Spatio-Temporal Modeling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

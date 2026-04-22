@@ -1,5 +1,6 @@
 # IncVGGT: Incremental VGGT for Memory-Bounded Long-Range 3D Reconstruction
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 6
 

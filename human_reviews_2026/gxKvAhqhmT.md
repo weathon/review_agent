@@ -1,5 +1,6 @@
 # FedKLS: Federated KL-Driven Low-rank SVD Adaptation in Non-IID Data Distributions
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

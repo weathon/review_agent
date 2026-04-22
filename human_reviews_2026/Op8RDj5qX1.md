@@ -1,5 +1,6 @@
 # Optimizing optimizers for fast gradient-based learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

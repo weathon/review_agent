@@ -1,5 +1,6 @@
 # Cognitive Control Architecture (CCA): A Lifecycle Supervision Framework for Robustly Aligned AI Agents
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 6, 0
 

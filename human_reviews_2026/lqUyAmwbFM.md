@@ -1,5 +1,6 @@
 # What Characterizes Effective Reasoning? Revisiting Length, Review, and Structure of CoT
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

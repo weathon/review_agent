@@ -1,5 +1,6 @@
 # Evaluating and Steering Modality Preference in Multimodal Large Language Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

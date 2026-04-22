@@ -1,5 +1,6 @@
 # Posterior Behavioral Cloning: Pretraining BC Policies for Efficient RL Finetuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

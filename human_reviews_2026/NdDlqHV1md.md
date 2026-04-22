@@ -1,5 +1,6 @@
 # Understanding the Mixture-of-Experts with Nadaraya-Watson Kernel
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

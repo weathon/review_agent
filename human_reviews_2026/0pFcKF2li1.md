@@ -1,5 +1,6 @@
 # Sandbox-RL: Scalable Multi-LLMs Optimization through Sandbox-Based Reinforcement Learning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

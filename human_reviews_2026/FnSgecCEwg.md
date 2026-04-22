@@ -1,5 +1,6 @@
 # FASA: FREQUENCY-AWARE SPARSE ATTENTION
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Towards Efficient Fairness Image Retrieval with Disentangled Information Suppression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

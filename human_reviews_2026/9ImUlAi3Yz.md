@@ -1,5 +1,6 @@
 # Fair Bayesian Model-Based Clustering
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 8, 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Logarithmic Regret in Preference Learning via Optimistic PAC-Bayesian Particle Ensembles
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

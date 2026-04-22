@@ -1,5 +1,6 @@
 # Seeing the Unseen: How EMoE Unveils Bias in Text-to-Image Diffusion Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

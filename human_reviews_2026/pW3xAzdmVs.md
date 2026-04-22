@@ -1,5 +1,6 @@
 # SLA-v3: Spatial Linkability-Aware and Novelty-Encouraging State Heuristic for Exploration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

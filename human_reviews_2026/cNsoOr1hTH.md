@@ -1,5 +1,6 @@
 # Overshoot and Shrinkage in Classifier-Free Guidance: From Theory to Practice
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

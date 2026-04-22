@@ -1,5 +1,6 @@
 # Can Large Language Model Help Design Effective Neural Operators for Solving Partial Differential Equations?
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

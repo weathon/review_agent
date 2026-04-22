@@ -1,5 +1,6 @@
 # Uncovering Intrinsic Capabilities: A Paradigm for Data Curation in Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

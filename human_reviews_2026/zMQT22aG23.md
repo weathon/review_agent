@@ -1,5 +1,6 @@
 # MSRS: Adaptive Multi-Subspace Representation Steering for Attribute Alignment in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

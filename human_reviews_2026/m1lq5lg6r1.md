@@ -1,5 +1,6 @@
 # Understanding Efficiency: Quantization, Batching, and Serving Strategies in LLM Energy Use
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 4, 8
 

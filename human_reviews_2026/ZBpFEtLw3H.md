@@ -1,5 +1,6 @@
 # Adversarial Reinforcement Learning Framework for ESP Cheater Simulation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

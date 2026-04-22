@@ -1,5 +1,6 @@
 # Towards Generalized Certified Robustness with Multi-Norm Training
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

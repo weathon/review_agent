@@ -1,5 +1,6 @@
 # BEYOND SINGLE-AXIS FAIRNESS: LEARNING TO DETECT INTERSECTIONAL BIASES
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

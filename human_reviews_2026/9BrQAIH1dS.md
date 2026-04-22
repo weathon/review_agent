@@ -1,5 +1,6 @@
 # A predictive coding model of hippocampo-neocortical interactions involved in memory replay
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

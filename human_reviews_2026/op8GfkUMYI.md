@@ -1,5 +1,6 @@
 # PoinNSP: Autoregressive 3D Point Cloud Generation with Next-Scale Leve-of-Detail Prediction
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

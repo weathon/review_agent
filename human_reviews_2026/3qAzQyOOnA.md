@@ -1,5 +1,6 @@
 # Social-R1: Enhancing Social Intelligence in LLMs through Human-like Reinforced Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

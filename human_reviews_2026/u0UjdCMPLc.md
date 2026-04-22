@@ -1,5 +1,6 @@
 # EnsembleSHAP: Faithful and Certifiably Robust Attribution for Random Subspace Method
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2
 

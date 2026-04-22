@@ -1,5 +1,6 @@
 # Maximizing Confidence Alone Improves Reasoning
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 4, 2, 4
 

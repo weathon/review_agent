@@ -1,5 +1,6 @@
 # Variance-Dependent Regret Lower Bounds for Contextual Bandits
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

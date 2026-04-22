@@ -1,5 +1,6 @@
 # Scientific logicality enriched methodology for LLM reasoning: A practice in physics
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

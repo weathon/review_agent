@@ -1,5 +1,6 @@
 # Proof2Hybrid: Automatic Mathematical Benchmark Synthesis for Proof-Centric Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

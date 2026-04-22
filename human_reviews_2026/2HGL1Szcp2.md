@@ -1,5 +1,6 @@
 # Memory Makes The Poison: Over Memorization Drives Visual Poisoning in LVLMs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 0, 4
 
@@ -67,7 +68,8 @@ This paper finds that visual data poisoning in LVLMs is mainly caused by over-me
 
 ### Weaknesses
 Main Concerns
-1. This paper shows that the effectiveness of Shadowcast does not come from the poisoned attack, but the hallucination of the model. I think this makes sense to me, as the injected images contain only a single class, which likely introduces strong data bias and induces hallucination. However, it remains unclear whether this limitation is unique to Shadowcast or shared across other poisoning setups. To support the claim that over-memorization, rather than poisoning, drives the observed effect, the authors should conduct additional experiments under varied training configurations and data distributions. Without such evidence, the generality of the conclusion remains uncertain. 
+1. This paper shows that the effectiveness of Shadowcast does not come from the poisoned attack, but the hallucination of the model. I think this makes sense to me, as the injected images contain only a single class, which likely introduces strong data bias and induces hallucination. However, it remains unclear whether this limitation is unique to Shadowcast or shared across other poisoning setups. To support the claim that over-memorization, rather than poisoning, drives the observed effect, the authors should conduct additional experiments under varied training configurations and data distributions. Without such evidence, the generality of the conclusion remains uncertain.
+
 2. The paper only evaluates the Shadowcast attack. Including more advanced attack methods (e.g, [1]) could strengthen the robustness of the conclusion.
 
 Other Concerns

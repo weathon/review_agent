@@ -1,5 +1,6 @@
 # Characterising the Inductive Biases of Neural Networks on Boolean Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

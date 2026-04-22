@@ -1,5 +1,6 @@
 # From Pixels to Paths: A Multi-Agent Framework for Editable Scientific Illustration
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

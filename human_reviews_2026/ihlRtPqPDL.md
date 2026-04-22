@@ -1,5 +1,6 @@
 # CTDG-SSM: Continuous-time Dynamic Graph State Space Models for Long Range Propagation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Torsional-GFN: a conditional conformation generator for small molecules
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

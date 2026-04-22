@@ -1,5 +1,6 @@
 # Revisiting Dynamic Graphs from the Perspective of Time Series
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

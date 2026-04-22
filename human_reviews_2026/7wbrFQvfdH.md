@@ -1,5 +1,6 @@
 # Inference-Time Scaling of Discrete Diffusion Models via Importance Weighting and Optimal Proposal Design
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 2
 

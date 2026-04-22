@@ -1,5 +1,6 @@
 # Test-Time Adaptation for LLM Agents via Environment Interaction
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

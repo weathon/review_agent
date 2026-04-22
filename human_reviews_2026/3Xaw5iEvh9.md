@@ -1,5 +1,6 @@
 # When LLMs Encounter Open-world Graph Learning: A Fresh View on Unlabeled Data Uncertainty
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 2
 

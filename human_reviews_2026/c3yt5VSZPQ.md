@@ -1,5 +1,6 @@
 # Understanding the Robustness of Distributed Self-Supervised Learning Frameworks Against Non-IID Data
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # SWE-eval: Trajectory-Enhanced Evaluation for Agentic Issue Resolution
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

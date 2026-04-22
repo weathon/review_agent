@@ -1,5 +1,6 @@
 # End-to-End On-Device Quantization-Aware Training for LLMs at Inference Cost
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

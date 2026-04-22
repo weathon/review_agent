@@ -1,5 +1,6 @@
 # Abductive Reasoning over Temporal Knowledge Graphs via Logical Hypothesis Generation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

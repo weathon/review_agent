@@ -1,5 +1,6 @@
 # Taming Large Language Models for Free-Form Generation Via Reinforcement Learning With Verifiable Rewards
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

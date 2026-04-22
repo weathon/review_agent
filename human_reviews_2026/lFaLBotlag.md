@@ -1,5 +1,6 @@
 # Dynamic Incremental Code Embeddings (DICE):  A Real-Time Communication Protocol for Multi-Agent Reinforcement Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # MOAI: Module-Optimizing Architecture for Non-Interactive Secure Transformer Inference
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # LEXam: Benchmarking Legal Reasoning on 340 Law Exams
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

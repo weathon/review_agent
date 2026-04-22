@@ -1,5 +1,6 @@
 # Training-Free Self-Scheduling for Efficient LLM Inference Serving
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 6
 

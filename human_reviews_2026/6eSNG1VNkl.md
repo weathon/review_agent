@@ -1,5 +1,6 @@
 # SEMA: Simple yet Effective Learning for Multi-Turn Jailbreak Attacks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

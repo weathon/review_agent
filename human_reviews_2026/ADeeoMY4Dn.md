@@ -1,5 +1,6 @@
 # Why Transformers Succeed and Fail at Compositional Generalization: Composition Equivalence and Module Coverage
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # A Robust Perturbation Strategy and Evaluation Benchmark for Accurate SHAP Attribution in Vision Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

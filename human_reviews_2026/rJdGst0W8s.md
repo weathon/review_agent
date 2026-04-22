@@ -1,5 +1,6 @@
 # Autoregressive Image Generation with Randomized Parallel Decoding
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

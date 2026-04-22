@@ -1,5 +1,6 @@
 # Car4Cast: A Dataset and Benchmark for LLM-Based Motion Forecasting and Spatial Reasoning in Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

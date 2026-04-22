@@ -1,5 +1,6 @@
 # Decision Potential Surface: A Theoretical and Practical Approximation of LLM's Decision Boundary
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

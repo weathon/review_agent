@@ -1,5 +1,6 @@
 # Improved state mixing in higher-order and block diagonal linear recurrent networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 4
 

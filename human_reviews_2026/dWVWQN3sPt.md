@@ -1,5 +1,6 @@
 # Beyond Anecdotal Evidence: A Systematic Framework for Evaluating Neuron Interpretability
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # UniOMA: Unified Optimal-Transport Multi-Modal Structural Alignment for Robot Perception
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Reward Models are Metrics in a Trench Coat
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

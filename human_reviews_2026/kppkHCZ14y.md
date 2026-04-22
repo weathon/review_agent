@@ -1,5 +1,6 @@
 # Multi-Head RAG: Solving Multi-Aspect Problems with LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

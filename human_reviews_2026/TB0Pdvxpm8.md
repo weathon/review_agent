@@ -1,5 +1,6 @@
 # BioTamperNet: Affinity-Guided State-Space Model Detecting Tampered Biomedical Images
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

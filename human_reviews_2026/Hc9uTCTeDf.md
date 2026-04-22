@@ -1,5 +1,6 @@
 # Cluster-Masked Scanning and Pretraining for Enhanced xLSTM Vision Performance
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Gradient-Sign Masking for Task Vector Transport Across Pre-Trained Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 6
 

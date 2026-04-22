@@ -1,5 +1,6 @@
 # MVGSR: Multi-View Consistency Gaussian Splatting for Robust Surface Reconstruction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

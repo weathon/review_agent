@@ -1,5 +1,6 @@
 # Short Window Attention Enables Long-Term Memorization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 2
 

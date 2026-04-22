@@ -1,5 +1,6 @@
 # CharFxReg : Characteristic Function based Regularisation
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 0, 2, 2
 

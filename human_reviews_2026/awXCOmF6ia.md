@@ -1,5 +1,6 @@
 # Zeroth-Order Methods for Stochastic Nonconvex Nonsmooth Composite Optimization
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

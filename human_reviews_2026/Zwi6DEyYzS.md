@@ -1,5 +1,6 @@
 # Towards Human-Like Event Boundary Detection in Unstructured Videos through Scene-Action Transition
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 4, 8, 0
 

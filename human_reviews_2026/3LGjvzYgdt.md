@@ -1,5 +1,6 @@
 # Enhancing Zero-Shot VLM Reward Models Through Structure-Aware Fine-Tuning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 4, 4, 6
 

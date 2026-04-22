@@ -1,5 +1,6 @@
 # TFD: Spectrally Guided Time–Frequency Diffusion Model For Time Series Imputation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

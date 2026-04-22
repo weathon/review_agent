@@ -1,5 +1,6 @@
 # KANO: Kolmogorov-Arnold Neural Operator
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8
 

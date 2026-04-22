@@ -1,5 +1,6 @@
 # Two Pathways to Truthfulness: On the Intrinsic Encoding of LLM Hallucinations
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

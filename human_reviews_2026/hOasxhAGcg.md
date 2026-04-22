@@ -1,5 +1,6 @@
 # Preventing Latent Reharsal Decay in Online Continual SSL with SOLAR
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

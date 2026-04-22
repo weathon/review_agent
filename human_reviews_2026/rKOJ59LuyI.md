@@ -1,5 +1,6 @@
 # CompassJudger-2: A Holistic Approach Towards Generalist Judge Model
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 8, 2
 

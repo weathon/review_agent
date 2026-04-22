@@ -1,5 +1,6 @@
 # Exposing Hallucinations To Suppress Them: VLMs Representation Editing With Generative Anchors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

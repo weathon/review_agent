@@ -1,5 +1,6 @@
 # MetaTT: A Global Tensor-Train Adapter for Parameter-Efficient Fine-Tuning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 8, 6
 

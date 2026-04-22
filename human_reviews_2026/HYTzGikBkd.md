@@ -1,5 +1,6 @@
 # The Illusion of Certainty: Uncertainty quantification for LLMs fails under ambiguity
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8
 

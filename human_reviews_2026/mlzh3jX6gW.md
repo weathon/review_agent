@@ -1,5 +1,6 @@
 # Navigate the Unknown: Enhancing LLM Reasoning with Intrinsic Motivation Guided Exploration
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

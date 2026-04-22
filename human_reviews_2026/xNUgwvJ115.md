@@ -1,5 +1,6 @@
 # BagelScore: Visual-Language Evaluation Made Easy
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

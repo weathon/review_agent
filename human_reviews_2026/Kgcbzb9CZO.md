@@ -1,5 +1,6 @@
 # Towards Better Generalization via Distributional Input Projection Network
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 
@@ -80,10 +81,17 @@ This paper introduces Distributional Input Projections, where Gaussian perturbat
 The paper is generally well-written and easy to follow. The authors run experiments on multiple architectures and tasks (MLPs, CNN/ViT, a language model), indicating an effort toward broader validation. Some empirical gains are visible, suggesting the idea could have regularization benefits. The attempt to connect generalization behavior to smoothness properties is conceptually aligned with robust learning literature.
 
 ### Weaknesses
-1. Misrepresentation of randomized smoothing literature. The manuscript repeatedly refers to “random smoothing” and incorrectly attributes adversarial training to Cohen et al. (2019). Cohen et al. established Gaussian randomized smoothing certificates using Neyman–Pearson and did not perform adversarial training. Salman et al. later connected smoothing to Lipschitz control, but this distinction is blurred or incorrect in multiple places. Example: Line 239: “and adversarial training (Cohen et al., 2019)”, this is factually wrong. Line 330: RS reduced to just adding noise; this misses the certified robustness objective.
-2. Limited novelty and unclear conceptual contribution. Adding learnable Gaussian noise inside networks is close to existing stochastic regularization methods (variational dropout, noisy layers, Bayesian features). Without a formal guarantee or structural insight, the contribution appears incremental. Distillation ablates the sampling at inference, which suggests much of the benefit may stem purely from stochastic training effects.
-3. Theory is not rigorous enough for the claims. Theorems rely on smoothness assumptions that do not reflect practical deep nets (non-smooth activations, unknown Lipschitz constants). No certified robustness or provable Lipschitz improvement is established, unlike in the proper RS literature. Consequently, the theoretical section does not convincingly support the narrative.
-4. Empirical evidence is insufficient. Results are limited to small-scale datasets. For generalization claims, ImageNet-level evaluation is expected. Variance across seeds is missing, and LLM results show minimal gains under a single training regime. There is no adversarial evaluation, despite repeatedly referencing adversarial robustness.
+1. Misrepresentation of randomized smoothing literature.
+The manuscript repeatedly refers to “random smoothing” and incorrectly attributes adversarial training to Cohen et al. (2019). Cohen et al. established Gaussian randomized smoothing certificates using Neyman–Pearson and did not perform adversarial training. Salman et al. later connected smoothing to Lipschitz control, but this distinction is blurred or incorrect in multiple places.
+Example:
+Line 239: “and adversarial training (Cohen et al., 2019)”, this is factually wrong.
+Line 330: RS reduced to just adding noise; this misses the certified robustness objective.
+2. Limited novelty and unclear conceptual contribution.
+Adding learnable Gaussian noise inside networks is close to existing stochastic regularization methods (variational dropout, noisy layers, Bayesian features). Without a formal guarantee or structural insight, the contribution appears incremental. Distillation ablates the sampling at inference, which suggests much of the benefit may stem purely from stochastic training effects.
+3. Theory is not rigorous enough for the claims.
+Theorems rely on smoothness assumptions that do not reflect practical deep nets (non-smooth activations, unknown Lipschitz constants). No certified robustness or provable Lipschitz improvement is established, unlike in the proper RS literature. Consequently, the theoretical section does not convincingly support the narrative.
+4. Empirical evidence is insufficient.
+Results are limited to small-scale datasets. For generalization claims, ImageNet-level evaluation is expected. Variance across seeds is missing, and LLM results show minimal gains under a single training regime. There is no adversarial evaluation, despite repeatedly referencing adversarial robustness.
 
 ### Questions
 Please address the weaknesses

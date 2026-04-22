@@ -1,5 +1,6 @@
 # Tackling Fake Forgetting through Uncertainty Quantification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

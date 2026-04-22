@@ -1,5 +1,6 @@
 # Contraction and Hourglass Persistence for Learning on Graphs, Simplices, and Cells
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 2
 

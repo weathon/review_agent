@@ -1,5 +1,6 @@
 # Robust Strength Behavior Modeling of Coarse-Grained Soils Using HSIC-Guided Stable Learning
 
+- Avg Score: 2.40
 - Decision: Reject
 - Scores: 0, 4, 2, 4, 2
 

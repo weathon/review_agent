@@ -1,5 +1,6 @@
 # On 10X Better Scalability: KV Stores Scale Up KV Cache
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

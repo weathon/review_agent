@@ -1,5 +1,6 @@
 # Collaborative Dual-Size Large Language Models with Dual-Stage Deferral Risk Control
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 4, 2
 

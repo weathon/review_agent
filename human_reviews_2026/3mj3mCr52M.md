@@ -1,5 +1,6 @@
 # Beyond Fixed: Aligning Guidance with Diffusion Dynamics via Exponential Scaling
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

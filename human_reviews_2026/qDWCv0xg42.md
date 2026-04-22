@@ -1,5 +1,6 @@
 # Socially-Aware Recommender Systems Mitigate Opinion Clusterization
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 8, 4, 4, 4
 

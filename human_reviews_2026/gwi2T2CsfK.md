@@ -1,5 +1,6 @@
 # FoeGlass: When Simple In-Context Learning Is Enough for Red Teaming Audio Deepfake Detectors
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Offline Reinforcement Learning for Interval-Censored Data
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

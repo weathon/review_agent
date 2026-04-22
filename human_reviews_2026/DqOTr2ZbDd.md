@@ -1,5 +1,6 @@
 # Light-Search: Reducing Retrieval Cost in RAG via Curriculum-Based Policy Optimization
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2, 2
 

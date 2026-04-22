@@ -1,5 +1,6 @@
 # Deterministic Transport-Based Sampling via Wasserstein Gradient Flows
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 2, 2, 2, 4
 

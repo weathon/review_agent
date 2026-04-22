@@ -1,5 +1,6 @@
 # TAH-QUANT: Effective Activation Quantization in Pipeline Parallelism over Slow Network
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

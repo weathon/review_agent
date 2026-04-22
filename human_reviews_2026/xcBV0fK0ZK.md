@@ -1,5 +1,6 @@
 # Adversarial Robustness of LLM-Based Multi-Agent Systems for Engineering Problems
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

@@ -1,5 +1,6 @@
 # Benchmarking Uncertainty Estimation in Large Language Model Replies for Natural Science Question Answering
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

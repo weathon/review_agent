@@ -1,5 +1,6 @@
 # What drives success in physical planning with Joint-Embedding Predictive World Models?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

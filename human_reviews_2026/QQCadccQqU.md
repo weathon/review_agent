@@ -1,5 +1,6 @@
 # FRIEDA: Benchmarking Multi-Step Cartographic Reasoning in Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 6
 
@@ -180,7 +181,9 @@ References
 
 ### Summary
 This paper introduces FRIEDA, a benchmark designed to evaluate multi-step cartographic reasoning in vision-language models (VLMs). FRIEDA focuses on reasoning over real-world maps and includes both single-map and multi-map questions.
-The benchmark contains 500 questions and supports two evaluation modes: (1) the direct setting, where the relevant map(s) are provided, and (2) the contextual setting, where models must first identify the relevant map(s) from a document set before reasoning.
+The benchmark contains 500 questions and supports two evaluation modes:
+(1) the direct setting, where the relevant map(s) are provided, and
+(2) the contextual setting, where models must first identify the relevant map(s) from a document set before reasoning.
 
 The authors evaluated 11 VLMs, finding that even the strongest models achieve less than 40% accuracy, far below the human baseline of 84.9%.
 

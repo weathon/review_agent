@@ -1,5 +1,6 @@
 # Cross-View Lewis Weight Fusion Empowering Exemplar Replay for Federated Class-Incremental Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

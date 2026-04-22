@@ -1,5 +1,6 @@
 # TriGuardFL: Triple-Step Byzantine-Robust Federated Learning against Model Poisoning Attacks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # MLLMCLIP: Feature-Level Distillation of MLLM for Robust Vision-Language Representations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

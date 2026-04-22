@@ -1,5 +1,6 @@
 # Facts in Stats: Impacts of Pretraining Diversity on Language Model Generalization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

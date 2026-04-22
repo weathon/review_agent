@@ -1,5 +1,6 @@
 # A Median Perspective on Unlabeled Data for Out-of-Distribution Detection
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 4, 2, 6
 

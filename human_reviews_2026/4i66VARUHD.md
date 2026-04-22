@@ -1,5 +1,6 @@
 # Surpassing Cosine Similarity  for Multidimensional Comparisons:  Dimension Insensitive Euclidean Metric
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2
 

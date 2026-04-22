@@ -1,5 +1,6 @@
 # Diagnosing and Mitigating Systemic Reward Bias in Self-Rewarding RL
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

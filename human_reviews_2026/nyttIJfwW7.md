@@ -1,5 +1,6 @@
 # FlowAlign: Trajectory-Regularized, Inversion-Free Flow-based Image Editing
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 6
 

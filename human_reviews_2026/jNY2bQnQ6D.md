@@ -1,5 +1,6 @@
 # Data Unlearning Beyond Uniform Forgetting via Diffusion Time and Frequency Selection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

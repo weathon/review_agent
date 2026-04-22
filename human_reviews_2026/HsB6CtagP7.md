@@ -1,5 +1,6 @@
 # Time Is a Feature: Exploiting Temporal Dynamics in Diffusion Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

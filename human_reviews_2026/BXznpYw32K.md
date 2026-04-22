@@ -1,5 +1,6 @@
 # XPoison: Cross-Class Attacks through Clean-Label Data Poisoning in Fine-Tuning
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 0
 

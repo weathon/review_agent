@@ -1,5 +1,6 @@
 # Evolvable Safety Benchmarking: Multi-agent Pipeline for LVLMs
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

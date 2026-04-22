@@ -1,5 +1,6 @@
 # Unlocking the Power of Multi-Agent LLM for Reasoning: From Lazy Agents to Deliberation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

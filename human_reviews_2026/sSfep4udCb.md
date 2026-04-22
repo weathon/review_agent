@@ -1,5 +1,6 @@
 # To Infinity and Beyond: Tool-Use Unlocks Length Generalization in State Space Models
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 4, 8, 8
 

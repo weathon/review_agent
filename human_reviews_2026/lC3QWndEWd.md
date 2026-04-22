@@ -1,5 +1,6 @@
 # RCR: Relation-Centric Reasoning with Large Language Models for Knowledge-based Question Answering
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

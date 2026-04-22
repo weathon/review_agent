@@ -1,5 +1,6 @@
 # PlanMoGPT: Flow-Enhanced Progressive Planning for Text to Motion Synthesis
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 6, 2, 2
 

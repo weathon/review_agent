@@ -1,5 +1,6 @@
 # Dual Distillation for Few-Shot Anomaly Detection
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

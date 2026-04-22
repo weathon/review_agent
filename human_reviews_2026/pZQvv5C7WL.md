@@ -1,5 +1,6 @@
 # GUI-R1: A Generalist R1-Style Vision-Language Action Model For GUI Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

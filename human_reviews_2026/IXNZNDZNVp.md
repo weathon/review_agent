@@ -1,5 +1,6 @@
 # StructPolicy: Robust Imitation Learning Policy Guided by Structure Map
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 4
 

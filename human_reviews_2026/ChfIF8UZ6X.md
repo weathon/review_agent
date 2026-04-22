@@ -1,5 +1,6 @@
 # Eyes-on-Me: Scalable RAG Poisoning through Transferable Attention-Steering Attractors
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

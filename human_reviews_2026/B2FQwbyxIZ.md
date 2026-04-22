@@ -1,5 +1,6 @@
 # From Pixels to Factors: Learning Independently Controllable State Variables for Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

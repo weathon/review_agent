@@ -1,5 +1,6 @@
 # Knowledge-Sensitive Dynamic Module Editing: Precise Knowledge Revision for Multimodal Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

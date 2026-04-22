@@ -1,5 +1,6 @@
 # Towards Non-destructive Privacy Protection for LVLMs via node-level localized editing
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

@@ -1,5 +1,6 @@
 # STORI: A Benchmark and Taxonomy for Stochastic Environments
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

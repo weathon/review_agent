@@ -1,5 +1,6 @@
 # Learning to See Before Seeing: Demystifying LLM Visual Priors from Language Pre-training
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 6, 6
 

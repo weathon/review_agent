@@ -1,5 +1,6 @@
 # Handwritten Text Recognition Adaptation for Low-Resource Languages: A Case Study on Historical Latin Manuscripts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

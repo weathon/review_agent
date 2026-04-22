@@ -1,5 +1,6 @@
 # Causal3D: a comprehensive benchmark for causal learning from visual data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

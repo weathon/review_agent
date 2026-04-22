@@ -1,5 +1,6 @@
 # RoRecomp: Enhancing Reasoning Efficiency via Rollout Response Recomposition in Reinforcement Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

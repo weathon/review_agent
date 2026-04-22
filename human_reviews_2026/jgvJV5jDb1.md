@@ -1,5 +1,6 @@
 # Partial Identification via Optimal Transport under Complex Constraints on Treatments and Potential Outcome Measures
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 4, 6
 

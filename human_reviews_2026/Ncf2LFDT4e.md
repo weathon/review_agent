@@ -1,5 +1,6 @@
 # BiasFreeBench: a Benchmark for Mitigating Bias in Large Language Model Responses
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 4
 

@@ -1,5 +1,6 @@
 # VoxelPrompt: A Vision Agent for End-to-End Medical Image Analysis
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

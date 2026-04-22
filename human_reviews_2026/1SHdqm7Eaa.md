@@ -1,5 +1,6 @@
 # A Guide to Training Consistency Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 
@@ -110,7 +111,8 @@ Recent methods for training consistency models rely on numerous design choices, 
 
 ### Weaknesses
 1. Results and analysis is done only on CIFAR-10 which is quite small. It would have been useful to show that the configuration from CIFAR-10 can be transferred to IMageNet-64. 
-2. Errors in Time Preconditioning and typos in some other expressions:  
+2. Errors in Time Preconditioning and typos in some other expressions: 
+
 - The general form for time preconditioning  $c(t) = K \int \dfrac{dt}{h(t)} + C$. Upon substituting $h(t) = \epsilon e^{ - \mu t}$, we get $c(t) = \dfrac{K}{\epsilon \mu} e^{\mu t} + C$. This function is exponentially decreasing when it should be exponentially increasing to get $c’(t)h(t)$ as constant. This expression is also different from the one in the paper $c(t) = \dfrac{e^{-\mu t} - 1}{\mu}$.
 -  In line 1142 and line 1147: After taking the limit, $r$ should be replaced with $t$ in the expression.
 3. From Table 2, the role of introducing some of the components is unclear. For instance, time-aware MMD loss has similar 1-step performance and only marginal gain (+0.01 FID) on 2 step over the other design choices. The recommended time preconditioning seems to result in worse 1-step performance. In Table 3 for variable-upper-limit, the granular analysis done for constant-upper limit is missing. Therefore, it is difficult to understand the contributions of different components like discretization function, time preconditioning, loss weighting etc. for variable upper limit case.

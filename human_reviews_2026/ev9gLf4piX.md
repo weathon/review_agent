@@ -1,5 +1,6 @@
 # Signal Collapse in One-Shot Pruning: When Sparse Models Fail to Distinguish Neural Representations
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 0, 2
 

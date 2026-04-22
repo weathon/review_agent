@@ -1,5 +1,6 @@
 # Is the Prediction Set Size Well-Calibrated? A Closer Look at Uncertainty in Conformal Prediction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

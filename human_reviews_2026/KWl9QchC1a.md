@@ -1,5 +1,6 @@
 # MC-LLaVA: Multi-Concept Personalized Vision-Language Model
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

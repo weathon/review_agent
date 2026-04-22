@@ -1,5 +1,6 @@
 # TwinVoice: A Multi-dimensional Benchmark Towards Digital Twins via LLM Persona Simulation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 4
 

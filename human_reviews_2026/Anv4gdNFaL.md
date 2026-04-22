@@ -1,5 +1,6 @@
 # One-Shot Exemplars for Class Grounding in Self-Supervised Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4, 6
 

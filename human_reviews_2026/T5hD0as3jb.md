@@ -1,5 +1,6 @@
 # Toward Universal and Transferable Jailbreak Attacks on Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

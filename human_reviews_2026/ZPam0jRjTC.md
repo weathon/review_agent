@@ -1,5 +1,6 @@
 # Outcome-Aware Spectral Feature Learning for Instrumental Variable Regression
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

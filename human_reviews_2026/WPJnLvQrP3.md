@@ -1,5 +1,6 @@
 # Prompt and Parameter Co-Optimization for Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 8
 

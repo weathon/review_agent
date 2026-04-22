@@ -1,5 +1,6 @@
 # How Do You Watch a Movie? HourHDVC: Hour-Long Hierarchical Dense Video Captioning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 10, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # DIME: Tackling Density Imbalance for High-Performance and Low-Latency Event-Based Object Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

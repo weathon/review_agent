@@ -1,5 +1,6 @@
 # Provable Benefit of Curriculum in Transformer Tree-Reasoning Post-Training
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 0, 4, 6, 2, 2
 

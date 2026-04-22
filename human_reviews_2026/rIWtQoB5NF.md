@@ -1,5 +1,6 @@
 # Towards Generalizable Context-aware Anomaly Detection: A Large-scale Benchmark in Cloud Environments
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

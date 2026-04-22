@@ -1,5 +1,6 @@
 # Deep Learning for Cyberbullying Detection: A GloVe-based Comparative Analysis of CNN and LSTM Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

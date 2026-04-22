@@ -1,5 +1,6 @@
 # PitStop: Physics-Informed Training with Gradient Stopping
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # AToken: A Unified Tokenizer for Vision
 
+- Avg Score: 6.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 8, 6
 

@@ -1,5 +1,6 @@
 # Struct-G: Structural-Aware Pretraining for Graph and Task Transfer Learning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

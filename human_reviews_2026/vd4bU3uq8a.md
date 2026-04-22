@@ -1,5 +1,6 @@
 # Which Formal Languages Can Large Language Models Learn in Context?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

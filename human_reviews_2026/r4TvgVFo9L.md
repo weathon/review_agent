@@ -1,5 +1,6 @@
 # InvarGC: Invariant Granger Causality for Heterogeneous Interventional Time Series under Latent Confounding
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

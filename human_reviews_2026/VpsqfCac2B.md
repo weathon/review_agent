@@ -1,5 +1,6 @@
 # SpatialHand: Generative Object Manipulation from 3D Prespective
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

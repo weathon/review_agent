@@ -1,5 +1,6 @@
 # TransFourier: FFT Is All You Need
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

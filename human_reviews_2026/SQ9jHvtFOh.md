@@ -1,5 +1,6 @@
 # Omni-SafetyBench: A Benchmark for Safety Evaluation of Audio-Visual Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

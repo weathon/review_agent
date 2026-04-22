@@ -1,5 +1,6 @@
 # Agent-Chained Policy Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 0, 6
 

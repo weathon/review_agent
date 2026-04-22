@@ -1,5 +1,6 @@
 # Pivot-Centric Trajectory Prediction: Bridging Long Horizons via Dynamical Guidance
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

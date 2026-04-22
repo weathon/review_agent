@@ -1,5 +1,6 @@
 # REMA: A Unified Reasoning Manifold Framework for Interpreting Large Language Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

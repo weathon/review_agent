@@ -1,5 +1,6 @@
 # PerturbFormer: Adversarial Graph Transformers for Scalable and Resilient Representation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

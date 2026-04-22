@@ -1,5 +1,6 @@
 # Efficient Ensemble Conditional Independence Test Framework for Causal Discovery
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # ATOM: A Pretrained Neural Operator for Multitask Molecular Dynamics
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

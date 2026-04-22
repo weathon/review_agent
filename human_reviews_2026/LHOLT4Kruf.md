@@ -1,5 +1,6 @@
 # Structurally-aware Genetic Algorithm for Vaccine Development
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

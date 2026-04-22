@@ -1,5 +1,6 @@
 # Revisiting Block-wise Interactions of MMDiT for Training-free Improved Synthesis
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

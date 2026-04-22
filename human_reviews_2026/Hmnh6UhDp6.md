@@ -1,5 +1,6 @@
 # Layer-Based 3D Gaussian Splatting for Sparse-View CT Reconstruction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

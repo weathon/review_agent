@@ -1,5 +1,6 @@
 # The data-quality illusion: Rethinking Classifier-based Quality Filtering for LLM Pretraining
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

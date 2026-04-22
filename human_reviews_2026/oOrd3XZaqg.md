@@ -1,5 +1,6 @@
 # Gradual Binary Search and Dimension Expansion : A general method for activation quantization in LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 8, 2, 4
 

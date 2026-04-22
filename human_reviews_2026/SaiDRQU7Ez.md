@@ -1,5 +1,6 @@
 # StreamSplat: Towards Online Dynamic 3D Reconstruction from Uncalibrated Video Streams
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4
 

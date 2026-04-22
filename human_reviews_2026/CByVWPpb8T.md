@@ -1,5 +1,6 @@
 # Repurposing Synthetic Data for Fine-grained Search Agent Supervision
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

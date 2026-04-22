@@ -1,5 +1,6 @@
 # Training-free Task Classification for Multi-Task Model Merging
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

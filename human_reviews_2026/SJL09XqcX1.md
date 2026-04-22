@@ -1,5 +1,6 @@
 # Less Data Less Tokens: Multilingual Unification Learning for Efficient Test-Time Reasoning in LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 8, 6
 

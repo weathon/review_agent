@@ -1,5 +1,6 @@
 # Architectural Inductive Biases Can Be Enough for State Abstraction in Deep Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

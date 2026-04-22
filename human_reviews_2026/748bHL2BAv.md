@@ -1,5 +1,6 @@
 # Ctrl-World: A Controllable Generative World Model for Robot Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

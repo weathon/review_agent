@@ -1,5 +1,6 @@
 # Focus on the Fog: Leveraging Student Uncertainty for Guided Knowledge Distillation in Semantic Segmentation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

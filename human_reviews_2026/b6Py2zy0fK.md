@@ -1,5 +1,6 @@
 # Enabling arbitrary inference in spatio-temporal dynamic systems: A physics-inspired perspective
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Consistency Training Helps Stop Sycophancy and Jailbreaks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 6, 4
 

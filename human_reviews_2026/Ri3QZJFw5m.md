@@ -1,5 +1,6 @@
 # Agents Aren't Agents: the Agency, Loyalty and Accountability Problems of AI agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

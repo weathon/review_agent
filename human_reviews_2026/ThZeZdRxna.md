@@ -1,5 +1,6 @@
 # UIT-Pred: Universal Intermittent Trajectory Predictor for Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

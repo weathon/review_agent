@@ -1,5 +1,6 @@
 # Binary Node Clustering via Contrastive Learning for Haplotype Phasing in de novo Genome Assembly
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Fit-LoRA: Fit Your LoRAs to Pruned LLMs Without Additional Training or Data
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 6, 2
 

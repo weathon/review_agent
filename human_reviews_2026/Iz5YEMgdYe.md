@@ -1,5 +1,6 @@
 # AstRL: Analog and Mixed-Signal Circuit Synthesis with Deep Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

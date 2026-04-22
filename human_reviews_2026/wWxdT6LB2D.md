@@ -1,5 +1,6 @@
 # Test-Time Matching: Unlocking Compositional Reasoning in Multimodal Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 6
 

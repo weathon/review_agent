@@ -1,5 +1,6 @@
 # OR-LLM-Agent: Automating Modeling and Solving of Operations Research Optimization Problems with Reasoning LLM
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

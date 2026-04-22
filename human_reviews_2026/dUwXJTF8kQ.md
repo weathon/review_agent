@@ -1,5 +1,6 @@
 # In-Context Learning Is Provably Bayesian Inference: A Generalization Theory for Meta-Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

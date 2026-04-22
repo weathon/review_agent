@@ -1,5 +1,6 @@
 # Towards Optimism-Pessimism Trade-off in Model-based Offline-to-Online Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

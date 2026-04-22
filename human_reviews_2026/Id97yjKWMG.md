@@ -1,5 +1,6 @@
 # PersonaAgent: When Large Language Model Agents Meet Personalization at Test Time
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

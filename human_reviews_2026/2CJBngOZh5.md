@@ -1,5 +1,6 @@
 # Preferential dynamic modeling with forward-backward smoothing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # FedSAGD: federated learning with stable and accelerated client gradient descent
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

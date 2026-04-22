@@ -1,5 +1,6 @@
 # ReLayout: Integrating Relation Reasoning for Content-aware Layout Generation with Multi-modal Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

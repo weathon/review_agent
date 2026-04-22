@@ -1,5 +1,6 @@
 # Scenethesis: A Language and Vision Agentic Framework for 3D Scene Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

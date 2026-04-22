@@ -1,5 +1,6 @@
 # PEPTRIX: A FRAMEWORK FOR EXPLAINABLE PEPTIDE ANALYSIS THROUGH PROTEIN LANGUAGE MODELS
 
+- Avg Score: 1.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 2, 2
 

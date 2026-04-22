@@ -1,5 +1,6 @@
 # RoboOmni: Actions Are Just Another Modality for Your Vision-Language Models
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 4, 8
 

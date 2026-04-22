@@ -1,5 +1,6 @@
 # MedAgentGym: A Scalable Agentic Training Environment for Code-Centric Reasoning in Biomedical Data Science
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 8
 

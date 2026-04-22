@@ -1,5 +1,6 @@
 # Multi-Synaptic Cooperation: A Bio-Inspired Framework for Robust and Scalable  Continual Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

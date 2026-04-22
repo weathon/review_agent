@@ -1,5 +1,6 @@
 # Thanos: A Block-wise Pruning Algorithm for Efficient Large Language Model Compression
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 8, 4
 

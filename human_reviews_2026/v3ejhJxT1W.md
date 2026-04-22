@@ -1,5 +1,6 @@
 # Splat the Net: Radiance Fields with Splattable Neural Primitives
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

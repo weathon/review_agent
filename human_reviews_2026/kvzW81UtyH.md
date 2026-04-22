@@ -1,5 +1,6 @@
 # Causality-Inspired Robustness for Nonlinear Models via Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 
@@ -38,7 +39,9 @@ The effectiveness of CIRLL is tested on one synthetic dataset, the ICU dataset f
 - The experiments section is noticeably short in comparison to the rest of the paper. As a result, a lot of important content about experiments is missing (e.g. experimental setup incl. description of datasets used, choice and ablation of hyperparameters, ablation of loss term $L_g$). As a bare minimum, their position in the Appendix should be referenced in the main part, but ideally they are already summarised in the main part. Suggestions for shortening would be introduction and related work (I have never seen a related work section that is longer than the experiment section).
 - The benefit of the proposed additional loss term $L_g$ is not clear. In its ablation in Figure 7 of the Appendix, the blue curve for $\alpha =0$ (corresponding to omitting it) is not shown for the test loss of the single-cell data and the one of its nearest neighbour ($\alpha = 0.001$) is not significantly dissimilar in performance from the ones of higher values for $\alpha$. 
 - Given that out of the 2 real life datasets, the proposed method noticeably outperforms its purely linear component DRIG only on one of the two datasets, while being on par on the other, it would be interesting to have some discussion about this that tries to explain this at least or ideally an analysis that adds more depth to the fundamental differences in the data that explain this difference in relative performance.
-- More guidance for practitioners would be useful - e.g. is there a way to verify if assumption 1 holds, how to choose hyperparameters etc.   Minor: 
+- More guidance for practitioners would be useful - e.g. is there a way to verify if assumption 1 holds, how to choose hyperparameters etc. 
+
+Minor: 
 - I think the paper could benefit from an illustrative example of the causal graph assumed in Eqn. (2) and (3) in Section 3.1. E.g. ‘X_1 being smoking, X_2 being BMI, Y being …’. 
 - At times, key sources are missing: e.g. in line 249 after ‘a vector c’, line 170 after ‘if the graph is acyclic’, line 110 after ‘finite-sample regimes’, line 65 after ‘multi-source heterogeneity’, as well as citing the authors of the datasets used in Section 4.  
 - More a comment than a weakness: given that the authors mention adversarial perturbations in line 30 as example, and design a method to make predictors robust to worst case shifts, an experiment on adversarial robustness would have been very interesting! 

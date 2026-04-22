@@ -1,5 +1,6 @@
 # SIPDO: Closed-Loop Prompt Optimization via Synthetic Data Feedback
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

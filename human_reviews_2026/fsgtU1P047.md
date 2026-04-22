@@ -1,5 +1,6 @@
 # Property-aware Reinforcement Learning with Retrieval Enhancement for Controllable 3D Molecule Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2
 

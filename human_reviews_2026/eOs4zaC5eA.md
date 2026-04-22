@@ -1,5 +1,6 @@
 # Discovering Hierarchical Latent Capabilities of Language Models via Causal Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

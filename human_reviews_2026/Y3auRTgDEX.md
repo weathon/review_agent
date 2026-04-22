@@ -1,5 +1,6 @@
 # CS-Dialogue: A 104-Hour Dataset of Spontaneous Mandarin-English Code-Switching Dialogues for Speech Recognition
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 2, 8, 8
 

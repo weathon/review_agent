@@ -1,5 +1,6 @@
 # Agreement with the Ensemble for Zero-Shot Vision-Language Model Selection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

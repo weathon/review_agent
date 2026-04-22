@@ -1,5 +1,6 @@
 # Beyond RNA Structure Alone: Complex-Aware Fusion for Tertiary Structure-based RNA Design
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

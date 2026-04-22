@@ -1,5 +1,6 @@
 # Scalable and Generalizable Autonomous Driving Scene Synthesis
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 6, 6
 

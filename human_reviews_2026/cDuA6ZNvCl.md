@@ -1,5 +1,6 @@
 # Efficient Agent Training for Computer Use
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

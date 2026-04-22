@@ -1,5 +1,6 @@
 # PoliCon: Evaluating LLMs on Achieving Diverse Political Consensus Objectives
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

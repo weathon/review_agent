@@ -1,5 +1,6 @@
 # OpenEstimate: Evaluating LLMs on Reasoning Under Uncertainty with Real-World Data
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # HERS: Hidden-Pattern Expert Learning for Risk-Specific Vehicle Damage Adaptation in Diffusion Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 4, 4
 

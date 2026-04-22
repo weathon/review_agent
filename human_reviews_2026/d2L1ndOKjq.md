@@ -1,5 +1,6 @@
 # Foundation Models for Causal Inference via Prior-Data Fitted Networks
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

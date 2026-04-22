@@ -1,5 +1,6 @@
 # LLMs as In-Context Meta-Learners for Model and Hyperparameter Selection
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 2, 4, 4
 

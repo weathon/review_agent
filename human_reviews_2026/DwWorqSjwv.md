@@ -1,5 +1,6 @@
 # AdaGrad Converges in a Robust Sense: Almost Sure Last-Iterate Rates under Any Stopping Time
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

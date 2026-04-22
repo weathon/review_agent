@@ -1,5 +1,6 @@
 # Weak-to-Strong Diffusion with Reflection
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6, 4
 

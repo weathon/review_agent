@@ -1,5 +1,6 @@
 # Towards Universal Neural Operators through Multiphysics Pretraining
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

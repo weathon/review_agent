@@ -1,5 +1,6 @@
 # CannyEdit: Selective Canny Control and Dual-Prompt Guidance for Training-free Image Editing
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

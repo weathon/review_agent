@@ -1,5 +1,6 @@
 # FaceID-6M: A Large-Scale, Open-Source FaceID Customization Dataset
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

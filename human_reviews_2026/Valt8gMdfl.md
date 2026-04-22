@@ -1,5 +1,6 @@
 # Mixture-of-Mamba: Enhancing Multi-Modal State-Space Models with Modality-Aware Sparsity
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

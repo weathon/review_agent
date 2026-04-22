@@ -1,5 +1,6 @@
 # Higher-Order Fourier Neural Operator: Explicit Mode Mixer for Nonlinear PDEs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

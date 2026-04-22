@@ -1,5 +1,6 @@
 # Federated Learning of Quantile Inference under Local Differential Privacy
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4, 4
 

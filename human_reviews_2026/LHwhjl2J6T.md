@@ -1,5 +1,6 @@
 # TadABench-1M: A Large-Scale Wet-Lab Protein Benchmark For Rigorous OOD Evaluation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

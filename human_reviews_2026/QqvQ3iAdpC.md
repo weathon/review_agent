@@ -1,5 +1,6 @@
 # It's All Just Vectorization: einx, a Universal Notation for Tensor Operations
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 6
 

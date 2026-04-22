@@ -1,5 +1,6 @@
 # GeoMoLa: Geometry-Aware Motion Latents for Learning Robust Manipulation Policies
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

@@ -1,5 +1,6 @@
 # RFS: Reinforcement learning with Residual flow steering for dexterous manipulation
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 2
 

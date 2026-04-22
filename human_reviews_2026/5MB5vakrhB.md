@@ -1,5 +1,6 @@
 # Beyond Linear Processing: Dendritic Bilinear Integration in Spiking Neural Networks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

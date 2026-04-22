@@ -1,5 +1,6 @@
 # SLAE:  Strictly Local All-atom Environment for Protein Representation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

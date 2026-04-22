@@ -1,5 +1,6 @@
 # Do Neural Networks Learn Similar Subspaces? An Empirical Exploration of Joint Parametric Subspaces in Deep Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

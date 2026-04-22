@@ -1,5 +1,6 @@
 # Reinforcement Learning for Clinical Reasoning: Aligning LLMs with ACR Imaging Criteria
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Data- and Hardware-Aware Entanglement Selection for Quantum Feature Maps in Hybrid Quantum Neural Networks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

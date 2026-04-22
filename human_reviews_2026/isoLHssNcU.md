@@ -1,5 +1,6 @@
 # Memory Savings at What Cost? A Study of Alternatives to Backpropagation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

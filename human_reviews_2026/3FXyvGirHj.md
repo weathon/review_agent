@@ -1,5 +1,6 @@
 # Learning to Fly Camera Drones by Watching Internet Videos
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6
 

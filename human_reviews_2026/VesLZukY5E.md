@@ -1,5 +1,6 @@
 # How Far Can Unsupervised RLVR Scale LLM Training?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

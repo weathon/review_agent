@@ -1,5 +1,6 @@
 # Tabular Learning with Background Information: LLMs, Knowledge Graphs, or Both?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Adaptive Test-Time Compute Allocation via Query Complexity Estimation in Large Language Models
 
+- Avg Score: 0.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0
 

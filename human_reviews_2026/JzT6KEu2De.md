@@ -1,5 +1,6 @@
 # IMAP: A Mind Mapping Construct To Enhance Inductive Reasoning In Generative Model
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 0, 4
 

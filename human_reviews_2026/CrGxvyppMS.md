@@ -1,5 +1,6 @@
 # Data Passports: Confidentially Provable Provenance for Onboarding Verifiable ML
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0
 

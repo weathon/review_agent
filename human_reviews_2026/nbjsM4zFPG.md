@@ -1,5 +1,6 @@
 # RECON: Multimodal GraphRAG for Visually Rich Documents with Intra-Page Reflection and Inter-Page Connection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

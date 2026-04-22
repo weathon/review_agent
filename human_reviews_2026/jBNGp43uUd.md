@@ -1,5 +1,6 @@
 # DDM-TS: Decoupled Diffusion Models for Time-Series Generation with Explicit Trend–Seasonality Decomposition
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

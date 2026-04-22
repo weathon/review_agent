@@ -1,5 +1,6 @@
 # Learning Goal-Oriented Language-Guided Navigation with Self-Improving Demonstrations at Scale
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

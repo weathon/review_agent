@@ -1,5 +1,6 @@
 # When Scale is Fixed: Revisiting Pre-training Indicators for LLM Fine-tuning Performance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

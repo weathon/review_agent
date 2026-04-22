@@ -1,5 +1,6 @@
 # Towards Identifiability of Interventional Stochastic Differential Equations
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

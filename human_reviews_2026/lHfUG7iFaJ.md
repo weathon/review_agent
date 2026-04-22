@@ -1,5 +1,6 @@
 # Multi-Step Reasoning for Embodied Question Answering via Tool Augmentation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 6, 4
 

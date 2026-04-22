@@ -1,5 +1,6 @@
 # AI Respondents for Policy Monitoring: From Data Extraction to AI-Driven Survey Responses in the OECD STIP Compass
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 0, 4, 2
 

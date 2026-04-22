@@ -1,5 +1,6 @@
 # Predictive Embedding as Latent Action: Towards VLA Pretraining in the Wild
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 8
 

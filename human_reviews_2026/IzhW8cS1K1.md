@@ -1,5 +1,6 @@
 # Contrastive Inverse Reinforcement Learning for Highway Driving Behavior Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

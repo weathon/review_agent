@@ -1,5 +1,6 @@
 # FreqAlign: Frequency-Based Calibration for Mitigating Contextual Hallucinations in Large Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

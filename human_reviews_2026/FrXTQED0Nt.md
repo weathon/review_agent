@@ -1,5 +1,6 @@
 # ProtoBind-Diff: Protein-Conditioned Discrete Diffusion for Structure-Free Ligand Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

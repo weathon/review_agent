@@ -1,5 +1,6 @@
 # Learning KAN-based Implicit Neural Representations for Deformable Image Registration
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

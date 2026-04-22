@@ -1,5 +1,6 @@
 # Bandit Learning in Matching Markets Robust to Adversarial Corruptions
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

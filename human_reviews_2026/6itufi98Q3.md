@@ -1,5 +1,6 @@
 # Ego-Foresight: Self-supervised Learning of Agent-Aware Representations for Improved RL
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

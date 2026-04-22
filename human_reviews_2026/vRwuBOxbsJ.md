@@ -1,5 +1,6 @@
 # Solving Football by Exploiting Equilibrium Structure of 2p0s Differential Games with One-Sided Information
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 6
 

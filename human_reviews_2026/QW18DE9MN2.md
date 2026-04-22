@@ -1,5 +1,6 @@
 # BioAnalyst: A Foundation Model for Biodiversity
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

@@ -1,5 +1,6 @@
 # ES-GGT: Efficient Submap-based Visual Geometry Grounded Transformer with Spatial Memory Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Target Before You Perturb: Enhancing Locally Private Graph Learning via Task-Oriented Perturbation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

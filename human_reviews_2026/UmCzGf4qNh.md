@@ -1,5 +1,6 @@
 # Bayes Adaptive Monte Carlo Tree Search for Offline Model-based Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

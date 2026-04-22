@@ -1,5 +1,6 @@
 # MuEdit: A Lightweight yet Effective Multi-task Model Editing Method
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

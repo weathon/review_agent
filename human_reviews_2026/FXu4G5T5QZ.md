@@ -1,5 +1,6 @@
 # Autoregressive-based Progressive Coding for Ultra-Low Bitrate Image Compression
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

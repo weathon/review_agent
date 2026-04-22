@@ -1,5 +1,6 @@
 # NurValues: Real-World Nursing Values Evaluation for Large Language Models in Clinical Context
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 2
 

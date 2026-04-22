@@ -1,5 +1,6 @@
 # Test-Time Efficient Pretrained Model Portfolios for Time Series Forecasting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

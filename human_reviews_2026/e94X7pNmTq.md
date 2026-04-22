@@ -1,5 +1,6 @@
 # MIMA: Iterative Model Averaging and Fine-Tuning for Multi-Task Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 4, 2
 

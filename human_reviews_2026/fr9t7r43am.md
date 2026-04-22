@@ -1,5 +1,6 @@
 # Hidden Markov Modeling of Reasoning Dynamics in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

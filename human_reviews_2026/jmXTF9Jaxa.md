@@ -1,5 +1,6 @@
 # Unifying Structure- and Ligand-based Drug Design via Contrastive Geometric Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Are Large Language Models Really Reliable Zero-shot Time Series Forecaster? Failure Analysis via the Lens of Stationarity
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 
@@ -85,7 +86,8 @@ The work emphasizes the need for hybrid approaches that incorporate explicit sta
 
 2.The paper only analyzes the reasoning process of DeepSeek-R1; adding similar analyses for other LLMs would provide a deeper understanding of why LLMs fail.
 
-3.The evaluation lacks motivation. Few studies have explored zero-shot time series forecasting with LLMs—Gruver et al.[1] merely demonstrated LLM`s limited TSF ability, such as capturing simple monotonic patterns. Subsequent methods that preserve the autoregressive nature of LLMs on TSF have mainly focused on fine-tuning them [2] [3] [4]. Analyzing the shortcomings of these approaches would make the paper more solid. 
+3.The evaluation lacks motivation. Few studies have explored zero-shot time series forecasting with LLMs—Gruver et al.[1] merely demonstrated LLM`s limited TSF ability, such as capturing simple monotonic patterns. Subsequent methods that preserve the autoregressive nature of LLMs on TSF have mainly focused on fine-tuning them [2] [3] [4]. Analyzing the shortcomings of these approaches would make the paper more solid.
+
 
 [1] Large Language Models Are Zero-Shot Time Series Forecasters
 

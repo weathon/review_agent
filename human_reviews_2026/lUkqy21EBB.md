@@ -1,5 +1,6 @@
 # Pushing LLMs to Their Logical Reasoning Bound: The Role of Data Reasoning Intensity
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

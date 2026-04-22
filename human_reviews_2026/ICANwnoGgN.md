@@ -1,5 +1,6 @@
 # Model soups need only one ingredient
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 6, 4, 6, 4
 

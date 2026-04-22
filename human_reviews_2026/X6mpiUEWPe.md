@@ -1,5 +1,6 @@
 # TabX: X-cellent at Complex Tables and Beyond
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

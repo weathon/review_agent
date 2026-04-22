@@ -1,5 +1,6 @@
 # Beyond the Proxy: Trajectory-Distilled Guidance for Offline GFlowNet Training
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

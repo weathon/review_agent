@@ -1,5 +1,6 @@
 # Balancing the Experts: Unlocking LoRA-MoE for GRPO via Mechanism-Aware Rewards
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

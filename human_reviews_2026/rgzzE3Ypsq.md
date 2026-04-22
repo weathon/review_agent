@@ -1,5 +1,6 @@
 # Harnessing task overload for scalable jailbreak attacks on large language models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

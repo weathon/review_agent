@@ -1,5 +1,6 @@
 # Conformal Risk-Controlled Routing for Large Language Model
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 4, 0
 

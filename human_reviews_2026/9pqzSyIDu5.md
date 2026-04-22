@@ -1,5 +1,6 @@
 # CP Merging: Joint LoRA Merging using Canonical Polyadic Decomposition
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

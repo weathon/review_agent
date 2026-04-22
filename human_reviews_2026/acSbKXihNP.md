@@ -1,5 +1,6 @@
 # Hierarchical Periodic Stationarization for Non-stationary Time Series Forecasting
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

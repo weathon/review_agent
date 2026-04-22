@@ -1,5 +1,6 @@
 # Go Beyond Earth: Understanding Human Actions and Scenes in Microgravity Environments
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

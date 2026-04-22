@@ -1,5 +1,6 @@
 # Subspace Kernel Learning on Tensor Sequences
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4
 

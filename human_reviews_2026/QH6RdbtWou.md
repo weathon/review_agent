@@ -1,5 +1,6 @@
 # GenICF: Benchmarking Generative Methods for Inverse Modeling in Inertial Confinement Fusion
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Equalized Generative Treatment: Matching $f$-divergences for Fairness in Generative Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

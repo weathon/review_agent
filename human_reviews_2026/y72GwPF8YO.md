@@ -1,5 +1,6 @@
 # FineSplat: Fine-Grained 3D Open-Vocabulary Language Gaussian Splatting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

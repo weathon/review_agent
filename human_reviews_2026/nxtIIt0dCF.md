@@ -1,5 +1,6 @@
 # Mechanism Design as Inverse Games: A Computational Approach to Dynamic Mechanism Design
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

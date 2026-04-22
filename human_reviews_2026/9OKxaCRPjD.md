@@ -1,5 +1,6 @@
 # Mitigating Surgical Data Imbalance with Dual-Prediction Video Diffusion Model
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

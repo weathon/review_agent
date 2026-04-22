@@ -1,5 +1,6 @@
 # TSM-Bench: Detecting LLM-Generated Text in Real-World Wikipedia Editing Practices
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

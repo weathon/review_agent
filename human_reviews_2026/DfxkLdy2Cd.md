@@ -1,5 +1,6 @@
 # Reasoning or Retrieval? A Study of Answer Attribution on Large Reasoning Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

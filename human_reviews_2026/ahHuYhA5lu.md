@@ -1,5 +1,6 @@
 # SAMITE: Position Prompted SAM2 with Calibrated Memory for Visual Object Tracking
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

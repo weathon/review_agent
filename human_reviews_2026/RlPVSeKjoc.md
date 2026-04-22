@@ -1,5 +1,6 @@
 # Extending the Context of Pretrained LLMs by Dropping Their Positional Embedding
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 2
 

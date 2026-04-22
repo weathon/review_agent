@@ -1,5 +1,6 @@
 # STT: Towards Training-Free Zero-Shot Composed Image Retrieval via Semantic Transition and Transportation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

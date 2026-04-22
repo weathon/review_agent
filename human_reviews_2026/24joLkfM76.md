@@ -1,5 +1,6 @@
 # Boosting Process-Correct CoT Reasoning by Modeling Solvability of Multiple-Choice QA
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

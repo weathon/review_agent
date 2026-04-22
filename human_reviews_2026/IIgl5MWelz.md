@@ -1,5 +1,6 @@
 # Prosperity before Collapse: How Far Can Off-Policy RL Reach with Stale Data on LLMs?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

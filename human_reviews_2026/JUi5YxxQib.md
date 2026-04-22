@@ -1,5 +1,6 @@
 # LLM Agents Do Not Replicate Human Market Traders: Evidence from Experimental Finance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 2, 8, 6
 

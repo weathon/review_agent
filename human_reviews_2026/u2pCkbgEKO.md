@@ -1,5 +1,6 @@
 # Point2Primitive: CAD Reconstruction from Point Cloud by Direct Primitive Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

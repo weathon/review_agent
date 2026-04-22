@@ -1,5 +1,6 @@
 # An Optimal Algorithm for Marginalization in Bayesian Networks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 2
 

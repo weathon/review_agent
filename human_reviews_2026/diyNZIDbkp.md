@@ -1,5 +1,6 @@
 # Hierarchical Parametrization with Gaussian Process for Bayesian Meta-Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

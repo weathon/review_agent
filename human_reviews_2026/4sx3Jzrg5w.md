@@ -1,5 +1,6 @@
 # Beyond Homogeneous Attention: Memory-Efficient LLMs via Fourier-Approximated KV Cache
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

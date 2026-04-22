@@ -1,5 +1,6 @@
 # Grothendieck Graph Neural Networks Framework: An Algebraic Platform for Crafting Topology-Aware GNNs
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

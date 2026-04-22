@@ -1,5 +1,6 @@
 # MMTok: Multimodal Coverage Maximization for Efficient Inference of VLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

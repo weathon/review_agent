@@ -1,5 +1,6 @@
 # Adaptive Sensor Selection for Power Efficient 3D Object Detection on Autonomous Driving
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

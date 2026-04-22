@@ -1,5 +1,6 @@
 # Sample Smart, Not Hard: Correctness-First Decoding for Better Reasoning in LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 8
 

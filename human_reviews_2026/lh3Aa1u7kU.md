@@ -1,5 +1,6 @@
 # Stacked from One: Multi-Scale Self-Injection for Context Window Extension
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 2
 

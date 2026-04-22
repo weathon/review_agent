@@ -1,5 +1,6 @@
 # Let OOD Feature Exploring Vast Predefined Classifiers
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6, 6
 

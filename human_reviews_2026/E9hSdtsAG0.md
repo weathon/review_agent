@@ -1,5 +1,6 @@
 # Drax: Speech Recognition with Discrete Flow Matching
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

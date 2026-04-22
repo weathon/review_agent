@@ -1,5 +1,6 @@
 # RACA-CLIP: Relation-Aware Compositional Alignment for CLIP
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

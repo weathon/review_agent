@@ -1,5 +1,6 @@
 # Deep Hashing Based on the von Mises-Fisher Distribution for Fast Large-Scale Image Retrieval
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

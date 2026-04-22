@@ -1,5 +1,6 @@
 # AceReason-Nemotron 1.1: Advancing Math and Code Reasoning through SFT and RL Synergy
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

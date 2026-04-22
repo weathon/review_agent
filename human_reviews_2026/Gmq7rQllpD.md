@@ -1,5 +1,6 @@
 # OPTIMA: Optimal One-shot Pruning for LLMs via Quadratic Programming Reconstruction
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

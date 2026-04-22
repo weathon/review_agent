@@ -1,5 +1,6 @@
 # A Neurosymbolic Agent System for Compositional Visual Reasoning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # PAFT: A Parallel Training Paradigm for Effective LLM Fine-Tuning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

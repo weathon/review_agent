@@ -1,5 +1,6 @@
 # Certified Evaluation of Model-Level Explanations for Graph Neural Networks
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 4
 

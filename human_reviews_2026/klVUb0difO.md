@@ -1,5 +1,6 @@
 # Edge-wise topological divergence gaps: guiding search in combinatorial optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

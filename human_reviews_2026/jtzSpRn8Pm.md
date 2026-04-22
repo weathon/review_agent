@@ -1,5 +1,6 @@
 # TCBench: A Benchmark for Tropical Cyclone Track and Intensity Forecasting at the Global Scale
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

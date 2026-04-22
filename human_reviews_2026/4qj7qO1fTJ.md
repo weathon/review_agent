@@ -1,5 +1,6 @@
 # BottleneckMLP: Graph Explanation via Implicit Information Bottleneck
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

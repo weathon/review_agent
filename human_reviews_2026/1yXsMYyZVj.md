@@ -1,5 +1,6 @@
 # Forgetting: A New Mechanism Towards Better Large Language Model Fine-tuning
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

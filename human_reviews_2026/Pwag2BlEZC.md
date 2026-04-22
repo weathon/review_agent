@@ -1,5 +1,6 @@
 # EvoWorld: Evolving Panoramic World Generation with Explicit 3D Memory
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

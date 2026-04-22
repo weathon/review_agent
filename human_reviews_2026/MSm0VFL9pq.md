@@ -1,5 +1,6 @@
 # Hyperdimensional Probe: Decoding LLM Representations via Vector Symbolic Architectures
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 4, 4
 

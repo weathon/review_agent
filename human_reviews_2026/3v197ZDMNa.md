@@ -1,5 +1,6 @@
 # Learning Causal Structures from Mixed Dynamics via Polynomial Chaos Expansion
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

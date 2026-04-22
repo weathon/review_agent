@@ -1,5 +1,6 @@
 # Model Collapse Is Not a Bug but a Feature in Machine Unlearning for LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

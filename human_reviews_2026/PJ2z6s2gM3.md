@@ -1,5 +1,6 @@
 # The emergence of the left-right asymmetry in predicting brain activity from LLMs' representations specifically correlates with their formal linguistic competence
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # ParetoRouter: VLSI Global Routing with Multi-Objective Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

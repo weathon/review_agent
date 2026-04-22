@@ -1,5 +1,6 @@
 # Real-time Monocular SLAM with Stochastic Local Newton Optimized 3D Gaussian Splatting
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

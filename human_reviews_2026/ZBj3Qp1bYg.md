@@ -1,5 +1,6 @@
 # Energy-Based Transformers are Scalable Learners and Thinkers
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 2, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # C$^2$GSPG: Confidence-calibrated Group Sequence Policy Gradient towards Self-aware Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

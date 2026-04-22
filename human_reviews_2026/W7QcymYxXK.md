@@ -1,5 +1,6 @@
 # Bridging Unsupervised and Semi-Supervised Anomaly Detection: A Provable and Practical Framework with Synthetic Anomalies
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 4, 0
 

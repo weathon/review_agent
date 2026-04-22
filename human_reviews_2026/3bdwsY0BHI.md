@@ -1,5 +1,6 @@
 # Harnessing Patient Connectivity for Medical Classification under Missing Values
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2, 2
 

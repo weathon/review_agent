@@ -1,5 +1,6 @@
 # MaterialFusion: High-Quality, Zero-Shot, and Controllable Material Transfer with Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

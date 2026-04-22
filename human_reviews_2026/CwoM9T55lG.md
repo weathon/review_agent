@@ -1,5 +1,6 @@
 # On the Impossibility of Separating Intelligence from Judgment: The Computational Intractability of Filtering for AI Alignment
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Deep Hierarchical Learning with Nested Subspace Networks for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2
 

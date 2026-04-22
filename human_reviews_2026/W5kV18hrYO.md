@@ -1,5 +1,6 @@
 # AFORA: Activation-aware Factorization with Optimal Rank Allocation for Training-free LLM Compression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

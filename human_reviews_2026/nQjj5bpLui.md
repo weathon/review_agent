@@ -1,5 +1,6 @@
 # UUE: Untargeted Language Model Unlearning via Null-Space-Guided Editing with Lightweight Adapters
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Learning Text-driven 3D Human Motion Generation from 3D-free Web Videos
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

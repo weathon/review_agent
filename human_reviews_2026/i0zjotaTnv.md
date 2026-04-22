@@ -1,5 +1,6 @@
 # Not How You Think, It's What You See: Decoupling Perception from Reasoning
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 4, 2, 2
 

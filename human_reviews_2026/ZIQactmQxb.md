@@ -1,5 +1,6 @@
 # CaTs and DAGs: Integrating Directed Acyclic Graphs with Transformers for Causally Constrained Predictions
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

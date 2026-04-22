@@ -1,5 +1,6 @@
 # FedReLa: Imbalanced Federated Learning via Re-Labeling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

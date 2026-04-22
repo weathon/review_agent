@@ -1,5 +1,6 @@
 # From Regression to Dose–Response: A Framework to predict Activity and $EC50$ for GPCRs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

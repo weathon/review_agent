@@ -1,5 +1,6 @@
 # ScooBDoob: Schrödinger Bridge with Doob’s h-Transform for Molecular Dynamics
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

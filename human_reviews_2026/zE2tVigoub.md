@@ -1,5 +1,6 @@
 # A3: Android Agent Arena For Mobile GUI Agents
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6, 4
 

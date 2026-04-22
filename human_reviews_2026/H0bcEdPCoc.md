@@ -1,5 +1,6 @@
 # Let's (not) just put things in Context: Test-time Training for Long-context LLMs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6
 

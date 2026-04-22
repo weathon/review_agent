@@ -1,5 +1,6 @@
 # Foundation Models for Industrial Scheduling Leveraging the Techniques from LLMs
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 4, 8
 

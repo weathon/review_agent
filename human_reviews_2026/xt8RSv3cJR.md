@@ -1,5 +1,6 @@
 # From One to Many: Trajectory Invariant Learning for Multimodal Large Language Model Editing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

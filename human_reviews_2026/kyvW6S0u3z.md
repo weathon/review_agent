@@ -1,5 +1,6 @@
 # FMIP: Joint Continuous-Integer Flow For Mixed-Integer Linear Programming
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # FindMeIfYouCan: Bringing Open Set Metrics to $\textit{near}$, $\textit{far}$ and $\textit{farther}$ Out-of-Distribution Object Detection
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

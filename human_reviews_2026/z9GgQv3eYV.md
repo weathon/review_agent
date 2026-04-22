@@ -1,5 +1,6 @@
 # Less is Not Worse: Effective Reasoning Without Complete Reasoning Traces
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

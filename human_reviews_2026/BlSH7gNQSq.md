@@ -1,5 +1,6 @@
 # InfoNCE Induces Gaussian Distribution
 
+- Avg Score: 4.00
 - Decision: Accept (Oral)
 - Scores: 4, 2, 8, 2
 

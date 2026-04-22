@@ -1,5 +1,6 @@
 # Learning-Time Encoding Shapes Unlearning in LLMs
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

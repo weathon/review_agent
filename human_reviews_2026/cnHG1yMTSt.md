@@ -1,5 +1,6 @@
 # Towards Adversarially Robust VLMs with an Information-Theoretic Approach
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

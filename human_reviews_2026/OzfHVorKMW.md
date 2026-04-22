@@ -1,5 +1,6 @@
 # Privacy-Preserving Mechanisms Enable Cheap Verifiable Inference of LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

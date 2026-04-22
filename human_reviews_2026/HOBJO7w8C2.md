@@ -1,5 +1,6 @@
 # SurvDiff: A Diffusion Model for Generating Synthetic Data in Survival Analysis
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

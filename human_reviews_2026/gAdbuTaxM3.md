@@ -1,5 +1,6 @@
 # Exploring Sparsity for Parameter Efficient Fine Tuning Using Wavelets
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

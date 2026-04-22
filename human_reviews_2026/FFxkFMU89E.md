@@ -1,5 +1,6 @@
 # EgoDex: Learning Dexterous Manipulation from Large-Scale Egocentric Video
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

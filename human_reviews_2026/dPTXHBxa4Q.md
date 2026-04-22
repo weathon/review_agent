@@ -1,5 +1,6 @@
 # Diffusion Aligned Embeddings
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4, 4
 

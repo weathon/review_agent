@@ -1,5 +1,6 @@
 # Test-Time Alignment for Large Language Models via Textual Model Predictive Control
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

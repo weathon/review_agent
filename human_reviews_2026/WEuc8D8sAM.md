@@ -1,5 +1,6 @@
 # SpikeGen: Decoupled “Rods and Cones” Visual Representation Processing with Latent Generative Framework
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

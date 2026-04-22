@@ -1,5 +1,6 @@
 # PLuG-Attention: Unleashing the Potential of Attention via Plug-in Pairwise Logit Gating
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 8
 

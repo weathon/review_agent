@@ -1,5 +1,6 @@
 # BMAttn: Block-Aligned Mixed-Precision  Attention Quantization for LLM Inference
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

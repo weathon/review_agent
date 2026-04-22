@@ -1,5 +1,6 @@
 # On the Emergence of Induction Heads for In-Context Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

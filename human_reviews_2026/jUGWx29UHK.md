@@ -1,5 +1,6 @@
 # Understanding Federated Unlearning through the Lens of Memorization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

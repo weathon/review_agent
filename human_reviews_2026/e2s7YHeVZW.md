@@ -1,5 +1,6 @@
 # AgentMath: Empowering Mathematical Reasoning for Large Language Models via Tool-Augmented Agent
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

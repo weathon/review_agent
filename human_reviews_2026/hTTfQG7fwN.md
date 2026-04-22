@@ -1,5 +1,6 @@
 # MAPLE: Context-aware Multimodal Augmentation for Long-tail 3D Object Detection
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

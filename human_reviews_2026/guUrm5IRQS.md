@@ -1,5 +1,6 @@
 # 4DNeX: Feed-Forward 4D Generative Modeling Made Easy
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

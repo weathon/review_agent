@@ -1,5 +1,6 @@
 # SPF-Portrait: Towards Pure Text-to-Portrait Customization with Semantic Pollution-Free Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

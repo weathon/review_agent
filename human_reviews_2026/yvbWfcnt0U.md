@@ -1,5 +1,6 @@
 # Max-Min Sliced Gromov-Wasserstein
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

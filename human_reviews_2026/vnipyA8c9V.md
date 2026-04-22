@@ -1,5 +1,6 @@
 # Intrinsic Entropy of Context Length Scaling in LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 10, 2, 4
 

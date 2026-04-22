@@ -1,5 +1,6 @@
 # Clone Deterministic 3D Worlds with Geometrically Regularized World Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 0
 

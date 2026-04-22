@@ -1,5 +1,6 @@
 # Natural gradient Bayesian sampling automatically emerges in canonical cortical circuits
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

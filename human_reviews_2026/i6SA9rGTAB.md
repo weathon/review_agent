@@ -1,5 +1,6 @@
 # Latent Reward-Guided Search for Faster Inference-Time Scaling in Video Diffusion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

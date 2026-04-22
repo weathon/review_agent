@@ -1,5 +1,6 @@
 # GNPA-DIL: Unveiling the Vulnerability Genome Through Semantic Graph Distillation and Invariant Neural Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

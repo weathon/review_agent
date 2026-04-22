@@ -1,5 +1,6 @@
 # A Physics-Inspired Optimizer: Velocity Regularized Adam
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 0, 4
 

@@ -1,5 +1,6 @@
 # Learning More with Less: A Dynamic Dual-Level Down-Sampling Framework for Efficient Policy Optimization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

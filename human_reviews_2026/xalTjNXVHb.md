@@ -1,5 +1,6 @@
 # Where Redundancy Lives: Stage-Aware Block Saliency in Skip-Connected Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

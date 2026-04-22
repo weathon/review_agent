@@ -1,5 +1,6 @@
 # Empowering Efficiency and Efficacy in WebAgent via Enabling Info-Rich Seeking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4
 

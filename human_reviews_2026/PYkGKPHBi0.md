@@ -1,5 +1,6 @@
 # On the Efficiency-Safety Dilemma in Large Reasoning Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

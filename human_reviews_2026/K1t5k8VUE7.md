@@ -1,5 +1,6 @@
 # HTMformer: Hybrid Time and Multivariate Transformer for Time Series Forecasting
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

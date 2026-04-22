@@ -1,5 +1,6 @@
 # TempoPFN: Synthetic Pre-training of Linear RNNs for Zero-shot Time Series Forecasting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 8, 2
 

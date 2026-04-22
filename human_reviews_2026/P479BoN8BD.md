@@ -1,5 +1,6 @@
 # CoMind: Towards Community-Driven Agents for Machine Learning Engineering
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

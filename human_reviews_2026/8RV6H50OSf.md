@@ -1,5 +1,6 @@
 # MoBE: Mixture-of-Basis-Experts for Compressing MoE-based LLMs
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8
 

@@ -1,5 +1,6 @@
 # DP-Nav: Dynamic Exploration Driven by Semantic Region Potential for Zero-shot Visual Navigation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

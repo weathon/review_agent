@@ -1,5 +1,6 @@
 # AutoQG: An Automated Framework for Evidence-Traceable Question Generation via Ontology-Guided Knowledge Graph Construction
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

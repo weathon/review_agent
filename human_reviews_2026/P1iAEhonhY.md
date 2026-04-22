@@ -1,5 +1,6 @@
 # From Neural Networks to Logical Theories: The Correspondence between Fibring Modal Logics and Fibring Neural Networks
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

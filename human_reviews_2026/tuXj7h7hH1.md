@@ -1,5 +1,6 @@
 # A Constrained Optimization Perspective of Unrolled Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Inference-time scaling of diffusion models through classical search
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 8
 

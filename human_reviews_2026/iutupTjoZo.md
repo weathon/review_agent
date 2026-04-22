@@ -1,5 +1,6 @@
 # WaMo: Wavelet-Enhanced Multi-Frequency Trajectory Analysis for Fine-Grained Text-Motion Retrieval
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 4, 4, 8
 

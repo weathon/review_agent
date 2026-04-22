@@ -1,5 +1,6 @@
 # A Law of Data Reconstruction for Random Features (And Beyond)
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

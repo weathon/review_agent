@@ -1,5 +1,6 @@
 # StreamDiT: Real-Time Streaming Text-to-Video Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

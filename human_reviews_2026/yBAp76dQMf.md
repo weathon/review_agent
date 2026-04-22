@@ -1,5 +1,6 @@
 # FrameOracle: Learning What to See and How Much to See in Videos
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

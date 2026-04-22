@@ -1,5 +1,6 @@
 # Scalable Multilingual Multimodal Machine Translation with Speech-Text Fusion
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8
 

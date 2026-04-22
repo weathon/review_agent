@@ -1,5 +1,6 @@
 # SAMOSA: Sharpness Aware Minimization for Open Set Active learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

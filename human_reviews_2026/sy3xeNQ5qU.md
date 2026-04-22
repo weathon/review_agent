@@ -1,5 +1,6 @@
 # Adversarial Policy Transfer in Mixed Cooperative-Competitive Games
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

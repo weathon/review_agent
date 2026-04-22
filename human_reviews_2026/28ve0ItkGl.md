@@ -1,5 +1,6 @@
 # Inference Time Alignment for Code Auditing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 2, 4
 

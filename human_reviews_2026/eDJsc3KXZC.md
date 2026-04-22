@@ -1,5 +1,6 @@
 # Black-box Detection of LLM-generated Text Using Generalized Jensen-Shannon Divergence
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

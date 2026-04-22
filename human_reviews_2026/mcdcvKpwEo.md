@@ -1,5 +1,6 @@
 # IAAgent: Autonomous Inference Attacks Against ML Services With LLM-Based Agents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 4, 4
 

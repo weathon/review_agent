@@ -1,5 +1,6 @@
 # Omni TM-AE: A Scalable and Interpretable Embedding Model Using the Full Tsetlin Machine State Space
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2
 

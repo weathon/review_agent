@@ -1,5 +1,6 @@
 # Effect of Document Packing on the Latent Multi-Hop Reasoning Capabilities of Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

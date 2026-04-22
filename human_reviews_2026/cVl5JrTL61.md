@@ -1,5 +1,6 @@
 # Native Logical and Hierarchical Representations with Subspace Embeddings
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 2, 8
 

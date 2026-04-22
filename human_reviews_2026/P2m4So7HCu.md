@@ -1,5 +1,6 @@
 # HiDe: Rethinking The Zoom-IN method in High Resolution MLLMs via Hierarchical Decoupling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

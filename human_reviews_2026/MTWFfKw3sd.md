@@ -1,5 +1,6 @@
 # Unsupervised Representation Learning - an Invariant Risk Minimization Perspective
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

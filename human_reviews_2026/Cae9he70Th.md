@@ -1,5 +1,6 @@
 # WETAP: Speculative Decoding with Width-Entropy Tree and Adaptive Pruning for LLMs Inference Acceleration
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

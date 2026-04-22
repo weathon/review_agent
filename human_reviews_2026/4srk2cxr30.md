@@ -1,5 +1,6 @@
 # Writing-RL: Advancing Long-form Writing via Adaptive Curriculum Reinforcement Learning
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6, 4
 

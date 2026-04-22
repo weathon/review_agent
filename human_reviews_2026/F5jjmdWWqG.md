@@ -1,5 +1,6 @@
 # GRASP-GS: Geometric Registration and Dual-Stag Saliency Pruning for Efficient 3D Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

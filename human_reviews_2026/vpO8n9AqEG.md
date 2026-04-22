@@ -1,5 +1,6 @@
 # Quadratic Direct Forecast for Training Multi-Step Time-Series Forecast Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

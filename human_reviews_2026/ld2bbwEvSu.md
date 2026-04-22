@@ -1,5 +1,6 @@
 # VistaGUI: Towards More Robust and Intelligent GUI Automation
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 4
 

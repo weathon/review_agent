@@ -1,5 +1,6 @@
 # Kronecker Factorization Improves Efficiency and Interpretability of Sparse Autoencoders
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 2, 2, 6, 10, 6
 

@@ -1,5 +1,6 @@
 # SHARP: Structured Hierarchical Attention Rank Projection for Efficient Language Model Distillation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 2
 

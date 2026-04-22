@@ -1,5 +1,6 @@
 # Item Response Scaling Laws: A Measurement Theory Approach to Generalizable Neural Performance Prediction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

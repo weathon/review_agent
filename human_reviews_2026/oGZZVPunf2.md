@@ -1,5 +1,6 @@
 # HybridLinker: Topology-Guided Posterior Sampling for Enhanced Diversity and Validity in 3D Molecular Linker Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

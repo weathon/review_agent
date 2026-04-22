@@ -1,5 +1,6 @@
 # Co-Evolving Agents: Learning from Failures as Hard Negatives
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Chasing the Tail: Effective Rubric-based Reward Modeling for Large Language Model Post-Training
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

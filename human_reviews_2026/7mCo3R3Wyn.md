@@ -1,5 +1,6 @@
 # TEMPFLOW-GRPO: WHEN TIMING MATTERS FOR GRPO IN FLOW MODELS
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 10, 8, 6, 6
 

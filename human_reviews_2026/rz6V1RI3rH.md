@@ -1,5 +1,6 @@
 # Scaling Reasoning, Losing Control: Evaluating Instruction Following in Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 8
 

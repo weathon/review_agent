@@ -1,5 +1,6 @@
 # HF-Font: Few-Shot Font Generation via High-Frequency Style Enhancement and Fusion
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

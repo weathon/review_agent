@@ -1,5 +1,6 @@
 # MVP: Memory-enhanced Vision-Language-Action Policy with Feedback Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

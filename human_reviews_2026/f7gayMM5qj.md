@@ -1,5 +1,6 @@
 # Unlocking Decoder-LLMs for Text Embedding with Instructions, Soft Supervision and Curriculum Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 4, 4
 

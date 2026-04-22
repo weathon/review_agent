@@ -1,5 +1,6 @@
 # Efficient Hyperparameter Tuning via Trajectory Invariance Principle
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Best-of-Infinity: Asymptotic Performance of Test-Time LLM Ensembling
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 2
 

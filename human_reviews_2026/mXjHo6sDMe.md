@@ -1,5 +1,6 @@
 # VHSMarker and the Canine Cardiac Keypoint (CCK) Dataset: A Benchmark for Veterinary Cardiac X-ray Analysis
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 8, 8, 4
 

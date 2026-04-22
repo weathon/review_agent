@@ -1,5 +1,6 @@
 # A Dual-View Contrastive Learning Framework for Heterogeneous Graph Representation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

@@ -1,5 +1,6 @@
 # RE-Searcher: Robust Agentic Search via Goal-oriented Planning and Self-reflection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

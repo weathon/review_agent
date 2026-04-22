@@ -1,5 +1,6 @@
 # PAPER: Privacy-Preserving ResNet Models using Low-Degree Polynomial Approximations and Structural Optimizations on Leveled FHE
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

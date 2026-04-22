@@ -1,5 +1,6 @@
 # GCSGNN: Towards Global Counterfactual-Based Self-Explainable Graph Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

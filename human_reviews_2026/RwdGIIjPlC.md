@@ -1,5 +1,6 @@
 # SP-VLA: A Joint Model Scheduling and Token Pruning Approach for VLA Model Acceleration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Cross-Table Pretraining towards a Universal Function Space for Tabular Data
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 6, 2, 4
 

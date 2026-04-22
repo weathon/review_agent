@@ -1,5 +1,6 @@
 # Beyond Single Embeddings: Capturing Diverse Targets with Multi-Query Retrieval
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

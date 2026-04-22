@@ -1,5 +1,6 @@
 # Rethinking Scale: How Multi-Agent Collaboration Enables Smaller Models to Rival GPT-4 in Video Understanding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

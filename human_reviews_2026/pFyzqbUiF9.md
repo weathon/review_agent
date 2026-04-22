@@ -1,5 +1,6 @@
 # Vid2World: Crafting Video Diffusion Models to Interactive World Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4, 6
 

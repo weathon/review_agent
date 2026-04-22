@@ -1,5 +1,6 @@
 # MICLIP: Learning to Interpret Representation in Vision Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

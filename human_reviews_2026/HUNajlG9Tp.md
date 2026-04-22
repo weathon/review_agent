@@ -1,5 +1,6 @@
 # AutoRule: Reasoning Chain-of-Thought Extracted Rule-based Rewards Improve Preference Learning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

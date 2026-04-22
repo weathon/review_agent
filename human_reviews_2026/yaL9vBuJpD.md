@@ -1,5 +1,6 @@
 # A11YN: Aligning LLMs for Accessible Web UI Code Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

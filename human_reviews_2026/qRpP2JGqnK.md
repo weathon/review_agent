@@ -1,5 +1,6 @@
 # Prominence-Aware Artifact Detection and Dataset for Image Super-Resolution
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

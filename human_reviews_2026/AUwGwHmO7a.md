@@ -1,5 +1,6 @@
 # Efficient Self-Review Framework for Enhancing Instruction Following Capability of LLM
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

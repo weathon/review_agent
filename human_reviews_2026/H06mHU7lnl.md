@@ -1,5 +1,6 @@
 # When does Predictive Inverse Dynamics Outperform Behavior Cloning? Exploring the Role of Action and State Uncertainty
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6, 4
 

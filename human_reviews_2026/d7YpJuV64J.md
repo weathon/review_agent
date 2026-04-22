@@ -1,5 +1,6 @@
 # Two are Better than One: Uncertainty-Aware Vision-Language Models for Video Anomaly Detection
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

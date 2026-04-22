@@ -1,5 +1,6 @@
 # Massive Editing for Large Language Models Based on Dynamic Weight Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

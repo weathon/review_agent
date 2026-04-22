@@ -1,5 +1,6 @@
 # Path Matters: Unveiling Geometric Implicit Bias via Curvature-Aware Sparse View Optimization
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 6
 

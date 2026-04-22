@@ -1,5 +1,6 @@
 # TAVAE: A VAE with Adaptable Priors Explains Contextual Modulation in the Visual Cortex
 
+- Avg Score: 3.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2
 

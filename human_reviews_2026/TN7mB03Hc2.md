@@ -1,5 +1,6 @@
 # 1-Bit Quantization Meets Structured Pruning: Towards Extreme Compression of Large Language Models
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4, 2
 

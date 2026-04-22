@@ -1,5 +1,6 @@
 # Multi-module GRPO: Composing Policy Gradients and Prompt Optimization for Language Model Programs
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 2
 

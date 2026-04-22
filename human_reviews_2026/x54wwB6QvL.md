@@ -1,5 +1,6 @@
 # Scaling Laws Revisited: Modeling the Role of Data Quality in Language Model Pretraining
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

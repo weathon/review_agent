@@ -1,5 +1,6 @@
 # TTSDS2: Resources and Benchmark for Evaluating Human-Quality Text to Speech Systems
 
+- Avg Score: 5.33
 - Decision: Accept (Oral)
 - Scores: 2, 8, 6
 

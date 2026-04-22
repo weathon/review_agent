@@ -1,5 +1,6 @@
 # It's a TRAP! Task-Redirecting Agent Persuasion Benchmark for Web Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

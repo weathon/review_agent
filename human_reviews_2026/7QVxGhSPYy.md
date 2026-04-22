@@ -1,5 +1,6 @@
 # Revisit What You See: Disclose Language Prior in Vision Tokens for LVLM Decoding
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

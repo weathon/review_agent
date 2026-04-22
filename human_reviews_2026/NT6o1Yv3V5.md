@@ -1,5 +1,6 @@
 # PRISM: A Principled Framework for Supervised Disentanglement via Bipartite Factorization
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Squeeze the Soaked Sponge: Efficient Off-policy RFT for Large Language Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

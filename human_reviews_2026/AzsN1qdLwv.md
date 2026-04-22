@@ -1,5 +1,6 @@
 # Neural Compression of 3D Meshes using Sparse Implicit Representation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

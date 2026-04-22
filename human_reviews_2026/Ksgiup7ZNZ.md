@@ -1,5 +1,6 @@
 # Union-of-Experts: Experts in Mixture-of-Experts are Secretly Routers
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

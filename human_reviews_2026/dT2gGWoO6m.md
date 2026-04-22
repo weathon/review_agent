@@ -1,5 +1,6 @@
 # VIBRA: Redundancy-Aware Information Bottleneck for Hallucination-Resistant Vision-Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

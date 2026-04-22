@@ -1,5 +1,6 @@
 # FedSGM: A Unified Framework for Constraint Aware, Bidirectionally Compressed, Multi-Step Federated Optimization
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 6
 

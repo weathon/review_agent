@@ -1,5 +1,6 @@
 # SK2Decompile: LLM-based Two-Phase Binary Decompilation from Skeleton to Skin
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

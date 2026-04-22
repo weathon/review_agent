@@ -1,5 +1,6 @@
 # MILPnet: A Multi-Scale Architecture with Geometric Feature Sequence Representations for Advancing MILP Problems
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

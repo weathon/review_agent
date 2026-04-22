@@ -1,5 +1,6 @@
 # The Devil behind the mask: An emergent safety vulnerability of Diffusion LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

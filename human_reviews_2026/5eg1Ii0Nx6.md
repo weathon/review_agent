@@ -1,5 +1,6 @@
 # Hierarchical Hyperbolic Embedding: Enhancing Long Context Comprehension of Large Language Models via Fusing Local and Global Features in Hyperbolic Space
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

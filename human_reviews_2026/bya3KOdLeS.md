@@ -1,5 +1,6 @@
 # Visionary-R1: Mitigating Shortcuts in Visual Reasoning with Reinforcement Learning
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2, 4
 

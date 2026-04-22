@@ -1,5 +1,6 @@
 # RelayFormer: A Unified Local-Global Attention Framework for Scalable Image and Video Manipulation Localization
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

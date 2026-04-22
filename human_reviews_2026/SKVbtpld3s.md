@@ -1,5 +1,6 @@
 # Lyapunov Guidance: Stabilizing Generative Flows with One-Line Code
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

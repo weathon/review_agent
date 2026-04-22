@@ -1,5 +1,6 @@
 # Bridging Perception and Reasoning: Token Reweighting for RLVR in Multimodal LLMs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

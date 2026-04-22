@@ -1,5 +1,6 @@
 # A Derandomization Framework for Structure Discovery: Applications in Neural Networks and Beyond
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

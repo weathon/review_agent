@@ -1,5 +1,6 @@
 # OmniMouse: Scaling properties of multi-modal, multi-task Brain Models on 150B Neural Tokens
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

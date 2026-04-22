@@ -1,5 +1,6 @@
 # SOM2IMG: Self-Organizing Map Based Tabular-to-Image Transformation for Deep Learning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

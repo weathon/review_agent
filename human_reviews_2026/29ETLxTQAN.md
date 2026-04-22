@@ -1,5 +1,6 @@
 # How Can I Publish My LLM Benchmark Without Giving the True Answers Away?
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 4, 8
 

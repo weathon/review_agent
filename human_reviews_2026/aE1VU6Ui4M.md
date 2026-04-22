@@ -1,5 +1,6 @@
 # Learning Distributions over Permutations and Rankings with Factorized Representations
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 4
 

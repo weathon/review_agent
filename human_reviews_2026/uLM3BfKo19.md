@@ -1,5 +1,6 @@
 # Quagmires in SFT-RL Post-Training: When High SFT Scores Mislead and What to Use Instead
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 6, 4
 

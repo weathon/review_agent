@@ -1,5 +1,6 @@
 # MASS-DPO: Multi-negative Active Sample Selection for Direct Policy Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 2, 6
 

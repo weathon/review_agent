@@ -1,5 +1,6 @@
 # When three experiments are better than two: Avoiding intractable correlated aleatoric uncertainty by leveraging a novel bias--variance tradeoff
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

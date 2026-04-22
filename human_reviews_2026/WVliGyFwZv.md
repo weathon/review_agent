@@ -1,5 +1,6 @@
 # Accelerated co-design of robots through morphological pretraining
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

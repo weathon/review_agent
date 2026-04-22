@@ -1,5 +1,6 @@
 # sleep2vec: Unified Cross-Modal Alignment for Heterogeneous Nocturnal Biosignals
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4
 

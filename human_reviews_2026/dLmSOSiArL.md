@@ -1,5 +1,6 @@
 # PhyloAug: Injecting Evolutionary information into GLMs via Data Augmentation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

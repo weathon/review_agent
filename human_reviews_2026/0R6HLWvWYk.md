@@ -1,5 +1,6 @@
 # Test-Time Adaptation without Source Data for Out-of-Domain Bioactivity Prediction
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

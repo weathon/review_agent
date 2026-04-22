@@ -1,5 +1,6 @@
 # CABA: A Collusive Aggregation-Emergent Backdoor Attack in Federated Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

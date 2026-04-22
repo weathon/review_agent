@@ -1,5 +1,6 @@
 # Bootstrapping Zero-Shot Reasoning in Small Language Models via Advantage-Weighted Self-Distillation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

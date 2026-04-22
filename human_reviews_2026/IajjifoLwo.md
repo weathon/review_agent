@@ -1,5 +1,6 @@
 # VISTA: Visual-Semantic Disentanglement and Dynamic Spatial-Temporal Asynchrony for Brain Decoding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

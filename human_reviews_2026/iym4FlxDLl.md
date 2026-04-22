@@ -1,5 +1,6 @@
 # Exploring Markov-chain-style Evidence Using LLMs for Complex Claims
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

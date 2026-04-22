@@ -1,5 +1,6 @@
 # VideoShield: A Unified Framework for Multimodal Risk Detection and Control in Video Generative Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 
@@ -89,10 +90,12 @@ The paper
 
 [2] Hu, Xuhao, et al. "Vlsbench: Unveiling visual leakage in multimodal safety." arXiv preprint arXiv:2411.19939 (2024).
 
-[3] Wang, Siyin, et al. "Safe Inputs but Unsafe Output: Benchmarking Cross-modality Safety Alignment of Large Vision-Language Model." arXiv preprint arXiv:2406.15279 (2024). 
+[3] Wang, Siyin, et al. "Safe Inputs but Unsafe Output: Benchmarking Cross-modality Safety Alignment of Large Vision-Language Model." arXiv preprint arXiv:2406.15279 (2024).
+
 
 [4] Röttger, Paul, et al. "MSTS: A Multimodal Safety Test Suite for Vision-Language Models." arXiv preprint arXiv:2501.10057 (2025).
- 
+
+
 [5] Lee, Youngwan, et al. "HoliSafe: Holistic Safety Benchmarking and Modeling with Safety Meta Token for Vision-Language Model." arXiv preprint arXiv:2506.04704 (2025).
 
 ### Questions

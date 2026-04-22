@@ -1,5 +1,6 @@
 # LHM++: An Efficient Large Human Reconstruction Model for Pose-free Images to 3D
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

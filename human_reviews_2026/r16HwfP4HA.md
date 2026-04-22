@@ -1,5 +1,6 @@
 # Kernel Binary Optimizer (KBOP): Latent-free Optimizer for Binary Neural Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

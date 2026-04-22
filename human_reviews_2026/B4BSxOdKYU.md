@@ -1,5 +1,6 @@
 # Contrastive Diffusion Guidance for Spatial Inverse Problems
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 4
 

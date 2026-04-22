@@ -1,5 +1,6 @@
 # BWCache: Accelerating Video Diffusion Transformers through Block-Wise Caching
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

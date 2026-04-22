@@ -1,5 +1,6 @@
 # Trapped by simplicity: When Transformers fail to learn from noisy features
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Brain-Informed Language Model Training Enables Scalable and Generalizable Alignment with Human Brain Activity
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

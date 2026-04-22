@@ -1,5 +1,6 @@
 # The Less You Depend, The More You Learn: Synthesizing Novel Views from Sparse, Unposed Images without Any 3D Knowledge
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 8
 

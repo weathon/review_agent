@@ -1,5 +1,6 @@
 # Helix: Evolutionary Reinforcement Learning for Open-Ended Scientific Problem Solving
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 4
 

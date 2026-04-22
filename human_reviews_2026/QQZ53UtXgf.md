@@ -1,5 +1,6 @@
 # Shuffling the Data, Extrapolating the Step: Sharper Bias In Constant Step-Size SGD
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

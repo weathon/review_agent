@@ -1,5 +1,6 @@
 # CounselBench: A Large-Scale Expert Evaluation and Adversarial Benchmarking of Large Language Models in Mental Health Question Answering
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 8, 6, 6
 

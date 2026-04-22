@@ -1,5 +1,6 @@
 # Training-Free Distribution Adaptation for Diffusion Models via Maximum Mean Discrepancy Guidance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

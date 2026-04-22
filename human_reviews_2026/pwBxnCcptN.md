@@ -1,5 +1,6 @@
 # CASS: Nvidia to AMD Transpilation with Data, Models, and Benchmark
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

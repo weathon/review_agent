@@ -1,5 +1,6 @@
 # Frequent Subgraph-Based Persistent Homology for Graph Classification
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2, 4
 

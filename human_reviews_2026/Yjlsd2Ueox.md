@@ -1,5 +1,6 @@
 # RoboView-Bias: Benchmarking Visual Bias in Embodied Agents for Robotic Manipulation
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 2
 

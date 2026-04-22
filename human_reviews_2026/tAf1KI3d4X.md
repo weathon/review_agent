@@ -1,5 +1,6 @@
 # Physics vs Distributions: Pareto Optimal Flow Matching with Physics Constraints
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 10
 

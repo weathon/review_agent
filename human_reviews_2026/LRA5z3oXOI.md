@@ -1,5 +1,6 @@
 # Light of Normals: Unified Feature Representation for Universal Photometric Stereo
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 8
 

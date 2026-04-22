@@ -1,5 +1,6 @@
 # Are LLMs Exploitable Negotiators ?
 
+- Avg Score: 0.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 0, 0
 

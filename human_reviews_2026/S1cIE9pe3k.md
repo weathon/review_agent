@@ -1,5 +1,6 @@
 # SkillEvo: An Experience Learning Framework with  Reinforcement Learning for Skill Evolution
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

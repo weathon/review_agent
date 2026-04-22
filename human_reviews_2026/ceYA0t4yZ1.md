@@ -1,5 +1,6 @@
 # Bringing Light to the Threshold: Identification of Multi-Score Regression Discontinuity Effects with Application to LED Manufacturing
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

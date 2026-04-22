@@ -1,5 +1,6 @@
 # ARGOS: Hierarchical Autoregressive Generation of Unbounded 3D Outdoor Scenes with High Fidelity and Spatial Control
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

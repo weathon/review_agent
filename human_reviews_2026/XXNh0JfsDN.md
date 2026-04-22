@@ -1,5 +1,6 @@
 # GenoArmory: A Unified Evaluation Framework for Adversarial Attacks on Genomic Foundation Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 2, 6
 

@@ -1,5 +1,6 @@
 # Speak, Edit, Repeat: High-Fidelity Voice Editing and Zero-Shot TTS with Cross-Attentive Mamba
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 6, 6, 4
 

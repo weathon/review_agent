@@ -1,5 +1,6 @@
 # Toward Robust Feature Space in Long-Tailed Time Series Classification: A Multi-Scale Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

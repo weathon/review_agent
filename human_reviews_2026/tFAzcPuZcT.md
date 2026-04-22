@@ -1,5 +1,6 @@
 # RainPro-8: An Efficient Deep Learning Model to Estimate Rainfall Probabilities Over 8 Hours
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

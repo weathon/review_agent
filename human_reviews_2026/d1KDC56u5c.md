@@ -1,5 +1,6 @@
 # Probabilistic Modeling of Latent Agentic Substructures in Deep Neural Networks
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

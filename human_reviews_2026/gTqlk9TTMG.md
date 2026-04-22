@@ -1,5 +1,6 @@
 # MR–HCP: Morphology-Regularized Hierarchical Conformal Prediction for TEM of Subcellular Ultrastructure
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

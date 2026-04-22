@@ -1,5 +1,6 @@
 # AdaSCALE: Adaptive Scaling for OOD detection
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 8, 2, 4, 4
 

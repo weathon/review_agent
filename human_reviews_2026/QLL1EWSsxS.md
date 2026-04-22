@@ -1,5 +1,6 @@
 # SSR: Socratic Self-Refine for Large Language Model Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

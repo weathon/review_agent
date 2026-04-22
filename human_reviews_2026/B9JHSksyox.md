@@ -1,5 +1,6 @@
 # Energy-oriented Diffusion Bridge for Image Restoration with Foundational Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

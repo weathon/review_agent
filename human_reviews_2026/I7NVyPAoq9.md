@@ -1,5 +1,6 @@
 # Thompson Sampling Algorithm for Stochastic Games
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 8, 4, 4
 

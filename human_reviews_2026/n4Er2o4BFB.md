@@ -1,5 +1,6 @@
 # From Correction to Mastery: Reinforced Distillation of Large Language Model Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 6, 8
 

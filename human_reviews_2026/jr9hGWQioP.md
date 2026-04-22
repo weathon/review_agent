@@ -1,5 +1,6 @@
 # Self-Refining Vision Language Model for Robotic Failure Detection and Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Beyond Isolated Facts: Synthesizing Narrative and Grounded Supervision for VideoQA
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

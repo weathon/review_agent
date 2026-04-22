@@ -1,5 +1,6 @@
 # Prune to Fit: Enabling Federated Fine-Tuning within Edge Memory Budgets
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

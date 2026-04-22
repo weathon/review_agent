@@ -1,5 +1,6 @@
 # There and Back Again: On the relation between Noise and Image Inversions in Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

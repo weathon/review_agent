@@ -1,5 +1,6 @@
 # Unlocking Graph Structure Learning with Tree-Guided Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

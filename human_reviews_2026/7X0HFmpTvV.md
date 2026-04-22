@@ -1,5 +1,6 @@
 # Cross-domain Attention for Transfer Learning between Tabular Data without Shared Features
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

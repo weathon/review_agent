@@ -1,5 +1,6 @@
 # ReText: Text Boosts Generalization in Image-Based Person Re-identification
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 0, 4, 4
 

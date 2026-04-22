@@ -1,5 +1,6 @@
 # Enabling Thinking, Reflecting and Chain-of-Thought Reasoning with Biological Sequences
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 0, 6
 

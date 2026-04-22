@@ -1,5 +1,6 @@
 # The Blind Spot of LLM Security: Time-Sensitive Backdoors Activated by Inherent Features
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

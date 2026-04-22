@@ -1,5 +1,6 @@
 # GHOST: Hallucination-Inducing Image Generation for Multimodal LLMs
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 2, 6
 

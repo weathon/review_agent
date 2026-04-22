@@ -1,5 +1,6 @@
 # QuaMo: Quaternion Motions for Vision-based 3D Human Kinematics Capture
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

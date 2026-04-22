@@ -1,5 +1,6 @@
 # Light-X: Generative 4D Video Rendering with Camera and Illumination Control
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 6
 

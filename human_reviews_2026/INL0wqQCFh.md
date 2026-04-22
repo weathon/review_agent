@@ -1,5 +1,6 @@
 # Two-Period Guidance Diffusion Models for Hierarchical Conditional Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

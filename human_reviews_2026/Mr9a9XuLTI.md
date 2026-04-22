@@ -1,5 +1,6 @@
 # A Few Large Shifts: Layer-Inconsistency Based Minimal Overhead Adversarial Example Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

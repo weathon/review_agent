@@ -1,5 +1,6 @@
 # A Benchmark for Vericoding: Formally Verified Program Synthesis
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

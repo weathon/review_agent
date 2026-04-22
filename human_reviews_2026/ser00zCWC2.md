@@ -1,5 +1,6 @@
 # Adversarial Co-Evolution of LLM-Generated Policies and Environments via Two-Player Zero-Sum Game
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

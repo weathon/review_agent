@@ -1,5 +1,6 @@
 # Fake it till You Make it: Reward Modeling as Discriminative Prediction
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Dynamic Weighted Projection Maintenance with $\ell^p$-Lewis Weight
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

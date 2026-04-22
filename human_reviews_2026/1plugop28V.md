@@ -1,5 +1,6 @@
 # On the Measurement and Efficient Mitigation of Length Generalization Gaps in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

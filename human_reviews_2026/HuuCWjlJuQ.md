@@ -1,5 +1,6 @@
 # Dissecting Mahalanobis: How Feature Geometry and Normalization Shape OOD Detection
 
+- Avg Score: 4.29
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4, 6, 2, 4
 

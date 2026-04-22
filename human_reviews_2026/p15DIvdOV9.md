@@ -1,5 +1,6 @@
 # Flowing with Precision: Rectified Flow Image Editing with Trajectory and Frequency Guidance
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4, 2
 

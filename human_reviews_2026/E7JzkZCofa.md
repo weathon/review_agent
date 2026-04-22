@@ -1,5 +1,6 @@
 # Sat3DGen: Comprehensive Street-Level 3D Scene Generation from Single Satellite Image
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # DS-VTON: An Enhanced Dual-Scale Coarse-to-Fine Framework for Virtual Try-On
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

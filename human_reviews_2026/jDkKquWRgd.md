@@ -1,5 +1,6 @@
 # Bridge Policy: Visuomotor Policy Learning via Stochastic Optimal Control
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

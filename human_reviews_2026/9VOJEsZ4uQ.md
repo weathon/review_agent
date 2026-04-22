@@ -1,5 +1,6 @@
 # Dynamic Experts Search: Enhancing Reasoning in Mixture-of-Experts LLMs at Test Time
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

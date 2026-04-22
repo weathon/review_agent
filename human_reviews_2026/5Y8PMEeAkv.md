@@ -1,5 +1,6 @@
 # ZSPAPrune: Zero-Shot Prompt-Aware Token Pruning for Vision-Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

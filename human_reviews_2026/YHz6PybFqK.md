@@ -1,5 +1,6 @@
 # The Hidden Cost of Modeling $\text{P}(X)$: Membership Inference Attacks in Generative Text Classifiers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

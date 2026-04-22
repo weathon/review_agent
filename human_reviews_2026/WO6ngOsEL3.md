@@ -1,5 +1,6 @@
 # Test-Time Scaling via Metric Geometry for LLM Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 2, 6
 

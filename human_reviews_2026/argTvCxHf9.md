@@ -1,5 +1,6 @@
 # TRIDENT: Three-Dimensional Data Copyright Infringement Detection in LLMs
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

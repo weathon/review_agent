@@ -1,5 +1,6 @@
 # Wasserstein Motifs: Non-deterministic Alignment of Ecological Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

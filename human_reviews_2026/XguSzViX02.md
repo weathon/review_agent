@@ -1,5 +1,6 @@
 # STR-Match: Matching SpatioTemporal Relevance Score for Training-Free Video Editing
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

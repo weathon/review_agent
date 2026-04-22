@@ -1,5 +1,6 @@
 # Memory-Augmented Functional Koopmanism for Interpretable Learning of Spatiotemporal Dynamics
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

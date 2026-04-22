@@ -1,5 +1,6 @@
 # Emergent Bayesian Behaviour and Optimal Cue Combination in LLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

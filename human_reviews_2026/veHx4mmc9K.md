@@ -1,5 +1,6 @@
 # FrameMind: Frame-Interleaved Chain-of-Thought for Video Reasoning via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

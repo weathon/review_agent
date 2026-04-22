@@ -1,5 +1,6 @@
 # Self-Prompt: Leveraging Gradient-Based Search for Optimizing Prompts in Code Generation
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

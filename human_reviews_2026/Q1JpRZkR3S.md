@@ -1,5 +1,6 @@
 # Scalable Spatio-Temporal SE(3) Diffusion for Long-Horizon Protein Dynamics
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 8
 

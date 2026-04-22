@@ -1,5 +1,6 @@
 # SocialJax: An Evaluation Suite for Multi-agent Reinforcement Learning in Sequential Social Dilemmas
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6, 6
 

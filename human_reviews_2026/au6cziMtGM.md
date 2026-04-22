@@ -1,5 +1,6 @@
 # Interp3D: Correspondence-aware Interpolation for Generative Textured 3D Morphing
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Fine-tuning Diffusion Policies with Backpropagation Through Diffusion Timesteps
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

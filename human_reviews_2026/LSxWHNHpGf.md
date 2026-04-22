@@ -1,5 +1,6 @@
 # Fleming-R1: Toward Expert-Level Medical Reasoning via Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Noise as a Knob: An Inference Time Noise Scheduling Strategy to Optimize Diffusion Based Vision Tasks
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

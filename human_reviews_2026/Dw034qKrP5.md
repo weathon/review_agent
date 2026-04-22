@@ -1,5 +1,6 @@
 # RL of Thoughts: Navigating LLM Reasoning with Inference-time Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

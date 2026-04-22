@@ -1,5 +1,6 @@
 # GraphQ-LM: Scalable Graph Representation for Large Language Models via Residual Vector Quantization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

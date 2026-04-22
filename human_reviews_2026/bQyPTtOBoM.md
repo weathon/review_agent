@@ -1,5 +1,6 @@
 # MoDA: Multi-modal Diffusion Architecture for Talking Head Generation
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 4, 4
 

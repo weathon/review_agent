@@ -1,5 +1,6 @@
 # Let LLMs Speak Embedding Languages: Generative Text Embeddings via Iterative Contrastive Refinement
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

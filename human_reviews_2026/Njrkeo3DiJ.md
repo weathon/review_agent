@@ -1,5 +1,6 @@
 # Let's Explore Step by Step: Generating Provable Formal Statements with Deductive Exploration
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4
 

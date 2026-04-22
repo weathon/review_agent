@@ -1,5 +1,6 @@
 # Generate the Forest before the Trees - A Hierarchical Diffusion model for Climate Downscaling
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

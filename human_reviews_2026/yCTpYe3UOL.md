@@ -1,5 +1,6 @@
 # GPTailor: Large Language Model Pruning Through Layer Cutting and Stitching
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

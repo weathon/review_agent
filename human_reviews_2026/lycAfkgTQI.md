@@ -1,5 +1,6 @@
 # Shift-Invariant Attribute Scoring for Kolmogorov-Arnold Networks via Shapley Value
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Binary Oscillation-Regulated Network (BORN): Approach for Binary Neural Networks Training
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

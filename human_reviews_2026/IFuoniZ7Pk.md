@@ -1,5 +1,6 @@
 # You Are What You Train: Rethinking Training Data Quality, Targets, and Architectures for Universal Speech Enhancement
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

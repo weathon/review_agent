@@ -1,5 +1,6 @@
 # ON THE ADVERSARIAL ROBUSTNESS OF LEARNING-BASED CONFORMAL NOVELTY DETECTION
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

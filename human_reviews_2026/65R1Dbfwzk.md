@@ -1,5 +1,6 @@
 # LLM CHESS: Benchmarking Reasoning and Instruction-Following in LLMs through Chess
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

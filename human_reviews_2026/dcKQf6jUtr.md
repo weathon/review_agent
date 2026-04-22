@@ -1,5 +1,6 @@
 # Cross-Modal Content Optimization for Steering Web Agent Preferences
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 8, 4
 

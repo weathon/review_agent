@@ -1,5 +1,6 @@
 # Derandomized Online-to-Non-convex Conversion for Stochastic Weakly Convex Optimization
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

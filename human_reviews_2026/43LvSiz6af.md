@@ -1,5 +1,6 @@
 # TTS-Hub: Leveraging Modular LoRAs and  Arithmetic Composition for Controllable Text-to-Speech
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 2, 4, 4, 6
 

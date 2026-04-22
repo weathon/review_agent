@@ -1,5 +1,6 @@
 # EVADE-Bench: Multimodal Benchmark for Evasive Content Detection in E-Commerce Applications
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

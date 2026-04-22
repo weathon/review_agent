@@ -1,5 +1,6 @@
 # OmniClear: Soft Effects Removal from Images within a Versatile Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

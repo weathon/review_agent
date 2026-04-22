@@ -1,5 +1,6 @@
 # DIYHealth Suite: Dataset, Model, and Benchmark for Health Management at Home
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

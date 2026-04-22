@@ -1,5 +1,6 @@
 # AR4D: Autoregressive 4D Generation from Monocular Videos
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

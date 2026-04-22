@@ -1,5 +1,6 @@
 # Tractability via Low Dimensionality: The Parameterized Complexity of Training Quantized Neural Networks
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6
 

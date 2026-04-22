@@ -1,5 +1,6 @@
 # Context-Enriched Embeddings for Robust 3D Scene Understanding
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

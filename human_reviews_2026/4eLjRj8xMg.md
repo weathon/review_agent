@@ -1,5 +1,6 @@
 # TopoStreamer: Temporal Lane Segment Topology Reasoning in Autonomous Driving
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8
 

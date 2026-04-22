@@ -1,5 +1,6 @@
 # Exploring Minimum Bayes Risk Decoding for Text-to-SQL Ensemble
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

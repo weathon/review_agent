@@ -1,5 +1,6 @@
 # ApoAvatar: Expressive Audio-Driven Avatar Generation via Refocused Audio-Pose Priors
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 4, 8, 6, 4, 6
 

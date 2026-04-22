@@ -1,5 +1,6 @@
 # Benchmarks for Reinforcement Learning with Biased Offline Data and Imperfect Simulators
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

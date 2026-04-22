@@ -1,5 +1,6 @@
 # Generalizable 3D Edge Detection For Soft & Hard Features
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

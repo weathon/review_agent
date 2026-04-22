@@ -1,5 +1,6 @@
 # PRS-MED: POSITION REASONING SEGMENTATION IN MEDICAL IMAGING
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2, 4
 

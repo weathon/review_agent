@@ -1,5 +1,6 @@
 # Mitigating Deceptive Alignment via Self-Monitoring
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

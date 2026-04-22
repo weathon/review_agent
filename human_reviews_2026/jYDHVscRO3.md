@@ -1,5 +1,6 @@
 # BAH Dataset for Ambivalence/Hesitancy Recognition in Videos for  Digital  Behavioural Change
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

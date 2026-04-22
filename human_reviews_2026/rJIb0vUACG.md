@@ -1,5 +1,6 @@
 # The Right to be Forgotten in Pruning: Unveil Machine Unlearning on Sparse Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 
@@ -148,8 +149,10 @@ Line 4 says "set $\Theta_p$ mask indexes whose corresponding parameters have the
 
 
 Typos:
--  in Algorithm 1, line 178 of the PDF there are two consecutives commas “, ,”
-- line 205: “unstructured turning algorithms “-> should be "pruning "
+- 
+in Algorithm 1, line 178 of the PDF there are two consecutives commas “, ,”
+- line 205: “unstructured turning algorithms “-> should be "pruning
+"
 - line 257  there’s an inconsistency in notation. The authors are describing p as the sampling probability, but in the equation they use P($\Theta$)  as the argument inside the log.
 -  missing space in line 86, 352 
 - Eq 17 diag(0), I assume this is a typo. 
@@ -157,9 +160,12 @@ Typos:
 -  the symbol $\Theta_0$ is used in the algorihtm as initialized parameters and also as component of the modle (line 247).
 
 Inconsistencies/errors: 
--  line 257 is diffult to understand:   as defined by the authors p is the probability of sampling parameters from some random learning algorithm. What does it mean some random learning algorihtm? shoud it be an unlearnign algorithm? how is this probability defined? 
+-  line 257 is diffult to understand:  
+as defined by the authors p is the probability of sampling parameters from some random learning algorithm. What does it mean some random learning algorihtm? shoud it be an unlearnign algorithm? how is this probability defined?
+
 - formula 15 is incorrect. it collapse to 0!  The orignal paper cited by the authros (Thud et al.), actually has a different form for approximating the oerall changes, they also have. The critical difference is that the Hessian is applied to the sum of all previous gradients plus all previous correction terms, not just the previous correction term alone. The incorrect simplified version misses the gradient accumulation entirely, making it mathematically meaningless. 
-- Looking at the definitions:  equation 11 is the hessian  is computed with respect to parameters. Equation 13:  $\lambda(M) := \max{\lambda_j(H),1 }. Why should this depend on M? The mask M doesn't appear anywhere in how the Hessian is computed.
+- Looking at the definitions: 
+equation 11 is the hessian  is computed with respect to parameters. Equation 13:  $\lambda(M) := \max{\lambda_j(H),1 }. Why should this depend on M? The mask M doesn't appear anywhere in how the Hessian is computed.
 -  Equation 16 is attempting to show how the parameter update changes when you introduce the mask, it’s not clear where the external Where does M^{t-1} comes from (the one after the \eta) . I suspect they're trying to say: during un-pruning, parameter updates only affect masked (non-pruned) parameters but the way it's written in Equation 16 doesn't clearly express this, and the different masks  it's not clear to me how they are applied.
 - The analysis tries to connect un-pruning to unlearning via unrolled SGD, but never actually anlayzes what the algorithm does: iteratively adding parameters back by flipping mask bits from 0 to 1, re-initializing them, performing unlearning on the denser model, then finally repruning.
 

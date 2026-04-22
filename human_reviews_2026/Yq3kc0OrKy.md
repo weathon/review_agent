@@ -1,5 +1,6 @@
 # Jointly Reinforcing Diversity and Quality in Language Model Generations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

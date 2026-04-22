@@ -1,5 +1,6 @@
 # Off-Trajectory Reasoning: Can LLMs Collaborate on Reasoning Trajectories?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

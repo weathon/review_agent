@@ -1,5 +1,6 @@
 # A Reality Check on Robust Bandit Algorithms for Buffer-Aware Early Exits
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4, 2
 

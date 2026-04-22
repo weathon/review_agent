@@ -1,5 +1,6 @@
 # Where Did the Reasoning Go Wrong? A Benchmark of Puzzle-Based Visual Tasks with CoT Error Detection
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4, 4
 

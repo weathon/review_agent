@@ -1,5 +1,6 @@
 # DiaBlo: Diagonal Blocks Are Sufficient For Finetuning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 8
 

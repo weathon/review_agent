@@ -1,5 +1,6 @@
 # LRTI-VSR: Learning Long-Range Refocused Temporal Information from Short Video Clips
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

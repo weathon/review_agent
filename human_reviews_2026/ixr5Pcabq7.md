@@ -1,5 +1,6 @@
 # The Geometry of Reasoning: Flowing Logics in Representation Space
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

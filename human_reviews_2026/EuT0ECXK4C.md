@@ -1,5 +1,6 @@
 # Automatic Robustness Stress Testing of LLMs  as Mathematical Problem Solvers
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4, 2
 

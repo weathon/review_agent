@@ -1,5 +1,6 @@
 # From Memorization to Reasoning in the Spectrum of Loss Curvature
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

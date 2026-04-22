@@ -1,5 +1,6 @@
 # ReviveEdit: Robust Sequential Editing via Dominant Subspace Preservation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

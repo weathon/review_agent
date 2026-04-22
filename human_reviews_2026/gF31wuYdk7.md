@@ -1,5 +1,6 @@
 # Measuring and Mitigating Rapport Bias of Large Language Models under Multi-Agent Social Interactions
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # OVRD: Open-Vocabulary Relation DINO with Text-guided Salient Query Selection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

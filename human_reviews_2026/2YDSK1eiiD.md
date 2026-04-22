@@ -1,5 +1,6 @@
 # What Can an LLM Flip if It Fails to Flip Coins?
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

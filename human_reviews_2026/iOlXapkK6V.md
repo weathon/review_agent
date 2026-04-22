@@ -1,5 +1,6 @@
 # Why Can't Transformers Learn Multiplication? Reverse-Engineering Implicit Chain-of-Thought Reveals Challenges of Learning Long-Range Dependencies
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 10, 2, 4, 4
 

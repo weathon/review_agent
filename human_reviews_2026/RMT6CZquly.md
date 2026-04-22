@@ -1,5 +1,6 @@
 # One Tokenizer To Rule Them All: Emergent Language Plasticity via Multilingual Tokenizers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 8, 4, 4
 

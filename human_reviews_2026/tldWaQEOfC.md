@@ -1,5 +1,6 @@
 # Delayed Momentum Aggregation: Communication-efficient Byzantine-robust Federated Learning with Partial Participation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

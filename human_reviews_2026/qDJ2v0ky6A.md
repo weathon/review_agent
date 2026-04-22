@@ -1,5 +1,6 @@
 # AgentPack: A Dataset of Code Changes, Co-Authored by Agents and Humans
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 8, 2
 

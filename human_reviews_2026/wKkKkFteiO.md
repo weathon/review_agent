@@ -1,5 +1,6 @@
 # Stop Before You Forget: NTK-Guided Early Stopping for Continual Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 6
 

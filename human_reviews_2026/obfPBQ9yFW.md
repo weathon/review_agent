@@ -1,5 +1,6 @@
 # ContrastGen: A Multi-agent Contrastive Framework for Hard Retrieval Data Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

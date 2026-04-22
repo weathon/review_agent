@@ -1,5 +1,6 @@
 # CG-CLIP: Seeing Beyond Objects to Learn Corruption Robustness
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

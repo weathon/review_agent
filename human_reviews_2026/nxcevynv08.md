@@ -1,5 +1,6 @@
 # Thicker and Quicker: The Jumbo Token for Fast Plain Vision Transformers
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8
 

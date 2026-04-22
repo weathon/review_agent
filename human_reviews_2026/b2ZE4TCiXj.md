@@ -1,5 +1,6 @@
 # Controllable and Interpretable Multi-Value Alignment For Large Language Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

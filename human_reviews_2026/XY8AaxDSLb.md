@@ -1,5 +1,6 @@
 # MEM1: Learning to Synergize Memory and Reasoning for Efficient Long-Horizon Agents
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

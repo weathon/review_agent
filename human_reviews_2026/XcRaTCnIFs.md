@@ -1,5 +1,6 @@
 # Inter-Domain Sensor Alignment for Unsupevised Domain Adaptation of Wearable Multivariate Time Series
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

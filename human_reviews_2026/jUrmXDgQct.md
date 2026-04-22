@@ -1,5 +1,6 @@
 # Video2Reaction: Mapping Video to Audience Reaction Distribution in the Wild
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

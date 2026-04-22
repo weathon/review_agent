@@ -1,5 +1,6 @@
 # LumosX: Relate Any Identities with Their Attributes for Personalized Video Generation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

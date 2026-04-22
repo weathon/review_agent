@@ -1,5 +1,6 @@
 # On the Theoretical Limitations of Embedding-Based Retrieval
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

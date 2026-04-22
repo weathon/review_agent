@@ -1,5 +1,6 @@
 # D2D: Detector-to-Differentiable Critic for Improved Numeracy in Text-to-Image Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

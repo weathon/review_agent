@@ -1,5 +1,6 @@
 # Talk2Me: High-Fidelity and Controllable Audio-Driven Avatars with Gaussian Splatting
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

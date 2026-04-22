@@ -1,5 +1,6 @@
 # Additive Coupling of Liquid Neural Networks and Modern Hopfield Layer for Regression
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

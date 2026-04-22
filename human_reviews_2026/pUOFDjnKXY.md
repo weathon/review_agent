@@ -1,5 +1,6 @@
 # Next Token Perception Score: Analytical Assessment of your LLM Perception Skills
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

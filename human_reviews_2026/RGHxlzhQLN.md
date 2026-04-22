@@ -1,5 +1,6 @@
 # Adaptive Curriculum Strategies: Stabilizing Reinforcement Learning for Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Domain-Adaptive Syntax Tree Repair via Cross-Corpus Transfer with Adversarially Aligned Transformers
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 0, 2, 6
 

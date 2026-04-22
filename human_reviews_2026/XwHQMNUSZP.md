@@ -1,5 +1,6 @@
 # Generating Human Motion Videos using a Cascaded Text-to-Video Framework
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Learning to Grasp Anything By Playing with Random Toys
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4, 4
 

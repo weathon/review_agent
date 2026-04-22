@@ -1,5 +1,6 @@
 # Cross-Subject Integration of Multi-Region Neural Signals via Functional Embedding.
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

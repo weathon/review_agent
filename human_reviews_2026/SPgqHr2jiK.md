@@ -1,5 +1,6 @@
 # Differentially Private Synthetic Data via APIs 4: Tabular Data
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

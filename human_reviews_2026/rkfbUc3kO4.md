@@ -1,5 +1,6 @@
 # TraceFlow: Dynamic 3D Reconstruction of Specular Scenes Driven by Ray Tracing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Exposing VLM Memorization of Famous Landmarks: A 55K Building Age Dataset Revealing Popularity Bias
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 2
 

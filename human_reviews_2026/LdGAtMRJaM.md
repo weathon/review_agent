@@ -1,5 +1,6 @@
 # InfoDisent: Explainability of Image Classification Models by Information Disentanglement
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

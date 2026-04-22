@@ -1,5 +1,6 @@
 # ReBiSA: Data Reweighting with Bilevel Optimization for Safety Alignment
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

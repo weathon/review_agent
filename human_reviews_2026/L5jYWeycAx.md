@@ -1,5 +1,6 @@
 # Learning on a Razor’s Edge: Identifiability and Singularity of Polynomial Neural Networks
 
+- Avg Score: 6.80
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8, 8
 

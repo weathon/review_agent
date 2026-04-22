@@ -1,5 +1,6 @@
 # Reward-Agnostic Prompt Optimization for Text-to-Image Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

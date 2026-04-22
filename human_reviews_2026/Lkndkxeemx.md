@@ -1,5 +1,6 @@
 # A Near-Optimal Best-of-Both-Worlds Algorithm for Federated Bandits
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 8
 

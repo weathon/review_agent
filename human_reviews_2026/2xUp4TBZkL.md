@@ -1,5 +1,6 @@
 # Keep It Real: Challenges in Attacking Compression-Based Adversarial Purification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

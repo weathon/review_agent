@@ -1,5 +1,6 @@
 # From Crowds to Codes: Minimizing Review Burden in Conference Review Protocols
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

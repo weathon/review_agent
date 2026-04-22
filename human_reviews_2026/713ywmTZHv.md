@@ -1,5 +1,6 @@
 # PE-SGD: Differentially Private Deep Learning via Evolution of Gradient Subspace for Text
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

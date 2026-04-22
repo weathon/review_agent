@@ -1,5 +1,6 @@
 # Difference back propagation with inverse sigmoid function
 
+- Avg Score: 0.00
 - Decision: Reject
 - Scores: 0, 0, 0
 

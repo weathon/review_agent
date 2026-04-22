@@ -1,5 +1,6 @@
 # T1: One-to-One Channel-Head Binding for Multivariate Time-Series Imputation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

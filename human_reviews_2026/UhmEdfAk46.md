@@ -1,5 +1,6 @@
 # Multi-objective Large Language Model Alignment with Hierarchical Experts
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

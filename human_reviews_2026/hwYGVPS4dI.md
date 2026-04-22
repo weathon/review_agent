@@ -1,5 +1,6 @@
 # MetaRuleReasoner: Beyond Chain-of-Thought—Neural Rule-Based Reasoning for Reliable Mathematical Computation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 0
 

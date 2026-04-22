@@ -1,5 +1,6 @@
 # Cross Spline Net: A Simpler, More Interpretable and Unified Machine Learning Framework
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

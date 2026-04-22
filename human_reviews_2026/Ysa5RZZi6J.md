@@ -1,5 +1,6 @@
 # Nonparametric Unsupervised Data Condensation for Gigapixel Histological Images
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # SELECT: SELEctive Context Transfer for Class Incremental Semantic Segmentation
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

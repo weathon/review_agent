@@ -1,5 +1,6 @@
 # Interpretable Preference Elicitation: Aligning User Intent with Controllable Long-tailed Learning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 4
 

@@ -1,5 +1,6 @@
 # DSA: Efficient Inference For Video Generation Models via Distributed Sparse Attention
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

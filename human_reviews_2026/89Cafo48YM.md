@@ -1,5 +1,6 @@
 # Mitigating Error Propagation in Low-Rank Approximation of Large Models via Distribution-Aware Whitening
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 6, 2
 

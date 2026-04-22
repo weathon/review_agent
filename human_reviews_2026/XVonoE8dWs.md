@@ -1,5 +1,6 @@
 # LSMSeg: Unleashing the Power of Large-Scale Models for Open-Vocabulary Semantic Segmentation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

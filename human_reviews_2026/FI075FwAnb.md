@@ -1,5 +1,6 @@
 # Geometric Constraints for Small Language Models to Understand and Expand Scientific Taxonomies
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

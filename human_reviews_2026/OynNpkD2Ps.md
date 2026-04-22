@@ -1,5 +1,6 @@
 # Are Vision Language Models Ready for Clinical Diagnosis? A 3D CT Benchmark for Lesion-centric Visual Question Answering
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

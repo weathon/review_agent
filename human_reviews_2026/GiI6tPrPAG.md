@@ -1,5 +1,6 @@
 # ILRe: Intermediate Layer Retrieval for Context Compression in Causal Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

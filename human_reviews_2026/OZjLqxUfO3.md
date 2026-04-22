@@ -1,5 +1,6 @@
 # LiteHall: A Three-Stage, Modular and Lightweight Pipeline for End-to-End Hallucination Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

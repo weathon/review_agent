@@ -1,5 +1,6 @@
 # Learning to Lie: Adversarial Attacks on Human-AI Teams and LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

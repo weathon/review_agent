@@ -1,5 +1,6 @@
 # Building Scalable Real-World Robot Data Generation via Compositional Simulation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

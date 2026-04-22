@@ -1,5 +1,6 @@
 # ISAC: Training-Free Instance-to-Semantic Attention Control for Improving Multi-Instance Generation
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 6
 

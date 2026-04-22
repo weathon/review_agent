@@ -1,5 +1,6 @@
 # Exploring Data-Driven Models for Compound Flood Forecasting: A comprehensive benchmark
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

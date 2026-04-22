@@ -1,5 +1,6 @@
 # Predicting LLM Output Length via Entropy-Guided Representations
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

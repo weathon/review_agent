@@ -1,5 +1,6 @@
 # Stable Spatiotemporal Memory in Echo-State Networks via Gliotransmitter Feedback
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

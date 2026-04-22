@@ -1,5 +1,6 @@
 # PrecogUI: Proactive GUI Agents via Pre-cognitive Simulation and Experience Retrieval
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4, 6
 

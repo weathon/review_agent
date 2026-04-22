@@ -1,5 +1,6 @@
 # GeneAR: Autoregressive Gene-to-WSI Tile Synthesis via Causal MeanFlow
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6
 

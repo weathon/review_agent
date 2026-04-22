@@ -1,5 +1,6 @@
 # DBLP: Noise Bridge Consistency Distillation For Efficient And Reliable Adversarial Purification
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Enhancing Cross-task Transfer of Large Language Models via Fourier Activation Steering
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

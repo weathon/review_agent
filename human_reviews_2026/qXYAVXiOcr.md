@@ -1,5 +1,6 @@
 # Certifying Robustness of Agent Tool-Selection Under Adversarial Attacks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 8, 2, 2
 

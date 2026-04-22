@@ -1,5 +1,6 @@
 # The Athenian Academy: A Seven-Layer Architecture for Multi-Agent Systems
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 4, 0
 

@@ -1,5 +1,6 @@
 # Hierarchy Pruning for Unseen Domain Discovery in Predictive Healthcare
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 6, 6, 4
 

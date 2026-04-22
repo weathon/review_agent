@@ -1,5 +1,6 @@
 # HG-Mamba: Heuristic-Guided State Space Model for Laparoscopic Image Desmoking
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

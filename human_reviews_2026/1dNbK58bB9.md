@@ -1,5 +1,6 @@
 # Physics-Informed Neural Networks with Learnable Loss Balancing and Transfer Learning
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

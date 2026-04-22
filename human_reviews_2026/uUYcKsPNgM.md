@@ -1,5 +1,6 @@
 # MAVOS-DD: Multilingual Audio-Video Open-Set Deepfake Detection Benchmark
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4, 4
 

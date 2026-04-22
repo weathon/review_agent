@@ -1,5 +1,6 @@
 # Data Reliability Scoring
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 2, 6
 

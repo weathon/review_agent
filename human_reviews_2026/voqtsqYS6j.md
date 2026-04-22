@@ -1,5 +1,6 @@
 # Don't Shift the Trigger: Robust Gradient Ascent for Backdoor Unlearning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 4
 

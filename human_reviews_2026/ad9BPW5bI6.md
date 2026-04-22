@@ -1,5 +1,6 @@
 # Automated Algorithm Design with LLMs: A Benchmark-Assisted Approach to Black-Box Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # The Linear Geometry of Moral Choice in LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 6, 6
 

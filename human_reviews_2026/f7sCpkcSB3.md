@@ -1,5 +1,6 @@
 # Duality and Policy Evaluation in Distributionally Robust Bayesian Diffusion Control
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 6, 4
 

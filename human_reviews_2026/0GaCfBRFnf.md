@@ -1,5 +1,6 @@
 # A Stitch in Time Saves Nine: Proactive Self-Refinement for Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

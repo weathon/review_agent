@@ -1,5 +1,6 @@
 # GaussianLens: Localized High-Resolution Reconstruction via On-Demand Gaussian Densification
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

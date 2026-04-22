@@ -1,5 +1,6 @@
 # Cross-Modal Redundancy and the Geometry of Vision–Language Embeddings
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

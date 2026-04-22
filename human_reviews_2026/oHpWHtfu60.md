@@ -1,5 +1,6 @@
 # Unlocking Clinical Potential: Beyond Single-to-Tri-Phase CT with Dynamic Fusion for Precision Liver Tumor Segmentation
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4, 2
 

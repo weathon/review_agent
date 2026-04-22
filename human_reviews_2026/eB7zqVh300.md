@@ -1,5 +1,6 @@
 # PilotRL: Training Language Model Agents via Global Planning-Guided Progressive Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 6
 

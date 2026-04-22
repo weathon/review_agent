@@ -1,5 +1,6 @@
 # Graph-Based Operator Learning from Limited Data on Irregular Domains
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

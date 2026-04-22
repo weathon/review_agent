@@ -1,5 +1,6 @@
 # Can Vision-Language Models Answer Face to Face Questions in the Real-World?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

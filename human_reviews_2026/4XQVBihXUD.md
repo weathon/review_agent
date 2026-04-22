@@ -1,5 +1,6 @@
 # Unsupervised Parallel MRI Reconstruction via Projected Conditional Flow Matching
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 6
 

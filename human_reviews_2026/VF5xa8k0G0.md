@@ -1,5 +1,6 @@
 # Mitigating Object Hallucination in Large Vision-Language Models through Adversarial Contrastive Finetuning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

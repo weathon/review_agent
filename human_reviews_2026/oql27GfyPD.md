@@ -1,5 +1,6 @@
 # Rethinking Deep Safety Alignment: Reflective Safety Alignment for Balancing Harmlessness and Helpfulness of LLMs
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 2
 

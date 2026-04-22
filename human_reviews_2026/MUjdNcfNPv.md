@@ -1,5 +1,6 @@
 # VideoChat-Flash: Hierarchical Compression for Long-Context Video Modeling
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

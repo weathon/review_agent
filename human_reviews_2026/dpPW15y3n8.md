@@ -1,5 +1,6 @@
 # ATLAS: Learning to Optimally Memorize the Context at Test Time
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

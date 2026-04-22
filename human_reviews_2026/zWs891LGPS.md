@@ -1,5 +1,6 @@
 # Random Neural Network Expressivity for Non-Linear Partial Differential Equations
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

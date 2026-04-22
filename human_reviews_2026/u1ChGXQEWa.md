@@ -1,5 +1,6 @@
 # CL-Gen: An Inference-Time Iterative Optimization Framework for Reference-Consistent Image Generation Based on Closed-Loop Control
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

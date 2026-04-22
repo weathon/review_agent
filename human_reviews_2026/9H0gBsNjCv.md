@@ -1,5 +1,6 @@
 # ContextPRM: Leveraging Contextual Coherence for multi-domain Test-Time Scaling
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

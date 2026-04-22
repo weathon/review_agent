@@ -1,5 +1,6 @@
 # Probing Memes in LLMs: A Paradigm for the Entangled Evaluation World
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 
@@ -138,7 +139,8 @@ This paper introduces a new evaluation framwork to characterise data samples fro
 
 Minor
 1. Figure 5 and 6 are not easily interpretable, more details and insights would be beneficial.
-2. T-sne is known to result in spurious clusters. UMAP, on the other hand, preserves both local and global structure in the data and is a better algorithm for data visualisation. 
+2. T-sne is known to result in spurious clusters. UMAP, on the other hand, preserves both local and global structure in the data and is a better algorithm for data visualisation.
+
 
 [1] Ghosh et al. ONEBENCH to Test Them All: Sample-Level Benchmarking Over Open-Ended Capabilities, ACL 2025
 

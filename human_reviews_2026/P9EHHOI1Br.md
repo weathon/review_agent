@@ -1,5 +1,6 @@
 # TAN: Topological Attention Networks for Hierarchical Document Understanding
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0
 

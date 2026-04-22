@@ -1,5 +1,6 @@
 # Maximally Useful and Minimally Redundant: The Key to Self Supervised Learning for Imbalanced Data
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 2, 2, 4
 
@@ -63,21 +64,27 @@ Given that the Related Work section is not very detailed, could the authors supp
 3
 
 ### Summary
-The paper proposes MTTV, a self-supervised contrastive framework for long-tailed data that: (i) forms compact fused representations from more-than-two views (augmented and normalized), and (ii) masks extreme similarities via a thresholded InfoNCE variant. Experiments on CIFAR10-LT/100-LT and ImageNet-LT subsamples report linear-evaluation gains over prior SSL baselines such as SimCLR, BYOL, SwAV, SDCLR, and FASSL.
+The paper proposes MTTV, a self-supervised contrastive framework for long-tailed data that:
+(i) forms compact fused representations from more-than-two views (augmented and normalized), and
+(ii) masks extreme similarities via a thresholded InfoNCE variant.
+Experiments on CIFAR10-LT/100-LT and ImageNet-LT subsamples report linear-evaluation gains over prior SSL baselines such as SimCLR, BYOL, SwAV, SDCLR, and FASSL.
 
 ### Strengths
 * Shows clear empirical gains on CIFAR-LT and ImageNet-LT over several standard SSL baselines.
 * The proposed “extreme-feature elimination” (thresholded similarity filtering) is a simple idea that appears to stabilize training and may reduce representation collapse.
 
 ### Weaknesses
-* Missing Comparison to Multi-View Self-Supervised Learning: The manuscript repeatedly claims novelty in using more-than-two views and redundancy suppression, yet fails to compare to the extensive multi-view SSL literature where these principles were introduced and validated, including:
+* Missing Comparison to Multi-View Self-Supervised Learning:
+The manuscript repeatedly claims novelty in using more-than-two views and redundancy suppression, yet fails to compare to the extensive multi-view SSL literature where these principles were introduced and validated, including:
     * An Embedding-Dynamic Approach to Self-Supervised Learning (WACV 2023)
     * VICReg (ICLR 2022)
     * SwAV (NeurIPS 2020)
     * MIL-NCE: End-to-End Learning of Visual Representations from Uncurated Instructional Videos (CVPR 2020)
-    * Learning by Sorting: Self-Supervised Learning with Group Ordering Constraints (ICCV 2023) Moreover, the proposed “feature filtering” closely resembles hard-negative mining; a direct comparison to such methods is missing.
+    * Learning by Sorting: Self-Supervised Learning with Group Ordering Constraints (ICCV 2023)
+Moreover, the proposed “feature filtering” closely resembles hard-negative mining; a direct comparison to such methods is missing.
 * Incorrect citation: FASSL is listed as an ICCV proceedings paper; it is actually an ICCV 2023 Workshop  paper. Please correct this.
-* Missing baselines and discussion: The paper omits “Contrastive Learning with Boosted Memorization” (ICML 2022), which is conceptually close. It should be included in comparisons and discussed in detail. Additionally, evaluations should consider more recent visual-only backbones such as DINOv3 and SigLIP-v2 to ensure fair benchmarking.
+* Missing baselines and discussion: The paper omits “Contrastive Learning with Boosted Memorization” (ICML 2022), which is conceptually close. It should be included in comparisons and discussed in detail.
+Additionally, evaluations should consider more recent visual-only backbones such as DINOv3 and SigLIP-v2 to ensure fair benchmarking.
 * Motivation vs. Method Mixing: The introduction reads like a methods section, filled with equations and implementation details but little conceptual framing or problem motivation. The broader context of long-tailed SSL is not well developed.
 * Questionable novelty framing: The abstract credits a LeCun comment as inspiration for multi-view design, while multi-view SSL has been explored for years (see above). This framing misrepresents the originality of the idea.
 * Figures and clarity: Figures are small, crowded with equations, and not self-contained. They do not effectively illustrate the pipeline or contributions.

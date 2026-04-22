@@ -1,5 +1,6 @@
 # Poivre: Self-Refining Visual Pointing with Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 
@@ -23,8 +24,10 @@ Visual pointing, which aims to localize a target by predicting its coordinates o
 This paper proposes Poivre (Point, Visualize, then Refine), a self-refining framework for visual pointing tasks using reinforcement learning (RL). Instead of predicting target coordinates in a single step, Poivre enables a Vision-Language Model (VLM) to iteratively visualize its prediction on the image and refine the coordinates through multiple rounds. The key novelty lies in the PBRS-inspired process reward, which encourages improvement across refinement steps rather than focusing solely on the final outcomes.
 
 ### Strengths
-1.	The paper identifies an important gap in current VLMs: the lack of self-refinement capability. The proposed “Point → Visualize → Refine” loop is simple yet conceptually appealing, like human correction behavior in pointing tasks. 
-2.	The pipeline and training process (rollout sampling, reward computation) are clearly described, and the paper includes implementation details that make the work easy to replicate. 
+1.	The paper identifies an important gap in current VLMs: the lack of self-refinement capability. The proposed “Point → Visualize → Refine” loop is simple yet conceptually appealing, like human correction behavior in pointing tasks.
+
+2.	The pipeline and training process (rollout sampling, reward computation) are clearly described, and the paper includes implementation details that make the work easy to replicate.
+
 3.	The adaptation of PBRS to the visual refinement setting is neat and theoretically grounded. It encourages incremental improvement across iterations, which aligns naturally with the proposed iterative reasoning loop.
 
 ### Weaknesses
@@ -37,9 +40,12 @@ This paper proposes Poivre (Point, Visualize, then Refine), a self-refining fram
 4.	The paper lacks detailed visualization or failure case analysis. It would be useful to show when refinement helps or hurts, and whether the model can meaningfully interpret the marker in complex scenes.
 
 ### Questions
-1.	Have you tried any ablation where the model receives coordinate input directly (without visualization)? 
-2.	Does the model ever over-correct (move away from the correct target) in refinement steps? 
-3.	Could a supervised multi-step training baseline achieve similar improvements without RL? 
+1.	Have you tried any ablation where the model receives coordinate input directly (without visualization)?
+
+2.	Does the model ever over-correct (move away from the correct target) in refinement steps?
+
+3.	Could a supervised multi-step training baseline achieve similar improvements without RL?
+
 4.	How does the model behave when the initial pointing is already accurate, does refinement still occur?
 
 ### Soundness

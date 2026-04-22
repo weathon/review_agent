@@ -1,5 +1,6 @@
 # Out of the Shadows: Exploring a Latent Space for Neural Network Verification
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

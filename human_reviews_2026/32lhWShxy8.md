@@ -1,5 +1,6 @@
 # IN-RIL: Interleaved Reinforcement and Imitation Learning for Policy Fine-Tuning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

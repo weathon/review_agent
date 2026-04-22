@@ -1,5 +1,6 @@
 # OpenAgentSafety: A Comprehensive Framework For Evaluating Real-World AI Agent Safety
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

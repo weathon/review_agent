@@ -1,5 +1,6 @@
 # Latent Debate: A Surrogate Framework for Interpreting LLM Thinking
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

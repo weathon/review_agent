@@ -1,5 +1,6 @@
 # Mimicking the Physicist's Eye: A VLM-centric Approach for Physics Formula Discovery
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

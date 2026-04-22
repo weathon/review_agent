@@ -1,5 +1,6 @@
 # A LLM-Refined Dynamic Topic Clustering Framework for Business Forecasts with Large Corpora
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

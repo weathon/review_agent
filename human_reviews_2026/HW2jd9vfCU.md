@@ -1,5 +1,6 @@
 # Pathway to $O(\sqrt{d})$ Complexity bound under Wasserstein metric of flow-based models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 8, 2, 2
 

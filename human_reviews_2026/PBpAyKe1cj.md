@@ -1,5 +1,6 @@
 # Provably Sample-Efficient Robust  Reinforcement Learning with Average Reward
 
+- Avg Score: 4.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 6, 4, 2
 

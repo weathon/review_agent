@@ -1,5 +1,6 @@
 # Differential Privacy for Transformer Embeddings  with Nonparametric Variational Information Bottleneck
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

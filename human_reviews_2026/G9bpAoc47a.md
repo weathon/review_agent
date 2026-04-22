@@ -1,5 +1,6 @@
 # It Takes a Graph to Know a Graph: Rewiring for Homophily with a Reference Graph
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 0, 4, 2, 4, 4
 

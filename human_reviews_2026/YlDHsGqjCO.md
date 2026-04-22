@@ -1,5 +1,6 @@
 # Perishable Online Inventory Control with Context-Aware Demand Distributions
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 4, 6, 6, 2
 

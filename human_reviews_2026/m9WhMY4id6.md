@@ -1,5 +1,6 @@
 # Diffusion Modulation via Environment Mechanism Modeling for Planning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 2, 8
 

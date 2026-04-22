@@ -1,5 +1,6 @@
 # Vidar: Embodied Video Diffusion Model for Generalist Manipulation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

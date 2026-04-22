@@ -1,5 +1,6 @@
 # When would Vision-Proprioception Policies Fail in Robotic Manipulation?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

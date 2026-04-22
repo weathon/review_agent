@@ -1,5 +1,6 @@
 # SpecOffload: Unlocking Latent GPU Capacity for LLM Inference on Resource-Constrained Devices
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 
@@ -85,7 +86,8 @@ Experiments on Mixtral and LLaMA models show up to 4.5× GPU utilization and 2.3
 
 ### Questions
 1. The ParaSpec Planner seems tuned for specific hardware (RTX 4090). Could the authors elaborate on how much manual profiling or calibration is needed to port SpecOffload to a different GPU architecture.
-2. In practice, how should users choose the draft model size relative to the target model? Nowadays many choose to use Eagle to reduce the spec execution time but it might not be too much helpful for an offloading system like SpecOffload. How should SpecOffload adapt in terms of scheduling policy?
+2. In practice, how should users choose the draft model size relative to the target model? 
+Nowadays many choose to use Eagle to reduce the spec execution time but it might not be too much helpful for an offloading system like SpecOffload. How should SpecOffload adapt in terms of scheduling policy?
 
 ### Soundness
 3

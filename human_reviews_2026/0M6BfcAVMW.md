@@ -1,5 +1,6 @@
 # TusoAI: Agentic Optimization for Scientific Methods
 
+- Avg Score: 3.60
 - Decision: Accept (Poster)
 - Scores: 2, 2, 4, 4, 6
 

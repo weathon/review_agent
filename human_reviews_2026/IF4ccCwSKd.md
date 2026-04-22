@@ -1,5 +1,6 @@
 # LEMUR: Leveraging Vision-Language Models for Fine-Grained Multimodal Retrieval
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 2
 

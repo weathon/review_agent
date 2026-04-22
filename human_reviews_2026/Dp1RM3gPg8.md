@@ -1,5 +1,6 @@
 # Fast Proteome-Scale Protein Interaction Retrieval via Residue-Level Factorization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

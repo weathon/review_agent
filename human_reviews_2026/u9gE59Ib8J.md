@@ -1,5 +1,6 @@
 # ProMoS: Prototype-Guided Distillation for Generalist Graph Anomaly Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

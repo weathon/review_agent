@@ -1,5 +1,6 @@
 # TIGaussian: Disentangle Gaussians for Spatial-Awared Text-Image-3D Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

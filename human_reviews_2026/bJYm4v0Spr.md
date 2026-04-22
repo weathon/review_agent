@@ -1,5 +1,6 @@
 # LFQA-E: Carefully Benchmarking Long-form QA Evaluation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 4
 

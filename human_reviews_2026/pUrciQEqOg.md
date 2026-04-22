@@ -1,5 +1,6 @@
 # On the Geometry of Uncertainty: Equivariant Uncertainty Estimation for Molecular Vector Properties
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

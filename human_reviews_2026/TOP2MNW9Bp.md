@@ -1,5 +1,6 @@
 # Learning Task-Agnostic Motifs to Capture the Continuous Nature of Animal Behavior
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

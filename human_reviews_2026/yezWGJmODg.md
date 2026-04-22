@@ -1,5 +1,6 @@
 # Getting Your LLMs Ready for Reinforcement Learning with Lightweight SFT
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

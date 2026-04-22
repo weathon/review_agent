@@ -1,5 +1,6 @@
 # Cross-modal RAG: Sub-dimensional Text-to-Image Retrieval-Augmented Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

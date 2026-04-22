@@ -1,5 +1,6 @@
 # MPS: A Multi-Perspective Benchmark For Assessing Spurious Correlations in Text Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Cosmos Policy: Fine-Tuning Video Models for Visuomotor Control and Planning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 8
 

@@ -1,5 +1,6 @@
 # On the Mechanisms of Collaborative Learning in VAE Recommenders
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 8
 

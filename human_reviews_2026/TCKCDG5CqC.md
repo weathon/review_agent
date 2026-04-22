@@ -1,5 +1,6 @@
 # Provably Learning from Language Feedback
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 2, 8
 

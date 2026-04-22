@@ -1,5 +1,6 @@
 # Unlocking the Power of Layer By Layer Training For LLM
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # SWE-Ext: Extending and Scaling Augmented Data for Repository-Level Coding Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 2
 

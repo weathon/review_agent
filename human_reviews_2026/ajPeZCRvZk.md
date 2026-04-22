@@ -1,5 +1,6 @@
 # Towards Multimodal Active Learning: Efficient Learning with Limited Paired Data
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

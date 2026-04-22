@@ -1,5 +1,6 @@
 # Concept-Guided Dictionary Learning for Interpretable Concept Extraction and Attribution in Large Vision–Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

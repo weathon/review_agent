@@ -1,5 +1,6 @@
 # Huxley-G\"odel Machine: Human-Level Coding Agent Development by an Approximation of the Optimal Self-Improving Machine
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 8
 

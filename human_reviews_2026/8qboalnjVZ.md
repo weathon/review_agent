@@ -1,5 +1,6 @@
 # Lightweight Midas Touch: A Paired-learning Framework for Flexible Design of Antimicrobial Peptides
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

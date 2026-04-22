@@ -1,5 +1,6 @@
 # Gradients Through Logarithmic Lens: Reformulating Optimization Dynamics
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 8, 2, 6, 2, 4
 

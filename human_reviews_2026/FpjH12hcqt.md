@@ -1,5 +1,6 @@
 # Taming OOD Actions for Offline Reinforcement Learning: An Advantage-Based Approach
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4, 2, 4
 

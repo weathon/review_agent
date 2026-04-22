@@ -1,5 +1,6 @@
 # FineScope: SAE-guided Data Selection Enables Domain-Specific LLM Pruning & Fine-Tuning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # In-Context Prompt Optimisation for Knowledge Editing: Enhancing Safety and Coherency in Large Language Models
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4, 2
 

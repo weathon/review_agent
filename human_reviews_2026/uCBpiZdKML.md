@@ -1,5 +1,6 @@
 # Genome-Factory: A Library for Tuning, Deploying, and Interpreting Genomic Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # A Unified Framework for EEG–Video Emotion Recognition with Brain Anatomy Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

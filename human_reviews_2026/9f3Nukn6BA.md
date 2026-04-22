@@ -1,5 +1,6 @@
 # Fastcar: Cache Attentive Replay for Fast Auto-Regressive Video Generation on the Edge
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

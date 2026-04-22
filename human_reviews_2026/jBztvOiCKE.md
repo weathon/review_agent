@@ -1,5 +1,6 @@
 # Decoupled DMD: CFG Augmentation as the Spear, Distribution Matching as the Shield
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

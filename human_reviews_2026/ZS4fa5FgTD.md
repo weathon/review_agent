@@ -1,5 +1,6 @@
 # Learning for Dynamic Combinatorial Optimization without Training Data
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

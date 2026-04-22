@@ -1,5 +1,6 @@
 # Neural-Guided Enumerative SAT Framework for Cryptographic Key Recovery
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

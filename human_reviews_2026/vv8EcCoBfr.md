@@ -1,5 +1,6 @@
 # Bilateral Information-aware Test-time Adaptation for Vision-Language Models
 
+- Avg Score: 4.33
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 4, 6, 6
 

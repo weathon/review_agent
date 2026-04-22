@@ -1,5 +1,6 @@
 # BRAIN: Boltzmann Reinforcement For Analog Ising Networks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4
 

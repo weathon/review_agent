@@ -1,5 +1,6 @@
 # Language Models Need Sleep: Learning to Self Modify and Consolidate Memories
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 4, 4
 

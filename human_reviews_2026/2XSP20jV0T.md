@@ -1,5 +1,6 @@
 # Solving General-Utility Markov Decision Processes in the Single-Trial Regime with Online Planning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4, 4
 

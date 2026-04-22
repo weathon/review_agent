@@ -1,5 +1,6 @@
 # Distilling and Adapting:  A Topology-Aware Framework for Zero-Shot Interaction Prediction in Multiplex Biological Networks
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

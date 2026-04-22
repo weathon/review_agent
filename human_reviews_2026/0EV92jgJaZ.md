@@ -1,5 +1,6 @@
 # Non-Incremental Bottom-Up Knowledge Compilation of Neuro-Answer Set Programs
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

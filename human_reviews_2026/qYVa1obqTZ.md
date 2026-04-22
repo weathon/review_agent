@@ -1,5 +1,6 @@
 # Neural Modular Physics for Elastic Simulation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # VGPA: Deep View-Graph Pose Averaging for Structure-from-Motion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2
 

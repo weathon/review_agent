@@ -1,5 +1,6 @@
 # MAS$^3$AC: A Learning Framework for General Multi-Agent Safe and Stable Control with State-Wise Guarantees
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # An Optimal Diffusion Approach to Quadratic Rate-Distortion Problems: New Solution and Approximation Methods
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 6
 

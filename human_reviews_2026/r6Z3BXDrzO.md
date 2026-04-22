@@ -1,5 +1,6 @@
 # On the Impossibility of Retrain Equivalence in Machine Unlearning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

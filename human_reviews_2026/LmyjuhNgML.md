@@ -1,5 +1,6 @@
 # LLM-informed Object Search in Partially-Known Environments via Model-based Planning and Prompt Selection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

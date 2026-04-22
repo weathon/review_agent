@@ -1,5 +1,6 @@
 # Amplitude-based Input Attribution in Quantum Learning via Integrated Gradients
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 4, 0
 

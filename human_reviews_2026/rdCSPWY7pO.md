@@ -1,5 +1,6 @@
 # A Practical Descent Method for Singular Value Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

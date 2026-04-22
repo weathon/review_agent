@@ -1,5 +1,6 @@
 # VitaBench: Benchmarking LLM Agents with Versatile Interactive Tasks in Real-world Applications
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # DiffuGuard: How Intrinsic Safety is Lost and Found in Diffusion Large Language Models
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 6, 8
 

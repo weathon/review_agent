@@ -1,5 +1,6 @@
 # AgenticMath: Enhancing LLM Reasoning via Agentic-based Math Data Generation
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Winter Soldier: Backdooring Language Models at Pre-Training with Indirect Data Poisoning
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # NeSy-MMCAD: A Neuro-Symbolic Multimodal Framework for Child-Abusive Meme Detection and Explanation with Emotion Consistency
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

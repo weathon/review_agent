@@ -1,5 +1,6 @@
 # Learning to Describe Urban Change: Graph-Guided Detection and spatio-Temporal State Space Model with Uncertainty Estimation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0, 2
 

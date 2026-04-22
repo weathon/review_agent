@@ -1,5 +1,6 @@
 # Break Stylistic Sophon: Are We Really Meant to Confine the Imagination in Style Transfer?
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Prior-aware and Context-guided Group Sampling for Active Probabilistic Subsampling
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

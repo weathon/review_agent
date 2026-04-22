@@ -1,5 +1,6 @@
 # MambaSIC: Mamba-based Stereo Image Compression with Bi-directional Multi-reference Entropy Model
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 4
 

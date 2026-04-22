@@ -1,5 +1,6 @@
 # User-Controllable Dense Video Captioning: A Large-Scale Benchmark and Framework
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

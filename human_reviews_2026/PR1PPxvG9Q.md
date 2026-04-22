@@ -1,5 +1,6 @@
 # Frequency Bands in RoPE: Base Frequency and Context Length Shape the Interpolation–Extrapolation Trade-off
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 8
 

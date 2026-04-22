@@ -1,5 +1,6 @@
 # VAR: Visual Attention Reasoning via Structured Search and Backtracking
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

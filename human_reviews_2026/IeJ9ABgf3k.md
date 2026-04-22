@@ -1,5 +1,6 @@
 # OmniEduBench: A Comprehensive Chinese Benchmark for Assessing Large Language Models in Education
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Adapter-augmented Time Series Reconstruction for Source-free Domain Adaptation: A Black-box Method
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

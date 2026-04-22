@@ -1,5 +1,6 @@
 # S3M3D: Cross-Modal Selective State Space Modulation for 3D Object Detection
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

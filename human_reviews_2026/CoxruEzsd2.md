@@ -1,5 +1,6 @@
 # Zero-Shot Visual Generalization in Model-Based Reinforcement Learning via Latent Consistency
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

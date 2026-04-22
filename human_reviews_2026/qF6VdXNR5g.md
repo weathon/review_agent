@@ -1,5 +1,6 @@
 # Strategic Deception in Deterministic Markov Decision Processes via Value Differences
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

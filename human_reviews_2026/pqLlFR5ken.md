@@ -1,5 +1,6 @@
 # SPROUT: Training-free Nuclear Instance Segmentation with Automatic Prompting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

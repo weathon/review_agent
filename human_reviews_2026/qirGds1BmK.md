@@ -1,5 +1,6 @@
 # Pretrain Value, Not Reward: Decoupled Value Policy Optimization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

@@ -1,5 +1,6 @@
 # BézierFlow: Learning Bézier Stochastic Interpolant Schedulers for Few-Step Generation
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8
 

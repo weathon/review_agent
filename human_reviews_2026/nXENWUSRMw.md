@@ -1,5 +1,6 @@
 # Enhancing Reasoning in Large Language Models via Entropy-Aware Self-Evolution
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

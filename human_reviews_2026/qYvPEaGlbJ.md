@@ -1,5 +1,6 @@
 # OOD Learner via In-Context Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

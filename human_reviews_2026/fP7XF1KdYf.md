@@ -1,5 +1,6 @@
 # IntSR: An Integrated Generative Framework for Search and Recommendation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

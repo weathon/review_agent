@@ -1,5 +1,6 @@
 # Revisiting Group Relative Policy Optimization: Insights into On-Policy and Off-Policy Training
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

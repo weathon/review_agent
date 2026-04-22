@@ -1,5 +1,6 @@
 # Data-Centric Unlearning: Optimizing Labels and Retain Data via Learning Dynamics
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # On the Benefits of Weight Normalization for Overparameterized Matrix Sensing
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8, 4
 

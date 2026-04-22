@@ -1,5 +1,6 @@
 # SELECT: Search-Enhanced Language Models for Analog Circuit Topology Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

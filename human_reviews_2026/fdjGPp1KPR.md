@@ -1,5 +1,6 @@
 # Neural Networks with Adaptive Activation Functions and their Application to the Solution of PDEs
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0
 

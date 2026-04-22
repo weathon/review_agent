@@ -1,5 +1,6 @@
 # Domain Expansion: A Latent Space Construction Framework for Multi-Task Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 
@@ -94,7 +95,8 @@ The paper introduces Domain Expansion, a novel framework designed to address the
 
 * **Q3. Transferability of the Learned Representation:** Could a model pre-trained with Domain Expansion be adapted to new tasks or datasets? For example, could a model trained on concepts {azimuth, elevation, category} be effectively fine-tuned on a new dataset that only has labels for {azimuth, category}, or perhaps one where a new concept, {color}, is introduced?
 
-* **Q4. Training Dynamics and Computational Cost:** How many epochs are typically needed for the orthogonal basis to stabilize before the encoder is frozen? What's the time per epoch? What is the computational overhead of the eigendecomposition step per epoch compared to a standard multi-task baseline?
+* **Q4. Training Dynamics and Computational Cost:** How many epochs are typically needed for the orthogonal basis to stabilize before the encoder is frozen?
+What's the time per epoch? What is the computational overhead of the eigendecomposition step per epoch compared to a standard multi-task baseline?
 
 * **Q5. The Value of Representation Quality:** The results for Objective Set 2 compellingly show that baseline methods can achieve high predictive accuracy despite having a collapsed latent representation (i.e., poor V-scores). However, in a practical scenario where a user only cares about the final prediction accuracy on this specific test set, what is the key argument for your method? Does the superior representation quality translate to other critical benefits, such as improved robustness, better generalization to out-of-distribution samples, or greater fairness?
 

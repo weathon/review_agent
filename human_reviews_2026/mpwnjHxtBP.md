@@ -1,5 +1,6 @@
 # AutoPBO: LLM-powered Optimization for Local Search PBO Solvers
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 6, 4, 2, 2, 2, 0, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Figma2Code: Automating Multimodal Design to Code in the Wild
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

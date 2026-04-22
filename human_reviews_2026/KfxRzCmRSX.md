@@ -1,5 +1,6 @@
 # ReForm: Reflective Autoformalization with Prospective Bounded Sequence Optimization
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

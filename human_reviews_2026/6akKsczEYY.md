@@ -1,5 +1,6 @@
 # Truncated Proximal Policy Optimization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 2, 4, 4
 

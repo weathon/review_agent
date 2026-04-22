@@ -1,5 +1,6 @@
 # Boosting Targeted Adversarial Transferability: A Generative Approach Guided by Core Target Samples
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

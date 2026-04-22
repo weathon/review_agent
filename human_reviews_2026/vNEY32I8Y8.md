@@ -1,5 +1,6 @@
 # LightRetriever: A LLM-based Text Retrieval Architecture with Extremely Faster Query Inference
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

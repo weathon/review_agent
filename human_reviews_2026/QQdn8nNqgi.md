@@ -1,5 +1,6 @@
 # Clean-Action Backdoor Attacks on Vision-Language-Action Models via Sequential Error Exploitation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

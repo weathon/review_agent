@@ -1,5 +1,6 @@
 # Towards Effective MLLM Jailbreaking Through Balanced On-Topicness and OOD-Intensity
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

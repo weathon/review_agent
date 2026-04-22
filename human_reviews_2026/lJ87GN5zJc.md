@@ -1,5 +1,6 @@
 # Graph Diffusion Transformers are In-Context Molecular Designers
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2, 4
 

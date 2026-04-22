@@ -1,5 +1,6 @@
 # Take Another Look: Improving Information Extraction From Images With Multiple Encoders
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

@@ -1,5 +1,6 @@
 # PAMA: Dual-Memory Augmentation Assisted Pseudo-Anomaly Contrastive Learning for Multivariate Time Series Anomaly Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

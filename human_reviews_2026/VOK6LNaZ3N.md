@@ -1,5 +1,6 @@
 # Directional Convergence, Benign Overfitting of Gradient Descent in leaky ReLU two-layer Neural Networks
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

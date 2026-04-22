@@ -1,5 +1,6 @@
 # Revisiting Confidence Calibration for Misclassification Detection in VLMs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Enhancing Offline-to-Online Reinforcement Learning by Adaptive Experience Aligned Diffusion Sampling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

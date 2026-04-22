@@ -1,5 +1,6 @@
 # DP-RFT: Learning to Generate Synthetic Text via Differentially Private Reinforcement Fine-tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

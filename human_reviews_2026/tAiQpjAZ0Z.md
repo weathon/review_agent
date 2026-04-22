@@ -1,5 +1,6 @@
 # Value-State Gated Attention for Mitigating Extreme-Token Phenomena in Transformers
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # How Should Corruption Be Used in SSL? Empirical Insights for Effective Pretraining
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

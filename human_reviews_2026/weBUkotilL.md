@@ -1,5 +1,6 @@
 # Gaussian Motion Field for High-Performance Video Compression
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Pixels Lie, Code Doesn't: Thinking with Visual Programming for ''Seemingly Impossible'' Multimodal Agentic Reasoning Tasks
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

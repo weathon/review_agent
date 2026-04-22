@@ -1,5 +1,6 @@
 # RepIt: Steering Language Models with Concept-Specific Refusal Vectors
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 2
 

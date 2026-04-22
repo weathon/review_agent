@@ -1,5 +1,6 @@
 # PO-Dreamer: Memory Guided World Models for Partially Observable Reinforcement Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

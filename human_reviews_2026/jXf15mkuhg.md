@@ -1,5 +1,6 @@
 # EMERGE: A Benchmark for Updating Knowledge Graphs with Emerging Textual Knowledge
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 6, 0
 

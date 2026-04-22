@@ -1,5 +1,6 @@
 # GraphIP–Bench: A Benchmark for Extraction Attacks and Defenses in Graph Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

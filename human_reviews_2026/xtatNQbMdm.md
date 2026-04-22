@@ -1,5 +1,6 @@
 # Rethinking the Flow-based Gradual Domain Adaption: A Semi-Dual Transport Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

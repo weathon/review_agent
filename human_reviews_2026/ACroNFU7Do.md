@@ -1,5 +1,6 @@
 # LiveProteinBench: A Contamination-Free Benchmark for Assessing Models' Specialized Capabilities in Protein Science
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

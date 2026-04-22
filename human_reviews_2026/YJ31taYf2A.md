@@ -1,5 +1,6 @@
 # Predicting the Order of Upcoming Tokens Improves Language Modeling
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 2, 2
 

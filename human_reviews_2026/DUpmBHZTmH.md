@@ -1,5 +1,6 @@
 # LacTok: Latent Consistency Tokenizer for High-resolution Image Reconstruction and Generation by 256 Tokens
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

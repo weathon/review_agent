@@ -1,5 +1,6 @@
 # Solving the 2-norm k-hyperplane clustering problem via multi-norm formulations
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

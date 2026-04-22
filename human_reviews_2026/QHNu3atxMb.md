@@ -1,5 +1,6 @@
 # OmniVIVO: Towards Unified Multimodal Generative Modeling for Simultaneous Language-Guided Speech and Image Synthesis
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Reinforcement Learning with Verifiable Rewards: GRPO's Loss, Dynamics, and Success Amplification
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

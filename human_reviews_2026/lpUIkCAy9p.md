@@ -1,5 +1,6 @@
 # Cactus: Accelerating Auto-Regressive Decoding with Constrained Acceptance Speculative Sampling
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4, 6
 

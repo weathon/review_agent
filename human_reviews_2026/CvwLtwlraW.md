@@ -1,5 +1,6 @@
 # OptiMind: Teaching LLMs to Think Like Optimization Experts
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

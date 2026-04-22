@@ -1,5 +1,6 @@
 # Carré du champ flow matching: better quality-generalisation tradeoff in generative models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

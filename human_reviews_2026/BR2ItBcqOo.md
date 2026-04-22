@@ -1,5 +1,6 @@
 # RoRE: Rotary Ray Embedding for Generalised Multi-Modal Scene Understanding
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

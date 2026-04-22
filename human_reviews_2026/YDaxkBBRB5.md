@@ -1,5 +1,6 @@
 # Robust Image Self-Recovery against Tampering using Watermark Generation with Pixel Shuffling
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8, 8
 

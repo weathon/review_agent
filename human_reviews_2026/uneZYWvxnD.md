@@ -1,5 +1,6 @@
 # RISK: A Framework for GUI Agents in E-commerce Risk Management
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

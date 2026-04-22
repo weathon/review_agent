@@ -1,5 +1,6 @@
 # AutoCode: LLMs as Problem Setters for Competitive Programming
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

@@ -1,5 +1,6 @@
 # FUAS-Agents: Autonomous Multi-Modal LLM Agents for Treatment Planning in Focused Ultrasound Ablation Surgery
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

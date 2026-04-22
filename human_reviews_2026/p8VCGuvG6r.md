@@ -1,5 +1,6 @@
 # ParaThinker: Native Parallel Thinking as a New Paradigm to Scale LLM Test-time Compute
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

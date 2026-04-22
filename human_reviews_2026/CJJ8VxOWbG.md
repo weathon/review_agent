@@ -1,5 +1,6 @@
 # RL Grokking Recipe: How Does RL Unlock and Transfer New Algorithms in LLMs?
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Towards Scalable and Consistent 3D Editing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # CFDLLMBench: A Benchmark Suite for Evaluating Large Language Models in Computational Fluid Dynamics
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

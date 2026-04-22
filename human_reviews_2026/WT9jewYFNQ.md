@@ -1,5 +1,6 @@
 # FantasyPortrait: Multi-Character Portrait Animation with Expression-Augmented Diffusion Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

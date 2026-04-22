@@ -1,5 +1,6 @@
 # SpeechWakBench: How Well do Large Language Models Speak with Watermarks?
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

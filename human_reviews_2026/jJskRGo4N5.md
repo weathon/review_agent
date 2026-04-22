@@ -1,5 +1,6 @@
 # Graft: Integrating the Domain Knowledge via Efficient Parameter Synergy for LLMs
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 2, 6, 6, 6, 4
 

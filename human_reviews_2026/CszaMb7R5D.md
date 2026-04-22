@@ -1,5 +1,6 @@
 # MOBA: Model-Based Offline Reinforcement Learning with Adaptive Contextual Penalties
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

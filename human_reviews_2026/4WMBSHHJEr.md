@@ -1,5 +1,6 @@
 # Machine Unlearning under Retain–Forget Entanglement
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # Multiple Token Divergence: Measuring and Steering In-Context Computation Density
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

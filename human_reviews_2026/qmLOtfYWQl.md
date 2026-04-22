@@ -1,5 +1,6 @@
 # Memorization is Not Learning: Delineated through Features and Labels
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # Mean-Field Neural Differential Equations: A Game-Theoretic Approach to Sequence Prediction
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

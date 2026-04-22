@@ -1,5 +1,6 @@
 # LASS-ODE: When Large Foundation Models Meet Small Unified ODE Representations
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

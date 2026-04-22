@@ -1,5 +1,6 @@
 # Adaptive parameter-efficient fine-tuning via multi-task optimization on subset selection
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6
 

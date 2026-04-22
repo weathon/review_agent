@@ -1,5 +1,6 @@
 # Mining Valuable Sub-Expressions for Symbolic Regression
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

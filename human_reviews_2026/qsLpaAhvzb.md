@@ -1,5 +1,6 @@
 # Learning to Reject Low-Quality Explanations via User Feedback
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

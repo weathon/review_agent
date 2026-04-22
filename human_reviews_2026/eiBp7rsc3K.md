@@ -1,5 +1,6 @@
 # CoFact: Conformal Factuality Guarantees for Language Models under Covariate Shift
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

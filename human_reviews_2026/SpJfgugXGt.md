@@ -1,5 +1,6 @@
 # Data Uniformity Improves Training Efficiency and More, with a Convergence Framework Beyond the NTK Regime
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

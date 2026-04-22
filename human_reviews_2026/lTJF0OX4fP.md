@@ -1,5 +1,6 @@
 # Rectified Attribute-Missing Graph Clustering
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2, 4
 

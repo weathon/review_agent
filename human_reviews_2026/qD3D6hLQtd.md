@@ -1,5 +1,6 @@
 # Slim Object Direct Offset (SODO): Why YOLO with TOOD struggles to detect slim objects? A new matching approach for slim objects
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Do We Really Need to Approach the Entire Pareto Front in Many-Objective Bayesian Optimisation?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

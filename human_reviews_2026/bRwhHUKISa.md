@@ -1,5 +1,6 @@
 # Differentiable Average Precision Loss in DETR
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 6
 

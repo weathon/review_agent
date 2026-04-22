@@ -1,5 +1,6 @@
 # Keep the Beam on Track: Stabilizing Reward Trajectories in Guided Decoding
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

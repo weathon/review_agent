@@ -1,5 +1,6 @@
 # Scaling Quantum Machine Learning without Tricks: High-Resolution and Diverse Image Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

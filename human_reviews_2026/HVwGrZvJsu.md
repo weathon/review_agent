@@ -1,5 +1,6 @@
 # Temporal Bridges for Spatial Resolution: Enhancing Climate Data Super-Resolution with Bidirectional Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

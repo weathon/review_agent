@@ -1,5 +1,6 @@
 # MARTI: A Framework for Multi-Agent LLM Systems Reinforced Training and Inference
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6, 2, 6
 

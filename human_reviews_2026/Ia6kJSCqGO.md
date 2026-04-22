@@ -1,5 +1,6 @@
 # When Does Reasoning Matter? A Controlled Study of Reasoning’s Contribution to Model Performance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

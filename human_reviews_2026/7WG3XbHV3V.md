@@ -1,5 +1,6 @@
 # Chasing the Wind: Background Flow Tracing for Wind Speed Forecasting
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

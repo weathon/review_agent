@@ -1,5 +1,6 @@
 # Exact Certification of Neural Networks and Partition Aggregation Ensembles against Label Poisoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

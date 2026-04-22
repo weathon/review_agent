@@ -1,5 +1,6 @@
 # Obscuring Data Contamination Through Translation: Evidence from Arabic Corpora
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 2, 0, 2, 0
 

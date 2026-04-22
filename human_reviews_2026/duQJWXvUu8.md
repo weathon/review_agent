@@ -1,5 +1,6 @@
 # Uncertainty-Aware Scheduling: State-Dependent Training-Free Diffusion Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

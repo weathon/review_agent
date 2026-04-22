@@ -1,5 +1,6 @@
 # Differentiable Entropy Regularization: A Complexity-Aware Approach for Neural Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

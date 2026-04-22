@@ -1,5 +1,6 @@
 # Pass@k Training for Adaptively Balancing Exploration and Exploitation of Large Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

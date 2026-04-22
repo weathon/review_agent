@@ -1,5 +1,6 @@
 # Power and Limitations of Aggregation in Compound AI Systems
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 6, 4
 

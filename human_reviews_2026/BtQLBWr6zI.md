@@ -1,5 +1,6 @@
 # SRON: State-free LLM Training via Row-wise Gradient Normalization
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

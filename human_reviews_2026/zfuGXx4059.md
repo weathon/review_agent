@@ -1,5 +1,6 @@
 # Action Dependency Graphs for Globally Optimal Coordinated Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

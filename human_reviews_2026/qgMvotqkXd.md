@@ -1,5 +1,6 @@
 # RefCritic: Training Long Chain-of-Thought Critic Models with Refinement Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

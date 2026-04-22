@@ -1,5 +1,6 @@
 # WaterSearch: A Quality-Aware Search-based Watermarking Framework for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

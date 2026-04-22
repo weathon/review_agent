@@ -1,5 +1,6 @@
 # Multi-Agent Guided Policy Optimization
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

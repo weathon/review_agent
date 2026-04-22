@@ -1,5 +1,6 @@
 # Beyond Pass@ 1: Self-Play with Variational Problem Synthesis Sustains RLVR
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 4, 6
 

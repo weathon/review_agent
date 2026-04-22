@@ -1,5 +1,6 @@
 # ELSE: An Extremely Lightweight Adapter of Simple Expression for Vision Transformer Fine Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

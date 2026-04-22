@@ -1,5 +1,6 @@
 # Evaluating Language Models' Evaluations of Games
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

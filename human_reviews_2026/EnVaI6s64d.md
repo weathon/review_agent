@@ -1,5 +1,6 @@
 # Modeling Interference for Treatment Effect Estimation in Network Dynamic Environment
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 8
 

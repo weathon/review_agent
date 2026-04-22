@@ -1,5 +1,6 @@
 # Tucker-FNO: Tensor Tucker-Fourier Neural Operator and its Universal Approximation Theory
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

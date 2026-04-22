@@ -1,5 +1,6 @@
 # Inter-Task Learning Dynamics in Deep Linear Multi-Task Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

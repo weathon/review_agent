@@ -1,5 +1,6 @@
 # Adaptive High-Dimensional Subspace Evolution Based on Broad Learning System and Error-Correcting Output Codes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 8, 2
 

@@ -1,5 +1,6 @@
 # BadReward: Clean-Label Poisoning of Reward Models in Text-to-Image RLHF
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

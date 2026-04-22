@@ -1,5 +1,6 @@
 # SwiftTS: A Swift Selection Framework for Time Series Pre-trained Models via Multi-task Meta-Learning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

@@ -1,5 +1,6 @@
 # When AI Agents Collude Online: Financial Fraud Risks by Collaborative LLM Agents on Social Platforms
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # KinemaDiff: Towards Diffusion for Coherent and Physically Plausible Human Motion Prediction
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

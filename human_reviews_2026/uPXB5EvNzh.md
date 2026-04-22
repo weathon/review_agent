@@ -1,5 +1,6 @@
 # Sparks of Cooperative Reasoning: LLMs as Strategic Hanabi Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 8, 4, 2
 

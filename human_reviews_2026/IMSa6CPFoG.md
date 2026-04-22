@@ -1,5 +1,6 @@
 # Dream2Learn: Structured Generative Dreaming for Continual Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 6, 0
 

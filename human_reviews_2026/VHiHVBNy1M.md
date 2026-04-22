@@ -1,5 +1,6 @@
 # Inference-Time Personalized Safety Control via Paired Difference-in-Means Intervention
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 2, 4, 6, 6
 

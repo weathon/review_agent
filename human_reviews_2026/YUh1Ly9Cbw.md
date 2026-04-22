@@ -1,5 +1,6 @@
 # Demystifying MaskGIT Sampler and Beyond: Adaptive Order Selection in Masked Diffusion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

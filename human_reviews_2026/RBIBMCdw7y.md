@@ -1,5 +1,6 @@
 # The Intricate Dance of Prompt Complexity, Quality, Diversity and Consistency in T2I Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

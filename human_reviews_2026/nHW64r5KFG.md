@@ -1,5 +1,6 @@
 # Thinking as Society: Multi-Social-Agent Self-Distillation for Multimodal Misinformation Detection
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

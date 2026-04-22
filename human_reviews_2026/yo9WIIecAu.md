@@ -1,5 +1,6 @@
 # Efficient Multi-View 3D Representation via Fusion of View-Agnostic Transformations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

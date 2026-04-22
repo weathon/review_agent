@@ -1,5 +1,6 @@
 # On Training Mixture-of-Experts: A Social Choice Perspective
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 2
 

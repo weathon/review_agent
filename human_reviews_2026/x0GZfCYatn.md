@@ -1,5 +1,6 @@
 # Bridge Thinking and Acting: Unleashing Physical Potential of VLM with Generalizable Action Expert
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 4
 

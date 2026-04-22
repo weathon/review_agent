@@ -1,5 +1,6 @@
 # HyperKAN: A Plug-and-Play Tool for Personalized Weights Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

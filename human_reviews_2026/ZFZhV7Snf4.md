@@ -1,5 +1,6 @@
 # Robustness of Probabilistic Models to Low-Quality Data: A Multi-Perspective Analysis
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6
 

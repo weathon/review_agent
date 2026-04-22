@@ -1,5 +1,6 @@
 # Cer-Eval: Certifiable and Cost-Efficient Evaluation Framework for LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

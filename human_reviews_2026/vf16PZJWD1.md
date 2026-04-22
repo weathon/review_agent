@@ -1,5 +1,6 @@
 # A Minimum Variance Path Principle for Accurate and Stable Score-Based Density Ratio Estimation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8
 

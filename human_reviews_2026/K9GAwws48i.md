@@ -1,5 +1,6 @@
 # Teaching LLMs When to Stop Seeking and Start Acting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

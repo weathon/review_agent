@@ -1,5 +1,6 @@
 # Scaffold–Substituent Differentiated Diffusion for Hierarchical Molecule Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

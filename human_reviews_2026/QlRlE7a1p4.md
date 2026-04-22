@@ -1,5 +1,6 @@
 # FullPart: Generating each 3D Part at Full Resolution
 
+- Avg Score: 7.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 8
 

@@ -1,5 +1,6 @@
 # AV-Odyssey Bench: From Fundamental Audio Perception to Audio-Visual Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Multi-Objective Task-Aware Predictor for Image-Text Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # GSLLM: Geospatial Knowledge Acquisition for Large Language Model
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

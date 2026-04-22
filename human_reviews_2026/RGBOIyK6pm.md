@@ -1,5 +1,6 @@
 # Quantum Kolmogorov–Arnold Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 0, 2, 8, 6
 

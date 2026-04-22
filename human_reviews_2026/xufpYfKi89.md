@@ -1,5 +1,6 @@
 # Sparse training of neural networks based on multilevel mirror descent
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

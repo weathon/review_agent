@@ -1,5 +1,6 @@
 # Model-Based Diffusion Sampling for Predictive Control in Offline Decision Making
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

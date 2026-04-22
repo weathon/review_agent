@@ -1,5 +1,6 @@
 # GQA-Q2Q: A Large-scale Dataset for Resolving Entity Ambiguity in Visual Question-Answering via Clarifying Subquestion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

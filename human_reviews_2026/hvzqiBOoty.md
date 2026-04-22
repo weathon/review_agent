@@ -1,5 +1,6 @@
 # Uncertainty in Federated Granger Causality: From Origins to Systemic Consequences
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

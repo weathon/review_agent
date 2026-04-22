@@ -1,5 +1,6 @@
 # Combination-of-Experts with Knowledge Sharing for Cross-Task Vehicle Routing Problems
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # Towards Noise‐Robust Multi‐Agent Imitation Learning via Global Credit Sequence Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

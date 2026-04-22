@@ -1,5 +1,6 @@
 # From Model to Breach: Towards Actionable LLM-Generated Vulnerabilities Reporting
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 0, 2
 

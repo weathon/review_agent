@@ -1,5 +1,6 @@
 # NullGuard: Null-Space Embedding for Driftless Invisible Image Watermarking
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

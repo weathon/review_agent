@@ -1,5 +1,6 @@
 # Learning from Few Samples with Language-Model Guidance
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

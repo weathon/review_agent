@@ -1,5 +1,6 @@
 # A Dynamic Low-Rank Fast Gaussian Transform
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 2, 4, 6, 8
 

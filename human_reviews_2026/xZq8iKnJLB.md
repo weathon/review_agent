@@ -1,5 +1,6 @@
 # EmoFeedback²: Reinforcement of Continuous Emotional Image Generation via LVLM-based Reward and Textual Feedback
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

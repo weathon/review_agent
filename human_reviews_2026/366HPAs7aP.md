@@ -1,5 +1,6 @@
 # ContextFlow: Context-Aware Flow Matching for Trajectory Inference from Spatial Omics Data
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 6
 

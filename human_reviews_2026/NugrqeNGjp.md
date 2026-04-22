@@ -1,5 +1,6 @@
 # HybridSketchNet: Sketch-based 3D Human Mesh Reconstruction via Hybrid Point-Image Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

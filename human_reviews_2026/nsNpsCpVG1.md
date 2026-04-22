@@ -1,5 +1,6 @@
 # FrameThinker: Learning to Think with Long Videos via Multi-Turn Frame Spotlighting
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4, 6
 

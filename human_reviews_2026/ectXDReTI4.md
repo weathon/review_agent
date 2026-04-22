@@ -1,5 +1,6 @@
 # GIST: Gauge-Invariant Spectral Transformers for Scalable Graph Neural Operators
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

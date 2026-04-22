@@ -1,5 +1,6 @@
 # Learn to Merge: Meta-Learning for Adaptive Multi-Task Model Merging
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

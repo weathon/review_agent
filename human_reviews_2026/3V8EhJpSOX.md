@@ -1,5 +1,6 @@
 # Causal-EPIG: A Prediction-Oriented Active Learning Framework for CATE Estimation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

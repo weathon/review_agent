@@ -1,5 +1,6 @@
 # Knowledge Guided Bayesian Flow Network for CAD Sequence Generation
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

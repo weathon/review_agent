@@ -1,5 +1,6 @@
 # Mastering Sparse CUDA Generation through Pretrained Models and Deep Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 4, 6, 6, 8
 

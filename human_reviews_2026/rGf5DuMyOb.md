@@ -1,5 +1,6 @@
 # SPUS: A Lightweight and Parameter-Efficient Foundation Model for PDEs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

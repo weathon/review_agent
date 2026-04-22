@@ -1,5 +1,6 @@
 # HalluText: Towards Benchmarking and Mitigating OCR Hallucination for LVLMs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

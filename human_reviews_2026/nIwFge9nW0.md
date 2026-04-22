@@ -1,5 +1,6 @@
 # DenseGRPO: From Sparse to Dense Reward for Flow Matching Model Alignment
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

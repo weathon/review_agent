@@ -1,5 +1,6 @@
 # LLM-Powered Preference Elicitation in Combinatorial Assignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

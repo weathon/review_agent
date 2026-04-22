@@ -1,5 +1,6 @@
 # ID-LoRA: Efficient Low-Rank Adaptation Inspired by Matrix Interpolative Decomposition
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

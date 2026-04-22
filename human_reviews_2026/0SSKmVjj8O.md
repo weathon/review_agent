@@ -1,5 +1,6 @@
 # Sample-efficient LLM Optimization with Reset Replay
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

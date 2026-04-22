@@ -1,5 +1,6 @@
 # Time Series Forecasting: Empowering Exogenous Data with Shape Morphing
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

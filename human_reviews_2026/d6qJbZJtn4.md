@@ -1,5 +1,6 @@
 # AN ITERATIVE PROMPTING FRAMEWORK FOR LLM-BASED DATA PREPROCESSING
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

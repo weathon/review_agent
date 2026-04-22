@@ -1,5 +1,6 @@
 # GTD: Dynamic Generation of Multi LLM Agents Communication Topologies with Graph Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Subquadratic Algorithms and Hardness for Attention with Any Temperature
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

@@ -1,5 +1,6 @@
 # Ground Slow, Move Fast: A Dual-System Foundation Model for Generalizable Vision-Language Navigation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

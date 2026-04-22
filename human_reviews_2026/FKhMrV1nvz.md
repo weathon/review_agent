@@ -1,5 +1,6 @@
 # Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

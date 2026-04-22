@@ -1,5 +1,6 @@
 # EpiFormer: a transformer-based multi-relational equivariant graph neural network for antibody-aware epitope prediction
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

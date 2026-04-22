@@ -1,5 +1,6 @@
 # SafetyPairs: Isolating Safety Critical Image Features with Counterfactual Image Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Vertical Attention: Automatic Exploration of Inter-Layer Connections in Transformer-based Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

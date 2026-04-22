@@ -1,5 +1,6 @@
 # BT-MoE: A Budget-Aware Tuning Framework for Joint Bit–Rank Allocation in MoE Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

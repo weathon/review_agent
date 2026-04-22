@@ -1,5 +1,6 @@
 # AI Der Ring:The Forging of the Future A Wagnerian Gesamtkunstwerk Reimagined through Multi-agent System
 
+- Avg Score: 0.80
 - Decision: Reject
 - Scores: 2, 0, 0, 0, 2
 

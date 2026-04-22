@@ -1,5 +1,6 @@
 # Where to Begin: Efficient Pretraining via Sub-network Selection and Distillation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 4, 6
 

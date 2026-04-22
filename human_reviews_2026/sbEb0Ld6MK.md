@@ -1,5 +1,6 @@
 # Fairness via Independence: A General Regularization Framework for Machine Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

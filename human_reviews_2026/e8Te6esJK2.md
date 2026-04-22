@@ -1,5 +1,6 @@
 # Detail Enhancement and Transfer Balance for Open-Vocabulary Compositional Zero-Shot Learning
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

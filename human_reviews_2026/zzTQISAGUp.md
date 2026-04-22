@@ -1,5 +1,6 @@
 # Polychromic Objectives for Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 6
 

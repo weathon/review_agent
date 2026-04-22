@@ -1,5 +1,6 @@
 # Surrogate-Based Quantification of Policy Uncertainty in Generative Flow Networks
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

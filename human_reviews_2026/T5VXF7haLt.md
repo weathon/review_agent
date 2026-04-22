@@ -1,5 +1,6 @@
 # Beyond Hard and Soft: Hybrid Context Compression for Balancing Local and Global Information Retention
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # Semi-Supervised Noise Adaptation: Transferring Knowledge from Noise Domain
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 2, 6
 

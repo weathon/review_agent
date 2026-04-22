@@ -1,5 +1,6 @@
 # Self-Aligned Reward: Towards Effective and Efficient Reasoners
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

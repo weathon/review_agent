@@ -1,5 +1,6 @@
 # Formalising Human-in-the-Loop: Computational Reductions, Failure Modes, and Legal-Moral Responsibility
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 10
 

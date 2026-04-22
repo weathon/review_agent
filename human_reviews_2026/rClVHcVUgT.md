@@ -1,5 +1,6 @@
 # PATEin: A Privacy-Preserving Framework for Knowledge Integration via Adaptive Teacher Selection in C-LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

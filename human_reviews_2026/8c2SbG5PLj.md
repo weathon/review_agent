@@ -1,5 +1,6 @@
 # Turning the Spell Around: Lightweight Alignment Amplification via Rank-One Safety Injection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

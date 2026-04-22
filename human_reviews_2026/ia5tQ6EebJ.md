@@ -1,5 +1,6 @@
 # What Matters in RL-Based Methods for Object-Goal Navigation? An Empirical Study and A Unified Framework
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

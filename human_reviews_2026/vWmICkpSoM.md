@@ -1,5 +1,6 @@
 # ReTa-Diffusion: Exploring Task-State from Resting-State in EEG Signals via Bidirectional Decoupling and Latent Guiding for Early Detection of Subclinical Depression
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

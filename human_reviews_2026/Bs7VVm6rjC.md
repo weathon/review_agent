@@ -1,5 +1,6 @@
 # Network Shape Automata: a brain network inspired collaborative filter for link prediction in bipartite complex networks and recommendation systems
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

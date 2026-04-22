@@ -1,5 +1,6 @@
 # MoEEdit: Efficient and Routing-Stable Knowledge Editing for Mixture-of-Experts LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

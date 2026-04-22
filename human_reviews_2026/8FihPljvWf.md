@@ -1,5 +1,6 @@
 # Video-As-Prompt: Unified Semantic Control for Video Generation
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6, 8
 

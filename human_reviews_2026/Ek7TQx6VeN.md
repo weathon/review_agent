@@ -1,5 +1,6 @@
 # Goal-Conditioned Supervised Learning for Multi-Objective Recommendation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 2, 4
 

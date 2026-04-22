@@ -1,5 +1,6 @@
 # CompeteSMoE - Statistically Guaranteed Mixture of Experts Training via Competition
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 4
 

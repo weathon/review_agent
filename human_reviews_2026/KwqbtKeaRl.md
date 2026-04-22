@@ -1,5 +1,6 @@
 # AlgoForge: Specializing Code Generation Agents through Collaborative Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 2
 

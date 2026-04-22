@@ -1,5 +1,6 @@
 # Lifelong Learning with Behavior Consolidation for Vehicle Routing
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

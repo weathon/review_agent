@@ -1,5 +1,6 @@
 # Accelerating Large Language Model Inference via Speculative Decoding with Progressive Tree Drafting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

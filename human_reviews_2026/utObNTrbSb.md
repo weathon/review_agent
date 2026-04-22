@@ -1,5 +1,6 @@
 # Latent Feature Alignment: Discovering Biased and Interpretable Subpopulations in Face Recognition Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 8, 2, 2
 

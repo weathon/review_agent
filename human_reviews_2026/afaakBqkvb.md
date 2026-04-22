@@ -1,5 +1,6 @@
 # General search techniques without common knowledge for imperfect-information games, and application to superhuman Fog of War chess
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Stochastic Order Learning: An Approach to Rank Estimation Using Noisy Data
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 6, 4, 8, 6, 2
 

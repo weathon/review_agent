@@ -1,5 +1,6 @@
 # Theoretical Analysis of Relative Errors in Gradient Computations for Adversarial Attacks with CE Loss
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

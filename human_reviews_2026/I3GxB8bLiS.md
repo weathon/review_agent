@@ -1,5 +1,6 @@
 # AutoAgent: A Fully-Automated and Zero-Code Framework for LLM Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

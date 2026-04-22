@@ -1,5 +1,6 @@
 # Multiphysics Bench: Benchmarking and Investigating Scientific Machine Learning for Multiphysics PDEs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 6, 2
 

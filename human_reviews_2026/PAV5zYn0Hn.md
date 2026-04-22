@@ -1,5 +1,6 @@
 # Neural Sum-of-Squares: Certifying the Nonnegativity of Polynomials with Transformers
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2
 

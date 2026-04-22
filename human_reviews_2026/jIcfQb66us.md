@@ -1,5 +1,6 @@
 # W-EDIT: A Wavelet-Based Frequency-Aware Framework for Text-Driven Image Editing
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4, 4
 

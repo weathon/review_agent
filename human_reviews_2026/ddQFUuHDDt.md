@@ -1,5 +1,6 @@
 # When Does Divide and Conquer Work for Long Context LLM? A Noise Decomposition Framework
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

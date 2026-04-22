@@ -1,5 +1,6 @@
 # Temporal Grounding as a Learning Signal for Referring Video Object Segmentation
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4, 2
 

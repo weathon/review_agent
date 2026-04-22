@@ -1,5 +1,6 @@
 # NeSyGeo: A Neuro-Symbolic Framework for Multimodal Geometric Reasoning Data Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

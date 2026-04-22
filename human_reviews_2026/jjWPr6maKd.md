@@ -1,5 +1,6 @@
 # XGC-AVis: Towards Audio-Visual Content Understanding with a Multi-Agent Collaborative System
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

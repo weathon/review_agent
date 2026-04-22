@@ -1,5 +1,6 @@
 # MedVR: Annotation-Free Medical Visual Reasoning via Agentic Reinforcement Learning
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 2, 8, 4, 6, 4
 

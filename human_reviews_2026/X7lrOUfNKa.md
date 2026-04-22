@@ -1,5 +1,6 @@
 # GraphFractalNet: A Fractal-Inspired Sparse Transformer for Ultra-Scalable Graph Representation Learning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

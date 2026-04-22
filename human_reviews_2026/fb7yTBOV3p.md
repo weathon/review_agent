@@ -1,5 +1,6 @@
 # MobiEdit: Resource-efficient Knowledge Editing for Personalized On-device LLMs
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

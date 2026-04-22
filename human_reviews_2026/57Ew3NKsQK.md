@@ -1,5 +1,6 @@
 # Decoupling of Experts: A Knowledge-Driven Architecture for Efficient LLMs
 
+- Avg Score: 1.60
 - Decision: Reject
 - Scores: 2, 4, 0, 0, 2
 

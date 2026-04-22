@@ -1,5 +1,6 @@
 # ShapeGen4D: Towards High Quality 4D Shape Generation from Videos
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

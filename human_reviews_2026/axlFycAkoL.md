@@ -1,5 +1,6 @@
 # Selective Expert Guidance for Effective and Diverse Exploration in Reinforcement Learning of LLMs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

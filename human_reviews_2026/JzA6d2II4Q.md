@@ -1,5 +1,6 @@
 # VLM-Guided Adaptive Negative Prompting for Creative Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # VAT: Vision Action Transformer by Unlocking Full Representation of ViT
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 4, 0
 

@@ -1,5 +1,6 @@
 # CUARewardBench: Benchmark for Evaluating Reward Models on Computer-using Agent Trajectories
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

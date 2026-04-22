@@ -1,5 +1,6 @@
 # Beyond Moment : Rethinking Evaluation para-digm for Timeline Summarization in the era of LLMs
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 6
 

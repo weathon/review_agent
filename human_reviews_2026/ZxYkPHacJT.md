@@ -1,5 +1,6 @@
 # Classification vs. Deep Feature Learning in Normalized Spaces with Different Scaling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

@@ -1,5 +1,6 @@
 # TRACE: Your Diffusion Model is Secretly an Instance Edge Detector
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Loc$^{2}$: Interpretable Cross-View Localization via Depth-Lifted Local Feature Matching
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

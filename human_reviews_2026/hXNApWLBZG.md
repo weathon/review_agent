@@ -1,5 +1,6 @@
 # P-GenRM: Personalized Generative Reward Model with Test-time User-based Scaling
 
+- Avg Score: 4.67
 - Decision: Accept (Oral)
 - Scores: 4, 4, 6
 

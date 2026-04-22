@@ -1,5 +1,6 @@
 # Evoking Generalized Cognition for Exemplar Free Continual Learning via Granular Ball Representation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

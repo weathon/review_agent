@@ -1,5 +1,6 @@
 # POLO: Preference-Guided Multi-Turn Reinforcement Learning for Lead Optimization
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

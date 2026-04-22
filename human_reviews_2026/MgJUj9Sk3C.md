@@ -1,5 +1,6 @@
 # Actions Speak Louder than Prompts: A Large-Scale Study of LLMs for Graph Inference
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 2
 

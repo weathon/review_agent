@@ -1,5 +1,6 @@
 # Improving End-to-End Training of Retrieval-Augmented Generation Models via Joint Stochastic Approximation
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4
 

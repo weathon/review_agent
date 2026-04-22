@@ -1,5 +1,6 @@
 # Why Low-Precision Transformer Training Fails: An Analysis on Flash Attention
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 4, 6, 8
 

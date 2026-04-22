@@ -1,5 +1,6 @@
 # FrontierBench: Are We Only Testing Agents Under the Streetlight?
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

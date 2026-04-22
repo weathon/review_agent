@@ -1,5 +1,6 @@
 # Revisiting Mixture Policies in Entropy-Regularized Actor-Critic
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 8, 4, 6
 

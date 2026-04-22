@@ -1,5 +1,6 @@
 # KnowOS: Knowledge-driven Large Language Models for Operating System Kernel Tuning
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

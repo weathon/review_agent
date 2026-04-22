@@ -1,5 +1,6 @@
 # Rethinking the High-Throughput LLM Inference: An Opportunity for Speculative Decoding
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 4, 4
 

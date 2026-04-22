@@ -1,5 +1,6 @@
 # An AI Monkey Gets Grapes for Sure -- Sphere Neural Networks for Reliable Decision-Making
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

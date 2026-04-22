@@ -1,5 +1,6 @@
 # LiveMCP-101: Stress Testing and Diagnosing MCP-enabled Agents on Challenging Queries
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

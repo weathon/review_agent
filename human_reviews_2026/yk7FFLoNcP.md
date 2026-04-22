@@ -1,5 +1,6 @@
 # SHIELD: Suppressing Hallucinations In LVLM Encoders via Bias and Vulnerability Defense
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

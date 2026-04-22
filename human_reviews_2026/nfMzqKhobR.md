@@ -1,5 +1,6 @@
 # Fake Player: Imitating Real Player to Distill Data for LLM-based NPC Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # LSPO: Length-aware Dynamic Sampling for Policy Optimization in LLM Reasoning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

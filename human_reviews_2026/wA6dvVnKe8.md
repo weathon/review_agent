@@ -1,5 +1,6 @@
 # Model-agnostic Adversarial Attack and Defense for Vision-Language-Action Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

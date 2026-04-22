@@ -1,5 +1,6 @@
 # v1: Learning to Point Visual Tokens for Multimodal Grounded Reasoning
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 6, 6
 

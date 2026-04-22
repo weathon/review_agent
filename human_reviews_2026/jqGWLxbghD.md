@@ -1,5 +1,6 @@
 # Latent-Guided Reasoning: Empowering Small LLMs with Large-Model Thinking
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 6, 6
 

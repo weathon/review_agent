@@ -1,5 +1,6 @@
 # WebDART: Dynamic Decomposition and Re-planning for Complex Web Tasks
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 
@@ -25,7 +26,8 @@ A novel LLM agent framework (named, WebDART) is proposed to automate long-horizo
 ### Strengths
 In this section, I demonstrate the strengths of this paper.
 
-1. Solid motivation: The design behind the framework stems from grounded observations that complex tasks overload the common agent frameworks. The rationale behind the structural heuristics is also reasonably backed up by mentioning that the quality of sub-tasks differs from each other. The authors also point out the possible limitations, revealing the necessity of the second component (i.e., adaptation). 
+1. Solid motivation: The design behind the framework stems from grounded observations that complex tasks overload the common agent frameworks. The rationale behind the structural heuristics is also reasonably backed up by mentioning that the quality of sub-tasks differs from each other. The authors also point out the possible limitations, revealing the necessity of the second component (i.e., adaptation).
+
 2. Empirical supports: While navigating all the possible pages to get the task-relevant information is demanding, it can often be exhaustive. Table 2 demonstrates that such limitations can be significantly overcome with their proposed method. These results strongly support the effectiveness of the design of WebDART.
 3. Case study analysis: The case study analysis allows readers to understand how WebDART performs well in practice. The readability of the study is high, as it is organized as a concise table.
 

@@ -1,5 +1,6 @@
 # Steering Evaluation-Aware Language Models To Act Like They Are Deployed
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

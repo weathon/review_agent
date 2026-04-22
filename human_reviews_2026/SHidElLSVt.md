@@ -1,5 +1,6 @@
 # Transformers Learn Latent Mixture Models In-Context via Mirror Descent
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8, 6
 

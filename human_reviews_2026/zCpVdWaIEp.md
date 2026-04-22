@@ -1,5 +1,6 @@
 # Data Alignment Predicts Language Model Performance: Evidence from Controlled Experiments in Autoformalization
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 2, 2, 0
 

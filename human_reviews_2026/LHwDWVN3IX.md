@@ -1,5 +1,6 @@
 # EDITOR: Effective and Interpretable Prompt Inversion for Text-to-Image Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

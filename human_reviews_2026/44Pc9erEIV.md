@@ -1,5 +1,6 @@
 # Efficient Difference-in-Differences Estimation when Outcomes are Missing at Random
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

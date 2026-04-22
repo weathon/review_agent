@@ -1,5 +1,6 @@
 # Pivot-ICL: Adaptive Exemplar Selection for In-Context Learning
 
+- Avg Score: 1.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0
 

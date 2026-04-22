@@ -1,5 +1,6 @@
 # The Intrinsic Dimension of Prompts in Internal Representations of Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

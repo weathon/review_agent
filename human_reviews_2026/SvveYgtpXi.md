@@ -1,5 +1,6 @@
 # PAL-UI: Planning with Active Look-back for Vision-Based GUI Agents
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

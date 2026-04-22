@@ -1,5 +1,6 @@
 # Mixture-of-Transformers Learn Faster: A Theoretical Study on Classification Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

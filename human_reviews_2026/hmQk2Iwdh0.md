@@ -1,5 +1,6 @@
 # Reliability-Adjusted Prioritized Experience Replay
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 8
 

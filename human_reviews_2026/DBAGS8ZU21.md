@@ -1,5 +1,6 @@
 # Prot2Token: A Unified Framework for Protein Modeling via Next-Token Prediction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

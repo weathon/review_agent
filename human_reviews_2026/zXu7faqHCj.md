@@ -1,5 +1,6 @@
 # DogRot: Taming Highly Ill-Conditioned Sensing Matrix in Sparse Signal Recovery by Random Gaussian Rotator
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

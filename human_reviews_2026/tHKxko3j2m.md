@@ -1,5 +1,6 @@
 # CausalFusion: Integrating LLMs and Graph Falsification for Causal Discovery
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

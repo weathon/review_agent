@@ -1,5 +1,6 @@
 # Operator Learning for Families of Finite-State Mean-Field Games
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 8, 4
 

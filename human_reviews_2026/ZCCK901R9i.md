@@ -1,5 +1,6 @@
 # Unsupervised Prompt Learning with Few-shot Examples for Answering Objective Questions
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 6, 6
 

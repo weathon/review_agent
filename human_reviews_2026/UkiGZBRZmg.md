@@ -1,5 +1,6 @@
 # Accelerating Optimization and Machine Learning via Decentralization
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 4
 

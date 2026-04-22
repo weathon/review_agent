@@ -1,5 +1,6 @@
 # Accept More, Reject Less: Reducing up to 19% Unnecessary Desk-Rejections over 11 Years of ICLR Data
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 6
 

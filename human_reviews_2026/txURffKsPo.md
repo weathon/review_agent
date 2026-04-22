@@ -1,5 +1,6 @@
 # M3Kang: Evaluating Multilingual Multimodal Mathematical Reasoning in Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # From Frames to Clips: Efficient Key Clip Selection for Long-Form Video Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

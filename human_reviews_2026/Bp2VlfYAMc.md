@@ -1,5 +1,6 @@
 # TIPS: A Text-Image Pairs Synthesis Framework for Robust Text-based Person Retrieval
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 6, 2
 

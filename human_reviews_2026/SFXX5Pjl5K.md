@@ -1,5 +1,6 @@
 # EntropyLong: Effective Long-Context Training via Predictive Uncertainty
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 10, 2
 

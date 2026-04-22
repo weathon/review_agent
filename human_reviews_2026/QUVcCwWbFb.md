@@ -1,5 +1,6 @@
 # On the Theory of Neural Network Surjectivity: Can You Elicit Any Behavior from Your Model?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

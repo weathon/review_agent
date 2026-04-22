@@ -1,5 +1,6 @@
 # UniFy: Efficient Modeling of Non-Stationary Periodicity for Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

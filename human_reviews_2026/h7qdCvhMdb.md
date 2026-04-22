@@ -1,5 +1,6 @@
 # Can Microcanonical Langevin Dynamics Leverage Mini-Batch Gradient Noise?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

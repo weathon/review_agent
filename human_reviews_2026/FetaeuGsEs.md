@@ -1,5 +1,6 @@
 # A Hidden Semantic Bottleneck in Conditional Embeddings of Diffusion Transformers
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

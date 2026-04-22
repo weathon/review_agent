@@ -1,5 +1,6 @@
 # GOAL: Balance Multimodal Learning with Gradient Orthogonalization and Adaptive Leveraging
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

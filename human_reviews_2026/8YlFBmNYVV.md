@@ -1,5 +1,6 @@
 # Round-trip Reinforcement Learning: Self-Consistent Training for Better Chemical LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

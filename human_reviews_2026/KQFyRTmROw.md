@@ -1,5 +1,6 @@
 # Orchestrating Pre-Trained Agents for Multi-Objective Decision Making
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

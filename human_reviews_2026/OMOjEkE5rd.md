@@ -1,5 +1,6 @@
 # Breaking Safety Alignment in Large Vision-Language Models via Benign-to-Harmful Optimization
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

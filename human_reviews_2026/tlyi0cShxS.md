@@ -1,5 +1,6 @@
 # MSFT: Mitigating Spurious Correlations in Text Classification via Feature Induction in Embedding Layers and Tensor Stretching
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

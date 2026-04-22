@@ -1,5 +1,6 @@
 # MiGrATe: Mixed-Policy GRPO for Adaptation at Test-Time
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 2, 8
 

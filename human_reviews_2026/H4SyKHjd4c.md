@@ -1,5 +1,6 @@
 # Sim2Real VLA: Zero-Shot Generalization of Synthesized Skills to Realistic Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 8
 

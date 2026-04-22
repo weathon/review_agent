@@ -1,5 +1,6 @@
 # On Measuring Influence in Avoiding Undesired Future
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

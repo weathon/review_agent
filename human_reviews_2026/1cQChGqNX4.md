@@ -1,5 +1,6 @@
 # MCP-R1: Generalized Real-World Task Agent Mastering Dozens of Tools
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

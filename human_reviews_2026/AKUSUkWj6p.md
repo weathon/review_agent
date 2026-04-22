@@ -1,5 +1,6 @@
 # Oracle-efficient Hybrid Learning with Constrained Adversaries
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

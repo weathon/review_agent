@@ -1,5 +1,6 @@
 # OmniPainter: Global-Local Temporally Consistent Video Inpainting Diffusion Model
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

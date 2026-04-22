@@ -1,5 +1,6 @@
 # Sound in Sights: Deriving Visual Insights from Audio for Comprehensive Video Understanding with Large Multimodal Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

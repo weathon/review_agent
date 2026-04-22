@@ -1,5 +1,6 @@
 # Can Exploration Save Us from Adversarial Attacks? A Reinforcement Learning Approach to Adversarial Robustness
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 8, 2, 4
 

@@ -1,5 +1,6 @@
 # Boosting Domain Generalization in Object Detection through the Lens of Phase Invariance
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 2, 6, 4, 6
 

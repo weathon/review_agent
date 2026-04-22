@@ -1,5 +1,6 @@
 # SVDF-20: A LARGE-SCALE MULTILINGUAL BENCHMARK FOR AI-GENERATED SINGING DETECTION
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 6, 2
 

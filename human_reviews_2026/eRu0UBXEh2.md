@@ -1,5 +1,6 @@
 # Hypergraph-Native Message Passing: An Incidence-Centric Perspective
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

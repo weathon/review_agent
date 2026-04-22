@@ -1,5 +1,6 @@
 # MemSearcher: Training LLMs to Reason, Search and Manage Memory via End-to-End Reinforcement Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

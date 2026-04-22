@@ -1,5 +1,6 @@
 # TAPTRv3: Spatial and Temporal Context Foster Robust Tracking of Any Point in Long Video
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

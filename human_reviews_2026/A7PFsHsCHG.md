@@ -1,5 +1,6 @@
 # LangDriveEdit: Language-Driven Image Editing for Street Scenes
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

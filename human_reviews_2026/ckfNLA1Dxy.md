@@ -1,5 +1,6 @@
 # Δ-AttnMask: Attention-Guided Masked Hidden States for Efficient Data Selection and Augmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

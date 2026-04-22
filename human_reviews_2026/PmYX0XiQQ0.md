@@ -1,5 +1,6 @@
 # VLAC: A Generalist Action-Critic Model via Pair-wise Progress Understanding
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

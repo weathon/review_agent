@@ -1,5 +1,6 @@
 # Semantic Probabilistic Control of Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 2, 4, 2
 

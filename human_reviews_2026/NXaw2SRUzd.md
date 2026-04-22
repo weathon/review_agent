@@ -1,5 +1,6 @@
 # ReCAP: Recursive Prompting for Self-Supervised Category-Level Articulated Pose Estimation from an Image
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

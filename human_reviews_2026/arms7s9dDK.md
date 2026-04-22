@@ -1,5 +1,6 @@
 # Contextual Similarity Distillation: Ensemble Uncertainties with a Single Model
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 10
 

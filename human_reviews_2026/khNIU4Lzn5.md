@@ -1,5 +1,6 @@
 # Fine-Grained Urban Traffic Forecasting on Metropolis-Scale Road Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

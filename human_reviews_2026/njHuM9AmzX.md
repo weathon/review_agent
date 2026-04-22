@@ -1,5 +1,6 @@
 # Thought Purity: A Defense Framework For Chain-of-Thought Attack
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Hyper-SET: Designing Transformers via Hyperspherical Energy Minimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 2
 

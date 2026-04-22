@@ -1,5 +1,6 @@
 # Shape-Adaptive Guidance Signal for Interactive Cortical Sulcal Labeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

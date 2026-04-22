@@ -1,5 +1,6 @@
 # Barriers for Learning in an Evolving World:  Mathematical Understanding of Loss of Plasticity
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 6
 

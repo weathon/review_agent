@@ -1,5 +1,6 @@
 # MANGO: MANGROVE GLOBAL OBSERVATIONS –A DATASET AND BENCHMARK
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4
 

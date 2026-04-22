@@ -1,5 +1,6 @@
 # Automating the Refinement of Reinforcement Learning Specifications
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

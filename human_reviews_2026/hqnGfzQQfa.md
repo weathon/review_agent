@@ -1,5 +1,6 @@
 # Stratified GRPO: Handling Structural Heterogeneity in Reinforcement Learning of LLM Search Agents
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

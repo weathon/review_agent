@@ -1,5 +1,6 @@
 # One-Shot Style Personalization for RL Agents via Latent Discriminator
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

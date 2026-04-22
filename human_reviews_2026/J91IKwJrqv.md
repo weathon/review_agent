@@ -1,5 +1,6 @@
 # QLCoder: A Query Synthesizer For Static Analysis of Security Vulnerabilities
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 8, 6
 

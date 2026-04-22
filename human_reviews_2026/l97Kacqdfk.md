@@ -1,5 +1,6 @@
 # Graph-based Nearest Neighbors with Dynamic Updates via Random Walks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

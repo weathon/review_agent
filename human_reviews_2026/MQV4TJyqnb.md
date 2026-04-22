@@ -1,5 +1,6 @@
 # RuleReasoner: Reinforced Rule-based Reasoning via Domain-aware Dynamic Sampling
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4, 6
 

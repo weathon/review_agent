@@ -1,5 +1,6 @@
 # Flash-Searcher: Fast and Effective Web Agents via DAG-Based Parallel Execution
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 8, 6
 

@@ -1,5 +1,6 @@
 # Uncovering Grounding IDs: How External Cues Shape Multi-Modal Binding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

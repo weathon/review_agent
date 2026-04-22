@@ -1,5 +1,6 @@
 # Preconditioned Norms: A Unified Framework for Steepest Descent, Quasi-Newton and Adaptive Methods
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

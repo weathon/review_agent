@@ -1,5 +1,6 @@
 # Learning-Based Autonomy from Kernel-Embedded Multi-modal Fusion to Feedback Control
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 0, 2, 4
 

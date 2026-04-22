@@ -1,5 +1,6 @@
 # Interact-RAG: Reason and Interact with the Corpus, Beyond Black-Box Retrieval
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

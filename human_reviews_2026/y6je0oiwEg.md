@@ -1,5 +1,6 @@
 # Datatype tagging and prompt alignment: a recipe for boosting LLMs on algorithmic tasks
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 2
 

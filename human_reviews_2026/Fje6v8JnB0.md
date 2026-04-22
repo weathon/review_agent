@@ -1,5 +1,6 @@
 # FLEX: A Largescale Multimodal, Multiview Dataset for Learning Structured Representations of Fitness Action Quality
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 2, 6, 6, 8
 

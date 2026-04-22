@@ -1,5 +1,6 @@
 # Elastic Mixture of Rank-Wise Experts for Knowledge Reuse in Federated Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4
 

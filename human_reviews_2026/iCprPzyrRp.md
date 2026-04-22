@@ -1,5 +1,6 @@
 # From Cheap Geometry to Expensive Physics: A Physics-agnostic Pretraining Framework for Neural Operators
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2, 4
 

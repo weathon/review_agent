@@ -1,5 +1,6 @@
 # Robust Generalized Schr\"{o}dinger Bridge via Sparse Variational Gaussian Processes
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

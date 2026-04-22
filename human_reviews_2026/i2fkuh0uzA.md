@@ -1,5 +1,6 @@
 # Aligning Rotational and Hierarchical Geometry in Molecular Representation Learning with Product-Manifold Latent Spaces
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

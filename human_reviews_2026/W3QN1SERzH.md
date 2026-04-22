@@ -1,5 +1,6 @@
 # Temporally-Grounded Language Generation: A Benchmark for Real-Time Vision-Language Models
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2
 

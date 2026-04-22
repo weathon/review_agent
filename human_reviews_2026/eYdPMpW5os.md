@@ -1,5 +1,6 @@
 # OBS-Diff: Accurate Pruning For Diffusion Models in One-Shot
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

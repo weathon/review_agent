@@ -1,5 +1,6 @@
 # Addressing Exogenous Variability in Cooperative Multi-Agent Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

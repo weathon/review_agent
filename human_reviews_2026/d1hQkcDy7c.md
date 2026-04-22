@@ -1,5 +1,6 @@
 # Directional Sheaf Hypergraph Networks: Unifying Learning on Directed and Undirected Hypergraphs
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

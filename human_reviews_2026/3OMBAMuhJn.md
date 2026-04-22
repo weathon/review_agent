@@ -1,5 +1,6 @@
 # Heterogeneous-Modal Unsupervised Domain Adaptation via Latent Space Bridging
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Automated Creativity Evaluation for LLMs with Semantic Entropy and Efficient Multi-Agent Judging Across Open-Ended Tasks
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

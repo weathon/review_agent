@@ -1,5 +1,6 @@
 # MIST: Multiple Stochastic Prompt Tuning for Few-shot Adaptation under Extreme Domain Shift
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

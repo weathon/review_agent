@@ -1,5 +1,6 @@
 # Beneath the Surface: Exposing and Mitigating Surface Learning in Large Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

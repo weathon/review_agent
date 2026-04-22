@@ -1,5 +1,6 @@
 # CineTrans: Learning to Generate Videos with Cinematic Transitions via Masked Diffusion Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10
 

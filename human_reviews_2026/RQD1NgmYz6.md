@@ -1,5 +1,6 @@
 # OODEEL: A Holistic Library for Unified Post-Hoc OOD Detection Research And Application
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

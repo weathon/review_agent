@@ -1,5 +1,6 @@
 # Think Then Embed: Generative Context Improves Multimodal Embedding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Sparse but Sharp: Saliency-guided Black-box Attacks  Reveal Vulnerabilities in Skeleton-based Human  Action Recognition
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

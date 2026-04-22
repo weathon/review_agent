@@ -1,5 +1,6 @@
 # Analog Circuit Topology Design and Sizing with Flow Matching Graph Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

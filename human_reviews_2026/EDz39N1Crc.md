@@ -1,5 +1,6 @@
 # Human-Alignment and Calibration of Inference-Time Uncertainty in Large Language Models
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 2, 6, 2
 

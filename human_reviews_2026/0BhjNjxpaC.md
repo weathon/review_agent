@@ -1,5 +1,6 @@
 # Limit Analysis for Symbolic Multi-step Reasoning Tasks with Information Propagation Rules Based on Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 8, 2
 

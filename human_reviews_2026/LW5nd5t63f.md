@@ -1,5 +1,6 @@
 # E$^2$GraphRAG: Advancing the Pareto Frontier in Efficiency and Effectiveness for Graph-based RAG
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

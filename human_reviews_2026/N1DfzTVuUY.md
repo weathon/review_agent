@@ -1,5 +1,6 @@
 # Training-Free Text-Guided Color Editing with Multi-Modal Diffusion Transformer
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

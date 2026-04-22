@@ -1,5 +1,6 @@
 # Cultivating Pluralism In Algorithmic Monoculture: The Community Alignment Dataset
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 10, 4, 6
 

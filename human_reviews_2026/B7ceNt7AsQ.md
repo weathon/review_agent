@@ -1,5 +1,6 @@
 # Experience-Driven Exploration for Efficient API-Free AI Agents
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

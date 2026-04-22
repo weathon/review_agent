@@ -1,5 +1,6 @@
 # Which LLM to pick? Online Active Model Selection for Large Language Models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

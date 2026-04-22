@@ -1,5 +1,6 @@
 # Variational Adapter for Cross-modal Similarity Representation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

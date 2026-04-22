@@ -1,5 +1,6 @@
 # AnimalGS: 4D Animal Reconstruction from Monocular video with 3D Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

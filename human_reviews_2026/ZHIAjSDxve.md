@@ -1,5 +1,6 @@
 # Beyond Markov Assumption: Improving Sample Efficiency in MDPs by Historical Augmentation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

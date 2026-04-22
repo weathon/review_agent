@@ -1,5 +1,6 @@
 # Flatness-Aware Stochastic Gradient Langevin Dynamics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 2, 6
 

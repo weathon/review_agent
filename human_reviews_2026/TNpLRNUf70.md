@@ -1,5 +1,6 @@
 # Telescope: Improving Zero Shot Detection of LLM Generated Content With Token Repetition
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 2, 2, 2, 0
 

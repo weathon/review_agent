@@ -1,5 +1,6 @@
 # Enhancing Molecular Property Predictions by Learning from Bond Modelling and Interactions
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

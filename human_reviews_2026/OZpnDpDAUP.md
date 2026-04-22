@@ -1,5 +1,6 @@
 # Overcoming Redundant Context in Auto-Regressive LLMs with Dynamic Draft Refinement
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 4, 0
 

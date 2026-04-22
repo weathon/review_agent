@@ -1,5 +1,6 @@
 # Decoding Layer by Layer: Uncovering Hierarchical Reasoning in Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

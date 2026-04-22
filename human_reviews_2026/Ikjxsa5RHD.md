@@ -1,5 +1,6 @@
 # LLM-Assisted Reinforcement Learning for Distributed Scheduling
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

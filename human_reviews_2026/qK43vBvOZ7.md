@@ -1,5 +1,6 @@
 # When Fewer Layers Break More Chains: Layer Pruning Harms Test-Time Scaling in LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

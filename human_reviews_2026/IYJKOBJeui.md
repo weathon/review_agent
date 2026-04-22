@@ -1,5 +1,6 @@
 # Negative-Guided Subject Fidelity Optimization for Zero-Shot Subject-Driven Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

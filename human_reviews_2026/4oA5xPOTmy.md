@@ -1,5 +1,6 @@
 # Multimodal Cancer Survival Analysis with Learnable Queries
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

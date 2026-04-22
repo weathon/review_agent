@@ -1,5 +1,6 @@
 # Large Reasoning Models Learn Better Alignment from Flawed Thinking
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 4, 8, 8
 

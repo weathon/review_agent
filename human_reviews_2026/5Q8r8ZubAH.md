@@ -1,5 +1,6 @@
 # Multiverse Mechanica: A Testbed for Learning Game Mechanics via Counterfactual Worlds
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6, 4
 

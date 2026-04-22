@@ -1,5 +1,6 @@
 # Deterministic Bounds and Random Estimates of Metric Tensors on Neuromanifolds
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

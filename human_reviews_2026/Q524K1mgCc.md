@@ -1,5 +1,6 @@
 # LATTS: LAtent space Test Time Scaling for diffusion language models
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

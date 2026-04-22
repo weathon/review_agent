@@ -1,5 +1,6 @@
 # System Prompt Poisoning: Persistent Attacks on Large Language Models Beyond User Injection
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 4
 

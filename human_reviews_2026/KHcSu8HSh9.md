@@ -1,5 +1,6 @@
 # WavJEPA: Semantic learning unlocks robust audio foundation models for raw waveforms
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

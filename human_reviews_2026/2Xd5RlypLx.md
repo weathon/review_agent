@@ -1,5 +1,6 @@
 # Diverse Text Decoding via Iterative Reweighting
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

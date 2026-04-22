@@ -1,5 +1,6 @@
 # Intermediate Layers Can Be Self-Hard Negative Generator For Large Language Model Based Recommendation
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

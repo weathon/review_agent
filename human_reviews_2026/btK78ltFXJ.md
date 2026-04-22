@@ -1,5 +1,6 @@
 # JudgeAgent: Knowledge-wise and Dynamic LLM Evaluation with Agent-as-Interviewer
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 2, 6
 

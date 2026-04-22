@@ -1,5 +1,6 @@
 # LLMs Leak Training Data Beyond Verbatim Memorization via Membership Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

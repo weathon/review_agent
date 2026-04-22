@@ -1,5 +1,6 @@
 # Synthetic History: Evaluating Visual Representations of the Past in Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

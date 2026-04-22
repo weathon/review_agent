@@ -1,5 +1,6 @@
 # The Personality Illusion: Revealing Dissociation Between Self-Reports & Behavior in LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 0
 

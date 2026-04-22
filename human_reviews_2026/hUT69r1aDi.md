@@ -1,5 +1,6 @@
 # Hybrid Models for Natural Language Reasoning: The Case of Syllogistic Logic
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 8, 4, 2, 2
 

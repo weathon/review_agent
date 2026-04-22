@@ -1,5 +1,6 @@
 # GDPval: Evaluating AI Model Performance on Real-World Economically Valuable Tasks
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2
 

@@ -1,5 +1,6 @@
 # Effective Diffusion-free Score Matching for Exact Conditional Sampling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

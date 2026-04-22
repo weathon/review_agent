@@ -1,5 +1,6 @@
 # DKP: Semantic Consistency Distillation via Key-layer Pre-alignment with Large Vision-language Models for Cross-Modal Retrieval
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

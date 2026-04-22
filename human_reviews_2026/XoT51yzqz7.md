@@ -1,5 +1,6 @@
 # Interpreting Any Condition to Caption for Controllable Video Generation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6
 

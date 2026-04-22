@@ -1,5 +1,6 @@
 # TabKDE:  Simple and Scalable Tabular Data Generation with Kernel Density Estimates
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 0
 

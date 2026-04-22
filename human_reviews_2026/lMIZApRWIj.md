@@ -1,5 +1,6 @@
 # Meta Pruning via Graph Metanetworks : A Universal Meta Learning Framework for Network Pruning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Robobench: A Comprehensive Evaluation Benchmark For Multimodal Large Language Models as Embodied Brain
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

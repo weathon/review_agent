@@ -1,5 +1,6 @@
 # Statistical Optimality of Newton-type Federated Learning with Heterogeneous Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

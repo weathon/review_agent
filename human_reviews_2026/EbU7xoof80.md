@@ -1,5 +1,6 @@
 # Beyond Noise: Non-Transitive Preferences as Consistency Checks for Robust LLM Evaluation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Regret Analysis of RMSProp and AdamNC for Training Deep Interpolating Neural Networks
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 6, 4
 

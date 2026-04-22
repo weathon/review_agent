@@ -1,5 +1,6 @@
 # ERC-SVD: Error-Controlled SVD for Large Language Model Compression
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

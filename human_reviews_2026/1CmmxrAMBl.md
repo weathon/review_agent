@@ -1,5 +1,6 @@
 # Uncertainty-Aware Brain Tumor Segmentation Using Attention Residual U-Net with Guided Decoder and Monte Carlo Dropout
 
+- Avg Score: 1.33
 - Decision: Reject
 - Scores: 2, 0, 2
 

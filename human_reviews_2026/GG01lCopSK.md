@@ -1,5 +1,6 @@
 # Conditionally Whitened Generative Models for Probabilistic Time Series Forecasting
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

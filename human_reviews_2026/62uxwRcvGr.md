@@ -1,5 +1,6 @@
 # ECHOSAT: Estimating Canopy Height Over Space And Time
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

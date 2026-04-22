@@ -1,5 +1,6 @@
 # TIPS: Turn-level Information-Potential Reward Shaping for Search-Augmented LLMs
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6, 4
 

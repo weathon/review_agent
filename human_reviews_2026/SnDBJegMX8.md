@@ -1,5 +1,6 @@
 # MulVuln: Enhancing Pre-trained LLMs with Shared and Language-Specific Knowledge for Multilingual Vulnerability Detection
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 

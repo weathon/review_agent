@@ -1,5 +1,6 @@
 # Evaluation Faking: Unveiling Observer Effects in Safety Evaluation of Frontier AI Systems
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 6, 6, 6
 

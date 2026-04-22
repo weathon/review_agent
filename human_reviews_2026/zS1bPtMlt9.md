@@ -1,5 +1,6 @@
 # RePL: Pseudo-label Refinement for Semi-supervised LiDAR Semantic Segmentation
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 4
 

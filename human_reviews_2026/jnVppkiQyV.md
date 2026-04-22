@@ -1,5 +1,6 @@
 # Proof of Forgeability: Universal Repudiation against Membership Inference Attacks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 0, 6
 

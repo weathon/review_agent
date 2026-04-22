@@ -1,5 +1,6 @@
 # Targeted perturbations reveal brain-like local coding axes in robustified, but not standard, ANN-based brain models
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

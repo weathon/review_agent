@@ -1,5 +1,6 @@
 # How far can we go with ImageNet for Text-to-Image generation?
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # SEMANTIC-GUIDED LORA PARAMETERS GENERATION
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Training Matryoshka Mixture-of-Experts for Elastic Inference-Time Expert Utilization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

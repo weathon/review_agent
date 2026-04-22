@@ -1,5 +1,6 @@
 # Alignment Does Matter: Enables Pure-Speech-Token Dialogue with Frozen Text LLMs
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 4, 4, 2, 2
 

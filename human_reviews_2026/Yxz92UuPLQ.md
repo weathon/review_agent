@@ -1,5 +1,6 @@
 # Transformers are Inherently Succinct
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 8, 8, 8, 4
 

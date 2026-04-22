@@ -1,5 +1,6 @@
 # LOBBen-TM: A Benchmark Study of Limit Order Book Prediction with Temporal Modeling
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

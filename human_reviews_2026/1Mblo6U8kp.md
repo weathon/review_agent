@@ -1,5 +1,6 @@
 # VideoReasonBench: Can MLLMs Perform Vision-Centric Complex Video Reasoning?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

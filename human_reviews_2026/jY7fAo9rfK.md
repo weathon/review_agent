@@ -1,5 +1,6 @@
 # Benchmarking Empirical Privacy Protection for Adaptations of Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Oral)
 - Scores: 4, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Search Arena Meets Nuggets: Towards Explanations and Diagnostics in the Evaluation of LLM Responses
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

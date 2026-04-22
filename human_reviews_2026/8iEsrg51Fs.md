@@ -1,5 +1,6 @@
 # SciNav: A General Agent Framework for Scientific Coding Tasks
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 4
 

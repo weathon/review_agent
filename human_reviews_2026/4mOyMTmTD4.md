@@ -1,5 +1,6 @@
 # LUCID-3D: A Lightweight and Compatible Framework for Unified 3D Understanding and Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Conversational Time Series Foundation Models: Towards Explainable and Effective Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

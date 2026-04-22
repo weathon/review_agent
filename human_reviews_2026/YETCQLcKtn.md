@@ -1,5 +1,6 @@
 # PolicyFlow: Policy Optimization with Continuous Normalizing Flow in Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 8
 

@@ -1,5 +1,6 @@
 # MoCa: Modeling Object Consistency for 3D Camera Control in Video Generation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

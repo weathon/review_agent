@@ -1,5 +1,6 @@
 # When Encoders Should Stay Simple: An Empirical Analysis of Architectures for Variational Autoencoders
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 0, 0, 2, 2
 

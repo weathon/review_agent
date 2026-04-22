@@ -1,5 +1,6 @@
 # JUCAL: Jointly Calibrating Aleatoric and Epistemic Uncertainty in Classification Tasks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

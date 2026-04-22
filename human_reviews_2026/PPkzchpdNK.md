@@ -1,5 +1,6 @@
 # RIDE: Difficulty Evolving Perturbation with Item Response Theory for Mathematical Reasoning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

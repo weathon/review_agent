@@ -1,5 +1,6 @@
 # Delta-MIA: Measuring Membership Inference Attacks in Large Language Models via self-Contrast Framework
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

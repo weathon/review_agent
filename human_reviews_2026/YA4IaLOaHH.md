@@ -1,5 +1,6 @@
 # Lost in the Maze: Overcoming Context Limitations in Long-Horizon Information-Seeking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

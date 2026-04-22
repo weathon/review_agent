@@ -1,5 +1,6 @@
 # Higher Embedding Dimension Creates a Stronger World Model for a Simple Sorting Task
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 2, 2
 

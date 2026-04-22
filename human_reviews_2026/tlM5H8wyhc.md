@@ -1,5 +1,6 @@
 # Attention Misalignment Attacks: Targeting Cross-Modal Attention in Multimodal Large Language Models for Adversarial Examples
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

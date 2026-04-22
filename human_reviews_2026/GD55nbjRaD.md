@@ -1,5 +1,6 @@
 # Terra: Explorable Native 3D World Model with Point Latents
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Two Lenses are Better Than One: Dual Vector Quantization for Self-Supervised Graph Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 4, 2
 

@@ -1,5 +1,6 @@
 # Efficient Low-rank and Sparse Approximation and Adaptation for Large Language Models
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

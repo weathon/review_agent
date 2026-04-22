@@ -1,5 +1,6 @@
 # Small molecule retrieval from tandem mass spectrometry: what are we optimizing for?
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 6
 

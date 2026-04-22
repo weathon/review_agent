@@ -1,5 +1,6 @@
 # SSONN: Self-Scaled Optimized Neural Network
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 2, 4, 6
 

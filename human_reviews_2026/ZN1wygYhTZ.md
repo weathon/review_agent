@@ -1,5 +1,6 @@
 # CRRC: Residual Cross-view Learning for Deep Multi-view Clustering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

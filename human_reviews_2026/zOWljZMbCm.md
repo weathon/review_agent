@@ -1,5 +1,6 @@
 # Unlocking the Potential of Weighting Methods in Federated Learning Through Communication Compression
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

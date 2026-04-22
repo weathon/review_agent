@@ -1,5 +1,6 @@
 # Taming Curvature: Architecture Warm-up for Stable Transformer Training
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

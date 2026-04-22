@@ -1,5 +1,6 @@
 # ViaRL: Adaptive Temporal Grounding via Visual Iterated Amplification Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

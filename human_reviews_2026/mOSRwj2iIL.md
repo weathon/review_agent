@@ -1,5 +1,6 @@
 # Learning a Stable Reservoir from a Single Trajectory via Persistent Loops and Markov Flow
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 4, 4
 

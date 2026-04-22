@@ -1,5 +1,6 @@
 # Tracing the Traces: Latent Temporal Signals for Efficient and Accurate Reasoning
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

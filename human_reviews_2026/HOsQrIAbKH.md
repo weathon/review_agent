@@ -1,5 +1,6 @@
 # DLM: A Scalable Decision Language Model for Multi-Agent Sequential Decision in SMAC Tasks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

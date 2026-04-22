@@ -1,5 +1,6 @@
 # Conjecturing: An Overlooked Step in Formal Mathematical Reasoning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

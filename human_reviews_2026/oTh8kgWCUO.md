@@ -1,5 +1,6 @@
 # How do Large Language Models Learn New Domain Knowledge?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 0, 6
 

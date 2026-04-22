@@ -1,5 +1,6 @@
 # ReCalKV: Low-Rank KV Cache Compression via Head Reordering and Offline Calibration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Solving Parameter-Robust Avoid Problems with Unknown Feasibility using Reinforcement Learning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

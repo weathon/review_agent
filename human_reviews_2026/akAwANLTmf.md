@@ -1,5 +1,6 @@
 # Struc-EMB: The Potential of Structure-Aware Encoding in Language Embeddings
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 2, 8
 

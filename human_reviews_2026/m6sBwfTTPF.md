@@ -1,5 +1,6 @@
 # Missing but Not Lost: Reconstructing Arbitrarily Missing EEG Channels with Pre-trained Diffusion
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 2, 6, 4
 

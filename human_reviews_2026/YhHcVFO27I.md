@@ -1,5 +1,6 @@
 # CPPO: Contrastive Perception for Vision Language Policy Optimization
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

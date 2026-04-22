@@ -1,5 +1,6 @@
 # A Cognitive Process-Inspired Architecture for Subject-Agnostic Brain Visual Decoding
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

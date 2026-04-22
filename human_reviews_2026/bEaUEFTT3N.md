@@ -1,5 +1,6 @@
 # Test-Real-Time Adaptation against Sparse Knowledge Bottleneck
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4, 2
 

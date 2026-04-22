@@ -1,5 +1,6 @@
 # AtC: Aggregate-then-Calibrate for Human-centered Assessment
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

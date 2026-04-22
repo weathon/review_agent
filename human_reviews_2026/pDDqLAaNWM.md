@@ -1,5 +1,6 @@
 # NeoWorld: Neural Simulation of Explorable Virtual Worlds via Progressive 3D Unfolding
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

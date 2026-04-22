@@ -1,5 +1,6 @@
 # Scales++: Compute Efficient Evaluation Subset selection with Cognitive Scales Embeddings
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

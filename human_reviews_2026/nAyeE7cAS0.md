@@ -1,5 +1,6 @@
 # Latent-to-Data Cascaded Diffusion Models for Unconditional Time Series Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Diagnosing Bottlenecks in Data Visualization Understanding by Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

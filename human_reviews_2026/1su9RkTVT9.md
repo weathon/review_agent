@@ -1,5 +1,6 @@
 # Growing with Your Embodied Agent: A Human-in-the-Loop Lifelong Code Generation Framework for Long-Horizon Manipulation Skills
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

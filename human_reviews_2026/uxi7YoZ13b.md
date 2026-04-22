@@ -1,5 +1,6 @@
 # Adversarial Robust Reward Shaping for Safe Reinforcement Learning in AI-Generated Code
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

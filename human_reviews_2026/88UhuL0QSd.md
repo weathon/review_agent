@@ -1,5 +1,6 @@
 # Verbosity Tradeoffs and the Impact of Scale on the Faithfulness of LLM Self-Explanations
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

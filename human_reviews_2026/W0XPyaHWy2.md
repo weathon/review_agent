@@ -1,5 +1,6 @@
 # CLEF: Clinically-Guided Contrastive Learning for Electrocardiogram Foundation Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

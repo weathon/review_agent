@@ -1,5 +1,6 @@
 # Exploratory Memory-Augmented LLM Agent via Hybrid On- and Off-Policy Optimization
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 6
 

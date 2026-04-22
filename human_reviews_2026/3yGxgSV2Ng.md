@@ -1,5 +1,6 @@
 # Look but Don’t Touch: Gradient Informed Selection Training
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 2, 6
 

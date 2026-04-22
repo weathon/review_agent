@@ -1,5 +1,6 @@
 # Coupled Transformer Autoencoder for Disentangling Multi-Region Neural Latent Dynamics
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 6
 

@@ -1,5 +1,6 @@
 # RTLSeek: Boosting the LLM-Based RTL Generation with Diversity-Oriented Reinforcement Learning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

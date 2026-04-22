@@ -1,5 +1,6 @@
 # Evaluating and Explaining Prompt Sensitivity of LLMs Using Interactions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

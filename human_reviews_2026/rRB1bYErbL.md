@@ -1,5 +1,6 @@
 # R-Horizon: How Far Can Your Large Reasoning Model Really Go in Breadth and Depth?
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

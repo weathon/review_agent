@@ -1,5 +1,6 @@
 # Learning of Population Dynamics: Inverse Optimization Meets JKO Scheme
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

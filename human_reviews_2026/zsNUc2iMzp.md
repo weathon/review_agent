@@ -1,5 +1,6 @@
 # LMask: Learn to Solve Constrained Routing Problems with Lazy Masking
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6
 

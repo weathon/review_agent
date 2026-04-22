@@ -1,5 +1,6 @@
 # Beyond the Final Layer: Intermediate Representations for Better Multilingual Calibration in Large Language Models
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 6, 4
 

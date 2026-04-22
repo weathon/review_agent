@@ -1,5 +1,6 @@
 # Layer-Scaled Weight Initialization for Efficient Deep Neural Network Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

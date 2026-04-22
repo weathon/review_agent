@@ -1,5 +1,6 @@
 # MemoPhishAgent: Memory-Augmented Multi-Modal LLM Agent for Phishing URL Detection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

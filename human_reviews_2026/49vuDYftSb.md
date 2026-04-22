@@ -1,5 +1,6 @@
 # Temporal Score Rescaling for Temperature Sampling in Diffusion and Flow Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

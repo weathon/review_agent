@@ -1,5 +1,6 @@
 # Inverse Linear Bandits via Linear Programs
 
+- Avg Score: 6.50
 - Decision: Reject
 - Scores: 6, 4, 8, 8
 

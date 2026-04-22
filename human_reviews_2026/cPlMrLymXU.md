@@ -1,5 +1,6 @@
 # Unlocking the Power of Mixture-of-Experts for Task-Aware Time Series Analytics
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 4
 

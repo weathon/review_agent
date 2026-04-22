@@ -1,5 +1,6 @@
 # From Evaluation to Defense: Advancing Safety in Video Large Language Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4
 

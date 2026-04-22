@@ -1,5 +1,6 @@
 # Diffuse and Disperse: Image Generation with Representation Regularization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # Refining Heuristic-Based Bitcoin Address Clustering with Graph Neural Networks
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

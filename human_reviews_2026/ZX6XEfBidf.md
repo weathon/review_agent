@@ -1,5 +1,6 @@
 # Exploring Image Generation via Mutually Exclusive Probability Spaces and Local Dependence Hypothesis
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 2, 2
 

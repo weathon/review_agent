@@ -1,5 +1,6 @@
 # Scent of Health (S-O-H): Olfactory Multivariate Time-Series Dataset for Non-Invasive Disease Screening
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

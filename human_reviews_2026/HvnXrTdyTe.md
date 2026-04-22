@@ -1,5 +1,6 @@
 # Wasserstein Hypergraph Neural Network
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 8, 2, 4
 

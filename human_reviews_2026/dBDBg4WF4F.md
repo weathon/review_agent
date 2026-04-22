@@ -1,5 +1,6 @@
 # Zero-Shot Adaptation of Behavioral Foundation Models to Unseen Dynamics
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 4
 

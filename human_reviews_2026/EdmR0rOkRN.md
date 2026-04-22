@@ -1,5 +1,6 @@
 # Keypoint Counting Classifiers: Turning Vision Transformers into Self-Explainable Models Without Training
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

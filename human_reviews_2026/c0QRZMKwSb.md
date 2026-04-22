@@ -1,5 +1,6 @@
 # NOVA3R: Non-pixel-aligned Visual Transformer for Amodal 3D Reconstruction
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 8
 

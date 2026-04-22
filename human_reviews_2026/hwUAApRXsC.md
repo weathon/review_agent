@@ -1,5 +1,6 @@
 # Answer-Consistent Chain-of-thought Reinforcement Learning For Multi-modal Large Langauge Models
 
+- Avg Score: 4.33
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 4, 6
 

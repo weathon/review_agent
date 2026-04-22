@@ -1,5 +1,6 @@
 # CleanEdit: Retention-Aware Pruning and Bounded Replay for Lifelong Model Editing
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

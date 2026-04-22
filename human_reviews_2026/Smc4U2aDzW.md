@@ -1,5 +1,6 @@
 # Omniagent: Long-Video Generation via Cross-Modal Multi-Agent Orchestration
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2
 

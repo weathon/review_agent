@@ -1,5 +1,6 @@
 # ML-Agent: Reinforcing LLM Agents for Autonomous Machine Learning Engineering
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

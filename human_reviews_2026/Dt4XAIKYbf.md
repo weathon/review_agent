@@ -1,5 +1,6 @@
 # Bridging Input Feature Spaces Towards Graph Foundation Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 10
 

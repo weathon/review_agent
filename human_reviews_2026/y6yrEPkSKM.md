@@ -1,5 +1,6 @@
 # Graph is a Natural Regularization: Revisiting Vector Quantization for Graph Representation Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # SpatialTree: Branching Out Spatial Intelligence in MLLMs via a Capability Tree
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4, 2
 

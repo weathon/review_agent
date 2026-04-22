@@ -1,5 +1,6 @@
 # Deep-ICE: The first globally optimal algorithm for empirical risk minimization of two-layer maxout and ReLU networks
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4
 

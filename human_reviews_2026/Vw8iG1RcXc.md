@@ -1,5 +1,6 @@
 # AlphaCon: In-Context Adaptation for Dynamic Alpha Generation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Rethinking the Vulnerability of Concept Erasure and a New Method
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

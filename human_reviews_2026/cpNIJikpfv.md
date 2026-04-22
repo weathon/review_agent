@@ -1,5 +1,6 @@
 # Interpretable Neural Decoding through Dynamical Embeddings
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 2, 6, 4, 4
 

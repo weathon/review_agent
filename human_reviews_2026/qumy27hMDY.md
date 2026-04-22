@@ -1,5 +1,6 @@
 # MAS$^2$: Self-Generative, Self-Configuring, Self-Rectifying Multi-Agent Systems
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 4
 

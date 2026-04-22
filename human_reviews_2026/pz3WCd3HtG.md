@@ -1,5 +1,6 @@
 # SARSteer: Safeguarding Large Audio Language Models via Safe-Ablated Refusal Steering
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

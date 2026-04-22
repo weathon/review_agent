@@ -1,5 +1,6 @@
 # MaskCO: Masked Generation Drives Effective Representation Learning and Exploiting for Combinatorial Optimization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

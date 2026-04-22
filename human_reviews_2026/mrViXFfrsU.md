@@ -1,5 +1,6 @@
 # Divid: Disentangled Spatial-Temporal Modeling within LLMs for Temporally Grounded Video Understanding
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

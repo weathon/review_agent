@@ -1,5 +1,6 @@
 # Improving the Sensitivity of Backdoor Detectors via Class Subspace Orthogonalization
 
+- Avg Score: 3.67
 - Decision: Reject
 - Scores: 4, 4, 2, 2, 4, 6
 

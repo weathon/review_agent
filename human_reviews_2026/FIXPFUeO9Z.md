@@ -1,5 +1,6 @@
 # MANZANO: A Simple and Scalable Unified Multimodal Model with a Hybrid Vision Tokenizer
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

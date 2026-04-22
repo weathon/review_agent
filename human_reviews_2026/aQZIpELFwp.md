@@ -1,5 +1,6 @@
 # Are Reasoning LLMs Robust to Interventions on their Chain-of-Thought?
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

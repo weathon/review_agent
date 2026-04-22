@@ -1,5 +1,6 @@
 # Towards Active Synthetic Data Generation for Finetuning Language Models
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

@@ -1,5 +1,6 @@
 # What really matters in matrix whitening optimizers?
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

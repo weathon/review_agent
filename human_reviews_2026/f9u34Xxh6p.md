@@ -1,5 +1,6 @@
 # Guided Actor-Critic: Off-Policy Partially Observable Reinforcement Learning with Privileged Information
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 4, 8
 

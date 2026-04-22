@@ -1,5 +1,6 @@
 # ByteFlow: Language Modeling through Adaptive Byte Compression without a Tokenizer
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

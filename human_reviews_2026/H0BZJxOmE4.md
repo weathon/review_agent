@@ -1,5 +1,6 @@
 # Unpacking Evaluation Pitfalls on Standard GNN Benchmarks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

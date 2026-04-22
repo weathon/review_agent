@@ -1,5 +1,6 @@
 # Computer-Use Agent Frameworks Can Expose Realistic Risks Through Tactics, Techniques, and Procedures
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

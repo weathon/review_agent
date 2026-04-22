@@ -1,5 +1,6 @@
 # Regularization can make diffusion models more efficient
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 8, 2, 4
 

@@ -1,5 +1,6 @@
 # FACTS: A Future-Aided Causal Teacher-Student Framework for Multimodal Time Series Forecasting
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

@@ -1,5 +1,6 @@
 # REAP the Experts: Why Pruning Prevails for One-Shot MoE compression
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6
 

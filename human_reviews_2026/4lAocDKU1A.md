@@ -1,5 +1,6 @@
 # TrajP-L: A Trajectory-Based Plugin with LoRA for Sampling Direction Correction in Distilled Diffusion Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

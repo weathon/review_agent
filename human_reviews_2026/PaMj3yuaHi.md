@@ -1,5 +1,6 @@
 # A Free Lunch in LLM Compression: Revisiting Retraining after Pruning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # NeuroCycle: Physiologically Constrained Cycling for Generating Neural Information-Rich fMRI from EEG
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # CodeRule-RL: Standard-Guided RL with Per-Rule Reward Scheduling for Code LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

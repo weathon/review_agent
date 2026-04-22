@@ -1,5 +1,6 @@
 # Hybrid Architectures for Language Models: Systematic Analysis and Design Insights
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 6, 2, 4
 

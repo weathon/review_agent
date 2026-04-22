@@ -1,5 +1,6 @@
 # HATSolver: Learning Gröbner Bases with Hierarchical Attention Transformers
 
+- Avg Score: 4.67
 - Decision: Accept (Oral)
 - Scores: 4, 6, 4
 

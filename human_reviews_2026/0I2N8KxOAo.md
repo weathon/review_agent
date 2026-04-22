@@ -1,5 +1,6 @@
 # DeFa: Non-Stationary Decomposition and Factorized Forecasting for Multivariate Time Series
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

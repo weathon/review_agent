@@ -1,5 +1,6 @@
 # Anchor-Guided Behavior Cloning with Offline Reinforcement Learning for Robust Autonomous Driving
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 2
 

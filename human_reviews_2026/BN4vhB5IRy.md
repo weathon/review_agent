@@ -1,5 +1,6 @@
 # Exploration for Deployment-Efficient Reinforcement Learning Agents
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 4, 4, 4, 2
 

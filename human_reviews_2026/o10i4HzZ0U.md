@@ -1,5 +1,6 @@
 # CLAD: Continual Learning for Robust Adversarial Text Detection and Repair in Resource-Constrained Scenarios
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

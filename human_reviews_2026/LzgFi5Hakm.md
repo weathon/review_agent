@@ -1,5 +1,6 @@
 # Unforgettable Lessons from Forgettable Images: Intra-Class Memorability Matters in Computer Vision
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 6
 

@@ -1,5 +1,6 @@
 # In-Context Reinforcement Learning through Bayesian Fusion of Context and Value Prior
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 4, 2
 

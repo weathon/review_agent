@@ -1,5 +1,6 @@
 # NextStep-1: Toward Autoregressive Image Generation with Continuous Tokens at Scale
 
+- Avg Score: 4.50
 - Decision: Accept (Oral)
 - Scores: 6, 6, 2, 4
 

@@ -1,5 +1,6 @@
 # Some Neural Networks Inherently Preserve Subspace Clustering Structure
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

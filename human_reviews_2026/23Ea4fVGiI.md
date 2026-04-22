@@ -1,5 +1,6 @@
 # Knowledge Model Prompting Increases LLM Performance on Planning Tasks
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 2, 0, 0
 

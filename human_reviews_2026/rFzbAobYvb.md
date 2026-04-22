@@ -1,5 +1,6 @@
 # PB²: Preference Space Exploration via Population-Based Methods in Preference-Based Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

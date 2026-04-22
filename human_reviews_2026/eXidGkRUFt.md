@@ -1,5 +1,6 @@
 # <SO$G_k$>: One LLM Token for Explicit Graph Structural Understanding
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

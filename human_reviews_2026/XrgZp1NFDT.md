@@ -1,5 +1,6 @@
 # Latent Space Uniformization in Generation
 
+- Avg Score: 2.80
 - Decision: Reject
 - Scores: 4, 2, 0, 4, 4
 

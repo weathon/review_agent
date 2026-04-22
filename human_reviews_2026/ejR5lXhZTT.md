@@ -1,5 +1,6 @@
 # Using Noise to Help Reach Global Minima: Turning Matrix Completion into Noisy Matrix Sensing
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 4
 
@@ -28,16 +29,22 @@ While this formulation guarantees valid RSS and RSC constants, it still suffers 
 To address this, the authors adopt and extend the lifted tensor framework of Ma et al. (2024) to the noisy setting, leveraging overparameterization to guarantee favorable optimization geometry—specifically, that all non-global critical points are strict saddles. Numerical experiments comparing the proposed tensor PCA solver with several baselines (e.g., BM factorization, SDP relaxation, spectral reweighting) demonstrate improved recovery success rates across both independent and structured sampling regimes.
 
 ### Strengths
-* The paper introduces a perturbed matrix completion formulation that ensures valid RSS and RSC constants and provides an explicit quantitative relationship between recovery accuracy, sampling rate, and noise level. 
-* It extends the lifted tensor framework to the perturbed setting, proving guarantees for local minima and establishing that spurious solutions become strict saddles under the proposed formulation. 
+* The paper introduces a perturbed matrix completion formulation that ensures valid RSS and RSC constants and provides an explicit quantitative relationship between recovery accuracy, sampling rate, and noise level.
+
+* It extends the lifted tensor framework to the perturbed setting, proving guarantees for local minima and establishing that spurious solutions become strict saddles under the proposed formulation.
+
 * The inclusion of numerical experiments—though the paper is largely theoretical—adds credibility and demonstrates the practical advantage of the proposed approach over multiple baselines.
 
 ### Weaknesses
-* Scalability: The lifted-tensor solver is memory-intensive and currently applicable only to small-scale matrices. The paper does not discuss possible algorithmic strategies, approximations, or structural assumptions that could make the proposed method practical for large-scale problems. 
-* Information-theoretic limits: While the paper derives explicit performance–sampling trade-offs, it does not discuss how close these results are to information-theoretic recovery limits for matrix completion. A comparison or partial converse analysis could provide valuable insight into the tightness and fundamental optimality of the proposed bounds.
+* Scalability:
+The lifted-tensor solver is memory-intensive and currently applicable only to small-scale matrices. The paper does not discuss possible algorithmic strategies, approximations, or structural assumptions that could make the proposed method practical for large-scale problems.
+
+* Information-theoretic limits:
+While the paper derives explicit performance–sampling trade-offs, it does not discuss how close these results are to information-theoretic recovery limits for matrix completion. A comparison or partial converse analysis could provide valuable insight into the tightness and fundamental optimality of the proposed bounds.
 
 ### Questions
-* Are there potential directions that could make the proposed approach more scalable? 
+* Are there potential directions that could make the proposed approach more scalable?
+
 * Can the authors provide any converse-style analysis or information-theoretic lower bounds on recovery accuracy in terms of the sampling rate $p$?
 
 ### Soundness

@@ -1,5 +1,6 @@
 # An AI Agent for Immune Receptor Fingerprint‑Based Diagnosis of Infection of Unknown Origin
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

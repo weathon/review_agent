@@ -1,5 +1,6 @@
 # Gradient Inversion Transcript: Leveraging Robust Generated Priors to Reconstruct Training Data from Gradient Leakage
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 6
 

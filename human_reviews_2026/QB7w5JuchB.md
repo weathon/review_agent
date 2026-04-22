@@ -1,5 +1,6 @@
 # Conditional-$t^3$VAE: Equitable Latent Space Allocation for Fair Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

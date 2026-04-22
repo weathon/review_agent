@@ -1,5 +1,6 @@
 # OpenPros: A Large-Scale Dataset for Limited View Prostate Ultrasound Computed Tomography
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

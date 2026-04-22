@@ -1,5 +1,6 @@
 # SumRA: Parameter Efficient Fine-tuning with Singular Value Decomposition and Summed Orthogonal Basis
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

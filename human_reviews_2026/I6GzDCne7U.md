@@ -1,5 +1,6 @@
 # DeepScaleR: Effective RL Scaling of Reasoning Models via Iterative Context Lengthening
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

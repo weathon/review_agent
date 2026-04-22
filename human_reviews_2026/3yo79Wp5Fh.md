@@ -1,5 +1,6 @@
 # Enhancing Zero-Shot LLM Recommendations via Semantics and Collaborative Signals
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

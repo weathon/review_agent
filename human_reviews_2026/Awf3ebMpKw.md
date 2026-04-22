@@ -1,5 +1,6 @@
 # Expert Merging: Model Merging with Unsupervised Expert Alignment and Importance-Guided Layer Chunking
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

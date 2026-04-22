@@ -1,5 +1,6 @@
 # LLM Watermark Evasion via Bias Inversion
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

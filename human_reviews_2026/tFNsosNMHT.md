@@ -1,5 +1,6 @@
 # Secure Autoregressive Inference with Prompt Separation via Key-Value Caching
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

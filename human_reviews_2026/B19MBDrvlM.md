@@ -1,5 +1,6 @@
 # On Fairness of Task Arithmetic: The Role of Task Vectors
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

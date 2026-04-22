@@ -1,5 +1,6 @@
 # Principled Fast and Meta Knowledge Learners for Continual Reinforcement Learning
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 8
 

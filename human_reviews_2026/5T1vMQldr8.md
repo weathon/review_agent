@@ -1,5 +1,6 @@
 # Subgoal-Guided Reward Shaping: Improving Preference-Based Offline Reinforcement Learning via Conditional VAEs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

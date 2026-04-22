@@ -1,5 +1,6 @@
 # RefTool: Reference-Guided Tool Creation for Knowledge-Intensive Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 2
 

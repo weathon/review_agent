@@ -1,5 +1,6 @@
 # Evolution-Aware Positive-Unlabeled Learning for Protein Design
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 0, 4
 

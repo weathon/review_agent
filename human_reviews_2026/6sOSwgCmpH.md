@@ -1,5 +1,6 @@
 # Learning Self-Critiquing Mechanisms for Region-Guided Chest X-Ray Report Generation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4
 

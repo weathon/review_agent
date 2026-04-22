@@ -1,5 +1,6 @@
 # Causal Explanations for Human Understanding in Deep Neural Policies
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

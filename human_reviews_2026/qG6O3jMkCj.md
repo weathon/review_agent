@@ -1,5 +1,6 @@
 # SurvHTE-Bench: A Benchmark for Heterogeneous Treatment Effect Estimation in Survival Analysis
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6, 4
 

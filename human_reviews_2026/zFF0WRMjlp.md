@@ -1,5 +1,6 @@
 # Your VAR Model is Secretly an Efficient and Explainable Generative Classifier
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

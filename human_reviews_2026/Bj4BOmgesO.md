@@ -1,5 +1,6 @@
 # Mutual Information Dynamics Learning: A New Paradigm for Unsupervised Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 4, 8
 

@@ -1,5 +1,6 @@
 # Is This Just Fantasy? Language Model Representations Reflect Human Judgments of Event Plausibility
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

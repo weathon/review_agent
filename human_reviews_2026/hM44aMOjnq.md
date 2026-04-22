@@ -1,5 +1,6 @@
 # Understanding Gradient Orthogonalization for Deep Learning via Non-Euclidean Trust-Region Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

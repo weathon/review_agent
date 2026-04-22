@@ -1,5 +1,6 @@
 # Beyond Length: Quantifying Long-Range Information for Long-Context LLM Pretraining Data
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

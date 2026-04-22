@@ -1,5 +1,6 @@
 # Principled Latent Diffusion for Graphs via Laplacian Autoencoders
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

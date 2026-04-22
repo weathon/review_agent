@@ -1,5 +1,6 @@
 # Whom to Trust? Adaptive Collaboration in Personalized Federated Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

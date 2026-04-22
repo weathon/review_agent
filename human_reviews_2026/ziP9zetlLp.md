@@ -1,5 +1,6 @@
 # Towards Cognitively-Faithful Decision-Making Models to Improve AI Alignment
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 2
 

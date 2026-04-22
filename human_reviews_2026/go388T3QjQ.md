@@ -1,5 +1,6 @@
 # Long-tailed Learning with Muon Optimizer
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

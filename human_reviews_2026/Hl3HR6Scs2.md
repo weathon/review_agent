@@ -1,5 +1,6 @@
 # UItron: Foundational GUI Agent with Advanced Perception and Planning
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Hierarchical Scoring with 3D Gaussian Splatting for Instance Image-Goal Navigation
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 4, 6, 6
 

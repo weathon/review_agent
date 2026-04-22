@@ -1,5 +1,6 @@
 # Parallel-R1: Towards Parallel Thinking via Reinforcement Learning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8, 2, 6, 8
 

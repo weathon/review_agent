@@ -1,5 +1,6 @@
 # Bridging Human Vision and Deep Perception with a Saccade-Fixation ROI Prior for Medical Image Segmentation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 0
 

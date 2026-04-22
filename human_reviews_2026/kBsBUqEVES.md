@@ -1,5 +1,6 @@
 # Track4Animate3D: Animating Any 3D Model via Multi-View Diffusion with Point-Tracking Motion Priors
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

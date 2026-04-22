@@ -1,5 +1,6 @@
 # Opponent Simulation as Inference-time Scaling for Self-improving Agent: Case Study of Repeated Negotiations
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

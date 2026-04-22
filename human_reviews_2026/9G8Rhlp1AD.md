@@ -1,5 +1,6 @@
 # Agent-REINFORCE: Searching Compute-Optimal Multi-LLM Collaboration Graph for Test-Time Scaling
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

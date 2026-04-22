@@ -1,5 +1,6 @@
 # PolySHAP: Extending KernelSHAP with Interaction-Informed Polynomial Regression
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 4, 8
 

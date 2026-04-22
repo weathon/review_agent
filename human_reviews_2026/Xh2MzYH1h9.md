@@ -1,5 +1,6 @@
 # MetaGen: A DSL, Database, and Benchmark for VLM-Assisted Metamaterial Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

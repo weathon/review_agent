@@ -1,5 +1,6 @@
 # $\texttt{RNAGenScape}$: Property-Guided Optimization and Interpolation of mRNA Sequences with Manifold Langevin Dynamics
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

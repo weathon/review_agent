@@ -1,5 +1,6 @@
 # Intercept Cancer: Cancer Pre-Screening with Large Scale Healthcare Foundation Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

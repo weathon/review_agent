@@ -1,5 +1,6 @@
 # SafeProtein: Red-Teaming Framework and Benchmark for Protein Foundation Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

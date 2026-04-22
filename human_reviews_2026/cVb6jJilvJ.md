@@ -1,5 +1,6 @@
 # MARVEL: Modular Abstention for Reliable and Versatile Expert LLMs
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

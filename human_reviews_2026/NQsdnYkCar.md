@@ -1,5 +1,6 @@
 # Arbitrary-Order Block SignSGD for Memory-Efficient LLM Fine-Tuning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 4
 

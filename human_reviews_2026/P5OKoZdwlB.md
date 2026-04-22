@@ -1,5 +1,6 @@
 # MicroMix: Efficient Mixed-Precision Quantization with Microscaling Formats for Large Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

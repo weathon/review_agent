@@ -1,5 +1,6 @@
 # Overlap-Adaptive Regularization for Conditional Average Treatment Effect Estimation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6
 

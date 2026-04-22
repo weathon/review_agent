@@ -1,5 +1,6 @@
 # Revisiting Active Sequential Prediction-Powered Mean Estimation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

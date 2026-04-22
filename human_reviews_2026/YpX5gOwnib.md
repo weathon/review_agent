@@ -1,5 +1,6 @@
 # ScaleMoR: Multi-Scale Mixture of Recursive Linear Experts for Time Series Forecasting
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

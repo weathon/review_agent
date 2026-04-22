@@ -1,5 +1,6 @@
 # Inferring brain plasticity rule under long-term stimulation with structured recurrent dynamics
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 4
 

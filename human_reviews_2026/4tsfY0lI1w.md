@@ -1,5 +1,6 @@
 # From Narrow to Panoramic Vision: Attention-Guided Cold-Start Reshapes Multimodal Reasoning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Learning Universal Adversarial Perturbations for Ordered Top-K Targeted Attacks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

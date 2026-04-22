@@ -1,5 +1,6 @@
 # JALMBench: Benchmarking Jailbreak Vulnerabilities in Audio Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

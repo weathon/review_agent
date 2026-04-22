@@ -1,5 +1,6 @@
 # An Agentic Framework with LLMs for Solving Complex Vehicle Routing Problems
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

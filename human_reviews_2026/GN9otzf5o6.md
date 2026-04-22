@@ -1,5 +1,6 @@
 # Inlier-Centric Post-Training Quantization for Object Detection Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

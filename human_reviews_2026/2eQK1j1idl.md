@@ -1,5 +1,6 @@
 # Dive into the Scene: Autonomous Focus Plan Generation in Vision-Language Decision-Making
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

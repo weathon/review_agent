@@ -1,5 +1,6 @@
 # HiPO-MILP: Hierarchical Preference Optimization for MILP Solving
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

@@ -1,5 +1,6 @@
 # Fine-tuning with RAG for Improving LLM Learning of New Skills
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 2, 8
 

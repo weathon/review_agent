@@ -1,5 +1,6 @@
 # Agents as Knowledge Integrator and Utilizer in Multimodal Recommendation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

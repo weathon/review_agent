@@ -1,5 +1,6 @@
 # BoRA: Towards More Expressive Low-Rank Adaptation with Block Diversity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

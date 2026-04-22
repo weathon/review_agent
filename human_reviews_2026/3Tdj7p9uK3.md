@@ -1,5 +1,6 @@
 # PLUMAGE: probablistic low-rank unbiased min variance gradient estimation framework for efficient large model training
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Pinpointing Crowd in Bird's Eye View via Proximal Contexts
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

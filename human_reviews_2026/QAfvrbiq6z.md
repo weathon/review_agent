@@ -1,5 +1,6 @@
 # CBP: Learning Shared Cognitive Basis Space and Connectivity Patterns for Cross-Task Brain Dynamics Modeling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

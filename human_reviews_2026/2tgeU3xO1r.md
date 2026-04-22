@@ -1,5 +1,6 @@
 # Origins and roles of world representations in neural networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 4, 6
 

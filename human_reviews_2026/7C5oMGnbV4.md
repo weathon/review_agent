@@ -1,5 +1,6 @@
 # A New Efficient Method for Eliminating Minor Components
 
+- Avg Score: 1.00
 - Decision: Reject
 - Scores: 4, 0, 0, 0
 

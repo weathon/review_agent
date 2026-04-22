@@ -1,5 +1,6 @@
 # Learning from Self Critique and Refinement for Faithful LLM Summarization
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 4, 4, 4
 

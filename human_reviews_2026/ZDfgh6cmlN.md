@@ -1,5 +1,6 @@
 # DNA-Net: Genetic-Inspired Dual-Chain Learning for Medical Image Domain Generalization without Negative Transfer
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # SPOT: Structured Prompting with Object-centric Tokens for open-world scene graphs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # TIC-GRPO: Provable and Efficient Optimization for Reinforcement Learning from Human Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # OPT-BENCH: Evaluating LLM Agent on Large-Scale Search Spaces Optimization Problems
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 2
 

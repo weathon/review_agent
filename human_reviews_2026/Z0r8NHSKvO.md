@@ -1,5 +1,6 @@
 # An Uncertainty-guided Manifold Smoothing Method for Non-Ideal Measurement Computed Tomography Reconstruction
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

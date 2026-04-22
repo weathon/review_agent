@@ -1,5 +1,6 @@
 # Multi-LCB: Extending LiveCodeBench to Multiple Programming Languages
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

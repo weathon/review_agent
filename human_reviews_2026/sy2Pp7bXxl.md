@@ -1,5 +1,6 @@
 # PEAR: Pixel-aligned Expressive humAn mesh Recovery
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

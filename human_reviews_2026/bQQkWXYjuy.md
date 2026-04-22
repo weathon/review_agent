@@ -1,5 +1,6 @@
 # AJF: Adaptive Jailbreak Framework Based on the Comprehension Ability of Black-Box Large Language Models
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 0, 4, 4, 2
 

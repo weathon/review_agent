@@ -1,5 +1,6 @@
 # Align and Filter: Improving Performance in Asynchronous On-Policy RL
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

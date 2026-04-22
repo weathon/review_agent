@@ -1,5 +1,6 @@
 # A Queueing-Theoretic Framework for Stability Analysis of LLM Inference with KV Cache Memory Constraints
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

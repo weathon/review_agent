@@ -1,5 +1,6 @@
 # Residual Connections Relay Generalization but Not Memorization in Transformers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

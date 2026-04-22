@@ -1,5 +1,6 @@
 # Zhyper: Factorized Hypernetworks for Conditioned LLM Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Identifying and Evaluating Inactive Heads in Pretrained LLMs
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6, 4, 8
 

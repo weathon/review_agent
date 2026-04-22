@@ -1,5 +1,6 @@
 # DualMap: Enabling Both Cache Affinity and Load Balancing for Distributed LLM Serving
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

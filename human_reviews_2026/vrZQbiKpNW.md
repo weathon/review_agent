@@ -1,5 +1,6 @@
 # MindShot: Multi-Shot Video Reconstruction from fMRI with LLM Decoding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

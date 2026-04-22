@@ -1,5 +1,6 @@
 # Continuous Reconstruction of Spatiotemporal Dynamical System with Neural PDE
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # Discovering Generalizable Governing Equations for Graph Dynamical Systems with Interpretable Neural Networks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

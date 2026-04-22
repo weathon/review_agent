@@ -1,5 +1,6 @@
 # Attention as a Compass: Efficient Exploration for Process-Supervised RL in Reasoning Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 4
 

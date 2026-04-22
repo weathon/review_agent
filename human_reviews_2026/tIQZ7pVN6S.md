@@ -1,5 +1,6 @@
 # Generalizable Heuristic Generation Through LLMs with Meta-Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8
 

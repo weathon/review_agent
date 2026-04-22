@@ -1,5 +1,6 @@
 # MC-SJD : Maximal Coupling Speculative Jacobi Decoding for Autoregressive Visual Generation Acceleration
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

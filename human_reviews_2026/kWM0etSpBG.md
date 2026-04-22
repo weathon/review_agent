@@ -1,5 +1,6 @@
 # Evaluating GFlowNet from partial episodes for stable and flexible policy-based training
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 8, 4
 

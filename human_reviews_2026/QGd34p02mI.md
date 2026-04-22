@@ -1,5 +1,6 @@
 # Flower: A Flow-Matching Solver for Inverse Problems
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Preserving Forgery Artifacts: AI-Generated Video Detection at Native Scale
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

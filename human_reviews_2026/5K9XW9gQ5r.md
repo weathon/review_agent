@@ -1,5 +1,6 @@
 # UniRL: Self-Improving Unified Multimodal Models via Supervised and Reinforcement Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

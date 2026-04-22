@@ -1,5 +1,6 @@
 # MobileRL: Online Agentic Reinforcement Learning for Mobile GUI Agents
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 4
 

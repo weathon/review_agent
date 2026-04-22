@@ -1,5 +1,6 @@
 # Ref-Adv: Exploring MLLM Visual Reasoning in Referring Expression Tasks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

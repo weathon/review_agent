@@ -1,5 +1,6 @@
 # Rethinking Masked Autoencoders for Multi-Channel Fluorescence Microscopy: Adaptive Inter-Channel Masking
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 6, 2, 4
 

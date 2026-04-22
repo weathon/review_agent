@@ -1,5 +1,6 @@
 # Likelihood Paradox Mitigation using Entropy Manipulation with Normalizing Flow in OOD Detection
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8
 

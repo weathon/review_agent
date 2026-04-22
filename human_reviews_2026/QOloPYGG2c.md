@@ -1,5 +1,6 @@
 # ReJump: A Tree-Jump Representation for Analyzing and Improving LLM Reasoning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # CLoSeR: Continual Learning in VQ-GAN for Test-time Style Refinement
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

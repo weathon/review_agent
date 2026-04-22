@@ -1,5 +1,6 @@
 # The Coherence Trap: When MLLM-Crafted Narratives Exploit Manipulated Visual Contexts
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

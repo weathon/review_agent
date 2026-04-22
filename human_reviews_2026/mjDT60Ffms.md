@@ -1,5 +1,6 @@
 # Agnostics: Learning to Synthesize Code in Any Programming Language with a Universal Reinforcement Learning Environment
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

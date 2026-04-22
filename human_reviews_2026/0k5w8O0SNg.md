@@ -1,5 +1,6 @@
 # Cartridges: Lightweight and general-purpose long context representations via self-study
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

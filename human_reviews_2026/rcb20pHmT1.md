@@ -1,5 +1,6 @@
 # HiPO: Self-Hint Policy Optimization for RLVR
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # PULSE: Projection-based Unlearning via Linear Speedy Entropy Maximization
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

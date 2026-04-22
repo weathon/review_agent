@@ -1,5 +1,6 @@
 # HGNet: Scalable Foundation Model for Automated Knowledge Graph Generation from Scientific Literature
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 8, 2
 

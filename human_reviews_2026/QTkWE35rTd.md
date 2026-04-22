@@ -1,5 +1,6 @@
 # HyperSyn: Synthesizing Instance-wise Model by Fusing Blackbox Expert via Hypernetwork
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

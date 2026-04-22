@@ -1,5 +1,6 @@
 # Is Graph Mixup Beneficial? Investigating Interpolation And Empirical Performance of Graph Mixup Methods
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 4, 6, 8
 

@@ -1,5 +1,6 @@
 # Fortune: Formula-Driven Reinforcement Learning for Symbolic Table Reasoning in Language Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

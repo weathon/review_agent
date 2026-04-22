@@ -1,5 +1,6 @@
 # DIPT: Deep Identification of Propagation Trees in Graph Diffusion
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 6
 

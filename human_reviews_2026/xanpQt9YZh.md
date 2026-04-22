@@ -1,5 +1,6 @@
 # TopoFormer: Topology Meets Attention for Graph Learning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2, 6
 

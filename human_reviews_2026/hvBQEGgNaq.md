@@ -1,5 +1,6 @@
 # The Last Token is Enough: Lightweight Contrastive Decoding for Mitigating Hallucinations in Large Vision-Language Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

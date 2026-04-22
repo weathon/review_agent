@@ -1,5 +1,6 @@
 # Get RICH or Die Scaling: Profitably Trading Inference Compute for Robustness
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6, 6
 

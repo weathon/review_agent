@@ -1,5 +1,6 @@
 # Spiking Neural Network with Mixture of Heterogeneous Enhancement Experts for Robust Underwater Object Detection
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

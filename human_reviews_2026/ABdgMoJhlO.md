@@ -1,5 +1,6 @@
 # Micro-Macro Retrieval: Reducing Long-Form Hallucination in Large Language Models
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 4
 

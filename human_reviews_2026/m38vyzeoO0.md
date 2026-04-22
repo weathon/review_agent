@@ -1,5 +1,6 @@
 # Inheriting Generalizable Knowledge from LLMs to Diverse Vertical Tasks
 
+- Avg Score: 3.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 2, 4
 

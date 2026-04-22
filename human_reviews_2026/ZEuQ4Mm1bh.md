@@ -1,5 +1,6 @@
 # Tuning without Peeking: Provable Privacy and Generalization Bounds for LLM Post-Training
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 4, 0, 6
 

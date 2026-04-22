@@ -1,5 +1,6 @@
 # Selecting Auxiliary Data via Neural Tangent Kernels for Low-Resource Domains
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

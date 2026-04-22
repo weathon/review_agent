@@ -1,5 +1,6 @@
 # Agent Learning via Early Experience
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

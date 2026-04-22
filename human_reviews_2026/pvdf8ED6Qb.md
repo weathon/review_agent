@@ -1,5 +1,6 @@
 # Toward Evaluative Thinking: Meta Policy Optimization with Evolving Reward Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

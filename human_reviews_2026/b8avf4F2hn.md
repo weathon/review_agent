@@ -1,5 +1,6 @@
 # Compositional Diffusion with Guided search for Long-Horizon Planning
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 6
 

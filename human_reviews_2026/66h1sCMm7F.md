@@ -1,5 +1,6 @@
 # Riemannian High-Order Pooling for Brain Foundation Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 8
 

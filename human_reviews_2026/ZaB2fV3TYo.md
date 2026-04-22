@@ -1,5 +1,6 @@
 # Grounding Bodily Awareness in Visual Representations for Efficient Policy Learning
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

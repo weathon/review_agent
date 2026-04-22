@@ -1,5 +1,6 @@
 # Inductive Reasoning for Temporal Knowledge Graphs with Emerging Entities
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

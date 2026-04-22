@@ -1,5 +1,6 @@
 # From Rejection to Acceptance: Model Editing Guided by Representation Transition for Jailbreak Backdooring LLMs
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

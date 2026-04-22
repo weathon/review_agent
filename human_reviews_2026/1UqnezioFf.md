@@ -1,5 +1,6 @@
 # ChartMaster: Boosting MLLMs for Chart Analysis through Data, Perception, and Reasoning Optimization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

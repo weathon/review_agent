@@ -1,5 +1,6 @@
 # Translution: Unifying Self-attention and Convolution for Adaptive and Relative Modeling
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

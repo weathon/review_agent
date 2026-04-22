@@ -1,5 +1,6 @@
 # Quantile Rendering: Efficiently Embedding High-dimensional Feature on 3D Gaussian Splatting
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

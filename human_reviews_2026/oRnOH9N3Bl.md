@@ -1,5 +1,6 @@
 # LLM Probability Concentration: How Alignment Shrinks the Generative Horizon
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 4, 4, 2
 
@@ -28,9 +29,12 @@ This work explores the behavior of LLMs during generation, focusing on the contr
 3. The subject matter would likely appeal to a broad community.
 
 ### Weaknesses
-1. In a few places I felt there is a bit of conflation between hypotheses/conjecture and things that are actually demonstrated empirically in the experiments. Specifically: 
-- In Table 2, the results show that the aligned models have lower standard deviation in task accuracy. This result does not in itself "confirm that BF is a reliable predictor of sampling consistency" (l. 377). What we see is a very anecdotal pattern of correlation between BF and accuracy STD, we do not know that this pattern is reliable and consistent (especially given the very small absolute differences in BF), and we certainly don't know that there is a causal connection between these factors (as opposed to, say, a general connection between higher task performance and lower STD). 
-- In Fig. 5, we see the effect of the resampling intervention. This is interesting in itself, but again I don't see how it can be used to directly infer that the BF metric "reflects a deeper commitment to specific generative paths", just because BF and the output token index are correlated. 
+1. In a few places I felt there is a bit of conflation between hypotheses/conjecture and things that are actually demonstrated empirically in the experiments. Specifically:
+
+- In Table 2, the results show that the aligned models have lower standard deviation in task accuracy. This result does not in itself "confirm that BF is a reliable predictor of sampling consistency" (l. 377). What we see is a very anecdotal pattern of correlation between BF and accuracy STD, we do not know that this pattern is reliable and consistent (especially given the very small absolute differences in BF), and we certainly don't know that there is a causal connection between these factors (as opposed to, say, a general connection between higher task performance and lower STD).
+
+- In Fig. 5, we see the effect of the resampling intervention. This is interesting in itself, but again I don't see how it can be used to directly infer that the BF metric "reflects a deeper commitment to specific generative paths", just because BF and the output token index are correlated.
+
 - In §7 and also in the intro and abstract there is talk about the effect of stylistic tokens, but I did not see that this is demonstrated anywhere in the paper.
 2. The main focus of the paper is on the BF metric, and in their motivation the authors state that "token-level metrics such as entropy or log-likelihood… offer only a narrow lens on model behavior: they capture local properties but miss the global structure of the output space… this motivates our proposal of the BF". As the BF is a major contribution I would have expected the paper to demonstrate this statement in some way - directly comparing how the conclusions on model behavior they draw from BF in this work differ (if at all) from the conclusions reached in prior works that supposedly focused on more "local" properties. Moreover, in practice the calculation is very similar to mean token entropy and it wasn't entirely clear to me that BF really measures something different.
 3. I found some later parts of the paper harder to follow and less self-contained - I was missing a more technical description of how exactly the resampling in §6 was performed, and I felt the concept of "nudging" (§7) and the motivation behind it was not sufficiently clear from the text.

@@ -1,5 +1,6 @@
 # SimCity: Multi-Agent Urban Development Simulation with Rich Interactions
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

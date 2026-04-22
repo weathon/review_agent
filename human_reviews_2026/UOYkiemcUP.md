@@ -1,5 +1,6 @@
 # READ: End-to-End Autonomous Driving Made Safer with Efficient Reinforcement Learning
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

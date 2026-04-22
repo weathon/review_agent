@@ -1,5 +1,6 @@
 # Mechanistic Independence: A Principle for Identifiable Disentangled Representations
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4, 8
 

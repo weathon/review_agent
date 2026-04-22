@@ -1,5 +1,6 @@
 # Foreground Confusion under Domain Shift: The Hidden Bottleneck in Source‑Free Domain Adaptive Object Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Neural Concept Verifier: Scaling Prover-Verifier Games via Concept Encodings
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

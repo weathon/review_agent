@@ -1,5 +1,6 @@
 # ATEX-CF: Attack-Informed Counterfactual Explanations for Graph Neural Networks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

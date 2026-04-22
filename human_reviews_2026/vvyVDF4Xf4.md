@@ -1,5 +1,6 @@
 # Provably Efficient Policy-Reward Co-Pretraining for Adversarial Imitation Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

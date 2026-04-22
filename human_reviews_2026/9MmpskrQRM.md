@@ -1,5 +1,6 @@
 # Zero Generalization Error Theorem for Random Interpolators via Algebraic Geometry
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

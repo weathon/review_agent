@@ -1,5 +1,6 @@
 # DyGB: Dynamic Gradient Boosting Decision Trees with In-Place Updates for Efficient Data Addition and Deletion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

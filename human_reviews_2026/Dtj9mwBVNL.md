@@ -1,5 +1,6 @@
 # The Dialogue That Heals: A Comprehensive Evaluation of Doctor Agent's Inquiry Capability
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

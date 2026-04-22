@@ -1,5 +1,6 @@
 # Layer-Wise Analysis in Exploring the Normalization Strategies in Mamba
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

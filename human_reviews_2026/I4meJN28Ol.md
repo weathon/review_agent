@@ -1,5 +1,6 @@
 # CellDuality: Unlocking Biological Reasoning in LLMs with Self-Supervised RLVR
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

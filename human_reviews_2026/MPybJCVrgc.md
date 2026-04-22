@@ -1,5 +1,6 @@
 # SQ-format: A Unified Sparse-Quantized Hardware-friendly Data Format for Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

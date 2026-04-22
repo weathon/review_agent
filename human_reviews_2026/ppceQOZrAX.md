@@ -1,5 +1,6 @@
 # On Discriminative vs. Generative classifiers: Rethinking MLLMs for Action Understanding
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

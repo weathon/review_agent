@@ -1,5 +1,6 @@
 # ReactionLLM: Data-Centric  Learning for a Compact Single-step Chemical reaction prediction model
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

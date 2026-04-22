@@ -1,5 +1,6 @@
 # AtlasKV: Augmenting LLMs with Billion-Scale Knowledge Graphs in 20GB VRAM
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 8
 

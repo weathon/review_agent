@@ -1,5 +1,6 @@
 # Coupling Experts and Routers in Mixture-of-Experts via an Auxiliary Loss
 
+- Avg Score: 6.67
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6
 

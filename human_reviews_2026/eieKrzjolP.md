@@ -1,5 +1,6 @@
 # Epipolar Prompt: A Simple Baseline for Motion Segmentation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

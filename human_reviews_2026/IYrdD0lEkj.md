@@ -1,5 +1,6 @@
 # Dedelayed: Deleting remote inference delay via on-device correction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Graph-Energy Reinforcement Learning: Adaptive Reward Design for API Usage Pattern Mining with OOD Detection
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

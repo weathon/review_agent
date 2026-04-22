@@ -1,5 +1,6 @@
 # NRGPT: An Energy-based Alternative for GPT
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6
 

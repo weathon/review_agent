@@ -1,5 +1,6 @@
 # ControlTac: Force- and Position-Controlled Tactile Data Augmentation with a Single Reference Image
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 2, 4
 

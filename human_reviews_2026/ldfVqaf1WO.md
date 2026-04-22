@@ -1,5 +1,6 @@
 # Geometry-Aware Metric for Dataset Diversity via Persistence Landscapes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 2, 6
 

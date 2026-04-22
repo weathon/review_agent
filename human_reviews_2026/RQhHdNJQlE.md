@@ -1,5 +1,6 @@
 # DeepOmni: Towards Seamless and Smart Speech Interaction with Adaptive Modality-Specific MoE
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 
@@ -126,7 +127,8 @@ The paper presents DeepOmni, a multimodal spoken language model that integrates 
 1. The paper claims native MLLMs preserve richer paralinguistic features as part of its motivation, but the evaluation lacks essential quality-based metrics to substantiate this claim and compare the expressive quality of the proposed model against other native baselines.
 
 ### Questions
-1. See weakness 1. Can we see results comparing DeepOmni's speech output against other native MLLMs on quality metrics like prosody and emotional expression? 
+1. See weakness 1. Can we see results comparing DeepOmni's speech output against other native MLLMs on quality metrics like prosody and emotional expression?
+
 
 2. The process for designating the 2 shared modality experts is missing from the adaptive partitioning mechanism (Algorithm 1). Can the authors clarify this step?
 

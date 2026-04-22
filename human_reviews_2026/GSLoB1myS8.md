@@ -1,5 +1,6 @@
 # EAT: Expert Account Tracker for Efficient MoE Inference
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

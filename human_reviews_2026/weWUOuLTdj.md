@@ -1,5 +1,6 @@
 # Generative Model via Quantile Assignment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 4, 8, 6
 

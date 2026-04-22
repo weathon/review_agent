@@ -1,5 +1,6 @@
 # SIM-Shapley: A Stable and Computationally Efficient Approach to Shapley Value Approximation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 2, 8
 

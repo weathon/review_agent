@@ -1,5 +1,6 @@
 # Efficient Multi-Agent System Training with Data Influence-Oriented Tree Search
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4
 

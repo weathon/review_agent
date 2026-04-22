@@ -1,5 +1,6 @@
 # BA2C: Bayesian Advantage Actor Critic for Few Sample Learning using Factor Graph Bayesian Neural Networks
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

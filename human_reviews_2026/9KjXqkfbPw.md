@@ -1,5 +1,6 @@
 # Brain-IT: Image Reconstruction from fMRI via Brain-Interaction Transformer
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

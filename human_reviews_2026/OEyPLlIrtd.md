@@ -1,5 +1,6 @@
 # Visual Geometry Transformer in the Wild: Distractor-Free 3D Reconstruction
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 2, 6, 6, 6, 6
 

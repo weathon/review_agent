@@ -1,5 +1,6 @@
 # The Sample Complexity of Online Reinforcement Learning: A Multi-model Perspective
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 8
 

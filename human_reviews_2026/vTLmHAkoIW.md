@@ -1,5 +1,6 @@
 # AutoDA-Timeseries: Automated Data Augmentation for Time Series
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

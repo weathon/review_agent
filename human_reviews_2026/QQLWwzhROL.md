@@ -1,5 +1,6 @@
 # CubistMerge: Spatial-Preserving Token Merging For Diverse ViT Backbones
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Caduceus: MoE-enhanced Foundation Models Unifying Biological and Natural Language
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

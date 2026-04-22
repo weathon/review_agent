@@ -1,5 +1,6 @@
 # From Genomic Whispers to Therapeutics: Multi-Resolution Transcriptome-Guided Diffusion Models for Drug Design and Screening
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 4, 2
 

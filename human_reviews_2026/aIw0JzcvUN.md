@@ -1,5 +1,6 @@
 # UniPrompt-CL: Sustainable Continual Learning in Medical AI with Unified Prompt Pools
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 2, 4, 6
 

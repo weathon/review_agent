@@ -1,5 +1,6 @@
 # Shortcut Diffusion Training with Cumulative Consistency Loss: An Optimal Control View
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 6
 

@@ -1,5 +1,6 @@
 # GOLD: Global Overview to Local Detail in Efficient Visual Grounding for GUI Agents
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

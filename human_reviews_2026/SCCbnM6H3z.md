@@ -1,5 +1,6 @@
 # Bridging the Gap Between Preference Alignment and Machine Unlearning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

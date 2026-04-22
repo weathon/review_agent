@@ -1,5 +1,6 @@
 # SituatedThinker: Grounding LLM Reasoning with Real-World through Situated Thinking
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

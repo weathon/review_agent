@@ -1,5 +1,6 @@
 # RL in Name Only? Analyzing the Structural Assumptions in RL post-training for LLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

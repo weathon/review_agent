@@ -1,5 +1,6 @@
 # INPO: Image-based Negative Preference Optimization for Concept Erasure in Text-to-Image Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

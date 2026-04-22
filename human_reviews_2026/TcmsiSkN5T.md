@@ -1,5 +1,6 @@
 # Chemical Language Models for Natural Products: A State-Space Model Approach
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 2, 4
 

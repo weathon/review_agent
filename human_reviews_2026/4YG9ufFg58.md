@@ -1,5 +1,6 @@
 # Identity-Free Deferral For Unseen Experts
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6
 

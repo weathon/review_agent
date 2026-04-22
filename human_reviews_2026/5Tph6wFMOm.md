@@ -1,5 +1,6 @@
 # SCoT: Teaching 3D-LLMs to Think Spatially with Million-scale CoT Annotations
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

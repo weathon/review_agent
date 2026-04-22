@@ -1,5 +1,6 @@
 # SPATIA: Multimodal Model for Prediction and Generation of Spatial Cell Phenotypes
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

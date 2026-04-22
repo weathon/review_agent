@@ -1,5 +1,6 @@
 # REPAIR: Robust Lifelong Model Editing via Progressive Adaptive Intervention and Reintegration
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

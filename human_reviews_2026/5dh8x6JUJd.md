@@ -1,5 +1,6 @@
 # LoRA in the Right Place: Which Block to Tune in Parameter-Efficient Fine-Tuning?
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 2
 

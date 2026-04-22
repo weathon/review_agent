@@ -1,5 +1,6 @@
 # Multi-Sample Preference Optimization for Generative Model Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Estimating structural shifts in graph domain adaptation via pairwise likelihood maximization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

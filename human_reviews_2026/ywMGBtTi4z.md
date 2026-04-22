@@ -1,5 +1,6 @@
 # What Shapes a Creative Machine Mind? Comprehensively Benchmarking Creativity in Foundation Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

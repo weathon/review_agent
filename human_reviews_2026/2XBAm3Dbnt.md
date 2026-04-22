@@ -1,5 +1,6 @@
 # EnvSocial-Diff: A Diffusion-Based Crowd Simulation Model with Environmental Conditioning and Individual-Group Interaction
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 6
 

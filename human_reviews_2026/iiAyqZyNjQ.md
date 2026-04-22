@@ -1,5 +1,6 @@
 # Self-supervised Learning to Predict Optimizer Performance: A Trade-off Study Between Ground Truth Requirements and Prediction Quality
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # TRIDENT: Cross-Domain Trajectory Spatio-Temporal  Representation via Distance-Preserving Triplet Learning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 2
 

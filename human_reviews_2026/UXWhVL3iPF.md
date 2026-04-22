@@ -1,5 +1,6 @@
 # When Bias Pretends to Be Truth: How Spurious Correlations Undermine Hallucination Detection in LLMs
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 4, 8
 

@@ -1,5 +1,6 @@
 # Contextual Multi-Armed Bandits with Minimum Aggregated Revenue Constraints
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6
 

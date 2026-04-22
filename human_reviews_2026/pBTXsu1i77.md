@@ -1,5 +1,6 @@
 # VLM-SubtleBench: How Far Are VLMs from Human-Level Subtle Comparative Reasoning?
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 2
 

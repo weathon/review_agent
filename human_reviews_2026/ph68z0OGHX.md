@@ -1,5 +1,6 @@
 # Value-aligned World Model Regularization for Model-based Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 
@@ -41,7 +42,8 @@ Albeit simple, it demonstrates substantial improvement on the Atari 100k benchma
 
 ### Questions
 **Q1. Clarification on the results**
-* Why the numbers are different from the original DreamerV3 and STORM paper?  Could the authors clarify whether differences in architecture, hyperparameters, or experimental setup could explain this discrepancy?
+* Why the numbers are different from the original DreamerV3 and STORM paper? 
+Could the authors clarify whether differences in architecture, hyperparameters, or experimental setup could explain this discrepancy?
 * It would also help if the DreamerV3 code used for experiments were made available in the supplementary materials.
 
 **Q2. Experiments with distracting dimensions**
@@ -51,7 +53,8 @@ Albeit simple, it demonstrates substantial improvement on the Atari 100k benchma
 
 **Q3. Plot of reconstruction loss with value regularization**
 * I think it would be interesting to analyze how value regularization influences the reconstruction loss. 
-* Specifically, does the improvement come from 1) higher overall reconstruction loss but better value-relevant fidelity, or 2) lower overall reconstruction loss due to improved learning signals? 
+* Specifically, does the improvement come from 1) higher overall reconstruction loss but better value-relevant fidelity, or 2) lower overall reconstruction loss due to improved learning signals?
+
 * Although not critical, such an analysis would clarify how value regularization benefits model learning.
 
 PLEASE READ: I would like to emphasize that I believe this paper is strong and has substantial potential. 

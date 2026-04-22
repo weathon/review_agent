@@ -1,5 +1,6 @@
 # InfoPrune: Revisiting Visual Token Pruning from an Information-Theoretic Perspective
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

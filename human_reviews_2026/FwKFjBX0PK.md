@@ -1,5 +1,6 @@
 # Federated Graph-Level Clustering Network with Dual Knowledge Separation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 6
 

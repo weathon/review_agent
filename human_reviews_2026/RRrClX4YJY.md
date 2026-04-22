@@ -1,5 +1,6 @@
 # SciNetBench: A Relation-Aware Benchmark for Scientific Literature Retrieval Agents
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 2, 2
 

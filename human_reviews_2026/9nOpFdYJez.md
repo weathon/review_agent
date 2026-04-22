@@ -1,5 +1,6 @@
 # From Sparse to Structured: A New Paradigm for Gradient-Based Parameter-Efficient Fine-Tuning
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 4, 6
 

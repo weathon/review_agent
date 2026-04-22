@@ -1,5 +1,6 @@
 # Overcoming Joint Intractability with Lossless Hierarchical Speculative Decoding
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 6, 0, 8, 6
 

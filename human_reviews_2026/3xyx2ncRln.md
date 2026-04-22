@@ -1,5 +1,6 @@
 # MaskInversion: Localized Embeddings via Optimization of Explainability Maps
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

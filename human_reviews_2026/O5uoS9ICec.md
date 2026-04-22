@@ -1,5 +1,6 @@
 # Adaptive Energy Amplification for Robust Time Series Forecasting
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

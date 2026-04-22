@@ -1,5 +1,6 @@
 # Render-FM: Feedforward Model for Real-time Photorealistic Volumetric Rendering
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

@@ -1,5 +1,6 @@
 # Remember Before You Explore: Persistent Shared Memory for Zero-Shot Object Navigation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

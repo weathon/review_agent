@@ -1,5 +1,6 @@
 # Continuous Hand Gesture Spotting through Deep Sequential Encoding and Probabilistic Time-Series Modeling
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

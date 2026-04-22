@@ -1,5 +1,6 @@
 # MMGenBench: Fully Automatically Evaluating LMMs from the Text-to-Image Generation Perspective
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

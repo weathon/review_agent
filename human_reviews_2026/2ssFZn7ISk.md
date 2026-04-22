@@ -1,5 +1,6 @@
 # Exchangeability in Neural Networks and its Application to Dynamic Pruning
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 6, 0, 2
 

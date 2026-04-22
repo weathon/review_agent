@@ -1,5 +1,6 @@
 # FeDaL: Federated Dataset Learning for General Time Series Foundation Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 4
 

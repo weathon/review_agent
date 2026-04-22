@@ -1,5 +1,6 @@
 # PolySona: Parameter-Efficient and Modular Latent Behavior Modeling for Traffic Simulation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

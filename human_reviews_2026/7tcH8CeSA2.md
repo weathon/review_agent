@@ -1,5 +1,6 @@
 # Cell-type Neural Ordinary Differential Equation Models for Parsing Biologically-Constrained Contributions to Neural Dynamics
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 6, 2
 

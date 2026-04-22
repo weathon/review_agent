@@ -1,5 +1,6 @@
 # EvoEngineer: Mastering Automated CUDA Kernel Code Evolution with Large Language Models
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 0, 4
 

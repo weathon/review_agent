@@ -1,5 +1,6 @@
 # DLM-One: Diffusion Language Models for One-Step Sequence Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

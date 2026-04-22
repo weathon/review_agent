@@ -1,5 +1,6 @@
 # AlphaVAE: Unified End-to-End RGBA Image Reconstruction and Generation with Alpha-Aware Representation Learning
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Gaussians on a Diet: High-Quality Memory-Bounded 3D Gaussian Splatting Training
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

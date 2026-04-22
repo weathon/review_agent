@@ -1,5 +1,6 @@
 # Route Before Retrieve: Activating Latent Routing Abilities of LLMs for RAG vs. Long Context Selection
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

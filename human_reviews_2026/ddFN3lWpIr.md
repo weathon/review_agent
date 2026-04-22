@@ -1,5 +1,6 @@
 # Everything in Its Place: Benchmarking Spatial Intelligence of Text-to-Image Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 8
 

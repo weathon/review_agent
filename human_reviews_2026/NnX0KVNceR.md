@@ -1,5 +1,6 @@
 # Generalized Pref-SHAP to Explain Preference Functions
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 6, 0
 

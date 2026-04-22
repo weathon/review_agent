@@ -1,5 +1,6 @@
 # Noise-Robust Density Estimation for Tabular Data Anomaly Detection
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

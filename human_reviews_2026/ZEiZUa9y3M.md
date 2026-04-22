@@ -1,5 +1,6 @@
 # HoP: Homeomorphic Polar Learning for Hard Constrained Optimization
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

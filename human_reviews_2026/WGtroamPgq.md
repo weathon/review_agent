@@ -1,5 +1,6 @@
 # MoEs Are Stronger than You Think: Hyper-Parallel Inference Scaling with RoE
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

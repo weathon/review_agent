@@ -1,5 +1,6 @@
 # Learning Overlap Detection for Domain-Adaptive Image-to-Point Cloud Registration
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 4
 

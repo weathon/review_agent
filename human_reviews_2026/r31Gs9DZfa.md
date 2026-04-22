@@ -1,5 +1,6 @@
 # IF-MDM: Implicit Face Motion Diffusion Model for Compressing Dynamic Motion Latent
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

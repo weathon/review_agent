@@ -1,5 +1,6 @@
 # AdaMuon: Adaptive Muon Optimizer
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 6, 4, 6
 

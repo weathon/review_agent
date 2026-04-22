@@ -1,5 +1,6 @@
 # MoRe4D: Joint 3D Motion Generation and Geometry Reconstruction for 4D Synthesis from a Single Image
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 6
 

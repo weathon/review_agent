@@ -1,5 +1,6 @@
 # CLUTCH: Contextualized Language model for Unlocking Text-Conditioned Hand motion modelling in the wild
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # The Momentum Persistence Effect: A New Theory for Why Soft Constraints Outperform Hard Projections
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 6
 

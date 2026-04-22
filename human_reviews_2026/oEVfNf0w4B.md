@@ -1,5 +1,6 @@
 # ComputerRL: Scaling End-to-End Online Reinforcement Learning for Computer Use Agents
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # CARVE: Dissecting Core Components for Accurate and Resolution-Enhanced Visual Geometry Estimation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 2
 

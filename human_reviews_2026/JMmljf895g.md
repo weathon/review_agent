@@ -1,5 +1,6 @@
 # Not-a-Bandit: Provably No-Regret Drafter Selection in Speculative Decoding for LLMs
 
+- Avg Score: 3.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 2, 4
 

@@ -1,5 +1,6 @@
 # FilMaster: Bridging Cinematic Principles and Generative AI for Automated Film Generation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

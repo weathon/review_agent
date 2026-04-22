@@ -1,5 +1,6 @@
 # Turning Uncertainty into Control: Bi-level Training with Editable Bayesian Layers
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2, 4
 

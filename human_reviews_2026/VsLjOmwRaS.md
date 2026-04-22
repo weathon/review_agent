@@ -1,5 +1,6 @@
 # Local and Unbalanced Optimal Transport for Feature Learning with Probabilistic Guarantees
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 2, 6, 4, 4
 

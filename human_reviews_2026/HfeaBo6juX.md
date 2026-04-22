@@ -1,5 +1,6 @@
 # Towards Adversarially Robust CLIP: A Hierarchical Model Fusion Method Using Optimal Transport
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

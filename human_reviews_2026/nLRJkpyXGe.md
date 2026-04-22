@@ -1,5 +1,6 @@
 # CAMEO: Correspondence-Attention Alignment for Multi-View Diffusion Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

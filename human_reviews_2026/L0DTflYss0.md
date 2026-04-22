@@ -1,5 +1,6 @@
 # A simple contraction criterion for the Sinkhorn mirror flow
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 2, 2
 

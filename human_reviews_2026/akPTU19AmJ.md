@@ -1,5 +1,6 @@
 # Sobolev Training of End-to-End Optimization Proxies
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # Uni-X: Mitigating Modality Conflict with a Two-End-Separated Architecture for Unified Multimodal Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

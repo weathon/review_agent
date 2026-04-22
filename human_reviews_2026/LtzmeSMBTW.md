@@ -1,5 +1,6 @@
 # The Curious Case of In-Training Compression of State Space Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

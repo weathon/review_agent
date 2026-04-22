@@ -1,5 +1,6 @@
 # Sage: A Scalable Framework for Evaluating LLM-as-a-Judge Without Human Effort
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

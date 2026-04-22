@@ -1,5 +1,6 @@
 # Test-Time Exploration in Unknown Environments
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

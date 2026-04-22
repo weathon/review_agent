@@ -1,5 +1,6 @@
 # PDE-Transformer: A Continuous Dynamical Systems Approach to Sequence Modeling
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 2
 

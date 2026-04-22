@@ -1,5 +1,6 @@
 # RL-Guard: Rescuing LLM Agents from Pitfalls
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 8
 

@@ -1,5 +1,6 @@
 # When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

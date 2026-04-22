@@ -1,5 +1,6 @@
 # Turn That Frown Upside Down: FaceID Customization via Cross-Training Data
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

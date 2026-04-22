@@ -1,5 +1,6 @@
 # HFSTI-Net: Hierarchical Frequency-spatial-temporal Interactions for Video Polyp Segmentation
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4
 

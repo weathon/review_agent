@@ -1,5 +1,6 @@
 # Expected Reward Prediction, with Applications to Model Routing
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

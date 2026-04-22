@@ -1,5 +1,6 @@
 # Unifying Graph-Based and Pairwise-Based Representations for Gene Regulatory Network Inference from scRNA-seq Data
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # Code-enabled language models can outperform reasoning models on diverse tasks
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 6, 2
 

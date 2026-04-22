@@ -1,5 +1,6 @@
 # Fine-grained Contrastive Learning for ECG-Report Alignment with Waveform Enhancement
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

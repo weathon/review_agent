@@ -1,5 +1,6 @@
 # Mirror Flow Matching with Heavy-Tailed Priors for Generative Modeling on Convex Domains
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

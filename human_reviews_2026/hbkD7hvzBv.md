@@ -1,5 +1,6 @@
 # From Static to Dynamic: Adaptive Monte Carlo Search for Mathematical Process Supervision
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 4
 

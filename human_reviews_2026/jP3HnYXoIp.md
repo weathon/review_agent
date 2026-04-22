@@ -1,5 +1,6 @@
 # MarS-FM: Generative Modeling of Molecular Dynamics via Markov State Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 4
 

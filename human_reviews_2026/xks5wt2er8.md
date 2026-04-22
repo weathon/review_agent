@@ -1,5 +1,6 @@
 # Latent Generative Models with Tunable Complexity for Compressed Sensing and other Inverse Problems
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

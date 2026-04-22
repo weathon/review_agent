@@ -1,5 +1,6 @@
 # Solve-Detect-Verify: Inference-Time Scaling with Flexible Generative Verifier
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 6, 2
 

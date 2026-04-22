@@ -1,5 +1,6 @@
 # DeblurSDI: Blind Image Deblurring Using Self-diffusion
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 0, 6, 2
 

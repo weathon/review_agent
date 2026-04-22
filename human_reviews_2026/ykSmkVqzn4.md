@@ -1,5 +1,6 @@
 # Flipping the Dialogue: Training and Evaluating User Language Models
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 8, 6
 

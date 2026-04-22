@@ -1,5 +1,6 @@
 # From Masks to Worlds: A Hitchhiker’s Guide to World Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0, 6
 

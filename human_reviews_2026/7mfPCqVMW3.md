@@ -1,5 +1,6 @@
 # Rethinking Reasoning Quality in Large Language Models through Enhanced Chain-of-Thought via RL
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

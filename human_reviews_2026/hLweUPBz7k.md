@@ -1,5 +1,6 @@
 # From Conversation to Query Execution: Benchmarking User and Tool Interactions for EHR Database Agents
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 4
 

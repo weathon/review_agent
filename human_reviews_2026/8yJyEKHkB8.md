@@ -1,5 +1,6 @@
 # TextAtlas5M: A Large-Scale Dataset for Long and Structured Text Image Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 0, 8, 4
 

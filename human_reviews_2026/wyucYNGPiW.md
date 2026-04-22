@@ -1,5 +1,6 @@
 # Attack-Resistant Watermarking for AIGC Image Forensics via Diffusion-based Semantic Deflection
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 8, 4
 

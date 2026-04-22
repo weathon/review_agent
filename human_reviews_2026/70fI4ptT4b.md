@@ -1,5 +1,6 @@
 # LILO: Bayesian Optimization with Interactive Natural Language Feedback
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Risk-Sensitive Reinforcement Learning for Alleviating Exploration Dilemmas in Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

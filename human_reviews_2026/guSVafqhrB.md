@@ -1,5 +1,6 @@
 # Fine-Grained Activation Steering: Steering Less, Achieving More
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

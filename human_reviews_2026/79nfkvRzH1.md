@@ -1,5 +1,6 @@
 # MW-Net: Multi-Wave U-Net with Cross-Wave Links for Multi-Scale Physical Dynamics
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

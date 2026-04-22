@@ -1,5 +1,6 @@
 # Noradrenergic-inspired gain modulation attenuates the stability gap in joint training
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 4, 2, 2, 4
 

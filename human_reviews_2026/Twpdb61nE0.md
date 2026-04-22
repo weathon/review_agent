@@ -1,5 +1,6 @@
 # Efficient Differentiable Discovery of Causal Order
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 4, 2
 

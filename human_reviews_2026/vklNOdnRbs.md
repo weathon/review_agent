@@ -1,5 +1,6 @@
 # COBRA: Contextual Bandit Algorithm for Ensuring Truthful Strategic Agents
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 2, 6, 6
 

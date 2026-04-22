@@ -1,5 +1,6 @@
 # Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM Reasoning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

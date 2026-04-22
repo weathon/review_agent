@@ -1,5 +1,6 @@
 # RadDiff: Retrieval-Augmented Denoising Diffusion for Protein Inverse Folding
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

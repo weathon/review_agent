@@ -1,5 +1,6 @@
 # SlotFM: A Motion Foundation Model with Slot Attention for Diverse Downstream Tasks
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 4, 6, 8
 

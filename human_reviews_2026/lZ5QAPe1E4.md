@@ -1,5 +1,6 @@
 # Creat3r: Confidence Reaggregation for Exploration-aware Active 3D Reconstruction
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4, 4
 

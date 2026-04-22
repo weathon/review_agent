@@ -1,5 +1,6 @@
 # Sample, Align, Synthesize: Graph-Based Response Synthesis with ConGrs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

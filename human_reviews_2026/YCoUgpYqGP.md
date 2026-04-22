@@ -1,5 +1,6 @@
 # Open-o3 Video: Grounded Video Reasoning with Explicit Spatio-Temporal Evidence
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

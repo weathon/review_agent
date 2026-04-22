@@ -1,5 +1,6 @@
 # Mitigating Position Bias in Transformers via Layer-Specific Positional Embedding Scaling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

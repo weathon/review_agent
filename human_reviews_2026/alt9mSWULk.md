@@ -1,5 +1,6 @@
 # TimeSeg: An Information-Theoretic Segment-Wise Explainer for Time-Series Predictions
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

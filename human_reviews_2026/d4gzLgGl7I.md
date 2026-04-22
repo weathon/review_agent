@@ -1,5 +1,6 @@
 # A Two-Phase Deep Learning Framework for Adaptive Time-Stepping in High-Speed Flow Modeling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 2
 

@@ -1,5 +1,6 @@
 # Building spatial world models from sparse transitional episodic memories
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

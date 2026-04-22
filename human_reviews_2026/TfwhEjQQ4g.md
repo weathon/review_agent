@@ -1,5 +1,6 @@
 # VLAAR: Vision-Language Attribute-Aware Router for Pedestrian Attribute Recognition
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

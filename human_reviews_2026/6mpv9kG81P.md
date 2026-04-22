@@ -1,5 +1,6 @@
 # Domain-Specific Data Synthesis for LLMs via Minimal Sufficient Representation Learning
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6
 

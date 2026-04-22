@@ -1,5 +1,6 @@
 # EMMA: Generalizing Real-World Robot Manipulation via Generative Visual Transfer
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 
@@ -83,7 +84,8 @@ Experiments demonstrate advantages of the proposed data augmentation approach du
 
 Moreover, using CosmosTransfer as the only baseline is a bit misleading as it does not support multi-view inference, making it a weak baseline for evaluation in a multi-view setting. The paper’s framing (“DreamTransfer achieves consistent and substantial improvements”) thus overstates novelty, since the baseline was not capable of leveraging multiple camera inputs at all.
 
-The reported 13% gain when integrating AdaMix with DreamTransfer is meaningful but modest.  Without a direct comparison to simpler baselines (e.g., reweighting by loss magnitude), and clear ablations on the metrics used for scoring, it’s hard to claim that AdaMix’s improvement is due to its design rather than generic hard-sample mining.
+The reported 13% gain when integrating AdaMix with DreamTransfer is meaningful but modest.
+ Without a direct comparison to simpler baselines (e.g., reweighting by loss magnitude), and clear ablations on the metrics used for scoring, it’s hard to claim that AdaMix’s improvement is due to its design rather than generic hard-sample mining.
 
 ### Questions
 Please address the issues with the missing details and inadequate evaluation described above. Specifically, please provide an evaluation on an established sim benchmark (e.g. RoboCasa) that shows that adding augmented samples to the existing set of demonstrations can improve the existing methods' performance of the benchmark.

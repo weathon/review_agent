@@ -1,5 +1,6 @@
 # $\texttt{EditCast3D}$: Single-Frame-Guided 3D Editing with Video Propagation and View Selection
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 4, 4, 2
 

@@ -1,5 +1,6 @@
 # Learning the Quadratic Assignment Problem with Warm-Started MCMC Finetuning and Cross-Graph Attention
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

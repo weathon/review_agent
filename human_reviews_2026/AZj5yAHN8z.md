@@ -1,5 +1,6 @@
 # MIN-MERGING: MERGE THE IMPORTANT NEURONS FOR MODEL MERGING
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

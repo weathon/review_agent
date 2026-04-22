@@ -1,5 +1,6 @@
 # RoBlock: Wide and Deep Scaling of Recommenders via Embedding Collapse Mitigation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 4, 4
 

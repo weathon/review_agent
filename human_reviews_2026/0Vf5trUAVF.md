@@ -1,5 +1,6 @@
 # Learning Ordinal Probabilistic Reward from Preferences
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 4
 

@@ -1,5 +1,6 @@
 # Rewriting Pre-Training Data Boosts LLM Performance in Math and Code
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

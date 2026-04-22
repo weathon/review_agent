@@ -1,5 +1,6 @@
 # Attention-Guided Masking and Neighbor-Informed Reconstruction for Tabular Anomaly Detection
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 4, 2
 

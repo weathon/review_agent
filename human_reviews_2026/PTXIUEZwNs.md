@@ -1,5 +1,6 @@
 # Task-Focused Consolidation with Spaced Recall: Making Neural Networks Learn like College Students
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4
 

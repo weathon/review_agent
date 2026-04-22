@@ -1,5 +1,6 @@
 # Gaussian certified unlearning in high dimensions: A hypothesis testing approach
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 8
 

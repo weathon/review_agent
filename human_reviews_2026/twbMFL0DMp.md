@@ -1,5 +1,6 @@
 # Muon Outperforms Adam in Tail-End Associative Memory Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

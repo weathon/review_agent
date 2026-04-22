@@ -1,5 +1,6 @@
 # Attend to the Active: Structure-Aware Dynamic Attention in LLMs for Compositional Instruction Following
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

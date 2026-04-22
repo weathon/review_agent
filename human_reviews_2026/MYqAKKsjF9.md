@@ -1,5 +1,6 @@
 # LifelongAgentBench: Evaluating LLM Agents as Lifelong Learners
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

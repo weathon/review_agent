@@ -1,5 +1,6 @@
 # Is Extending Modality The Right Path Towards Omni-Modality?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

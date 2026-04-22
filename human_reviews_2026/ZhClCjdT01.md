@@ -1,5 +1,6 @@
 # On-policy Reinforcement Fine-tuning with Offline reward for Multi-step Embodied Planning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

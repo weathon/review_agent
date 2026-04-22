@@ -1,5 +1,6 @@
 # Omni-Captioner: Data Pipeline, Models, and Benchmark for Omni Detailed Perception
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 8, 2
 

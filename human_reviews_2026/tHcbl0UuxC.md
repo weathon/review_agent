@@ -1,5 +1,6 @@
 # FedMOPA: Federated Multi-Objective Preference Alignment for Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

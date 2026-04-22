@@ -1,5 +1,6 @@
 # OSAQ: Outlier Self-Absorption for Accurate Low-bit LLM Quantization
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

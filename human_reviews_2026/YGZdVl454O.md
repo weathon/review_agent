@@ -1,5 +1,6 @@
 # When Small Models Team Up: A Weak‑Expert Ensemble Surpassing LLMs for Automated Intellectual‑Property Audits
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 4
 

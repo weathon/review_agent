@@ -1,5 +1,6 @@
 # Adaptive Conformal Prediction via Mixture-of-Experts Gating Similarity
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

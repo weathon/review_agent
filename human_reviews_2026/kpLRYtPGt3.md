@@ -1,5 +1,6 @@
 # Neon: Negative Extrapolation From Self-Training Improves Image Generation
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 6, 8
 

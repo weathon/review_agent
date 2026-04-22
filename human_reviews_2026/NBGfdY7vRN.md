@@ -1,5 +1,6 @@
 # Interpretable time series analysis with Gumbel dynamics
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 8, 2, 6
 

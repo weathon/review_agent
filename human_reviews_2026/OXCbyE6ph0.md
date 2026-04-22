@@ -1,5 +1,6 @@
 # Can LLMs be Fooled: A Textual Adversarial Attack method via Euphemism Rephrase to Large Language Models
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

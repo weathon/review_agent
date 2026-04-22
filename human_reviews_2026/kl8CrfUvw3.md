@@ -1,5 +1,6 @@
 # Matrix-Driven Detection and Reconstruction of LLM Weight Homology
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

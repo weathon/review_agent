@@ -1,5 +1,6 @@
 # Direct Reward Fine-Tuning on Poses for Single Image to 3D Human in the Wild
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 10
 

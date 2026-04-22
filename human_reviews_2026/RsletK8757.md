@@ -1,5 +1,6 @@
 # Can Your Model Separate Yolks with a Water Bottle? Benchmarking Physical Commonsense Understanding in Video Generation Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

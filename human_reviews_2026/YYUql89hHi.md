@@ -1,5 +1,6 @@
 # GEM-Bench: A Benchmark for Ad-Injected Response Generation within Generative Engine Marketing
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

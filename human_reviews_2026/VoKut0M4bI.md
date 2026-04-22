@@ -1,5 +1,6 @@
 # Unified Stability Bounds for Structured World Models: Geometry, Equivariance, and Identifiability as Sufficient Conditions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 6, 2
 

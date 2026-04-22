@@ -1,5 +1,6 @@
 # SecureAgentBench: Benchmarking Secure Code Generation under Realistic Vulnerability Scenarios
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

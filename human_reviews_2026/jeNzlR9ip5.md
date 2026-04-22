@@ -1,5 +1,6 @@
 # Retina Vision Transformer (RetinaViT): Measuring the Importance of Spatial Frequencies in Vision Transformers
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

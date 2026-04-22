@@ -1,5 +1,6 @@
 # $\texttt{LIME}$: Making LLM Data More Efficient with Linguistic Metadata Embeddings
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 0, 4, 8
 

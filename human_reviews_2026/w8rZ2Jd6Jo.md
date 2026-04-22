@@ -1,5 +1,6 @@
 # InnovatorBench: Evaluating Agents’ Ability to Conduct Innovative AI Research
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6
 

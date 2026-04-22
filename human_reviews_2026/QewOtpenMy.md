@@ -1,5 +1,6 @@
 # One-Token Verification for Reasoning LLMs, Anytime, Anywhere
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

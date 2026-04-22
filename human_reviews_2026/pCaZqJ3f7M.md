@@ -1,5 +1,6 @@
 # GeoSDF: Plane Geometry Diagram Synthesis via Signed Distance Field
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 2, 4
 

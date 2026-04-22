@@ -1,5 +1,6 @@
 # PARDiff: Bridging Autoregressive and Diffusion Models for Order-Agnostic Graph Generation
 
+- Avg Score: 0.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 0, 0, 2
 

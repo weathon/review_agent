@@ -1,5 +1,6 @@
 # What's Inside Your Diffusion Model? A Score-Based Riemannian Metric to Explore the Data Manifold
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2
 

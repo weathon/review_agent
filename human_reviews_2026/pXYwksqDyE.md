@@ -1,5 +1,6 @@
 # HyperClick: Advancing Reliable GUI Grounding via Uncertainty Calibration
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 4, 2
 

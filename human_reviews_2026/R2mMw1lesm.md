@@ -1,5 +1,6 @@
 # On Transportability for Structural Causal Bandits
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2, 2
 

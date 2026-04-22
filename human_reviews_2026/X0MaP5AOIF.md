@@ -1,5 +1,6 @@
 # LogiNumSynth: Synthesizing Joint Logical-Numerical Reasoning Problems for Language Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 0, 6, 2
 

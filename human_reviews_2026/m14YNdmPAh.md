@@ -1,5 +1,6 @@
 # floq: Training Critics via Flow-Matching for Scaling Compute in Value-Based RL
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 8
 

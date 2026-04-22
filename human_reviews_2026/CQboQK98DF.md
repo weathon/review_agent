@@ -1,5 +1,6 @@
 # RaanA: A Fast, Flexible, and Data-Efficient Post-Training Quantization Algorithm
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2
 

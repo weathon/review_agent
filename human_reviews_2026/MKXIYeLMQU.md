@@ -1,5 +1,6 @@
 # Dual-Priv Pruning : Efficient Differential Private Fine-Tuning in Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

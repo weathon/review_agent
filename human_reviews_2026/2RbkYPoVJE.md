@@ -1,5 +1,6 @@
 # LEO: A Graph Attention-Based Framework for Learned Object Extensions and Adaptive Sensor Fusion for Autonomous Driving Applications
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

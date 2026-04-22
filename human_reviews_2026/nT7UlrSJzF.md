@@ -1,5 +1,6 @@
 # Sculpting User Preferences for Recommendation with Positive-Negative Diffusion Guidance
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

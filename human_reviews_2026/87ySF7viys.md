@@ -1,5 +1,6 @@
 # RESTRAIN: From Spurious Votes to Signals — Self-Training RL with Self-Penalization
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

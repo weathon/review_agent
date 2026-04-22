@@ -1,5 +1,6 @@
 # Temporal Sparse Autoencoders: Leveraging the Sequential Nature of Language for Interpretability
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 10, 6, 4
 

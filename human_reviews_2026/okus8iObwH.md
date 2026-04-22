@@ -1,5 +1,6 @@
 # AhaTrans: A Hierarchical Adaptive Transfer Learning Framework for Cross-City Traffic Flow Prediction
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Look Back to Reason Forward: Revisitable Memory for Long-Context LLM Agents
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

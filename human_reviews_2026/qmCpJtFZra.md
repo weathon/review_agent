@@ -1,5 +1,6 @@
 # Scaling Atomistic Protein Binder Design with Generative Pretraining and Test-Time Compute
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 4, 8, 10
 

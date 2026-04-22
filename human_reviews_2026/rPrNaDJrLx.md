@@ -1,5 +1,6 @@
 # Improving and Accelerating Offline RL in Large Discrete Action Spaces with Structured Policy Initialization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 4
 

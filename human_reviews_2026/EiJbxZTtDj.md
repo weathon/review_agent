@@ -1,5 +1,6 @@
 # Neural Bandit Based Optimal LLM Selection for a Pipeline of Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

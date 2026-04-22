@@ -1,5 +1,6 @@
 # On the Reasoning Abilities of Masked Diffusion Language Models
 
+- Avg Score: 7.00
 - Decision: Accept (Oral)
 - Scores: 6, 8, 8, 6
 

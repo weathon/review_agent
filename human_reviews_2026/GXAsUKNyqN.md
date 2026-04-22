@@ -1,5 +1,6 @@
 # Laser- and shock-induced droplet dynamics: A machine learning benchmark for complex multiphase flows
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 6, 4, 2
 

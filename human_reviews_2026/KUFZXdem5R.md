@@ -1,5 +1,6 @@
 # Towards Efficient Optimizer Design for LLM via Structured Fisher Approximation with a Low-Rank Extension
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

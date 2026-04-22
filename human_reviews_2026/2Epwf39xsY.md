@@ -1,5 +1,6 @@
 # Bounded Working Memory for LLMs: Reproducing Human Recall Dynamics
 
+- Avg Score: 1.50
 - Decision: Reject
 - Scores: 0, 2, 0, 4
 

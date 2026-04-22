@@ -1,5 +1,6 @@
 # Pairwise explanations: towards a new task-agnostic paradigm in explainable artificial intelligence
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 6, 4, 2, 2, 2
 

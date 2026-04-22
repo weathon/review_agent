@@ -1,5 +1,6 @@
 # Activation Function Design Sustains Plasticity in Continual Learning
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Fair in Mind, Fair in Action? A Synchronous Benchmark for Understanding and Generation in UMLLMs
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 8
 

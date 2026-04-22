@@ -1,5 +1,6 @@
 # Co-EditBench: Human-Aligned Benchmark for Instruction-Based Image Editing with Multi-Dimensional Assessment
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

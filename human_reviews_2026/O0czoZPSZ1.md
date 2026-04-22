@@ -1,5 +1,6 @@
 # Scalable RF Simulation in Generative 4D Worlds
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

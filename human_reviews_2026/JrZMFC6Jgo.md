@@ -1,5 +1,6 @@
 # THE BLACK–WHITE-BOX OPTIMIZATION NETWORK
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 2
 

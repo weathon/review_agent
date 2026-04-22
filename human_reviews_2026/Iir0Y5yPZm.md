@@ -1,5 +1,6 @@
 # Uncertainty Quantification for Regression: A Unified Framework based on Kernel Scores
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 2, 2
 

@@ -1,5 +1,6 @@
 # Benchmarking and Advancing Quantization-Aware Training for Reasoning Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 2
 

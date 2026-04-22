@@ -1,5 +1,6 @@
 # SONAR: Spectral‑Contrastive Audio Residuals for Robust Deepfake Detection
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 6
 

@@ -1,5 +1,6 @@
 # Repurposing Foundation Model for Generalizable Medical Time Series Classification
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 6
 

@@ -1,5 +1,6 @@
 # High-Fidelity 3D Scene Representation via HDR-Integrated Multi-Constraint Neural Rendering
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 6, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # AirV2X: Unified Air-Ground Vehicle-to-Everything Collaboration
 
+- Avg Score: 6.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 6
 

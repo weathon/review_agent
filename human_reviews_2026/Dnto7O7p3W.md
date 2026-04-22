@@ -1,5 +1,6 @@
 # Evading Protections Against Unauthorized Data Usage via Limited Fine-tuning
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 6, 2, 4, 2
 

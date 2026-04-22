@@ -1,5 +1,6 @@
 # T2J: Leveraging Developer Bug-Fixing Behaviors to Evaluate and Improve LLM-Based PyTorch-to-JAX Translation
 
+- Avg Score: 2.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 0, 4, 2, 4
 

@@ -1,5 +1,6 @@
 # On the Limits of End-to-End Learning: Why Statistical Features Dominate in Hyper-Fragmented Battery Prognostics
 
+- Avg Score: 2.80
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 2, 4, 6
 

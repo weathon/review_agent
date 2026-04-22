@@ -1,5 +1,6 @@
 # Temporal Aware Iterative Speech Model for Dementia Detection
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0
 

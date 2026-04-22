@@ -1,5 +1,6 @@
 # GIE-Bench: Towards Grounded Evaluation for Text-Guided Image Editing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2
 

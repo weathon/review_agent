@@ -1,5 +1,6 @@
 # JoyAgents-R1: Accelerating Multi-Agent Evolution Dynamics with Variance-Reduction Group Relative Policy Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 6, 2
 

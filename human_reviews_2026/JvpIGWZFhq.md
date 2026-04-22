@@ -1,5 +1,6 @@
 # Neighborhood Stability as a Measure of Nearest Neighbor Searchability
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 6, 4, 2, 4
 

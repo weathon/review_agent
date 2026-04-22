@@ -1,5 +1,6 @@
 # DR-Submodular Maximization with Stochastic Biased Gradients: Classical and Quantum Gradient Algorithms
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

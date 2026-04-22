@@ -1,5 +1,6 @@
 # Time-Aware Prior Fitted Networks for Zero-Shot Forecasting with Exogenous Variables
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

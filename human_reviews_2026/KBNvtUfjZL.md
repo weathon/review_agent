@@ -1,5 +1,6 @@
 # EfficientRefiner: An Efficient Refinement Method over Black-Box Optimization in Macro Placement
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 4, 8
 

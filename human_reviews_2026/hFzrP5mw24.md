@@ -1,5 +1,6 @@
 # What "Not" to Detect: Negation-Aware VLMs via Structured Reasoning and Token Merging
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

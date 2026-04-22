@@ -1,5 +1,6 @@
 # UI2Code$^N$: A Visual Language Model for Test-Time Scalable Interactive UI-to-Code Generation
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

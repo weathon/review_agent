@@ -1,5 +1,6 @@
 # Visual Sparse Steering (VS2): Unsupervised Adaptation for Image Classification via Sparsity-Guided Steering Vectors
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

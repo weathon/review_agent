@@ -1,5 +1,6 @@
 # A Schrödinger Eigenfunction Method for Long-Horizon Stochastic Optimal Control
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

@@ -1,5 +1,6 @@
 # Balancing Perception and Distortion in Super Resolution via Spatial–Semantic Guidance
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

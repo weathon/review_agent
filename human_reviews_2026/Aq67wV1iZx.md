@@ -1,5 +1,6 @@
 # Right Side Up? Disentangling Orientation Understanding in MLLMs with Fine-grained Multi-axis Perception Tasks
 
+- Avg Score: 6.00
 - Decision: Reject
 - Scores: 8, 6, 4, 6
 

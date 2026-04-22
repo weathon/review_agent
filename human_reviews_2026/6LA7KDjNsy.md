@@ -1,5 +1,6 @@
 # RAG4DMC: Retrieval-Augmented Generation for Data-Level Modality Completion
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

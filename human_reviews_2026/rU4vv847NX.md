@@ -1,5 +1,6 @@
 # $\texttt{M-Attack-V2}$: Pushing the Frontier of Black-Box LVLM Attacks via Fine-Grained Detail Targeting
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

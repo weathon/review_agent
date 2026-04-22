@@ -1,5 +1,6 @@
 # Learning Privileged Degradation Priors for All-in-One Image Restoration
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4
 

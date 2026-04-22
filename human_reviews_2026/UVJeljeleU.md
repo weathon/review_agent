@@ -1,5 +1,6 @@
 # CircuitTuning: Improving Math Reasoning in LLMs via Targeted Sub-Network Updates
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

@@ -1,5 +1,6 @@
 # GaLe: memory-efficient Global Approximate and Local Exact features
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

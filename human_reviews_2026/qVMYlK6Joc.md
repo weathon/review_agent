@@ -1,5 +1,6 @@
 # Greedy Information Projection for LLM Data Selection
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 6
 

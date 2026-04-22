@@ -1,5 +1,6 @@
 # Unveiling the Hidden Structure: Tight Bounds for Matrix Multiplication Approximation via Convex Optimization
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 6, 0, 2, 6
 

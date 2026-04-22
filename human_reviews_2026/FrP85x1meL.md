@@ -1,5 +1,6 @@
 # HiPhO: How Far Are (M)LLMs from Humans in the Latest High School Physics Olympiad Benchmark?
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2, 4
 

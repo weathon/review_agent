@@ -1,5 +1,6 @@
 # Noise-Aware Generalization: Robustness to In-Domain Noise and Out-of-Domain Generalization
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

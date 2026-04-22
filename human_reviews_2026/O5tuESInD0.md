@@ -1,5 +1,6 @@
 # On Equivariance and Fast Sampling in Video Diffusion Models Trained with Warped Noise
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # DSOSR: Degradation-Separated Real-World Omnidirectional Image Super-Resolution Via Projection Fusion Representation
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 6, 4
 

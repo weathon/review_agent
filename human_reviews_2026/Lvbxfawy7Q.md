@@ -1,5 +1,6 @@
 # InteractScience: Programmatic and Visually-Grounded Evaluation of Interactive Scientific Demonstration Code Generation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 2
 

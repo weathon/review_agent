@@ -1,5 +1,6 @@
 # SafeDPO: A Simple Approach to Direct Preference Optimization with Enhanced Safety
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 4, 8, 6, 8
 

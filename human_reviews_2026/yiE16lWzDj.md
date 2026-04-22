@@ -1,5 +1,6 @@
 # Nemotron-Research-Tool-N1: Exploring Tool-Using Language Models with Reinforced Reasoning
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4
 

@@ -1,5 +1,6 @@
 # SSG-ECPE: Semantics-Structured Generation with Alignment for Emotion-Cause Pair Extraction
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2
 

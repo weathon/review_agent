@@ -1,5 +1,6 @@
 # Class-Conditional Neuron Pre-Activation Divergence to rule out validation set in label noise early stopping
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6
 

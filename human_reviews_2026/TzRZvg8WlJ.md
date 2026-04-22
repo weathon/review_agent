@@ -1,5 +1,6 @@
 # Affordable AI Assistants with Knowledge Graph of Thoughts
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4, 4
 

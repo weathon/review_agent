@@ -1,5 +1,6 @@
 # How Does Fine-Tuned Foundation Models Help for Long-Tailed Data
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

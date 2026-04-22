@@ -1,5 +1,6 @@
 # Smoothing-Based Conformal Prediction for Balancing Efficiency and Interpretability
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 

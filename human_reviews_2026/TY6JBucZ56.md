@@ -1,5 +1,6 @@
 # Practical Hybrid Quantum Language Models with Observable Readout on Real Hardware
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 0, 2, 4
 

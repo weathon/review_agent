@@ -1,5 +1,6 @@
 # Envision the Future in Open-World Dynamic Tasks by a Hierarchical World Model with Residual Enhanced Foresight
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # ExpeAttack: Efficient and Diverse LLM Jailbreaking via Two-Stage Exploration with Experience Replay
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

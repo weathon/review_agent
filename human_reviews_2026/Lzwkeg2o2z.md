@@ -1,5 +1,6 @@
 # Beyond Raw Detection Scores: Markov-Informed Calibration for Boosting Machine-Generated Text Detection
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 2, 4
 

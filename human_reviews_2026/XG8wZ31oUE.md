@@ -1,5 +1,6 @@
 # Small Drafts, Big Verdict: Information-Intensive Visual Reasoning via Speculation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # ReFORM: Reflected Flows for On-support Offline RL via Noise Manipulation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

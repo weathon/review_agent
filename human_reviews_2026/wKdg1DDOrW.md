@@ -1,5 +1,6 @@
 # SAIL: Self-Amplified Iterative Learning for Diffusion Model Alignment with Minimal Human Feedback
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

@@ -1,5 +1,6 @@
 # Insertion Language Models: Sequence Generation with Arbitrary-Position Insertions
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 6, 4
 

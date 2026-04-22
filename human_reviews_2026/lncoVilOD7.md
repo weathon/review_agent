@@ -1,5 +1,6 @@
 # Demystifying Hybrid Thinking: Can LLMs Truly Switch Between Think and No-Think?
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

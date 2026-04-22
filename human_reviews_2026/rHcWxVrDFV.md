@@ -1,5 +1,6 @@
 # Deliberation Meets Reaction: A Dual-Expert VLA framework for Autonomous Driving
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

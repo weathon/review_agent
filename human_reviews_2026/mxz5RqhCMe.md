@@ -1,5 +1,6 @@
 # Stability Under Scrutiny: Benchmarking Representation Paradigms for Online HD Mapping
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

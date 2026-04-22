@@ -1,5 +1,6 @@
 # How much can language models memorize?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 4, 8
 

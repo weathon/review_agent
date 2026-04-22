@@ -1,5 +1,6 @@
 # What matters for Representation Alignment: Global Information or Spatial Structure?
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8, 8
 

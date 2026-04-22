@@ -1,5 +1,6 @@
 # Beyond Worst-Case: Dimension-Aware Privacy for Black-Box Generative Models
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6
 

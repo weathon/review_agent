@@ -1,5 +1,6 @@
 # Change of Thought: Adaptive Test-Time Computation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

@@ -1,5 +1,6 @@
 # Nef-Net v2: Adapting Electrocardio Panorama in the wild
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 
@@ -42,8 +43,10 @@ https://github.com/HKUSTGZ-ML4Health-Lab/NEFNET-v2.
 4
 
 ### Summary
-The paper proposes NEF-NET+, a geometry-aware ECG transformation model that replaces field reconstruction with a direct view-to-view learning strategy. 
-It introduces a multi-stage adaptation pipeline to improve real-world robustness. 
+The paper proposes NEF-NET+, a geometry-aware ECG transformation model that replaces field reconstruction with a direct view-to-view learning strategy.
+
+It introduces a multi-stage adaptation pipeline to improve real-world robustness.
+
 A new 48-view dataset, Panobench, is constructed for spatially precise evaluation of cross-lead ECG reconstruction.
 
 ### Strengths

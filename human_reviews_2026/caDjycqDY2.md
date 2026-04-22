@@ -1,5 +1,6 @@
 # LLaVA-CMoE: Towards Continual Mixture of Experts for Large Vision-Language Models
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 4, 6, 6
 

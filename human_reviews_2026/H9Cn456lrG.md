@@ -1,5 +1,6 @@
 # Skillful Kilometer-Scale Regional Weather Forecasting via Global and Regional Coupling
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 4, 4
 

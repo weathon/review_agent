@@ -1,5 +1,6 @@
 # LoRDQ: activation-aware Low-Rank Decomposition and Quantization for Large Language Model Compression
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

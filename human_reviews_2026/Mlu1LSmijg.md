@@ -1,5 +1,6 @@
 # A Systematic Evaluation of Preference Aggregation in Federated RLHF for Pluralistic Alignment of LLMs
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

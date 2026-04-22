@@ -1,5 +1,6 @@
 # ChebMoE: A Spectral-Aware and Expert-Adaptive Framework for Graph Anomaly Detection
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 2
 

@@ -1,5 +1,6 @@
 # Recurrent model for Sequential reasoning
 
+- Avg Score: 3.25
 - Decision: Reject
 - Scores: 0, 2, 4, 6, 2, 2, 2, 8
 

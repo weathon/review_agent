@@ -1,5 +1,6 @@
 # Learning Semantics, Not Addresses: Runtime Neural Prefetching for Far Memory
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

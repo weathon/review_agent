@@ -1,5 +1,6 @@
 # Tokenisation over Bounded Alphabets is Hard
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 8, 2, 8, 8, 6
 

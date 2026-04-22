@@ -1,5 +1,6 @@
 # Language Models Use Lookbacks to Track Beliefs
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 0, 6, 6, 6
 

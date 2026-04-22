@@ -1,5 +1,6 @@
 # Toward Spatial Intelligence: A Unified Self-supervised Framework for 3D Representation Learning from Unposed Multi-View Images
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

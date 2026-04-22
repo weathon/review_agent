@@ -1,5 +1,6 @@
 # ACDC: Adaptive Cloud-Device Collaboration for Efficient and Accurate Semantic Segmentation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

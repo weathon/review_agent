@@ -1,5 +1,6 @@
 # Language-Assisted Super-Resolution from Real-World Low-Resolution Patches
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 2, 6
 

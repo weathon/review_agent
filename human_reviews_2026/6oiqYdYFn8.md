@@ -1,5 +1,6 @@
 # Better Bounds for the Distributed Experts Problem
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 8
 

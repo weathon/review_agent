@@ -1,5 +1,6 @@
 # Retrieval as Reasoning: Learning to Select and Generate with LLMs
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2, 2
 

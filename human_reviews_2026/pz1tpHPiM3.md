@@ -1,5 +1,6 @@
 # From Scores to Preferences: Redefining MOS Benchmarking for Speech Quality Reward Modeling
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4
 

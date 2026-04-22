@@ -1,5 +1,6 @@
 # VELR: Efficient Video Reward Feedback via Ensemble Latent Reward Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

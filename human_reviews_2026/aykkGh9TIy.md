@@ -1,5 +1,6 @@
 # UIS-Digger: Towards Comprehensive Research Agent Systems for Real-world Unindexed Information Seeking
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

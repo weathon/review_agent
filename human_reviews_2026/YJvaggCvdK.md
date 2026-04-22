@@ -1,5 +1,6 @@
 # Human Gaze is All You Need: Aligning Image Encoders with Human Attention
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 2, 2
 

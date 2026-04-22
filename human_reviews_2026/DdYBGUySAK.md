@@ -1,5 +1,6 @@
 # LaGEA: Language Guided Embodied Agents for Robotic Manipulation
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 2, 4, 6, 4, 2
 

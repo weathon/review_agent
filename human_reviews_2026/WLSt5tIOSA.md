@@ -1,5 +1,6 @@
 # Fine-tuning VLMs Without Forgetting Is Easier Than You Think
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

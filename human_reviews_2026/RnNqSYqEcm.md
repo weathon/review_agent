@@ -1,5 +1,6 @@
 # Online Multi-objective Convex Optimization: A Unified Framework and Joint Gradient Descent
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

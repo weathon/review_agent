@@ -1,5 +1,6 @@
 # TruncProof: LL(1)-Constrained Generation in Large Language Models with Maximum Token Limitations
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 8, 4
 
@@ -90,9 +91,13 @@ This paper addresses a problem in grammar-constrained generation with token limi
 * The evaluation considers various sampling techniques (beam search, MCTS) during inference. In my knowledge, this has not been studied extensively in the prior CFG-constrained decoding works.
 
 ### Weaknesses
-The major issue in the paper is the limited empirical evidence showing the practical applicability of the work beyond JSON generation under token-limit restriction. I would encourage the authors to perform additional experiments on one of the other grammars such SQL, Python, Java, or Go, that have been considered in prior works and use end-to-end benchmarks such as humaneval.  
+The major issue in the paper is the limited empirical evidence showing the practical applicability of the work beyond JSON generation under token-limit restriction. I would encourage the authors to perform additional experiments on one of the other grammars such SQL, Python, Java, or Go, that have been considered in prior works and use end-to-end benchmarks such as humaneval.
 
-* The technique uses LL(1) grammar, which is inherently weaker than LR and Earley grammars supported by some of the prior works  . 
+
+
+* The technique uses LL(1) grammar, which is inherently weaker than LR and Earley grammars supported by some of the prior works
+
+. 
 
 * The evaluation on JSON considers only 100 examples on 2 models. Both should ideally be more.
 

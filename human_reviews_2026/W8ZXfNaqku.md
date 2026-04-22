@@ -1,5 +1,6 @@
 # Frayed RoPE and Long Inputs: A Geometric Perspective
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 10, 4
 

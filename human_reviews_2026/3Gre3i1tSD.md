@@ -1,5 +1,6 @@
 # GRACE-MoE: Grouping and Replication with Locality-Aware Routing for Efficient Distributed MoE Inference
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 6
 

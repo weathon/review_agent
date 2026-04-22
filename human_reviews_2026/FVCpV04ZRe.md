@@ -1,5 +1,6 @@
 # From EduVisBench to EduVisAgent: A Benchmark and Multi-Agent Framework for Reasoning-Driven Pedagogical Visualization
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 2, 2, 6, 6
 

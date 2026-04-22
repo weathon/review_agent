@@ -1,5 +1,6 @@
 # Probabilistic Modeling of Multi-rater Medical Image Segmentation for Diversity and Personalization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

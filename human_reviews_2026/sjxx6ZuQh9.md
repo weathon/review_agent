@@ -1,5 +1,6 @@
 # Deep Spiking Neural Network with Brain-Inspired Recurrent Iterative Learning
 
+- Avg Score: 1.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 0, 0
 

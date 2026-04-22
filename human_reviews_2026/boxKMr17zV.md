@@ -1,5 +1,6 @@
 # Graph Attention with Knowledge-Aware Domain Adaptation for Drug-Target Interaction Prediction
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 0, 4, 2
 

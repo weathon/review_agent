@@ -1,5 +1,6 @@
 # Efficient Autoregressive Inference for Transformer Probabilistic Models
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 8
 

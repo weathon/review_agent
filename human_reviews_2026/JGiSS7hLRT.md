@@ -1,5 +1,6 @@
 # MagicTryOn: Harnessing Diffusion Transformer for Garment-Preserving Video Virtual Try-on
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Helmsman: Autonomous Synthesis of Federated Learning Systems via Collaborative LLM Agents
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 2, 6, 6
 

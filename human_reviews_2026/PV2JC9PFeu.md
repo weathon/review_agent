@@ -1,5 +1,6 @@
 # Docs2Table: Bridging Multiple Documents and Structured Tables via LLMs
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 6
 

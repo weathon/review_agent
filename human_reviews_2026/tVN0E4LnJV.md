@@ -1,5 +1,6 @@
 # Small-Large Collaboration: Training-efficient Concept Personalization for Large VLM using a Meta Personalized Small VLM
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4
 

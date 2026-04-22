@@ -1,5 +1,6 @@
 # Gated LoRA: Dual-Purpose Projections for Parameter-Efficient Mini-Expert Fine-Tuning
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 4, 2
 

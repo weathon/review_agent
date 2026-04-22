@@ -1,5 +1,6 @@
 # Sample Reward Soups: Query-efficient Multi-Reward Guidance for Text-to-Image Diffusion Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

@@ -1,5 +1,6 @@
 # Hierarchical Representational Transformations of Working Memory in Brains and Machines
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

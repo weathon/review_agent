@@ -1,5 +1,6 @@
 # Value-as-Return: A Two-Stage Framework to Align on the Optimal Score Function
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

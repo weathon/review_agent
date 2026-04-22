@@ -1,5 +1,6 @@
 # HyperMotion: DiT-Based Pose-Guided Human Image Animation of Complex Motions
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

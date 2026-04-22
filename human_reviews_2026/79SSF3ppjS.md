@@ -1,5 +1,6 @@
 # Decomposed Attention Fusion in MLLMs for Training-free Video Reasoning Segmentation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Latent Diffusion Pretraining for Crystal Property Prediction
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 2, 6, 6, 8
 

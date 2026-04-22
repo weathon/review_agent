@@ -1,5 +1,6 @@
 # PMDformer: Patch-Mean Decoupling Information Transformer for Long-term Forecasting
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Budgeted Broadcast: An Activity-Dependent Pruning Rule for Neural Network Efficiency
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

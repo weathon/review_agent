@@ -1,5 +1,6 @@
 # TokenCLIP: Token-wise Prompt Learning for Zero-shot Anomaly Detection
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

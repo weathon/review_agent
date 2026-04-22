@@ -1,5 +1,6 @@
 # Active Model Selection for Large Language Models
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 0, 4, 4
 

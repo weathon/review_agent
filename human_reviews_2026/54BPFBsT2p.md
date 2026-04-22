@@ -1,5 +1,6 @@
 # Dynamic Rank Adjustment for Accurate and Efficient Neural Network Training
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

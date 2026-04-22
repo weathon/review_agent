@@ -1,5 +1,6 @@
 # Massive Memorization with Hundreds of Trillions of Parameters for Sequential Transducer Generative Recommenders
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

@@ -1,5 +1,6 @@
 # From Ambiguity to Verdict: A Semiotic‑Grounded Multi‑Perspective Agent for LLM Logical Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2
 

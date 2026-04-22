@@ -1,5 +1,6 @@
 # A Benchmark for Deep Information Synthesis
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 6
 

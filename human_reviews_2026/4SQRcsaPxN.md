@@ -1,5 +1,6 @@
 # GUIDE : Generalized-Prior and Data Encoders for DAG Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

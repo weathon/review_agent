@@ -1,5 +1,6 @@
 # Graph Foundation Models: Bridging Language Model Paradigms and Graph Optimization
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 2, 4
 

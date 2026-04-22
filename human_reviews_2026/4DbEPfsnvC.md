@@ -1,5 +1,6 @@
 # TBG-Driven Minimization of Noise-Resistant Adaptive Sharpness Awareness
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4, 2
 

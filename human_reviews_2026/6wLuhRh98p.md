@@ -1,5 +1,6 @@
 # CARE: Causal Intervention and Adversarial Learning for Robust Multimodal Intent Recognition
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 0
 

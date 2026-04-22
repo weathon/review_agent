@@ -1,5 +1,6 @@
 # TestExplora: Can LLMs Write Tests to Find Potential Problems Existing in Repository?
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # From Language to Action Streams: Bridging LLM Autoregression for Long-Horizon Robot Action Prediction
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 0
 

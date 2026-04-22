@@ -1,5 +1,6 @@
 # UltraLLaDA: Scaling the Context Length to 128K for Diffusion Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6
 

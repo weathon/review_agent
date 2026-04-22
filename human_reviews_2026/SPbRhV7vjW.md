@@ -1,5 +1,6 @@
 # Towards shutdownable agents: stochastic choice in unseen gridworlds via DReST rewards
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # RefineStat: Efficient Exploration for Probabilistic Program Synthesis
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 4, 8
 

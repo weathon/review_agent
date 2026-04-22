@@ -1,5 +1,6 @@
 # Mamba-IVP: A Denoising State-Space Initial Value Problem Framework for SOTA Clinical Time Series, Healthcare Alternative
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

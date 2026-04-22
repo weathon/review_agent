@@ -1,5 +1,6 @@
 # Reasoning as Representation: Rethinking Visual Reinforcement Learning in Image Quality Assessment
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 4, 6, 6, 4
 

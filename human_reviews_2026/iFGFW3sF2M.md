@@ -1,5 +1,6 @@
 # Jailbreaking on Text-to-Video Models via Scene Splitting Strategy
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

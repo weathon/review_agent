@@ -1,5 +1,6 @@
 # Leveraging Label Dependencies for Calibration in Multi-Label Classification through Proper Scoring Rule
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4
 

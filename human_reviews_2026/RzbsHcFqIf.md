@@ -1,5 +1,6 @@
 # Distilling to Hybrid Attention Models via KL-Guided Layer Selection
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

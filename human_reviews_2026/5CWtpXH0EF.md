@@ -1,5 +1,6 @@
 # Deep Generative Prior for First Order Inverse Optimization
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 6
 

@@ -1,5 +1,6 @@
 # SpeeCheck: Self-Contained Speech Integrity Verification via Embedded Acoustic Fingerprints
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 8, 6, 4
 

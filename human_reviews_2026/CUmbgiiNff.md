@@ -1,5 +1,6 @@
 # Pretrain then Adapt: Uncertainty-Aware Test-Time Adaptation for Text-based Person Search
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

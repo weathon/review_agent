@@ -1,5 +1,6 @@
 # Unraveling the Complexity of Memory in RL Agents: an Approach for Classification and Evaluation
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4
 

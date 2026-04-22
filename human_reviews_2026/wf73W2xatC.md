@@ -1,5 +1,6 @@
 # RedacBench: Can AI Erase Your Secrets?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

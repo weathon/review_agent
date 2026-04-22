@@ -1,5 +1,6 @@
 # Comprehend and Talk: Text to Speech Synthesis  via Dual Language Modeling
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

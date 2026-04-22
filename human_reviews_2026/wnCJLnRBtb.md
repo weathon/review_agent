@@ -1,5 +1,6 @@
 # Context Similarity Structure Shapes the Emergence of Reliable In-Context and In-Weights Mixtures
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

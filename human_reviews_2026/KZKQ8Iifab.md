@@ -1,5 +1,6 @@
 # Weakly Supervised Motion Learning for Co-speech Gesture Video Generation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

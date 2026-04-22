@@ -1,5 +1,6 @@
 # Diffusion-based dynamics as a cognitive model of human speech production
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 6, 4, 2, 4, 6
 

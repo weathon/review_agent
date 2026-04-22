@@ -1,5 +1,6 @@
 # PHUMA: Physically-Grounded Humanoid Locomotion Dataset
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

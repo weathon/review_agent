@@ -1,5 +1,6 @@
 # EUGENE: Explainable Structure-aware Graph Edit Distance Estimation with Generalized Edit Costs
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 4, 2, 4
 

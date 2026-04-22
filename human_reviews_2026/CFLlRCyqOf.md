@@ -1,5 +1,6 @@
 # Preemptive Detection and Steering of LLM Misalignment via Latent Reachability
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

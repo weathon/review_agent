@@ -1,5 +1,6 @@
 # Symbolic Mixture-of-Experts: Adaptive Skill-based Routing for Heterogeneous Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

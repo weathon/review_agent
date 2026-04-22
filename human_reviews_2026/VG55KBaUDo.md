@@ -1,5 +1,6 @@
 # Zeros can be Informative: Masked Binary U-Net for Image Segmentation on Tensor Cores
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 6
 

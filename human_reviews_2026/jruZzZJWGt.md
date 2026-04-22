@@ -1,5 +1,6 @@
 # DRef: A Benchmark with Diverse Referring Expressions for Object Comprehension of Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

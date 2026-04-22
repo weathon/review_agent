@@ -1,5 +1,6 @@
 # Generalizable Coarse-to-Fine Robot Manipulation via Language-Aligned 3D Keypoints
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 6
 

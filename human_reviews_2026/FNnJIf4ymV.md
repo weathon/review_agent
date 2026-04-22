@@ -1,5 +1,6 @@
 # AutoQD: Automatic Discovery of Diverse Behaviors with Quality-Diversity Optimization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6
 

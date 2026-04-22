@@ -1,5 +1,6 @@
 # Softmax-Induced Ill-Conditioning in Transformer Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

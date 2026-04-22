@@ -1,5 +1,6 @@
 # In-and-On: Scaling Egocentric Manipulation with in-the-wild and on-task Data
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

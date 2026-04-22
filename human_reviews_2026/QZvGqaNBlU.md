@@ -1,5 +1,6 @@
 # PERSONA: Dynamic and Compositional Inference-Time Personality Control via Activation Vector Algebra
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

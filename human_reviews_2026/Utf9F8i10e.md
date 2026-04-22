@@ -1,5 +1,6 @@
 # From geometry to dynamics: Learning overdamped Langevin dynamics from sparse observations with geometric constraints
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 
@@ -185,7 +186,8 @@ The paper introduces a geometry-aware path augmentation framework for learning o
 * How do you learn drift control term and drift estimate given the Riemannian set-up?
 * Minor comment, but I believe sentence in line 243 is cut off by a figure?
 
-**References **
+**References
+**
 
 [1] Tong, Alexander, et al. "Simulation-free schr\" odinger bridges via score and flow matching." arXiv preprint arXiv:2307.03672 (2023).
 

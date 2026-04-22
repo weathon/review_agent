@@ -1,5 +1,6 @@
 # PixelCraft: A Multi-Agent system for High-Fidelity Visual Reasoning on Structured Images
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 6, 6
 

@@ -1,5 +1,6 @@
 # Beyond Text-to-SQL: Can LLMs Really Debug Enterprise SQL?
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 2, 6, 6, 6
 

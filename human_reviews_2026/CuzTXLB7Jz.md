@@ -1,5 +1,6 @@
 # OmniSAT: Compact Action Token, Faster Auto Regression
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Confident and Adaptive Generative Speech Recognition via Risk Control
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 2, 6, 6
 

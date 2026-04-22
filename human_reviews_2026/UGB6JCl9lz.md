@@ -1,5 +1,6 @@
 # Transformers as Intrinsic Optimizers: Forward Inference through the Energy Principle
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 2, 4
 

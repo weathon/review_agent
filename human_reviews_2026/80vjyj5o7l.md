@@ -1,5 +1,6 @@
 # DexNDM: Closing the Reality Gap for Dexterous In-Hand Rotation via Joint-Wise Neural Dynamics Model
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6, 8
 

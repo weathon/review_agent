@@ -1,5 +1,6 @@
 # From Theft to Bomb-Making: The Ripple Effect of Unlearning in Defending Against Jailbreak Attacks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 4, 8
 

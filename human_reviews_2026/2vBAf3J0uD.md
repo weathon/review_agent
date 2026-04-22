@@ -1,5 +1,6 @@
 # Pretraining in Actor-Critic Reinforcement Learning for Robot Motion Control
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 4, 2, 4, 4
 

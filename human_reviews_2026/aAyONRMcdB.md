@@ -1,5 +1,6 @@
 # Search-on-Graph: Iterative Informed Navigation for Large Language Model Reasoning on Knowledge Graphs
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 4, 4
 

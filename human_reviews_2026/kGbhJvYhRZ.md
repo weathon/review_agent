@@ -1,5 +1,6 @@
 # Learning Utility‑Calibrated Routing for Hierarchical Multi-Agents in Portfolio Decision‑Making
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 0, 4, 4
 

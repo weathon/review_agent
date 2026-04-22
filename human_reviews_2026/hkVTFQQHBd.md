@@ -1,5 +1,6 @@
 # Transformer Instability in Long Sequence Training: The Underestimated Role of Short-Range Dependencies
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 0, 2, 4, 2
 

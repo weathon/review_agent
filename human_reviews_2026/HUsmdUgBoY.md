@@ -1,5 +1,6 @@
 # Probability-based Reward Value Combination Method for Multi-Objective Alignment
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

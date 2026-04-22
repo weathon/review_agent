@@ -1,5 +1,6 @@
 # Exploring Expert Concentration for Parameter-efficient Fine-tuning of Mixture-of-Expert LLMs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 6, 4, 8
 

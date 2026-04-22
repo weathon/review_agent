@@ -1,5 +1,6 @@
 # Error Propagation in Dynamic Programming: From Stochastic Control to Option Pricing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

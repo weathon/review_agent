@@ -1,5 +1,6 @@
 # VisJudge-Bench: Aesthetics and Quality Assessment of Visualizations
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 4, 8
 

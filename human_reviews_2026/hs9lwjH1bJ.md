@@ -1,5 +1,6 @@
 # GRACE: Generative Representation Learning via Contrastive Policy Optimization
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 6, 4
 

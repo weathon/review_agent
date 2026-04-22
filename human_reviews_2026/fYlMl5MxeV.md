@@ -1,5 +1,6 @@
 # Calibration-Free Defense Against Backdoor Attacks in the Wild
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

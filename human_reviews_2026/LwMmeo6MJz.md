@@ -1,5 +1,6 @@
 # SceneLCM: Multi-Room Indoor Scene Generation with Latent Consistency Modeling
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 4, 4
 

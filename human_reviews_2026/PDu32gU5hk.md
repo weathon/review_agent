@@ -1,5 +1,6 @@
 # CAFÉ: Coverage-Aware Self-Distillation to Mitigate Forgetting in Deep Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

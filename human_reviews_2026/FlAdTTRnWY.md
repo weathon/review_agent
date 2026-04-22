@@ -1,5 +1,6 @@
 # Mixture of Sparse Attention: Content-Based Learnable Sparse Attention via MoEs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

@@ -1,5 +1,6 @@
 # RestoreVAR: Visual Autoregressive Generation for All-in-One Image Restoration
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 6
 

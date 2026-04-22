@@ -1,5 +1,6 @@
 # CDBridge: A Cross-omics Post-training Bridge Strategy for Context-aware Biological Modeling
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 4
 

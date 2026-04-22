@@ -1,5 +1,6 @@
 # Towards Understanding Subliminal Learning: When and How Hidden Biases Transfer
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4
 

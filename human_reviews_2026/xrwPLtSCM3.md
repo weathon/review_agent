@@ -1,5 +1,6 @@
 # ProxyFL: A Proxy-Guided Framework for Federated Semi-Supervised Learning
 
+- Avg Score: 4.40
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4, 4
 

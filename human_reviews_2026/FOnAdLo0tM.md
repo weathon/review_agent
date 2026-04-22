@@ -1,5 +1,6 @@
 # Do Not Let Low-Probability Tokens Over-Dominate in RL for LLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 6
 

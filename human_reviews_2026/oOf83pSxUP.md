@@ -1,5 +1,6 @@
 # Old N-Grams Never Die:Towards Identifying LLMs-Generated Text using Antique N-Grams
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6
 

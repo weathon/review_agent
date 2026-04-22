@@ -1,5 +1,6 @@
 # Provably Safe Representation Learning in CMDPs: A Primal-Dual Approach
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

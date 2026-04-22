@@ -1,5 +1,6 @@
 # UniGP: Taming Diffusion Transformer for Prior Preserved Unified Generation and Perception
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 6
 

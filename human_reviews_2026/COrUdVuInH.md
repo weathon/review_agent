@@ -1,5 +1,6 @@
 # MIMIC: Mask-Injected Manipulation Video Generation with Interaction Control
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 4, 6
 

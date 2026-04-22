@@ -1,5 +1,6 @@
 # PRISM-EE: A Peer-Federated Framework for Cost-Aware Large Language Model Evaluation
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4
 

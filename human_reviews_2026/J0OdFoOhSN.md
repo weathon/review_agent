@@ -1,5 +1,6 @@
 # TRACED: Transition-aware Regret Approximation with Co-learnability for Environment Design
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

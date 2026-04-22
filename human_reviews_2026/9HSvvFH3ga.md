@@ -1,5 +1,6 @@
 # Microsaccade Inspired Probing: Positional Encoding Perturbations Reveal LLM Misbehaviors
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 0, 2, 2
 

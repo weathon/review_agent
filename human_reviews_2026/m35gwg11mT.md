@@ -1,5 +1,6 @@
 # Boosting Large Language Models with Mask Fine-Tuning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

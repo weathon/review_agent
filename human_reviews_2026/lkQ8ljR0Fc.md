@@ -1,5 +1,6 @@
 # In-Place Feedback: A New Paradigm for Guiding Large Language Models in Multi-Turn Reasoning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 2, 2
 

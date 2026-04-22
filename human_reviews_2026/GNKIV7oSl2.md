@@ -1,5 +1,6 @@
 # KVCompose: Efficient Structured KV Cache Compression with Composite Tokens
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

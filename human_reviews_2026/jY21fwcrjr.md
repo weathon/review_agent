@@ -1,5 +1,6 @@
 # GUIDE: Gated Uncertainty-Informed Disentangled Experts for Long-tailed Recognition
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

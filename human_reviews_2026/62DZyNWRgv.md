@@ -1,5 +1,6 @@
 # TAROT: Test-Driven and Capability-Adaptive Curriculum Reinforcement Fine-Tuning for Code Generation
 
+- Avg Score: 3.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 8, 2, 2, 4, 2
 

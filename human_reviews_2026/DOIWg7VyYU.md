@@ -1,5 +1,6 @@
 # StyleBench: Evaluating  thinking styles in Large Language Models
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 2, 8, 2
 
@@ -71,26 +72,38 @@ This paper introduces StyleBench, a benchmark designed to systematically evaluat
 - The empirical evaluation is comprehensive, covering multiple reasoning styles across 15 open-source model families. The experiments are thorough and support the key findings reported by the authors.
 
 ### Weaknesses
-- **Limited Novelty of Findings.** Several key observations reported in the paper appear incremental relative to prior literature. For example, the impact of model scaling on instruction-following capabilities has been well documented (e.g., Chung et al., JMLR’25). Likewise, AoT and ToT have been previously evaluated on tasks such as Game-of-24 and are known to perform well on tasks requiring non-trivial planning or search, while SoT and CoD have been shown to be effective on commonsense and logical reasoning tasks. In light of this, the result that “search-based methods like AoT and ToT perform well on open-ended tasks like Game-of-24 but incur higher token usage, while concise methods such as SoT and CoD are more efficient on structured reasoning tasks” does not provide substantial new insight.
+- **Limited Novelty of Findings.**
+Several key observations reported in the paper appear incremental relative to prior literature. For example, the impact of model scaling on instruction-following capabilities has been well documented (e.g., Chung et al., JMLR’25). Likewise, AoT and ToT have been previously evaluated on tasks such as Game-of-24 and are known to perform well on tasks requiring non-trivial planning or search, while SoT and CoD have been shown to be effective on commonsense and logical reasoning tasks. In light of this, the result that “search-based methods like AoT and ToT perform well on open-ended tasks like Game-of-24 but incur higher token usage, while concise methods such as SoT and CoD are more efficient on structured reasoning tasks” does not provide substantial new insight.
 
-- **Concerns Regarding Evaluation Configuration and Determinism.** The paper sets the temperature to 0 across all experiments to ensure deterministic outputs; however, temperature = 0 does not guarantee determinism due to numerical and implementation-level nondeterminism [2, 3]. In addition, model providers often recommend non-zero temperatures for optimal performance (e.g., Qwen [4] suggests temperature 0.6/top-p 0.95; many reasoning-focused models recommend temperature = 1.0 [5]). Some models also include additional configuration parameters that control reasoning depth (e.g., reasoning_effort = {low|medium|high} in GPT-OSS models), but the paper does not clarify how such parameters were set. These inconsistencies make it difficult to attribute observed differences solely to reasoning styles.
+- **Concerns Regarding Evaluation Configuration and Determinism.**
+The paper sets the temperature to 0 across all experiments to ensure deterministic outputs; however, temperature = 0 does not guarantee determinism due to numerical and implementation-level nondeterminism [2, 3]. In addition, model providers often recommend non-zero temperatures for optimal performance (e.g., Qwen [4] suggests temperature 0.6/top-p 0.95; many reasoning-focused models recommend temperature = 1.0 [5]). Some models also include additional configuration parameters that control reasoning depth (e.g., reasoning_effort = {low|medium|high} in GPT-OSS models), but the paper does not clarify how such parameters were set. These inconsistencies make it difficult to attribute observed differences solely to reasoning styles.
 
-- **Lack of Statistical Reliability.** All experiments appear to be run only once, with no confidence intervals or variance estimates reported. Given the stochasticity of LLM outputs and the sensitivity of reasoning performance to hyperparameters, reporting confidence intervals (or at least repeated trials) would strengthen the empirical claims.
+- **Lack of Statistical Reliability.**
+All experiments appear to be run only once, with no confidence intervals or variance estimates reported. Given the stochasticity of LLM outputs and the sensitivity of reasoning performance to hyperparameters, reporting confidence intervals (or at least repeated trials) would strengthen the empirical claims.
 
-- **Missing Comparison to a Relevant Baseline.** The benchmark does not include comparison against the recent Buffer-of-Thoughts (BoT) method [6], which has demonstrated strong performance across diverse reasoning tasks. Incorporating BoT would provide a more comprehensive and contemporary evaluation of reasoning styles.  
+- **Missing Comparison to a Relevant Baseline.**
+The benchmark does not include comparison against the recent Buffer-of-Thoughts (BoT) method [6], which has demonstrated strong performance across diverse reasoning tasks. Incorporating BoT would provide a more comprehensive and contemporary evaluation of reasoning styles.
+
+
 
 ---
-References 
+References
 
-[1] Chung et al., Scaling Instruction-Finetuned Language Models, JMLR’25 
 
-[2] https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/#the-original-sin-floating-point-non-associativity 
+[1] Chung et al., Scaling Instruction-Finetuned Language Models, JMLR’25
 
-[3] Yuan et al., Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference, NeurIPS’25 
 
-[4] Qwen Technical Report: https://arxiv.org/pdf/2505.09388 
+[2] https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/#the-original-sin-floating-point-non-associativity
 
-[5] https://docs.unsloth.ai/models/gpt-oss-how-to-run-and-fine-tune#running-gpt-oss 
+
+[3] Yuan et al., Understanding and Mitigating Numerical Sources of Nondeterminism in LLM Inference, NeurIPS’25
+
+
+[4] Qwen Technical Report: https://arxiv.org/pdf/2505.09388
+
+
+[5] https://docs.unsloth.ai/models/gpt-oss-how-to-run-and-fine-tune#running-gpt-oss
+
 
 [6] Yang et al., Buffer of Thoughts: Thought-Augmented Reasoning with Large Language Models, NeurIPS’24
 

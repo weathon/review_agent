@@ -1,5 +1,6 @@
 # FLARE: Fast Low-rank Attention Routing Engine
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # RCStat: A Statistical Framework of Relative Contextualization in Transformers
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 8, 4, 4
 

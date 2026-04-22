@@ -1,5 +1,6 @@
 # Mediater: Memory-efficient LLM Merging with Less Parameter Conflicts and Uncertainty Based Routing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 4, 6
 
@@ -146,7 +147,8 @@ Please see weakness above
 The paper studies LLM merging where they merge different fine-tuned domain models to build a superior LLMs. The paper proposes an adaptive method where it only merges the layers whose parameter conflict rate is smaller than a threshold and keeps layers with significant parameter conflicts with inference-time routing. The paper conducts comprehensive experiments across model families and scales for verifying the method’s effectiveness.
 
 ### Strengths
-- The paper studies an interesting direction of merging different fine-tuned LLMs for obtaining a more powerful general LLM. The idea is clear and is proved with informative analysis. 
+- The paper studies an interesting direction of merging different fine-tuned LLMs for obtaining a more powerful general LLM. The idea is clear and is proved with informative analysis.
+
 
 - The paper provides detailed studies to help understand the parameter conflicts in different LLMs. This motivates its proposed method quite well.
 

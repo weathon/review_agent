@@ -1,5 +1,6 @@
 # M$^2$oT: Agglomerative Vision Foundation Models via Sparse Mixture-of-Experts
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

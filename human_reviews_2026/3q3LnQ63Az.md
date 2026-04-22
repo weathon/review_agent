@@ -1,5 +1,6 @@
 # Towards Fine-grained Audio Captioning with Multimodal Contextual Fusion
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 6, 4
 

@@ -1,5 +1,6 @@
 # MSearcher: Self-Reflective Search Agent Empowered by Monte Carlo Tree Search Based Data Synthesis
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 4
 

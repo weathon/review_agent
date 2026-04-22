@@ -1,5 +1,6 @@
 # Doctor-R1: Mastering Clinical Inquiry with Experiential Agentic Reinforcement Learning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6, 6
 

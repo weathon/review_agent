@@ -1,5 +1,6 @@
 # SAD-Flower: Flow Matching for Safe, Admissible, and Dynamically Consistent Planning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

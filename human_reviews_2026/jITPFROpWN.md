@@ -1,5 +1,6 @@
 # Learning Koopman Representations with Controllability Guarantees
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 2
 

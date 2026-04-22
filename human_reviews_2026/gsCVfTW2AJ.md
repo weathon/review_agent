@@ -1,5 +1,6 @@
 # VAR-MATH: Probing True Mathematical Reasoning in LLMs via Symbolic Multi-Instance Benchmarks
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

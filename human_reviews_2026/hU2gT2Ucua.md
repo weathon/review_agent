@@ -1,5 +1,6 @@
 # APPLE: Toward General Active Perception via Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 6
 

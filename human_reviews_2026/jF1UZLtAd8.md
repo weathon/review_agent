@@ -1,5 +1,6 @@
 # Where do Reasoning Models Make a Difference? Follow the Reasoning Leader for Efficient Decoding
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 
@@ -81,11 +82,16 @@ Experimental results show that the proposed approach outperforms existing method
 - The proposed observations are interesting, and the resulting decoding method seems quite effective, outperforming Speculative Thinking on reasoning benchmarks.
 
 ### Weaknesses
-**[W1] Restricted experimental scope.** Despite the interesting observations, both the analyses and experiments are conducted only on the Qwen family. This narrow scope limits the generality and broader applicability of the findings. 
+**[W1] Restricted experimental scope.**
+Despite the interesting observations, both the analyses and experiments are conducted only on the Qwen family. This narrow scope limits the generality and broader applicability of the findings.
 
-**[W2] Limited logical continuity.** While the paper highlights two main observations—Global Misalignment Rebound and Local Misalignment Diminish—the proposed method is mainly motivated by the latter. The connection between the observations and the final design could be more coherently justified. 
 
-**[W3] Unclear advantage over speculative decoding.** Although the method is distinct from existing speculative decoding paradigms, its advantage remains questionable. In Table 3, the comparison with Speculative Decoding appears somewhat unfair, as the draft lengths used (10 and 20) are unusually large. A fairer comparison would involve shorter draft lengths.
+**[W2] Limited logical continuity.**
+While the paper highlights two main observations—Global Misalignment Rebound and Local Misalignment Diminish—the proposed method is mainly motivated by the latter. The connection between the observations and the final design could be more coherently justified.
+
+
+**[W3] Unclear advantage over speculative decoding.**
+Although the method is distinct from existing speculative decoding paradigms, its advantage remains questionable. In Table 3, the comparison with Speculative Decoding appears somewhat unfair, as the draft lengths used (10 and 20) are unusually large. A fairer comparison would involve shorter draft lengths.
 
 ### Questions
 **[Q1]** Are the proposed observations generalizable to other reasoning models (e.g., LLaMA family) or to heterogeneous setups where the leading and draft models differ (e.g., LLaMA → Qwen)?

@@ -1,5 +1,6 @@
 # Mitigating Forgetting in Low Rank Adaptation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # SAE as a Crystal Ball: Interpretable Features Predict Cross-domain Transferability of LLMs without Training
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 4
 

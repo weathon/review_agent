@@ -1,5 +1,6 @@
 # Verifying Chain-of-Thought Reasoning via Its Computational Graph
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 6, 8, 4, 8
 

@@ -1,5 +1,6 @@
 # SonicMoE: Accelerating MoE with IO and Tile-aware Optimizations
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 6
 

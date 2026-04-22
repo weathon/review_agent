@@ -1,5 +1,6 @@
 # HURST: Learning Heterogeneity-Adaptive Urban Foundation Models for Spatiotemporal Prediction via Self-Partitional Mixture-of-Spatial-Experts
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

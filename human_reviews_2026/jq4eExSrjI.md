@@ -1,5 +1,6 @@
 # Bayesian Data Reweighting Improves Retrieval in Knowledge-Based VQA
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

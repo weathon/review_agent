@@ -1,5 +1,6 @@
 # Efficient Diffusion Models under Nonconvex Equality and Inequality constraints via Landing
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

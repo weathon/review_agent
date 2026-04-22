@@ -1,5 +1,6 @@
 # On the $O(1/T)$ Convergence of Alternating Gradient Descent–Ascent in Bilinear Games
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 8, 6, 2, 6
 

@@ -1,5 +1,6 @@
 # Coupling RNN with LLM: Does Their Integration Improve Highly Order-Sensitive Language Understanding?
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 6, 4, 0
 

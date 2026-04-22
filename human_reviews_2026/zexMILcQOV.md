@@ -1,5 +1,6 @@
 # MnemoDyn: Learning Resting State Dynamics from  $40$K FMRI sequences
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 6, 2, 6
 

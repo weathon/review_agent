@@ -1,5 +1,6 @@
 # Learning hidden cascades via classification
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 4, 0, 6
 

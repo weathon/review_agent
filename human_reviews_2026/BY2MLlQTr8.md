@@ -1,5 +1,6 @@
 # Enhancing Extreme Weather Forecasting via Dynamically Weighted MSE
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 6, 4, 4, 4, 6
 

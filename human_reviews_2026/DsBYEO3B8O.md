@@ -1,5 +1,6 @@
 # LEGACY: A Lightweight Dynamic Gradient Compression Strategy for Distributed Deep Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

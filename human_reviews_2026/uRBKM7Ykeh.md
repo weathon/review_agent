@@ -1,5 +1,6 @@
 # VisionSelector: End-to-End Learnable Visual Token Compression for Efficient Multimodal LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 4, 6
 

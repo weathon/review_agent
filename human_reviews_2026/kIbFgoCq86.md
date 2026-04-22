@@ -1,5 +1,6 @@
 # Efficient-DLM: From Autoregressive to Diffusion Language Models, and Beyond in Speed
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 2, 8
 

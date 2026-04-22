@@ -1,5 +1,6 @@
 # WaveletGPT: Wavelet Inspired LLMs
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 0, 4, 4
 

@@ -1,5 +1,6 @@
 # Revisit Visual Prompt Tuning: The Expressiveness of Prompt Experts
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4
 

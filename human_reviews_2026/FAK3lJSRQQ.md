@@ -1,5 +1,6 @@
 # ExLLM: Experience-Enhanced LLM Optimization for Molecular Design and Beyond
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 4, 2, 2, 2
 

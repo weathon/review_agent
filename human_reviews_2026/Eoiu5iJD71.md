@@ -1,5 +1,6 @@
 # Regret-Guided Search Control for Efficient Learning in AlphaZero
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 6, 2, 8
 

@@ -1,5 +1,6 @@
 # Degradation-Aware All-in-One Image Restoration via Latent Prior Encoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

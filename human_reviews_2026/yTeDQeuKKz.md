@@ -1,5 +1,6 @@
 # SALE : Low-bit Estimation for Efficient Sparse Attention in Long-context LLM Prefilling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

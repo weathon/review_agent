@@ -1,5 +1,6 @@
 # Towards Reliable Spatiotemporal Epidemic Forecasting via Steering Diffusion Inference
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 4, 6, 2, 2, 8
 

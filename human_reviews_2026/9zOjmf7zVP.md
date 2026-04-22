@@ -1,5 +1,6 @@
 # Drop-Muon: Update Less, Converge Faster
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 4, 8
 

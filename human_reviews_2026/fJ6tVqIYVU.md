@@ -1,5 +1,6 @@
 # RLAR: An Agentic Reward System for Multi-task Reinforcement Learning on Large Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # SGD with Adaptive Preconditioning: Unified Analysis and Momentum Acceleration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2, 8
 

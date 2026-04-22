@@ -1,5 +1,6 @@
 # Look Locally, Learn Precisely: Interpretable and Unbiased Text-to-Image Generation with Background Fidelity
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

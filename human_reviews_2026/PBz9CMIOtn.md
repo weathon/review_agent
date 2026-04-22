@@ -1,5 +1,6 @@
 # Rethinking the Spatiotemporal Distribution for High-Fidelity Parallel ANN-to-SNN Conversion
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 4, 2, 4
 

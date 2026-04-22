@@ -1,5 +1,6 @@
 # SPIKE-RL: Video-LLMs meet Bayesian Surprise
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 6
 

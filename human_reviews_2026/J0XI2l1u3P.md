@@ -1,5 +1,6 @@
 # Scaling the Prior: Size-Consistent Geometric Diffusion for 3D Molecular Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

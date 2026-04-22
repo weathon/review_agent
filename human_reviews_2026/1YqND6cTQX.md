@@ -1,5 +1,6 @@
 # Personalization Under Value Conflict: Resolving Contradictory Preferences with Paired Fine-Tuning
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2
 

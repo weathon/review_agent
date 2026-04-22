@@ -1,5 +1,6 @@
 # DisCo: Reinforcement with Diversity Constraints for Multi-Human Generation
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Better know nothing than half-know anything: A Precise and Efficient Dataset for Scientific Reasoning in Language Models
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

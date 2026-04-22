@@ -1,5 +1,6 @@
 # Stance Elicitation as a Black-Box Framework for Auditing LLM Alignment
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 4, 0
 

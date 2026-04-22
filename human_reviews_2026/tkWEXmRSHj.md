@@ -1,5 +1,6 @@
 # Contrastive-and-Correlation Catalysts for Cross-Domain Long-Tail Class-incremental Learning
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 4
 

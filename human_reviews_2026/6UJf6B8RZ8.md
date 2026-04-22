@@ -1,5 +1,6 @@
 # LikePhys: Evaluating Intuitive Physics Understanding in Video Diffusion Models via Likelihood Preference
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 4, 4
 

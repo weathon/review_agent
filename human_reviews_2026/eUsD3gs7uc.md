@@ -1,5 +1,6 @@
 # Self-Dual: Unifying Natural Language and Programmatic Thinking for Enhanced Mathematical Reasoning in LLMs
 
+- Avg Score: 3.33
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2
 

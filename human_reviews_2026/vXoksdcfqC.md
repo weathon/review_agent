@@ -1,5 +1,6 @@
 # The Entropy Mechanism of Reinforcement Learning for Reasoning Language Models
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 6, 2
 

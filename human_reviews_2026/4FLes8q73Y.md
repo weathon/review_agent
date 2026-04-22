@@ -1,5 +1,6 @@
 # scCBGM: Single-Cell Editing via Concept Bottlenecks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 6, 4
 

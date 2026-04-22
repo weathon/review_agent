@@ -1,5 +1,6 @@
 # Variational Inference for Cyclic Learning
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 8, 4
 

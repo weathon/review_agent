@@ -1,5 +1,6 @@
 # Learning to Align, Aligning to Learn: A Unified Approach for Self-Optimized Alignment
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4, 2
 

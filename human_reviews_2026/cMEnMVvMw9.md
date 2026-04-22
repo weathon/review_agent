@@ -1,5 +1,6 @@
 # Token-Importance Guided Direct Preference Optimization
 
+- Avg Score: 6.50
 - Decision: Accept (Oral)
 - Scores: 8, 6, 8, 4
 

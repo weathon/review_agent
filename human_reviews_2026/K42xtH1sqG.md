@@ -1,5 +1,6 @@
 # Attacking Combinatorial Bandits: Beyond Bounded Rewards
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 4, 2, 2
 

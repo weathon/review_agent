@@ -1,5 +1,6 @@
 # MultiLifeQA: A Multidimensional Lifestyle Question Answering Benchmark for Comprehensive Health Reasoning with LLMs
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 
@@ -117,7 +118,8 @@ W3. This is more so for clarity of presentation. The baselines (i.e., context pr
 
 W4. Minor, none of the frontier models (i.e., GPT-5, larger reasoning/thinking models) are evaluated so it is unclear whether the findings are actually consistent with modern LLM capabilities. My main concern with this is whether the dataset would be informative if used today to evaluate current frontier LLMs.
 
-[1] How well do LLMs reason over tabular data, really? Cornelius Wolff and Madelon Hulsebos, arXiv preprint arXiv:2505.07453 (2025). 
+[1] How well do LLMs reason over tabular data, really? Cornelius Wolff and Madelon Hulsebos, arXiv preprint arXiv:2505.07453 (2025).
+
 
 [2] Tabular Representation, Noisy Operators, and Impacts on Table Structure Understanding Tasks in LLMs, Ananya Singha et al., Table Representation Learning workshop at NeurIPS 2023.
 

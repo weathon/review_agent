@@ -1,5 +1,6 @@
 # InfLLM-V2: Dense-Sparse Switchable Attention for Seamless Short-to-Long Adaptation
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6
 

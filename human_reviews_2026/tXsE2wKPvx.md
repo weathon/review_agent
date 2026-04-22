@@ -1,5 +1,6 @@
 # MIDAS: Multi-Image Dispersion and Semantic Reconstruction for Jailbreaking MLLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

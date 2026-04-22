@@ -1,5 +1,6 @@
 # Risk-adaptive Activation Steering for Safe Multimodal Large Language Models
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

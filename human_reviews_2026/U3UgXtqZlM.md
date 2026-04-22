@@ -1,5 +1,6 @@
 # Edit-then-Consolidate for Reliable Knowledge Editing
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # MMSearch-Plus: Benchmarking Provenance-Aware Search for Multimodal Browsing Agents
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

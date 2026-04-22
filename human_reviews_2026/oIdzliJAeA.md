@@ -1,5 +1,6 @@
 # Mixture-of-Experts Can Surpass Dense LLMs Under Strictly Equal Resource
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 4, 4, 4, 8
 

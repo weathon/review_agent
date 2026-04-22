@@ -1,5 +1,6 @@
 # When Speculation Spills Secrets: Side Channels via Speculative Decoding in LLMs
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

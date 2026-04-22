@@ -1,5 +1,6 @@
 # Hierarchical Code Embeddings with Multi-Level Attention for Reinforcement Learning State Representation
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 0, 0, 2, 0
 

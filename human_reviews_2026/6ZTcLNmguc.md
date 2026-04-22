@@ -1,5 +1,6 @@
 # Gelato: Graph Edit Distance via Autoregressive Neural Combinatorial Optimization
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 4, 4
 

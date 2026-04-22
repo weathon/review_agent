@@ -1,5 +1,6 @@
 # ConRep4CO: Contrastive Representation Learning of Combinatorial Optimization Instances across Types
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # IS IT NECESSARY TO APPLY PARAMETER-EFFICIENT FINE-TUNING TO ALL POSITION INDICES?
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 2, 4
 

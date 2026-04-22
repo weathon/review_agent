@@ -1,5 +1,6 @@
 # Structured Attention Matters to Multimodal LLMs in Document Understanding
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

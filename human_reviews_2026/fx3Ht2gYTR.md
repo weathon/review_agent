@@ -1,5 +1,6 @@
 # TornadoAttention: Hardware-Efficient Sparse Attention via Fine-Grained Spatio-Temporal Permutation for Video Generation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 4, 4
 

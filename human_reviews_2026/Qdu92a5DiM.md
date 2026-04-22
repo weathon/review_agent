@@ -1,5 +1,6 @@
 # Refine Drugs, Don’t Complete Them: Uniform-Source Discrete Flows for Fragment-Based Drug Discovery
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 2, 6, 8, 4
 
@@ -111,7 +112,8 @@ This paper presents InVirtuoGen, a discrete flow–based molecular generator tha
 This submission investigates the problem of drug discovery, more specifically fragment-based drug discovery. The authors present a method called InVirtuoGen, which adopts the discrete flow model framework of Gat et al., 2024 and a slightly modified version of the SAFE framework of Noutahi et al., 2023 for molecule representation. The main contribution of the submission is the proposed method for Target Property Optimization on top of the Discrete Flow Model. This method combines a genetic algorithm for faster convergence with PPO-based Reinforcement Learning for gradient-based optimization. Experiments were performed on benchmarks for de novo (unconstrained) generation, fragment-constrained generation, target property optimization, and  lead optimization. Experimental results are supportive.
 
 ### Strengths
-The submission focuses on the practically important tasks of molecule optimization instead of de novo molecule generation. 
+The submission focuses on the practically important tasks of molecule optimization instead of de novo molecule generation.
+
 
 InVirtuoGen proposes a discrete flow model that transforms a uniform source distribution over all tokens into molecular data. The simultaneous generation of the whole molecule is beneficial for optimization tasks.
 

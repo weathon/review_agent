@@ -1,5 +1,6 @@
 # cgDDI: Controllable Generation of Diverse Dermatological Imagery for Fair and Efficient Malignancy Classification
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # PatchTraj: Unified Time-Frequency Representation Learning via Dynamic Patches for Trajectory Prediction
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 4
 

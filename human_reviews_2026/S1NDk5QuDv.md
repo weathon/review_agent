@@ -1,5 +1,6 @@
 # I Spy With My Model’s Eye: Visual Search as a Behavioural Test for MLLMs
 
+- Avg Score: 3.60
 - Decision: Reject
 - Scores: 4, 6, 2, 2, 4
 

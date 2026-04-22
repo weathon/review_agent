@@ -1,5 +1,6 @@
 # Learning without Memorizing Considered Infeasible: Rethinking Memorization in LLMs
 
+- Avg Score: 2.00
 - Decision: Reject
 - Scores: 2, 2, 2
 

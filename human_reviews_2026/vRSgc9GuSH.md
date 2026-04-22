@@ -1,5 +1,6 @@
 # TAD-Net: Reinforced Anomaly Generation and Wavelet-enhanced Prediction for Temporal Anomaly Detection
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 2
 

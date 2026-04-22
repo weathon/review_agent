@@ -1,5 +1,6 @@
 # AttentionR-GCN: Incorporating Spatiotemporal Reasoning in Heterogeneous and Partially Observed Graphs
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 2, 4
 

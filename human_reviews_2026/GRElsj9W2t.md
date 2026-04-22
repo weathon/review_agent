@@ -1,5 +1,6 @@
 # Motion Prior Distillation in Time Reversal Sampling for Generative Inbetweening
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

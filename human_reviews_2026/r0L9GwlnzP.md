@@ -1,5 +1,6 @@
 # Do LLM Agents Know How to Ground,  Recover, and Assess? Evaluating Epistemic Competence in Information-Seeking Agents
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 4, 4
 

@@ -1,5 +1,6 @@
 # Geometric Compression in Grokking: The Three-Stage Modular Dynamics of Transformers
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 6, 2, 2
 

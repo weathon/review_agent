@@ -1,5 +1,6 @@
 # DeepRepoQA: Code Repository Question Answering with Deep Agent Exploration
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 4, 2
 

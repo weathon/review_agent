@@ -1,5 +1,6 @@
 # Unveiling Impact of Frequency Components on Membership Inference Attacks for Diffusion Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Experience-Guided Reflective Co-Evolution of Prompts and Heuristics for Automatic Algorithm Design
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

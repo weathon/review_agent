@@ -1,5 +1,6 @@
 # LoRA-DA: Data-Aware Initialization for Low-Rank Adaptation via Asymptotic Analysis
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Iterative Multi-Objective Policy Optimization for Antibody Sequence Design
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 8, 4, 4
 

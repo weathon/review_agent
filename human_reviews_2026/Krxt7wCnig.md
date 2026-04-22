@@ -1,5 +1,6 @@
 # Long-range Modeling and Processing of Multimodal Event Sequences
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

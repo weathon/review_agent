@@ -1,5 +1,6 @@
 # Step-Aware Residual-Guided Diffusion for EEG Spatial Super-Resolution
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

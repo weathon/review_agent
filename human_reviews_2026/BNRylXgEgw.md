@@ -1,5 +1,6 @@
 # Provable Policy Optimization for Reinforcement Learning from Trajectory Preferences with an Unknown Link Function
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

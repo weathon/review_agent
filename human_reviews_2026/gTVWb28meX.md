@@ -1,5 +1,6 @@
 # Approximate Inference Suffices for Statistical Distance Estimation
 
+- Avg Score: 5.60
 - Decision: Reject
 - Scores: 8, 4, 4, 6, 6
 

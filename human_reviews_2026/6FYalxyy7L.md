@@ -1,5 +1,6 @@
 # ReMoBA: Representative Replay and Mixture of BatchNoise Autoencoders for Pre-Trained Model-Based Federated Domain-Incremental Learning
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

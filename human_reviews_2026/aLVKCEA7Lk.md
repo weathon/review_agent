@@ -1,5 +1,6 @@
 # Linear Causal Representation Learning by Topological Ordering, Pruning, and Disentanglement
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 6, 4, 6
 

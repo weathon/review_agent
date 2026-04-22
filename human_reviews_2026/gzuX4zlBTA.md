@@ -1,5 +1,6 @@
 # Phase-aware Memory Thought for 3D Medical Image Report Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 0, 4, 4, 4
 

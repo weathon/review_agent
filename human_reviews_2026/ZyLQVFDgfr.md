@@ -1,5 +1,6 @@
 # Consistency Flow Model Achieves One-step Denoising Error Correction Codes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Towards Flash Thinking via Decoupled Advantage Policy Optimization
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 2, 4
 

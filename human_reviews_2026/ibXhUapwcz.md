@@ -1,5 +1,6 @@
 # Improving Black-Box Generative Attacks via Generator Semantic Consistency
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 8, 2, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Greedy Distill: Efficient Video Generative Modeling with Linear Time Complexity
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 4, 8, 6, 4
 

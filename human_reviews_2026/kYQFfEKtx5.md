@@ -1,5 +1,6 @@
 # C-Voting: Confidence-Based Test-Time Voting without Explicit Energy Functions
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

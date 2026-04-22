@@ -1,5 +1,6 @@
 # Do Large Language Models Know What They Are Capable Of?
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 2
 

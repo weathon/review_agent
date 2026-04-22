@@ -1,5 +1,6 @@
 # Instance-Dependent Fixed-Budget Pure Exploration in Reinforcement Learning
 
+- Avg Score: 7.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6, 8
 

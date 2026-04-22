@@ -1,5 +1,6 @@
 # Quantization-Enhanced HNSW for Scalable Approximate Vector Search
 
+- Avg Score: 0.67
 - Decision: Reject
 - Scores: 0, 0, 2
 

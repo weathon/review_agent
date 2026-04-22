@@ -1,5 +1,6 @@
 # Structured and Abstractive Reasoning on Multi-modal Relational Knowledge Images
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4
 

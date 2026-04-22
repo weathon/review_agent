@@ -1,5 +1,6 @@
 # Base Models Know How to Reason, Thinking Models Learn When
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 4, 2, 2
 

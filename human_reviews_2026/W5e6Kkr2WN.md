@@ -1,5 +1,6 @@
 # Adapting World Models with Latent-State Dynamics Residuals
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 8
 

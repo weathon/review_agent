@@ -1,5 +1,6 @@
 # Attention and Compression is all you need for Controllably Efficient Language Models
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 4, 2, 6, 4, 0
 

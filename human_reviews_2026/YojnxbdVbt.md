@@ -1,5 +1,6 @@
 # Mixing Expertise with Confidence: A Mixture of Expert Framework for Robust Multi-Modal Continual Learner
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 

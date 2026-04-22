@@ -1,5 +1,6 @@
 # Reasoning with Confidence: Efficient Verification of LLM Reasoning Steps via Uncertainty Heads
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 6, 2
 

@@ -1,5 +1,6 @@
 # SOLAR: Communication-Efficient Model Adaptation via Subspace-Oriented Reparametrization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 6, 4
 

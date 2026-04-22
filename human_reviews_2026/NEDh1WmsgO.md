@@ -1,5 +1,6 @@
 # A Fine-Grained Approach to Explaining Catastrophic Forgetting of Interactions in Class-Incremental Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

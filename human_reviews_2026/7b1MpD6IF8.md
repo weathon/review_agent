@@ -1,5 +1,6 @@
 # AQuA: Toward Strategic Response Generation for Ambiguous Visual Questions
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # Breaking Rank Bottlenecks in Knowledge Graph Embeddings
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 0, 2, 6
 

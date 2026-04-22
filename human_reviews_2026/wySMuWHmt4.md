@@ -1,5 +1,6 @@
 # Primary-Fine Decoupling for Action Generation in Robotic Imitation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

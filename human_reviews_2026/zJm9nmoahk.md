@@ -1,5 +1,6 @@
 # G-reasoner: Foundation Models for Unified Reasoning over Graph-structured Knowledge
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6, 4
 

@@ -1,5 +1,6 @@
 # Rethinking Knowledge Distillation: A Data Dependent Regulariser With a Negative Asymmetric Payoff
 
+- Avg Score: 2.67
 - Decision: Reject
 - Scores: 2, 4, 2
 

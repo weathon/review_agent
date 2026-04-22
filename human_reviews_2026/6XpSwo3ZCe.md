@@ -1,5 +1,6 @@
 # Enhancing Deep Imbalanced Regression via Frobenius Norm Regularization
 
+- Avg Score: 3.20
 - Decision: Reject
 - Scores: 2, 2, 2, 6, 4
 

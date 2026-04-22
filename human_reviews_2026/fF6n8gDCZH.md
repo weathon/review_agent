@@ -1,5 +1,6 @@
 # FlowNIB: An Information Bottleneck Analysis of Bidirectional vs. Unidirectional Language Models
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 2, 2, 6
 

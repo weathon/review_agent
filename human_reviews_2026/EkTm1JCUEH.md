@@ -1,5 +1,6 @@
 # Extending Prediction-Powered Inference through Conformal Prediction
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

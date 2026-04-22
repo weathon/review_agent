@@ -1,5 +1,6 @@
 # TreeGRPO: Tree-Advantage GRPO for Online RL Post-Training of Diffusion Models
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

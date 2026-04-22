@@ -1,5 +1,6 @@
 # Self-Improving Vision-Language-Action Models with Data Generation via Residual RL
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

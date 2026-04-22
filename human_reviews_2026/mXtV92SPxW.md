@@ -1,5 +1,6 @@
 # UniversalRAG: Retrieval-Augmented Generation over Corpora of Diverse Modalities and Granularities
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 6, 4, 4
 

@@ -1,5 +1,6 @@
 # How NOT to benchmark your SITE metric: Beyond Static Leaderboards and Towards Realistic Evaluation.
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6
 

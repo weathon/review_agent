@@ -1,5 +1,6 @@
 # Coupled Distributional Random Expert Distillation for World Model Online Imitation Learning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 
@@ -123,12 +124,16 @@ This paper presents Coupled Distributional Random Expert Distillation (CDRED), a
 The method performs latent-space density estimation via Random Network Distillation (RND) using two predictor networks that share an ensemble of fixed random targets—one trained on expert data and the other on behavioral data. The coupled formulation defines rewards from the difference between expert and behavioral prediction errors, balancing imitation and exploration. CDRED is integrated into a TD-MPC2-style world model jointly trained with encoder, dynamics, and value networks. During inference, a Model Predictive Path Integral (MPPI) planner maximizes the cumulative CDRED reward. Experiments on Meta-World, DMControl, and ManiSkill2 show expert-level performance and substantially improved stability compared to IQ-MPC and other baselines.
 
 ### Strengths
-1. **Stable reward formulation**: The coupled RND mechanism jointly estimates expert and behavioral latent distributions, balancing exploitation and exploration. This approach intuitively prevents collapse to sub-optimal expert matching while avoiding the instability of adversarial IL.
-2. **Empirical robustness**: CDRED achieves expert-level performance on multiple domains and outperforms IQ-MPC and CFIL on Meta-World and ManiSkill2, while matching their performance on DMControl. Stability metrics and qualitative curves (Figures 4–6) clearly support the authors’ claim of lower gradient variance.
-3. **Thorough ablations**: The paper evaluates the effects of latent-space training, coupling, the number of expert trajectories, and the role of world models. The results show that coupling notably improves exploration coverage and stability.
+1. **Stable reward formulation**:
+The coupled RND mechanism jointly estimates expert and behavioral latent distributions, balancing exploitation and exploration. This approach intuitively prevents collapse to sub-optimal expert matching while avoiding the instability of adversarial IL.
+2. **Empirical robustness**:
+CDRED achieves expert-level performance on multiple domains and outperforms IQ-MPC and CFIL on Meta-World and ManiSkill2, while matching their performance on DMControl. Stability metrics and qualitative curves (Figures 4–6) clearly support the authors’ claim of lower gradient variance.
+3. **Thorough ablations**:
+The paper evaluates the effects of latent-space training, coupling, the number of expert trajectories, and the role of world models. The results show that coupling notably improves exploration coverage and stability.
 
 ### Weaknesses
-1. **Clarity and self-containment**: Section 3 introduces the RND correction from Yang et al. (2024) before CDRED’s own contribution, which causes conceptual fragmentation. The derivation of Equations 7 and 8 is abrupt and not self-contained, leaving the reader to infer critical relationships between the bias correction term and the coupled reward. The paper is also hard to follow. The notation is heavy, and the description of the reward construction involves many symbols (e.g., $,\epsilon$, $b$, $\mu_{\bar\theta}$) with little intuition. Important design choices such as the bias correction and the switch between the $L^2$ and variance terms are deferred to the appendix, which makes the main narrative difficult to digest. Readers unfamiliar with RND may struggle to understand the motivation behind the formulation.
+1. **Clarity and self-containment**:
+Section 3 introduces the RND correction from Yang et al. (2024) before CDRED’s own contribution, which causes conceptual fragmentation. The derivation of Equations 7 and 8 is abrupt and not self-contained, leaving the reader to infer critical relationships between the bias correction term and the coupled reward. The paper is also hard to follow. The notation is heavy, and the description of the reward construction involves many symbols (e.g., $,\epsilon$, $b$, $\mu_{\bar\theta}$) with little intuition. Important design choices such as the bias correction and the switch between the $L^2$ and variance terms are deferred to the appendix, which makes the main narrative difficult to digest. Readers unfamiliar with RND may struggle to understand the motivation behind the formulation.
 2. **Outdated references and missing baselines**: The references stop at 2024, but in 2025 there are multiple works on world‑model‑based imitation learning or RND‑based IL. For example, RND‑DAgger (ICLR 2025) uses RND to trigger expert queries, reducing the need for expert data [1]; Dream to Manipulate (ICLR 2025) uses a compositional world model as a digital twin to augment imitation learning [2]; LUMOS (ICRA 2025) trains a language‑conditioned policy in a world model with intrinsic rewards [3]; and AIME‑NoB (TMLR 2025) integrates online interactions and a surrogate reward to overcome knowledge barriers in IL [4]. None of these papers are cited or compared, and CDRED is therefore evaluated only against older baselines.
 3. **Limited novelty relative to concurrent work**: The core idea—using RND‑style density estimation in latent space for IL—closely resembles earlier methods (RED) and concurrent 2025 work. The primary difference is coupling the expert and behavioral predictors, yet the paper does not provide strong theoretical justification or thorough ablations on why the coupling stabilizes learning beyond the empirical toy example and empirical trends.
 4. **Incomplete discussion of hyperparameters and sensitivity**: Fixed parameters are used throughout without justification. There is no sensitivity analysis to show how performance depends on these choices.
@@ -144,8 +149,10 @@ The method performs latent-space density estimation via Random Network Distillat
 [4] Overcoming Knowledge Barriers: Online Imitation Learning from Visual Observation with Pretrained World Models. TMLR 2025. https://arxiv.org/abs/2404.18896
 
 ### Questions
-1. **Hyperparameter sensitivity**: The constants ζ = 0.8, α = 0.9, and K = 5 are fixed throughout. How sensitive is CDRED to these values? Could different ζ schedules improve the exploration–exploitation balance?
-2. **Reward interpretability**: Can the authors visualize or provide statistics on the evolving expert versus behavioral prediction errors? Such insights would clarify the coupling effect.
+1. **Hyperparameter sensitivity**:
+The constants ζ = 0.8, α = 0.9, and K = 5 are fixed throughout. How sensitive is CDRED to these values? Could different ζ schedules improve the exploration–exploitation balance?
+2. **Reward interpretability**:
+Can the authors visualize or provide statistics on the evolving expert versus behavioral prediction errors? Such insights would clarify the coupling effect.
 
 ### Soundness
 3

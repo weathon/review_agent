@@ -1,5 +1,6 @@
 # BM-CL: Bias Mitigation through the lens of Continual Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

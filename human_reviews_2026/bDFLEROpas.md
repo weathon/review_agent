@@ -1,5 +1,6 @@
 # Back Propagation through Auctions: First-Order Policy Gradient for Auto-Bidding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6, 4
 

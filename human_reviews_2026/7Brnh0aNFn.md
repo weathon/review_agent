@@ -1,5 +1,6 @@
 # Spiking Discrepancy Transformer for Point Cloud Analysis
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6
 

@@ -1,5 +1,6 @@
 # InfantNet: A Large Scale Dataset for Infant Body Pose and Shape Estimation
 
+- Avg Score: 5.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 8, 8
 

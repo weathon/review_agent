@@ -1,5 +1,6 @@
 # RoadBench: Benchmarking MLLMs on Fine-Grained Spatial Understanding and Reasoning in Urban Road Scenarios
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6, 4
 

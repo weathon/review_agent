@@ -1,5 +1,6 @@
 # FRELA: Frequency-Layered Audio Watermarking for Robust Content Authentication
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 2, 2, 2, 6
 

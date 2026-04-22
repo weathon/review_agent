@@ -1,5 +1,6 @@
 # Enhanced Generative Model Evaluation with Clipped Density and Coverage
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 
@@ -160,8 +161,10 @@ This paper proposes the metrics Clipped Density and Clipped Coverage, which are 
 ### Summary
 This paper introduces two new metrics, Clipped Density and Clipped Coverage, to address failings in the evaluation of generative models. The authors argue that existing metrics for fidelity and coverage suffer from two main problems: 1) a lack of robustness to outliers in both the real and synthetic datasets, and 2) an inability to provide an interpretable, absolute score.
 The proposed metrics address these issues through new clipping and calibration strategies:
-1. Clipping: Clipped Density (fidelity) prevents real-data outliers from inflating scores by clipping k-NN ball radii to the median distance. Both metrics also clip the contribution of any individual sample to a score of 1, preventing over-represented modes from masking the presence of "bad" samples. 
-2. Calibration: The metrics are calibrated to provide an absolute, more interpretable score. A score of $x$ is designed to be equivalent to the performance of a dataset with a proportion $x$ of "good" samples and $1-x$ of "bad" samples . For Clipped Coverage, this is achieved via a theoretical derivation (Lemma 1) and a resulting correction function ; for Clipped Density, this is achieved by normalizing by the real data's score on itself . 
+1. Clipping: Clipped Density (fidelity) prevents real-data outliers from inflating scores by clipping k-NN ball radii to the median distance. Both metrics also clip the contribution of any individual sample to a score of 1, preventing over-represented modes from masking the presence of "bad" samples.
+
+2. Calibration: The metrics are calibrated to provide an absolute, more interpretable score. A score of $x$ is designed to be equivalent to the performance of a dataset with a proportion $x$ of "good" samples and $1-x$ of "bad" samples . For Clipped Coverage, this is achieved via a theoretical derivation (Lemma 1) and a resulting correction function ; for Clipped Density, this is achieved by normalizing by the real data's score on itself .
+
 The authors demonstration on synthetic densities and through empirical validation on DINOv2-embedded image datasets that these two metrics are robust to outliers and provide interpretable absolute scores that behave linearly as sample quality degrades.
 
 ### Strengths
@@ -172,18 +175,21 @@ Strengths:
 - The authors have made some efforts to demonstrate the performances of their metrics on modern, high-dimensional datasets like ImageNet, LSUN, and FFHQ, which are the standard benchmarks for "real-world" generative models
 
 ### Weaknesses
-1. Overstated Claims and Missing Key Baselines: The paper's premise that "all existing... metrics are flawed" and that "no metric offers this property" (absolute interpretability) is an overstatement. The paper's analysis is confined almost entirely to kNN density-based metrics, while ignoring a relevant body of work on sampling-based evaluation: arXiv:2402.04355 and arXiv:2302.03026 similarly use distance metrics to probe the underlying density but don’t rely on kNN density estimation; there is also no comparison to other standard metrics used in the literature, to help the audience how the proposed metrics differ on specific tasks (Fréchet Inception Distance - FID  arXiv:1706.08500, Feature Likelihood Divergence  - FLD arXiv:2302.04440) Failing to refer to and compare against this (FID is mentioned, but just in the intro, no comparisons are actually made on on problems) related work significantly weakens the paper's claim to novelty, and makes it hard to understand how its performances compare to existing evaluation options.
+1. Overstated Claims and Missing Key Baselines: The paper's premise that "all existing... metrics are flawed" and that "no metric offers this property" (absolute interpretability) is an overstatement. The paper's analysis is confined almost entirely to kNN density-based metrics, while ignoring a relevant body of work on sampling-based evaluation: arXiv:2402.04355 and arXiv:2302.03026 similarly use distance metrics to probe the underlying density but don’t rely on kNN density estimation; there is also no comparison to other standard metrics used in the literature, to help the audience how the proposed metrics differ on specific tasks (Fréchet Inception Distance - FID  arXiv:1706.08500, Feature Likelihood Divergence  - FLD arXiv:2302.04440)
+Failing to refer to and compare against this (FID is mentioned, but just in the intro, no comparisons are actually made on on problems) related work significantly weakens the paper's claim to novelty, and makes it hard to understand how its performances compare to existing evaluation options.
 2. The paper's main technical contribution—the calibration of Clipped Coverage—could be presented more clearly.
 
    - Lack of Clarity: The paper never explicitly states that its "absolute interpretability" is a property of the metric's expected value, not its value from a single draw. This implies that bootstrapping (running the metric many times) is required to get an interpretable score, but this is never explicitly stated or analyzed (how stable is the score as a function of the number of samples and the dimensionality of the problem).
 
    - Statistical Ambiguity: As a result of sampling variance, a single "lucky" draw from a perfect model (or even an imperfect model) could yield an uncalibrated score $s > f_{\text{expected}}(0)$, which would result in a calibrated score greater than 1.0, breaking the "proportion" interpretation. This could happen even if the score is bootstrapped a small number of times (since the variance of the score is not studied theoretically, it’s hard to assess how many times the bootstrapping needs to be done for a specific application). The paper provides no analysis of the metric's variance or the number of bootstrap samples needed for a stable estimate.
 
-   - Lack of theoretical guarantees: The paper does not present theoretical guarantees that the proposed metric has important desirable properties in the theoretical limit of infinite number of samples or with infinite number of re-drawing of the samples and recalculating the score, like a proof of sufficiency or a proof of consistency.  
+   - Lack of theoretical guarantees: The paper does not present theoretical guarantees that the proposed metric has important desirable properties in the theoretical limit of infinite number of samples or with infinite number of re-drawing of the samples and recalculating the score, like a proof of sufficiency or a proof of consistency. 
+
 
 3. Limited Scope of Evaluation (Failure Modes & Modalities):
    - Limited evaluation of the sensitivity of the metrics: The "sanity checks" are limited to gross failures like complete mode dropping or injection of very easily detectable out of distribution samples. For scientific applications, a much more relevant test is sensitivity to subtle failures, such as missing rare modes, failing to capture intra-mode structure, or subtle corruption to the samples.
-    - Missing Modalities: All experiments are on images or simple Gaussian data. The metric is distance-based and should be applicable to any data modality. The paper would be far more convincing if it demonstrated this utility on other common data types, such as tabular data or time-series. 
+    - Missing Modalities: All experiments are on images or simple Gaussian data. The metric is distance-based and should be applicable to any data modality. The paper would be far more convincing if it demonstrated this utility on other common data types, such as tabular data or time-series.
+
 
 4. All the high-dimensional experiments presented have a dependence on  a black box feature extractor. The robustness claims are undermined by this, as it’s not clear if it’s the metric that’s robust, or the embedding of the data through DINOv2. This creates blinds spots for many real world applications:  
 
@@ -194,7 +200,11 @@ Strengths:
 5. There is a significant limitation of the metrics that is not discussed: The paper's design goal is "robustness to outliers," which it achieves by making the metrics insensitive to the magnitude of a sample's "badness" . A synthetic sample 1000 units away from the data manifold is scored as a 0, which is the same score a sample only 10 units away might receive. While this makes the metric sensitive to the proportion of bad samples, it ignores the severity. For the "high-stakes applications" mentioned in the introduction (e.g., healthcare), this is a critical flaw. A model that produces one catastrophic outlier is far more dangerous than a model that produces many mediocre samples. The paper presents this insensitivity as a feature without discussing the significant trade-off in its limitations.
 
 ### Questions
-1. How does the variance of the coverage score scale as a function of the number of samples, number of bootstrap performed, and dimensionality of the problem, for various applications?    
+1. How does the variance of the coverage score scale as a function of the number of samples, number of bootstrap performed, and dimensionality of the problem, for various applications?
+
+
+
+
 
 2. Your k-NN metrics are susceptible to the curse of dimensionality, which is why you use DINOv2. But what failure modes does this introduce? For example, how would your DINOv2-embedded metrics perform on a "bad" model that correctly learns the locations and densities of modes but gets the correlations within those modes wrong?
 

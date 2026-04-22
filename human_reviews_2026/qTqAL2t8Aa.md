@@ -1,5 +1,6 @@
 # Robust Spiking Neural Networks Against Adversarial Attacks
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 6, 6
 

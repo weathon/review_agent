@@ -1,5 +1,6 @@
 # Look&Learn: Where to Look? Bridging Perception and Grounding Gap in Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

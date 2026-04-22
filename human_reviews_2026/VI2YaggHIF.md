@@ -1,5 +1,6 @@
 # DeepRAG: Thinking to Retrieve Step by Step for Large Language Models
 
+- Avg Score: 4.67
 - Decision: Accept (Poster)
 - Scores: 4, 4, 6
 

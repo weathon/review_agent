@@ -1,5 +1,6 @@
 # The Quest for Efficient Reasoning: A Data-Centric Benchmark to CoT Distillation
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4
 

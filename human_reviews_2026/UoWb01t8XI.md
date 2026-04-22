@@ -1,5 +1,6 @@
 # Bridging Language Barriers in Smart Contract Security: A Reinforcement Learning-Based Translation Approach
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

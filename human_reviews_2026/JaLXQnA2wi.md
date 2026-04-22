@@ -1,5 +1,6 @@
 # Scaling Long-Horizon Agent via Context Folding
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 2, 8
 

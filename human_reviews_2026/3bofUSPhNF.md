@@ -1,5 +1,6 @@
 # DiffGED: Computing Graph Edit Distance via Diffusion-based Graph Matching
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 6, 6, 2
 

@@ -1,5 +1,6 @@
 # Equivariant Metanetworks for Mixture-of-Experts Weights
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 0, 6
 

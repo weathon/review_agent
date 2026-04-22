@@ -1,5 +1,6 @@
 # Bridging Modalities for Forgery Detection via Learnable Representations with Query-Guided Contrastive Learning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 2, 6
 

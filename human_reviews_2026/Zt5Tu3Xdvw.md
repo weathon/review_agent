@@ -1,5 +1,6 @@
 # Consistent 3D Object Detection with Active LLM Reasoning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

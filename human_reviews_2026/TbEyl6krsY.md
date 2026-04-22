@@ -1,5 +1,6 @@
 # Learning Correlated Reward Models: Statistical Barriers and Opportunities
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

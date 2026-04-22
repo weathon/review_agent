@@ -1,5 +1,6 @@
 # Phys-Bench: A Physics-aware Benchmark with Multi-Body Interactions for 3D Dynamic Scene Understanding
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

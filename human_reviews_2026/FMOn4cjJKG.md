@@ -1,5 +1,6 @@
 # Uni-MDTrack: Prompt Unified Single Object Tracking with Deep Fusion of Memory and Dynamic State
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 6, 4, 6, 4
 

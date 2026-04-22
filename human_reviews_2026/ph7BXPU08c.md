@@ -1,5 +1,6 @@
 # TD-M(PC)$^2$: Improving Temporal Difference MPC Through Policy Constraint
 
+- Avg Score: 4.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 8, 4
 

@@ -1,5 +1,6 @@
 # Learning to summarize user information for personalized reinforcement learning from human feedback
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 4, 6
 

@@ -1,5 +1,6 @@
 # Savaal: Scalable Concept-Driven Question Generation to Enhance Human Learning
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 4, 4, 4
 

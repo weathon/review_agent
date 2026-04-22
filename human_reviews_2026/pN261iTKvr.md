@@ -1,5 +1,6 @@
 # Learning to Segment for Vehicle Routing Problems
 
+- Avg Score: 5.00
 - Decision: Accept (Oral)
 - Scores: 4, 4, 6, 6
 

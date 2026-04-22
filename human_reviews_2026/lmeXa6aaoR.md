@@ -1,5 +1,6 @@
 # BrowserArena: Evaluating LLM Agents on Real-World Web Navigation Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

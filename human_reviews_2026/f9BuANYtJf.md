@@ -1,5 +1,6 @@
 # GRAF: Multi-turn Jailbreaking via Global Refinement and Active Fabrication
 
+- Avg Score: 4.40
 - Decision: Reject
 - Scores: 2, 6, 4, 6, 4
 

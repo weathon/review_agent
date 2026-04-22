@@ -1,5 +1,6 @@
 # Ghost in the Cloud: Your Geo-Distributed Large Language Models Training is Easily Manipulated
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 2, 8, 6
 

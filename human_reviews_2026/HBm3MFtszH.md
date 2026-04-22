@@ -1,5 +1,6 @@
 # TUMIX: Multi-Agent Test-Time Scaling with Tool-Use Mixture
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

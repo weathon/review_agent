@@ -1,5 +1,6 @@
 # Neural Brain Fields: A NeRF-Inspired Approach for Generating Nonexistent EEG Electrodes
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 8, 2
 

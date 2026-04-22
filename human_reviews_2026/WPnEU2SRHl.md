@@ -1,5 +1,6 @@
 # Local SGD and Federated Averaging Through the Lens of Time Complexity
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 8, 6, 4, 2, 4
 

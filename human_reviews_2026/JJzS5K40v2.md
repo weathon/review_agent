@@ -1,5 +1,6 @@
 # Can Data-driven Machine Learning Reach Symbolic-level Logical Reasoning? -- The Limit of the Scaling Law
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # FlowBypass: General Training-Free Rectified Flow Image Editing via Trajectory Bypass
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

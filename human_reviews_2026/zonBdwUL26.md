@@ -1,5 +1,6 @@
 # Circuits, Features, and Heuristics in Molecular Transformers
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 4, 8
 

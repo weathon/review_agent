@@ -1,5 +1,6 @@
 # Probing to Refine: Reinforcement Distillation of LLM Reasoners via Explanatory Inversion
 
+- Avg Score: 5.67
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 6, 6
 

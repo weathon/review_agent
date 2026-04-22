@@ -1,5 +1,6 @@
 # Systematic Exploration Supervision Enables Scaling Beyond Training Complexity
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 8, 2
 

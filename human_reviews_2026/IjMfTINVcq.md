@@ -1,5 +1,6 @@
 # SuperRL: Reinforcement Learning with Supervision to Boost Language Model Reasoning
 
+- Avg Score: 4.80
 - Decision: Reject
 - Scores: 4, 4, 4, 6, 6
 

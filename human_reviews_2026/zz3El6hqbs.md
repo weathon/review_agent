@@ -1,5 +1,6 @@
 # Learning activation functions with PCA on a set of diverse piecewise-linear self-trained mappings
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 8, 2, 2
 

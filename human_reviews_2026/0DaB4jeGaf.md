@@ -1,5 +1,6 @@
 # Conquer the Quantile: Convolution-Smoothed Quantile Regression with Neural Networks and Minimax Guarantees
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

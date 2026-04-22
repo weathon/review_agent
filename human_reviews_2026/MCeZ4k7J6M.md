@@ -1,5 +1,6 @@
 # Accelerated Predictive Coding Networks via Direct Kolen–Pollack Feedback Alignment
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 2, 6, 6
 

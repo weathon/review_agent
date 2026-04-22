@@ -1,5 +1,6 @@
 # Embodied Agents Meet Personalization: Investigating Challenges and Solutions Through the Lens of Memory Utilization
 
+- Avg Score: 5.33
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6
 

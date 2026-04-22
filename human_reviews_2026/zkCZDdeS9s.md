@@ -1,5 +1,6 @@
 # Dancing in Chains: Strategic Persuasion in Academic Rebuttal via Theory of Mind
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

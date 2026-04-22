@@ -1,5 +1,6 @@
 # TISR: Breaking Vision–Language Models via Text–Image Segmentation and Reassembly
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 6
 

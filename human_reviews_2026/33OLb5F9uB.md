@@ -1,5 +1,6 @@
 # Guaranteeing Privacy in Hybrid Quantum Learning through Theoretical Mechanisms
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 6, 4, 6
 
@@ -29,8 +30,11 @@ The authors identify POVM trace balancing as a design rule to further tighten de
 The paper is well written (except for the abstract) and is easy to follow. The work is commendable, lighting a torch towards a new direction of quantum noise-based differential privacy.
 
 ### Weaknesses
-The abstract is misleading, although the manuscript follows by introducing DP and QDP eventually, the abstract says “noise means privacy” which is incomplete and misleading to a non-DP expert.  
-The idea is very good. Leveraging the quantum noise as a DP mechanism is like realizing a foe can be a friend. But the formulation in the manuscript seems simpler than the actual noise scenario that is in quantum world.  It starts with the scope of the paper which considers only the depolarization noise. Before moving into the discussion of the theoretical formulation aspect, this umbrella assumption itself is flawed/incomplete.  The mathematical properties are not universal, although acknowledged, one of the most critical aspects is considered as future work.
+The abstract is misleading, although the manuscript follows by introducing DP and QDP eventually, the abstract says “noise means privacy” which is incomplete and misleading to a non-DP expert. 
+
+The idea is very good. Leveraging the quantum noise as a DP mechanism is like realizing a foe can be a friend. But the formulation in the manuscript seems simpler than the actual noise scenario that is in quantum world.
+
+It starts with the scope of the paper which considers only the depolarization noise. Before moving into the discussion of the theoretical formulation aspect, this umbrella assumption itself is flawed/incomplete.  The mathematical properties are not universal, although acknowledged, one of the most critical aspects is considered as future work.
 
 For example, let’s just take some unavoidable temporal ones, like, amplitude damping noise (T1) or phase damping (T2). T1 is not a uniform contraction of the Bloch sphere. It asymmetrically pulls the state towards the ground state. It does not have the simple convex combination form. Another dangerous one is coherent noises. They contradict the whole concept of randomness; they are systematic. 
 
@@ -38,7 +42,9 @@ It is highly plausible that these noises might create a new vulnerability by sys
 
 If the authors aim to show a proof a concept that the quantum noise has the potential to show DP properties, then, as per my judgment, it has already been done rigorously in the literature. The adaptation of quantum noise as an amplifier to classical form is a novelty but not enough. 
 
-Experiments: Datasets selected are although suitable for a first proof of concept, they are considered as the toy-datsets by the community; Mnist, FashionMNIST (just an extension with same dimension 28x28, and features as grayscale pixel value), and USPS. More complex, at least something like Cifar-10 is expected.  This might steer in a new direction, say more qubits requirements. Adding qubits to a circuit generally reduces fidelity and forces η upward, quickly negating the dimensional advantage. Will privacy–utility curve changes shape? My intuition says it will.  
+Experiments:
+Datasets selected are although suitable for a first proof of concept, they are considered as the toy-datsets by the community; Mnist, FashionMNIST (just an extension with same dimension 28x28, and features as grayscale pixel value), and USPS. More complex, at least something like Cifar-10 is expected. 
+This might steer in a new direction, say more qubits requirements. Adding qubits to a circuit generally reduces fidelity and forces η upward, quickly negating the dimensional advantage. Will privacy–utility curve changes shape? My intuition says it will.  
 
 Clarification required regarding the narrative “HYPER-Q improves robustness in QML models.” 
 The experiment compares HyperQ (0.1, 0.3) against classical-DP applied to the same QML model. While the HYPER-Q-protected QML model wins under very strict privacy budgets, it seems outperformed by a standard classical ResNet-9 when the privacy budget is relaxed. This suggests that the quantum advantage shown is not inherent to the QML model itself, but rather an artifact of the classical model being "over-penalized" by extreme noise. Is this happening? I would love a clarification.

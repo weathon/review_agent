@@ -1,5 +1,6 @@
 # AGDC: Autoregressive Generation of Variable-Length Sequences with Joint Discrete and Continuous Spaces
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 6, 2
 

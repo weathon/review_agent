@@ -1,5 +1,6 @@
 # Seeing Beyond Redundancy: Task Complexity's Role in Vision Token Specialization in VLLMs
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

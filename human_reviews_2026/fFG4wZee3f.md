@@ -1,5 +1,6 @@
 # Risk Phase Transitions in Spiked Regression: Alignment Driven Benign and Catastrophic Overfitting
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 8, 2, 6
 

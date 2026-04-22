@@ -1,5 +1,6 @@
 # Metropolis-Hastings Discrete Diffusion: Reward-Guided Sampling by Exploring the Clean Data Manifold
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 2, 4, 6, 2
 

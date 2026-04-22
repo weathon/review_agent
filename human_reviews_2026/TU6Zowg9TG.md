@@ -1,5 +1,6 @@
 # TimeFK: Towards Time Series Forecasting via Treating LLMs as Fuzzy Key
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 10, 0
 

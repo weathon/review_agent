@@ -1,5 +1,6 @@
 # From Pixels to Semantics: Unified Facial Action Representation Learning for Micro-Expression Analysis
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6, 6
 

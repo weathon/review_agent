@@ -1,5 +1,6 @@
 # Can Small Training Runs Reliably Guide Data Curation? Rethinking Proxy-Model Practice
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4, 8
 

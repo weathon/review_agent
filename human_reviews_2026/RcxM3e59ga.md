@@ -1,5 +1,6 @@
 # Who Said Neural Networks Aren't Linear?
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 0, 6, 4, 4
 

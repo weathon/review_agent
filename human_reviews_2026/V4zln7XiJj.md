@@ -1,5 +1,6 @@
 # Scheduling Your LLM Reinforcement Learning with Reasoning Trees
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Controllable First-Frame-Guided Video Editing via Mask-Aware LoRA Fine-Tuning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

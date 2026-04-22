@@ -1,5 +1,6 @@
 # T2VTextBench: A Human Evaluation Benchmark for Textual Control in Video Generation Models
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 4
 

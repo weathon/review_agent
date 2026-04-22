@@ -1,5 +1,6 @@
 # GaLLoP: Gradient-based Sparse Learning on Low-Magnitude Parameters
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 6, 2, 2
 

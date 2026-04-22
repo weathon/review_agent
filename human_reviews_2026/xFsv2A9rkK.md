@@ -1,5 +1,6 @@
 # ID-PreFeR: ID-Preserving Face Restoration with Mixed Data Quality
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 8, 2, 6, 4
 

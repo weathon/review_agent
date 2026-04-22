@@ -1,5 +1,6 @@
 # Quant-dLLM: Post-Training Extreme Low-Bit Quantization for Diffusion Large Language Models
 
+- Avg Score: 6.40
 - Decision: Accept (Poster)
 - Scores: 6, 4, 8, 6, 8
 

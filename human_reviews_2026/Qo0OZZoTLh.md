@@ -1,5 +1,6 @@
 # Virtual Community: An Open World for Humans, Robots, and Society
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

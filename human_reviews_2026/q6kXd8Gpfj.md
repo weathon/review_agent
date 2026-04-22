@@ -1,5 +1,6 @@
 # LearNAT: Learning NL2SQL with AST-guided Task Decomposition  for Large Language Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 4
 

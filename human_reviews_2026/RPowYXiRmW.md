@@ -1,5 +1,6 @@
 # End-to-End Probabilistic Framework for Learning with Hard Constraints
 
+- Avg Score: 6.50
 - Decision: Accept (Poster)
 - Scores: 6, 8, 6, 6
 

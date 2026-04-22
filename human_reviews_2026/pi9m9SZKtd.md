@@ -1,5 +1,6 @@
 # Latent Structure of Affective Representations in Large Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

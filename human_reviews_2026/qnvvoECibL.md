@@ -1,5 +1,6 @@
 # Beyond Pruning: Neuro-inspired Sparse Training For Enhancing Model Performance, Convergence Speed, and Training Stability
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 4, 4, 0
 

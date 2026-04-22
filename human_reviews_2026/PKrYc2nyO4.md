@@ -1,5 +1,6 @@
 # SAID: Empowering Large Language Models with Self-Activating Internal Defense
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4, 2, 6
 

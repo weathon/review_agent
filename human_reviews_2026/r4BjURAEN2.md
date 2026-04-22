@@ -1,5 +1,6 @@
 # Towards Causal Fine-Tuning under Latent-Confounded Shift
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 0, 2
 

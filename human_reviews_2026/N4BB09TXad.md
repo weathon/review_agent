@@ -1,5 +1,6 @@
 # JanusCoder: Towards a Foundational Visual-Programmatic Interface for Code Intelligence
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 8, 6, 6
 

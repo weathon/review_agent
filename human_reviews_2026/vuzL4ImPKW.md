@@ -1,5 +1,6 @@
 # Multivariate Time Series Forecasting under Hyperbolic Space Hierarchical Constraints
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 6, 2, 4, 2
 

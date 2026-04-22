@@ -1,5 +1,6 @@
 # Value Shaping: Bias Reduction in Bellman Error for Deep Reinforcement Learning
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

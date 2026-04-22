@@ -1,5 +1,6 @@
 # Dual-Stage Gradient Projection Based Continual Learning: Enhancing Plasticity and Preserving Stability
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 6
 

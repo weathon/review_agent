@@ -1,5 +1,6 @@
 # DarwinLM: Evolutionary Structured Pruning of Large Language Model
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 8, 4, 4, 6
 

@@ -1,5 +1,6 @@
 # Multi-modality Image Fusion under Adverse Weather: Mask-Guided Feature Restoration and Interaction
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 6, 6
 

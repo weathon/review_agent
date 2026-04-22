@@ -1,5 +1,6 @@
 # A Generative Approach to LLM Harmfulness Mitigation with Red Flag Tokens
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # APTBench: Benchmarking Agentic Potential of Base LLMs During Pre-Training
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 6, 2
 

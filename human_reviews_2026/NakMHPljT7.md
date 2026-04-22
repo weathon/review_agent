@@ -1,5 +1,6 @@
 # GUI-Shift: Enhancing VLM-Based GUI Agents through Self-supervised Reinforcement Learning
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 6
 

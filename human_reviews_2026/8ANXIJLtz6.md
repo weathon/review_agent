@@ -1,5 +1,6 @@
 # LANO: Large Language Models as Active Annotation Agents for Open-World Node Classification
 
+- Avg Score: 5.33
 - Decision: Reject
 - Scores: 4, 8, 4
 

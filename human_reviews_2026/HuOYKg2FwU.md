@@ -1,5 +1,6 @@
 # MagiC: Evaluating Multimodal Cognition Toward Grounded Visual Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4
 

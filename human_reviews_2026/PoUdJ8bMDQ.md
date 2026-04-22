@@ -1,5 +1,6 @@
 # TabularGSM: Understanding the Limitations of LLMs in Tabular Math Reasoning
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 4
 

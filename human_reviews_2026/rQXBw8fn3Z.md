@@ -1,5 +1,6 @@
 # BOTS: A Unified Framework for Bayesian Online Task Selection in LLM Reinforcement Finetuning
 
+- Avg Score: 4.40
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 6, 4
 

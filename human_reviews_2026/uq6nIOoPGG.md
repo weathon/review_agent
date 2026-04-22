@@ -1,5 +1,6 @@
 # Learning Coarse-Grained Representations: An Exploration of Mutual Information via Hyperspherical Density
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 0, 2
 

@@ -1,5 +1,6 @@
 # InterActHuman: Multi-Concept Human Animation with Layout-Aligned Audio Conditions
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

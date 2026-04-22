@@ -1,5 +1,6 @@
 # Yet Another Scaling Axis with Some Free Lunch: Enlarging Token-indexed Parameters
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 
