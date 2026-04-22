@@ -3,7 +3,7 @@ export HARSH_MODEL="ollama:glm-5.1:cloud"
 export MERGER_MODEL="ollama:glm-5.1:cloud"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="results/bench_scores_glm.csv"
-export MERGE_LOG="results/pipeline_whole_glm_or.log"
+export MERGE_LOG="results/pipeline_whole_glm.log"
 export SUBAGENT_MODEL="minimax/minimax-m2.7"
 export CONCURRENCY=10
 # rm bench_scores_qwen.log
