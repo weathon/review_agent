@@ -5,7 +5,7 @@ export NEUTRAL_MODEL="gpt-5.2"
 export CALIBRATION_SET="2026"
 export OUTPUT_CSV="results/bench_scores_glm_2026_new.csv"
 export MERGE_LOG="results/pipeline_whole_glm_2026.log"
-export SUBAGENT_MODEL="gpt-5.2-mini"
+export SUBAGENT_MODEL="gpt-5.4-mini"
 export CONCURRENCY=5
 ollama serve & 
 git add .
