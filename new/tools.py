@@ -1,7 +1,18 @@
-
 from agents import Agent, Runner, function_tool
 import os
-ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
+
+
+_calibration_set = os.getenv("CALIBRATION_SET", "2025").strip().lower()
+if _calibration_set in ("2026", "iclr2026"):
+    CALIBRATION_REVIEW_DIR = os.path.abspath("../human_reviews_2026/")
+    _embeddings_path = "./human_reviews_embeddings_2026.pkl"
+    _score_index_path = "./human_review_score_index_2026.pkl"
+else:
+    CALIBRATION_REVIEW_DIR = os.path.abspath("../human_reviews/")
+    _embeddings_path = "./human_reviews_embeddings.pkl"
+    _score_index_path = "./human_review_score_index.pkl"
+
+ALLOWED_PATHS = [CALIBRATION_REVIEW_DIR]
 
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
@@ -11,7 +22,7 @@ dotenv.load_dotenv()
 or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 # ── Build Index ────────────────────────────────────────────────
 import time
-print(f"Indexing ...")
+print(f"Indexing calibration corpus '{_calibration_set}' from {CALIBRATION_REVIEW_DIR} ...")
 start = time.time()
 database = {}
 for path in ALLOWED_PATHS:
@@ -35,7 +46,7 @@ print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
 
 
 import numpy as np
-with open("./human_reviews_embeddings.pkl", "rb") as f:
+with open(_embeddings_path, "rb") as f:
     import pickle
     db = pickle.load(f)
 
@@ -44,7 +55,7 @@ vectors = np.array(list(db.values()))
 
 # Per-file avg human score (basename -> float). Used to pre-filter candidates
 # by score range before BM25/vector ranking.
-with open("./human_review_score_index.pkl", "rb") as f:
+with open(_score_index_path, "rb") as f:
     _score_index: dict[str, float] = pickle.load(f)
 
 
@@ -171,7 +182,7 @@ def search_file(query: str, n: int, mode: str, low_score: float = 0.0, high_scor
             if not np.isfinite(masked[idx]):
                 break
             fn = filenames[idx]
-            file_path = os.path.abspath(f"../human_reviews/{fn}")
+            file_path = os.path.abspath(os.path.join(CALIBRATION_REVIEW_DIR, fn))
             rel = similarities[idx]
             avg = _score_index.get(fn, -1.0)
             with open(file_path, "r", errors="replace") as file_handle:

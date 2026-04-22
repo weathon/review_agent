@@ -5,18 +5,32 @@ import json
 import random
 import re
 import logging
+import os
 import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
+
+
+def _extract_cli_arg(flag: str) -> str | None:
+    if flag in sys.argv:
+        idx = sys.argv.index(flag)
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return None
+
+
+_cli_calibration_set = _extract_cli_arg("--calibration_set")
+if _cli_calibration_set:
+    os.environ["CALIBRATION_SET"] = _cli_calibration_set
+
+from tools import CALIBRATION_REVIEW_DIR, read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
 import weave
 weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
-import os
 os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
@@ -46,8 +60,9 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
+HUMAN_REVIEW_DIR = CALIBRATION_REVIEW_DIR
 CONCURRENCY = int(os.environ.get("CONCURRENCY", 1))
+print(f"Calibration review dir: {HUMAN_REVIEW_DIR}")
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -665,6 +680,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--balanced", action="store_true")
+    parser.add_argument("--calibration_set", choices=["2025", "2026"], default=os.getenv("CALIBRATION_SET", "2025"))
     parser.add_argument("--no_cal", action="store_true", help="Skip calibration sample search; score based on paper merits alone")
     parser.add_argument("--accept_csv", type=str, default=None, help="Path to bench CSV; predict acceptance rate at predicted score and ±0.5")
     args = parser.parse_args()

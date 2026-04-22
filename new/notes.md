@@ -29,7 +29,7 @@ Pipeline 对极端低分/高分论文**系统性地不敢给极端分**,把所�
 
 ### 走过的错误假设 (按被推翻顺序)
 
-1. **PDF parser contamination** — 约一半 2026 论文前面被 PDF 解析器拉出 "108 109 110 ..." 的行号垃圾,100+ 个 `\b\d{1,3}\s+\d{1,3}...\b` run。Correlation(line_num_runs, |pred-gt|)=0.38, 真的有影响,但单独清 parse 只能贡献 ~+0.5 (VbTLgEUocp clean-parse rerun: 4.5 → 5.0), 解释不了 2.5 分的 gap。 *次要因素, 值得修, 但不是主因。*
+1. **PDF parser contamination** — 早期一度低估了它。旧的 `iclr2026_cspaper` 确实有大量 parser noise: 行号 run、断词、公式碎裂、图表占位符都明显高于 2025。最初只看单篇 clean-parse rerun 时, 觉得单独清 parse 只能贡献 ~+0.5 (如 VbTLgEUocp: 4.5 → 5.0), 不足以解释整体现象。但后面把 `../iclr2026_cspaper` 整套换成 API parser 重跑得到 `../iclr2026_cspaper_new` 后, **在 calibration set 还没改的情况下 benchmark 就已经明显改善**。这说明 parser shift 不是边角噪声, 而是 2026 失真的一个主要来源。现在更合理的表述是: parser 是 **major factor**, calibration 仍然重要, 但它不是唯一主因。
 
 2. **2026 bench 是 reviewer-disagreement-heavy subset** — `iclr2026_cspaper/papers/` 只有 203 / 571 的 ratings.csv, 这个 disk subset 的 one-vs-rest reviewer r=0.609 vs full ratings.csv 的 0.722。真的有偏。但不能解释 pipeline 在所有 gt 上都压缩,也不能解释 pred std 恒低。 *真实但非主因。*
 
@@ -64,6 +64,13 @@ python main.py --single_paper <path>
 ```
 
 metric.py 里加了 per-bin accept rate (pred vs individual human) — 这是最直观看到 pipeline 压缩的方式。
+
+### 后续修正 (2026-04-22)
+
+- 上面第 1 条后来被新实验部分推翻: 用 `main.py` 单论文路径里的 API PDF parser, 把 `../iclr2026_balanced` 和 `../iclr2026_unbalanced` 里的原始 PDF 全部重 parse 到 `../iclr2026_cspaper_new`。
+- 新 corpus 共 200 篇, `reparse_manifest.txt` 记录 `failures=0`。
+- 在 **不改 calibration set** 的前提下 rerun benchmark, 用户观察到结果已经明显变好。
+- 所以现在对 2026 问题的判断应改成: **旧 parser / 文本表示漂移本身就足以显著伤害分数相关性**, 不是单纯 calibration 才导致的。
 
 ---
 
