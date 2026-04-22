@@ -5,7 +5,7 @@ export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="results/bench_scores_glm_2026_new.csv"
 export MERGE_LOG="results/pipeline_whole_glm_2026.log"
 export SUBAGENT_MODEL="ollama:glm-5.1:cloud"
-export CONCURRENCY=2
+export CONCURRENCY=10
 ollama serve & 
 git add .
 git commit -m "run.sh: $(date) test 2026"
