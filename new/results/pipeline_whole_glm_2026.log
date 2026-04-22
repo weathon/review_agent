@@ -9296,3 +9296,217 @@ MY FINAL DECISION: <orange>Reject</orange>
 
 --- Decision ---
 Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/ZMzha5gbnF.txt
+Timestamp: 2026-04-21T23:17:10
+
+--- Token Usage ---
+  Harsh Critic: input=15141 (cached=0) output=5928 (reasoning=3878) total=21069 requests=1 duration=n/ams
+  Strength Finder: input=14273 (cached=0) output=1814 (reasoning=940) total=16087 requests=1 duration=n/ams
+  Merger: input=602425 (cached=447744) output=14068 (reasoning=7343) total=616493 requests=40 duration=318826ms speed=44.12 tokens/s
+  TOTAL: input=631839 output=21810 total=653649
+
+--- Merged Inputs ---
+
+### Harsh Critic
+# Review: Toward Safer Diffusion Language Models: Discovery And Mitigation Of Priming Vulnerability
+
+## Critical Issues
+
+**1. Missing over-refusal evaluation (Evidential)**
+The paper claims RA preserves utility "with minimal impact on task performance" (Abstract, Section 6.3). However, the general capability evaluation (Table 4) consists entirely of multiple-choice or code-generation benchmarks (ARC, MMLU, HumanEval, etc.) that do not measure whether the model over-refuses benign requests. This is a standard and necessary evaluation for safety alignment work. RA trains the model to refuse from contaminated intermediate states, and the No Attack ASR drops to exactly 0.0% on LLaDA (Table 2), which could indicate overly aggressive refusal behavior. Without measuring false refusal rates on benign or borderline queries (e.g., using XSTest or similar), the claim that utility is preserved is unsupported for the most relevant dimension of "utility" in a safety context.
+
+**2. The monotonicity assumption in Theorem 4.1 is partially circular (Structural)**
+Theorem 4.1 requires that log π_θ(r̃_{t+1} = r | q, r_t) ≥ log π_θ(r̃_1 = r | q, r_0) for the *harmful target response r*. This assumption essentially states that as more tokens of the harmful response are revealed in the intermediate state, the model becomes more confident about generating that harmful response. This is a formalization of the priming vulnerability itself. The paper uses this assumption to derive a lower bound that justifies First-Step GCG, which is then used to *demonstrate* the priming vulnerability. The empirical validation in Appendix C.2 helps, but the theoretical contribution is weaker than presented: the theorem assumes the vulnerability exists in order to prove a result that motivates an attack exploiting it.
+
+**3. The anchoring attack threat model dominates evaluation but is largely unrealistic (Methodological gap)**
+Table 2 devotes 6 columns to the anchoring attack at different intervention steps, producing the most dramatic results (e.g., reducing ASR from 96.7% to 50.7%). However, the anchoring attack requires an attacker to directly modify the model's internal denoising state during inference—an extremely strong assumption about the attacker's capabilities with limited real-world relevance. The more realistic First-Step GCG and conversational attacks (Table 3) show more modest improvements. The paper acknowledges the hypothetical nature of the anchoring attack (Section 4.1) but foregrounds these results in the abstract and introduction, creating a mismatch between the strength of the headline claims and the threat model under which the strongest evidence holds.
+
+## Section-by-Section Notes
+
+**Abstract:** Claims "minimal impact on task performance" but the task performance measured does not assess over-refusal. Claims the vulnerability "allows existing optimization-based jailbreak attacks to succeed"—the connection is established via First-Step GCG, which is a *new* attack derived in this paper, not an existing one.
+
+**Section 1:** The comparison to ARM prefilling attacks (Wei et al., 2023a) is useful but underspecified. The paper says MDLM priming is "similar" to ARM prefilling but the key difference (parallel vs. sequential, positional flexibility vs. left-prefix) deserves more precise articulation of why MDLM-specific analysis is needed beyond what ARM safety research already tells us.
+
+**Section 4.1:** The anchoring attack evaluation at t_inter=1 shows ASR increasing from 2% to 21% on LLaDA Instruct. While notable, a 21% ASR on 100 examples with GPT-4o judging is 21 examples—confidence intervals are wide. The standard deviations reported elsewhere (±4-5%) suggest this difference could be somewhat noisy at this sample size.
+
+**Section 4.2:** First-Step GCG's dramatic improvement over MC GCG (58% vs 20% on LLaDA) conflates two factors: (a) the tractable gradient makes optimization more effective, and (b) the priming effect amplifies first-step improvements. The paper doesn't disentangle these. A control where MC GCG is given equivalent compute budget to First-Step GCG (i.e., many more iterations at lower per-iteration cost) would clarify whether the ASR improvement is due to better optimization or the priming mechanism specifically.
+
+**Section 5:** The RLHF-style instantiation of RA is practical (reusing existing datasets and reward models), but the limitation acknowledged in Section 7—that a DPO-style variant requires costly data construction—raises the question of whether RA's effectiveness depends heavily on the RL optimization. The ablation (RA w/o inter) controls for RLHF training but not for the specific RL algorithm (GRPO).
+
+**Section 6.2:** On MMaDA, the baseline No Attack ASR is 79.7%, indicating the model is essentially unaligned. RA reduces this to 3.3%, but starting from such a poorly aligned baseline makes it difficult to assess the interaction between existing safety alignment and the priming vulnerability. The most informative results are on LLaDA and LLaDA 1.5, which have reasonable baseline safety.
+
+**Section 6.3:** HumanEval drops from 22.0 to 17.1 on LLaDA with RA (a ~22% relative decrease). The paper attributes PIQA decreases to "potential forgetting effects" but doesn't discuss this HumanEval drop, which is the largest relative change in the table. This should be acknowledged more directly.
+
+**Section 6.4:** The ablation on t_max (Figure 3a) shows reward hacking at large t_max, which is a practical concern. The paper mentions this but doesn't characterize it—what does "meaningless" output look like, and at what t_max does it emerge?
+
+## Strengths
+
+1. **Clean problem identification**: The priming vulnerability is clearly defined and its connection to the MDLM inference mechanism (parallel, iterative denoising from masked states) is well-articulated. The inequality in Eq. 6 cleanly captures why standard alignment fails.
+
+2. **Controlled vulnerability analysis**: The anchoring attack is well-designed as a diagnostic tool—by varying t_inter, it provides a precise characterization of how vulnerability scales with intervention timing (Figure 2), which directly motivates the curriculum in RA.
+
+3. **The RA w/o inter ablation**: This is a crucial control that isolates the benefit of training on contaminated intermediate states from the benefit of RLHF-style training. The consistent gap between RA and RA w/o inter across models (Table 2) is convincing evidence for the core design choice.
+
+4. **First-Step GCG as a practical attack**: Deriving a tractable surrogate objective for GCG on MDLMs is a genuine technical contribution. The 20× speedup and 4× ASR improvement over MC GCG (Table 1) are practically significant.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Over-refusal evaluation on benign queries**: Add evaluation on a benchmark like XSTest or a benign instruction-following dataset to verify RA does not increase false refusal rates. Without this, the claim of "minimal impact on task performance" is incomplete for safety alignment.
+2. **Compute-matched comparison for MC GCG vs First-Step GCG**: Run MC GCG with equivalent total compute (more iterations at lower per-iteration cost) to disentangle optimization efficiency from priming amplification effects.
+
+### Deeper Analysis Needed
+1. **Characterization of when RA fails**: At t_inter=32, RA still achieves ~50% ASR. An analysis of *which* harmful queries are still successful—e.g., whether certain categories of harm are harder to recover from—would provide actionable insight into the fundamental limits of recovery alignment.
+2. **Interaction between RA and model size/architecture**: All three models are based on similar architectures. Whether RA scales or transfers across different MDLM architectures would strengthen the generality claim.
+
+### Visualizations & Case Studies
+1. **Qualitative examples of recovery trajectories**: Showing actual token-level denoising trajectories (before and after RA) where affirmative tokens appear at intermediate steps would make the mechanism concrete and help readers assess whether RA truly "recovers" or simply learns to override context in a different way.
+
+### Obvious Next Steps
+1. **DPO-style RA**: The paper identifies this as a limitation. Even a preliminary experiment with a DPO variant (using heuristically constructed safe responses for contaminated states) would significantly strengthen the framework by showing the core idea generalizes beyond GRPO.
+
+## Overall Assessment
+
+This paper identifies a genuine and interesting vulnerability specific to MDLMs and proposes a targeted defense. The core insight—that standard alignment trains only from the fully masked starting state, leaving the model defenseless against contaminated intermediates—is clearly articulated and well-supported by the RA vs. RA w/o inter ablation. However, the evaluation has a significant gap: the absence of over-refusal measurement on benign queries, which is standard in safety alignment work and directly relevant to the claim that utility is preserved. Additionally, the most dramatic results come from an unrealistic threat model (direct intervention in the denoising process), while results under more realistic attacks are more modest. The theoretical contribution (Theorem 4.1) is weakened by its partially circular assumption. These issues do not invalidate the contribution—the priming vulnerability is real, and RA is a sensible and empirically effective approach—but they mean the paper does not fully establish its claims about the severity of the vulnerability under realistic conditions or the harmlessness of the defense. The paper should be revised to include over-refusal evaluation and to more clearly contextualize results by threat model realism.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Strong quantitative evidence for the priming vulnerability**: Figure 2 demonstrates that even a single-token intervention at step 1 raises ASR from 2% to 21% on LLaDA Instruct, and ASR exceeds 80% across all models by step 16. This establishes that the vulnerability is both real and severe, even under minimal contamination.
+
+2. **Theorem 4.1 provides a tractable surrogate objective for optimization-based attacks**: By proving that the first-step log-likelihood is a lower bound on the full denoising log-likelihood (Equation 3), the paper converts an intractable stochastic optimization into a directly differentiable objective. Table 1 confirms this is both faster (~20× speedup) and more effective (ASR on LLaDA 1.5: 49.5% vs. 12.5% for Monte Carlo GCG), making it a genuinely useful theoretical contribution with practical impact.
+
+3. **Recovery Alignment dramatically mitigates the priming vulnerability with clear ablation support**: Table 2 shows RA reduces ASR from 17.3%→0.0% at t_inter=1 and 68.7%→3.0% at t_inter=8 on LLaDA Instruct, far outperforming all baselines. The "RA w/o inter" ablation is critical: without training on contaminated intermediate states, ASR remains at 49.0% vs. 3.0% at t_inter=8, directly confirming the paper's core thesis that conventional alignment is insufficient and conditioning on contaminated states is essential.
+
+4. **RA generalizes robustness beyond the priming vulnerability to conventional jailbreak attacks**: Table 3 shows RA also reduces ASR against conversational attacks not designed to exploit priming (e.g., PAIR on LLaDA: 44.3%→10.0%; on LLaDA 1.5: 45.3%→16.0%), suggesting the method learns a general recovery capability rather than narrowly patching one attack vector.
+
+5. **General capability is preserved**: Table 4 shows average benchmark scores remain effectively unchanged after RA (LLaDA: 52.2→52.6; LLaDA 1.5: 52.7→52.8), with some tasks like TruthfulQA improving (47.6→53.4 on LLaDA), confirming the alignment does not come at significant utility cost.
+
+### Supporting strengths
+
+1. **Principled explanation for why existing alignment fails**: Equation 6 and the surrounding analysis in Section 5 formally articulate why minimizing p(r_T=r|q,r_0) cannot guarantee safety at contaminated intermediate states, providing a clean theoretical justification that is empirically validated by the ablation.
+
+2. **Well-designed ablation studies on training design choices**: Figure 3a demonstrates that larger t_max improves robustness against stronger attacks, and Figure 3b shows linear scheduling outperforms both constant and uniform scheduling, providing practical guidance for the method's deployment.
+
+3. **Comprehensive experimental scope**: The evaluation covers 3 MDLMs, 7 attack methods spanning both intervention-based and black-box attacks, and 3 automatic evaluators (GPT-4o, LLaMA Guard 3, keyword matching), making the findings robust to model, attack, and evaluation choices.
+
+### Presentation / practical strengths
+
+1. **Scalable implementation requiring no custom data**: The RLHF-style RA instantiation uses the existing BeaverTails dataset and a pretrained DeBERTaV3 reward model (Section 6.1), avoiding additional data-construction costs and making the method readily deployable.
+
+2. **Reproducibility**: Code is publicly available at the provided GitHub repository, and all hyperparameters and implementation details are specified.
+
+## Summary
+
+The paper identifies and addresses the "priming vulnerability" in Masked Diffusion Language Models, where affirmative tokens appearing at intermediate denoising steps can steer generation toward harmful responses even in safety-aligned models. The single most important piece of evidence is Table 2: Recovery Alignment reduces the anchoring attack ASR from 68.7% to 3.0% at t_inter=8 on LLaDA Instruct, while the ablation without contaminated-state training leaves ASR at 49.0%, demonstrating both the severity of the vulnerability and that explicitly training on contaminated intermediate states is essential for mitigation.
+
+--- Merged Review ---
+Now I have all the information needed. Let me write the final review.
+
+## Summary
+
+This paper identifies the "priming vulnerability" in Masked Diffusion Language Models (MDLMs), where affirmative tokens appearing at intermediate denoising steps can steer subsequent generation toward harmful responses even in safety-aligned models. The authors analyze this vulnerability through an anchoring attack (hypothetical intervention in the denoising process) and derive First-Step GCG (a tractable surrogate objective for optimization-based attacks that exploits the priming effect). They then propose Recovery Alignment (RA), which trains models to generate safe responses from contaminated intermediate states, and demonstrate that RA effectively mitigates the vulnerability while preserving general capability and improving robustness against conventional jailbreaks.
+
+## Strengths
+
+- **Clear identification of a novel, MDLM-specific vulnerability**: The priming vulnerability is precisely defined (Section 4) and its connection to the MDLM's parallel, iterative denoising mechanism is well-articulated. Figure 2 cleanly demonstrates that even a single-token intervention at step 1 raises ASR from 2% to 21% on LLaDA Instruct, and ASR exceeds 80% by step 16 across all models.
+
+- **First-Step GCG is a genuine technical contribution**: Theorem 4.1 provides a tractable surrogate objective that converts an intractable stochastic optimization into a directly differentiable one. Table 1 confirms ~20× speedup and up to 4× ASR improvement over Monte Carlo GCG, making it practically useful.
+
+- **RA has strong empirical support with crucial ablation**: Table 2 shows RA reduces ASR from 68.7%→3.0% at t_inter=8 on LLaDA Instruct, far outperforming baselines. The "RA w/o inter" ablation is critical: without contaminated-state training, ASR remains at 49.0% vs. 3.0% at t_inter=8, directly confirming that conventional alignment is insufficient and conditioning on contaminated states is essential.
+
+- **RA generalizes beyond the priming vulnerability**: Table 3 shows RA also reduces ASR against conventional conversational attacks (e.g., PAIR on LLaDA: 44.3%→10.0%), suggesting it learns a general recovery capability rather than narrowly patching one attack vector.
+
+- **General capability is preserved**: Table 4 shows average benchmark scores remain effectively unchanged (LLaDA: 52.2→52.6; LLaDA 1.5: 52.7→52.8), with TruthfulQA improving (47.6→53.4 on LLaDA).
+
+- **Comprehensive evaluation scope**: 3 MDLMs, 7 attack methods (intervention-based and black-box), 3 automatic evaluators, and 11 capability benchmarks make the findings robust.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Missing over-refusal evaluation on benign queries**: The paper claims "minimal impact on task performance" (Abstract), but the general capability evaluation (Table 4) consists entirely of multiple-choice and code-generation benchmarks that do not measure whether the model over-refuses benign requests. RA trains the model to refuse from contaminated intermediate states, and the No Attack ASR drops to 0.0% on LLaDA (Table 2). Without measuring false refusal rates on benign or borderline queries (e.g., using XSTest), the utility-preservation claim is incomplete for the dimension most relevant to safety alignment. This is standard practice in the safety alignment literature, and the closely related backtracking paper (Bo62NeU6VF) received the same criticism from its reviewers.
+
+- **Theoretical contribution limited by the monotonicity assumption**: Theorem 4.1 requires log π_θ(r̃_{t+1}=r|q,r_t) ≥ log π_θ(r̃_1=r|q,r_0) for the harmful response r, which essentially assumes that revealing more of the harmful response makes the model more confident about it. While the paper empirically validates this assumption (Appendix C.2), the theoretical contribution is weaker than presented: the assumption encodes the vulnerability itself, and the theorem shows that if the vulnerability holds, a simpler objective suffices. The theorem does not explain *why* the vulnerability arises or provide non-trivial predictive power beyond the empirical observation.
+
+### Minor
+
+- **Anchoring attack results foregrounded despite unrealistic threat model**: The most dramatic results come from the anchoring attack (Table 2), which requires directly modifying the model's internal denoising state—an extremely strong assumption. The paper acknowledges this is "hypothetical" (Section 4.1), but the abstract and introduction lead with these results. Results under the more realistic First-Step GCG and conversational attacks (Tables 1, 3) show more modest but still meaningful improvements. The paper would benefit from clearer contextualization of results by threat model realism.
+
+- **HumanEval drops meaningfully on LLaDA**: HumanEval drops from 22.0 to 17.1 with RA (a ~22% relative decrease), the largest relative change in Table 4. The paper attributes PIQA decreases to "potential forgetting effects" but does not discuss this HumanEval drop, which is more substantial and directly relevant to code-generation capability.
+
+- **Abstract overclaims about "existing" attacks**: The abstract states "the vulnerability allows existing optimization-based jailbreak attacks to succeed on DLMs." While MC GCG does benefit somewhat from the vulnerability (20% ASR on LLaDA), the most dramatic improvements come from First-Step GCG, which is a *new* attack derived in this paper. The phrasing could be more precise.
+
+### Trivial
+None.
+
+## Nice-to-Haves
+
+- Over-refusal evaluation on a benchmark like XSTest to complete the utility-preservation claim.
+- A compute-matched comparison for MC GCG vs. First-Step GCG to disentangle optimization efficiency from priming amplification.
+- Qualitative examples of recovery trajectories showing token-level denoising before and after RA, to make the recovery mechanism concrete.
+- Analysis of which harmful queries still succeed against RA at large t_inter, to characterize the fundamental limits.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution.
+
+- **Circularity of Theorem 4.1 (from Harsh Critic, elevated to "partially circular")**: The harsh critic claims the theorem is "partially circular" because it "assumes the vulnerability exists in order to prove a result that motivates an attack exploiting it." While the monotonicity assumption does encode a property closely related to the priming effect, this is not truly circular—many theorems make assumptions that align with observed phenomena. The assumption is empirically validated (Appendix C.2) and the theorem's value is in providing a tractable optimization objective, not in "proving" the vulnerability. Downgraded from the critic's structural-level concern to a minor theoretical limitation.
+
+- **Unrealistic threat model dominates evaluation (from Harsh Critic, elevated to "methodological gap")**: The critic overstates this. The paper explicitly frames the anchoring attack as a "hypothetical" diagnostic tool and devotes separate sections and tables to the realistic threat model (Section 4.2, Tables 1 and 3). The anchoring attack is a well-designed *diagnostic*—varying t_inter provides a precise characterization of vulnerability scaling (Figure 2), which directly motivates the curriculum in RA. This is appropriate methodology. Retained as a minor point about presentation/contextualization only.
+
+- **MMaDA baseline essentially unaligned (from Harsh Critic)**: The critic notes MMaDA's 79.7% No Attack ASR indicates the model is poorly aligned, making RA's effect less informative. This is true but the paper's main claims are supported by LLaDA and LLaDA 1.5 results. MMaDA results are supplementary. Removed as a standalone weakness.
+
+- **Compute-matched MC GCG comparison (from Harsh Critic)**: Interesting but not critical—the paper's contribution is the First-Step GCG method and its empirical effectiveness. The theoretical justification provides the connection to priming. Moved to Nice-to-Have.
+
+- **DPO-style RA (from Harsh Critic)**: Already acknowledged as a limitation in Section 7. Moved to Nice-to-Have.
+
+- **Confidence intervals on small samples (from Harsh Critic)**: The 21% ASR at t_inter=1 on 100 examples. The paper reports standard deviations (±4-5% across experiments), which appropriately conveys uncertainty. This is standard practice and not a meaningful concern.
+
+- **Generic strengths without specific citations (from Strength Finder)**: Dropped strengths that were too generic ("well-written," "timely topic") or conflicted with verified weaknesses.
+
+## Novel Insights
+
+The paper reveals a fundamental structural asymmetry in how safety alignment works for MDLMs versus ARMs: in ARMs, prefilling attacks exploit the causal left-to-right constraint, but the defense (refusal at any position) is conceptually straightforward; in MDLMs, the parallel denoising structure means that any affirmative token at any position can serve as an anchor, and the model must learn to recover from arbitrarily contaminated states rather than simply override a prefix. This distinction explains why RA—training on contaminated intermediates rather than just improving initial-step safety—is necessary and why the "RA w/o inter" ablation shows such a large gap. The generalization of RA to conventional jailbreaks further suggests that the recovery capability learned from contaminated states is not attack-specific but reflects a deeper property of how safety manifests in iterative denoising.
+
+## Suggestions
+
+- Add evaluation on XSTest or a similar benign-query benchmark to verify that RA does not increase over-refusal, completing the utility-preservation claim.
+- In the abstract, replace "existing optimization-based jailbreak attacks" with more precise language distinguishing MC GCG's moderate improvement from First-Step GCG's stronger results.
+- Acknowledge the HumanEval drop on LLaDA directly in Section 6.3 rather than only discussing the PIQA decrease.
+- When presenting anchoring attack results, briefly reiterate that this is a diagnostic tool for understanding vulnerability scaling, not a realistic attack scenario, to help readers contextualize the headline numbers.
+
+## Calibration
+
+**Anchors used:**
+
+- **6Mxhg9PtDE.md** (avg 9.5, Oral): "Shallow safety alignment" paper—discovers that ARM safety alignment is shallow (first few tokens), proposes deep realignment. Closest analog conceptually. This paper is broader and has cleaner theory, earning a higher score. The current paper is more specific to MDLMs and has a limited theoretical contribution.
+
+- **Bo62NeU6VF.md** (avg 8.0, Oral): Backtracking paper—proposes [RESET] token for recovery from unsafe partial generation. Very similar "recovery" concept. Also lacked over-refusal evaluation (noted by its reviewers) but scored 8.0. The current paper has broader evaluation but a weaker theoretical contribution and the MDLM-specific scope is narrower.
+
+- **r42tSSCHPh.md** (avg 7.0, Spotlight): Generation exploitation attack—discovers decoding-strategy vulnerability, proposes alignment defense. Similar structure (vulnerability + defense). The current paper has stronger defense results and better ablation.
+
+- **kUH1yPMAn7.md** (avg 6.0, Poster): Safety layers vulnerability—discovers vulnerability, proposes defense. Weaker empirical support than the current paper.
+
+- **41uZB8bDFh.md** (avg 6.0, Poster): Q-Misalign attack—novel vulnerability with overclaiming flagged. The current paper has stronger ablation and broader evaluation but similarly limited theory.
+
+- **v6tPaf8V09.md** (avg 2.0, Reject): Arms race paper—unrealistic threat model, no systematic evaluation. Far below the current paper.
+
+- **5kMwiMnUip.md** (avg 1.4, Reject): NEMESIS—no results section, superficial analysis. Far below the current paper.
+
+The current paper sits above the 5-6 range papers (which had overclaimed or weaker results) but below the 8+ papers (which had broader implications and cleaner theoretical frameworks). The over-refusal gap is a real but addressable concern, and the theoretical contribution is limited. The empirical work is strong with comprehensive evaluation across 3 models, 7 attacks, and 11 capability benchmarks.
+
+MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.0
+
+--- Decision ---
+Accept
