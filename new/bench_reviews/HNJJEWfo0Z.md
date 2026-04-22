@@ -1,14 +1,24 @@
+Now let me run calibration searches in parallel.Now I have enough to write the consolidated review. Let me proceed.
+
+---
+
 ## Summary
 
-The paper studies how prediction probabilities of image classifiers change under different localized perturbations, and what this implies for perturbation-based fidelity metrics used to evaluate saliency maps. It formalizes two desiderata on probability drops and ranking stability (P1/P2), proposes conformity scores DROP and PSim to quantify them, and empirically shows that typical models and perturbations substantially violate these desiderata across architectures, datasets, and perturbation schemes.
+This paper investigates why perturbation-based fidelity metrics for saliency maps (e.g., AOPC, AD%, IC%, W%, faithfulness) produce inconsistent results across perturbation types. The authors identify two implicit assumptions underlying these metrics — P1 (perturbing any pixel should decrease model confidence) and P2 (the magnitude of decrease should be proportional to pixel importance, consistently across perturbation types) — and propose two conformity measures, DROP (for P1) and PSim (for P2). They empirically evaluate these across 5 models, 3 datasets, and 9 perturbation types (~75 million model predictions), finding that both assumptions are systematically violated, and that Gaussian Blur perturbations are more consistent than others.
+
+---
 
 ## Strengths
 
-- Clear, simple formalization of two intuitive perturbation-behavior conditions (P1: probability drop on perturbation, P2: ranking stability across perturbations) in Sec. 2.1, connected to PIR-based evaluation procedures.
-- Introduction of DROP and PSim (Sec. 2.2–2.3, Alg. 1) as model-agnostic diagnostics; they can be computed using only model predictions under perturbations and provide compact summaries of directionality and rank stability.
-- Broad empirical coverage: 3 standard CNN architectures plus 2 adversarially trained variants, 3 standard image datasets, 9 perturbation types, and both pixel-wise and segment-wise schemes (Sec. 4, Tables 1–2), with tens of millions of forward passes.
-- Consistent empirical finding that DROP ≈ 0.5–0.6 and PSim ≈ 0.3–0.6 instead of near 1 (Sec. 5.1–5.3, Tables 1–2, Figs. 2–5), showing that these desiderata fail widely rather than in isolated cases.
-- Identification of relatively more “stable” perturbation families (Gaussian blur, and Telea vs. Navier-Stokes inpainting) via both distributions and KDE-based probabilities (Secs. 5.2–5.3, Figs. 2–5), providing constructive guidance.
+- **Breadth of empirical evaluation**: The study spans 9 perturbation types, 5 models (3 standard + 2 adversarially trained), 3 datasets, and both pixel-wise and segment-wise perturbation schemes, totaling ~75 million model predictions (Section 4). This is substantially more comprehensive than prior analyses like Tomsett et al. (2020), which used only 2 perturbation types.
+
+- **PSim as a principled measure**: The use of Rank Biased Overlap (Eq. 8–9) to measure cross-perturbation pixel importance rank consistency is methodologically sound and provides a concrete, computable operationalization of P2. PSim values spanning 0.26–0.64 (vs. ideal ≈1) in Table 1 quantitatively confirm that pixel importance rankings produced by different perturbations are highly inconsistent.
+
+- **Actionable practical finding**: The consistent observation in Figures 2–5 that Gaussian Blur variants produce significantly higher DROP and PSim scores compared to constant-replacement and inpainting perturbations gives practitioners a concrete, evidence-backed preference among perturbation choices, even in the absence of a mechanistic explanation.
+
+- **Extension to adversarially trained models**: Table 2 demonstrates that adversarial training (both L2- and Linf-norm) does not substantially improve DROP or PSim scores, broadening the scope of the finding to a setting practitioners might believe resolves the inconsistency.
+
+---
 
 ## Weaknesses
 
@@ -18,85 +28,91 @@ None.
 
 ### Major
 
-- **Overstated and somewhat strawman characterization of fidelity metrics’ assumptions.**  
-  The paper repeatedly frames P1 (“there is a drop in the output probability when a pixel is perturbed”, instantiated as \(p_0 > p_i^\phi\ \forall i,\phi\), Eq. (2)) and P2 (rank invariance across perturbations, Eq. (5)) as assumptions that “perturbation based fidelity metrics should conform to” (Sec. 2.1, line 88; Sec. 5.1, 204), and concludes that “fidelity metrics… do not always hold, making them inconsistent and unreliable” (abstract) and “would be rendered unreliable and fail the sanity checks” (Sec. 6). In the original literature, however, metrics like AOPC, AD/IC/W, or “faithfulness” are defined relative to a fixed perturbation scheme and rely on relative drops along an explanation-induced ordering, not on monotone decrease for all pixels or invariance of PIR across qualitatively different perturbation operators. The paper cites Tomsett et al. (2020) for inconsistencies but does not show that those works (or others) require P1/P2 in the strong form used here. As a result, the empirical violation of P1/P2 establishes that these particular desiderata rarely hold, but does not by itself justify the strong headline that existing fidelity metrics are fundamentally “inconsistent and unreliable.”
+- **DROP ≈ 0.5 on random pixels is a near-mathematical inevitability, not a diagnostic finding.** The paper formalizes P1 as `p₀ > pᵢᶠ` for all pixels `i` and all perturbations `φ` (Eq. 2), then measures DROP on 50 *randomly selected* pixels. For any smooth, non-linear classifier operating near a local confidence maximum, approximately half of random pixel perturbations will increase and half will decrease the output — making DROP ≈ 0.5 a near-mathematical inevitability regardless of the fidelity metric being evaluated. More critically, the primary metrics targeted by the paper (AOPC, AD%, IC%, W%) do *not* actually require P1 as stated: AOPC measures the cumulative drop when pixels are removed in order of *saliency-map importance* versus a random baseline, and functions correctly even if most individual pixel perturbations have negligible or slightly positive effects. The only metric arguably requiring this strict monotone relationship is the rank-correlation faithfulness of Alvarez Melis & Jaakkola (2018), and even that measures rank correlation, not monotone response. As a result, the DROP-based half of the paper's evidence is conceptually disconnected from the metrics it claims to diagnose.
 
-- **No direct evaluation of actual fidelity metrics or explanation methods.**  
-  While the abstract and introduction emphasize “inconsistencies in existing fidelity metrics” and the need for caution in their use, all experiments operate directly on model probabilities and PIR rankings, without ever computing AOPC, AD/IC/W, or “faithfulness” scores for saliency methods under different perturbations. There is no experiment showing, for example, that varying perturbation type reorders a set of saliency methods, or that low DROP/PSim corresponds to metrics mis-ranking obvious baselines. This makes the link from “PIR variability” to “metric unreliability” largely speculative.
+- **No saliency map appears anywhere in the analysis.** The paper's stated goal (Abstract, Sections 1 and 6) is to explain inconsistencies in "evaluating the fidelity of saliency maps," and the proposed use case is "a preconditional check before analyzing the fidelity of saliency maps" (Section 6). Yet not a single saliency method (GradCAM, SHAP, LIME, Integrated Gradients, etc.) appears anywhere in the paper. DROP and PSim are computed from random pixel perturbations on unmodified images, with no saliency ranking in the loop. The paper never demonstrates: (a) that low PSim/DROP scores for a given model predict that fidelity metric rankings of saliency methods on that model are inconsistent, or (b) that high PSim/DROP predict consistent rankings. Without this link, the "preconditional check" recommendation is entirely unvalidated — the paper diagnoses a model property but does not show it translates into the saliency evaluation inconsistency it is framed around.
 
-- **Logical gap between DROP/PSim findings and the central claim about metric reliability.**  
-  The main argument chain (Sec. 5.1–5.3 and Sec. 6) is: DROP and PSim are far from 1 → P1/P2 are violated → PIR is high-variance → “metrics that implicitly rely on the invariance of PIR… would be rendered unreliable” (Sec. 6). Even granting the first two steps, the paper does not establish that the fidelity metrics in question, as actually used, require such strong PIR invariance. Nor does it measure how much observed PIR variability affects downstream metric conclusions. Without a demonstrated connection between low DROP/PSim and concrete failures of fidelity metrics, the conclusion that those metrics are “inconsistent and unreliable” overstates what the evidence supports.
+- **Incremental novelty over Tomsett et al. (2020)**, which already demonstrated statistically significant inconsistencies in AOPC, AD%, IC%, W%, and faithfulness across perturbation values, identified variance in PIR as the mechanism, and recommended studying perturbation-induced variance before reporting fidelity scores. This paper's new contributions are (a) broader empirical coverage (9 perturbations vs. 2), (b) DROP, and (c) PSim. Given that the DROP measure has the conceptual problem described above, the net addition is PSim applied across more perturbation types. The paper also claims to explain the "origins" of inconsistency (Abstract) but provides no mechanistic explanation — it demonstrates *that* assumptions are violated more broadly, not *why* non-linear models violate them (e.g., adversarial geometry, distributional shift from out-of-distribution perturbations, batch normalization artifacts).
 
 ### Minor
 
-- **Assumptions P1/P2 are not clearly motivated as necessary conditions rather than heuristic ideals.**  
-  P1 requires decrease of \(p_0\) on essentially every local perturbation; P2 requires near-identity of PIR across distinct perturbation operators. In realistic models, some perturbations can legitimately increase \(p_0\), and different perturbations can emphasize different structures. The paper notes that DROP and PSim have “ideal value 1” and treats “higher is better” (Secs. 2.2–2.3), but does not analyze when deviations from 1 actually undermine the intended use of perturbation-based evaluation, versus being benign.
+- **Pseudocode bug in Algorithm 1.** Line 251 appends the *count* of non-negative δP entries onto the δP list (`δP.append(|{δP ≥ 0}|)`) before performing argsort on line 252. This contaminates the rank computation by inserting an extraneous scalar. The return comment on line 256 also labels values incorrectly ("DROP (Equation 7) and PSim (Equation 6)"), swapping the equation references. This is likely a pseudocode presentation error rather than an implementation bug (results remain internally coherent), but it should be corrected.
 
-- **Gaussian blur recommendation is weakly grounded.**  
-  The paper concludes that “Gaussian Blur was relatively consistent… [and] should be considered” (Sec. 5.2, 5.3, 6) because it yields higher DROP and PSim. However, it does not validate that blur-based perturbations lead to fidelity metrics that better correlate with any external notion of correctness (e.g., ground-truth masks, human annotations) or with task performance. At present, “more internally stable under DROP/PSim” is not clearly shown to mean “better for evaluating faithfulness.”
-
-- **Scope of experiments relative to claims about adversarial training.**  
-  Table 2 shows that the two adversarially trained ResNet50 variants still have low DROP/PSim. The conclusion carefully avoids overclaiming (“we refrain from making conclusive remarks”, line 206), but the abstract and introduction could more clearly frame adversarial experiments as exploratory rather than as evidence about fidelity metrics in robust models more generally.
+- **The Gaussian Blur consistency advantage is confounded.** Section 5.3 notes that Gaussian Blur yields higher PSim than constant-replacement and inpainting perturbations, but the paper does not address the key confound: Gaussian Blur produces in-distribution images (local smoothness is preserved), while constant replacement (U0, U1, U0.5) and inpainting generate markedly out-of-distribution pixel patches. Higher consistency for Gaussian Blur may primarily reflect proximity to the training distribution rather than any model robustness or saliency property. This distinction matters for the practical recommendation.
 
 ### Trivial
 
-- Some minor notational/presentation inconsistencies (e.g., Algorithm 1 using \(\delta\mathcal{P}\) both as list of deltas and then appending a count, and the mismatch between comments and equations at lines 241–256) slightly reduce clarity but do not affect the core methodology.
+- The label `G1.5` in Section 4.1 for "Gaussian blur with kernel widths of 1.5" is inconsistently referred to as `G15` throughout the paper's figures and tables (Figure 2, Figure 4, Table 1, etc.). Should be consistent.
+
+---
 
 ## Nice-to-Haves
 
-- Evaluate at least one or two standard perturbation-based fidelity metrics (e.g., AOPC, AD/IC/W, faithfulness) across multiple saliency methods and perturbation types, and correlate their stability or ranking changes with DROP/PSim. This would empirically ground the argument that conformity scores are useful “preconditions” for metric use.
-- Provide qualitative case studies showing images where perturbation pairs yield substantially different PIR, and then how fidelity metric scores (for several saliency maps) differ under these perturbations.
-- Analyze which parts of the ranked list drive low PSim: are disagreements concentrated in low-importance pixels or do they affect the very top of the rankings, which matter most for many metrics?
+- **Validate DROP/PSim as predictors of saliency evaluation inconsistency**: Run GradCAM, SHAP, or LIME on images selected for high vs. low PSim, compute AOPC under multiple perturbation types, and show that fidelity ranking disagreement correlates with PSim. This single experiment would convert the "preconditional check" from an assertion into a validated recommendation.
+
+- **Recompute DROP using saliency-ranked pixels, not random pixels**: If DROP remains ≈0.5 when computed on the *top-k pixels identified by a saliency method* (rather than random pixels), that is a genuinely meaningful finding. It would also address the near-triviality argument directly.
+
+- **Provide actionable PSim/DROP thresholds**: The paper recommends checking conformity before using fidelity metrics but provides no guidance on what constitutes a "safe" score. Even an exploratory calibration — e.g., "PSim above X corresponds to fidelity metric ranking disagreement below Y" — would make the measures practically useful.
+
+- **Address the distributional confound for Gaussian Blur**: Compare DROP/PSim under in-distribution vs. out-of-distribution perturbations to separate the effect of distribution shift from the effect of perturbation family.
+
+---
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- **Claim that the paper mischaracterizes PIR as the metric itself.**  
-  The harsh review notes that PIR is “not the metric” but a ground-truth proxy. The paper does acknowledge this, stating that PIR “serves as a proxy for ground truth, enabling the estimation of the fidelity score for saliency maps” (lines 29–29). The criticism correctly points out that AOPC/AD/etc. are functions of explanation rankings under a chosen perturbation, but since the paper’s analysis is explicitly about the PIR construction those metrics rely on, the charge of conflation is overstated.
-- **Assertion that P1/P2 are claimed to be universally assumed by prior work.**  
-  The reviewer suggests the paper attributes P1/P2 directly to prior metrics. In fact, Sec. 2 says “The fidelity metrics are based on the PIR which assume…” (line 47) and then posits P1/P2 as “based on two aspects” rather than citing a specific prior formalization. The criticism that the connection to prior literature could be better aligned is valid and kept (Minor), but the stronger claim that the authors state existing metrics literally assume Eq. (2) and Eq. (5) is not textually accurate, so that stronger form is removed.
-- **Critique that the algorithm “explicitly does not involve any saliency method” is a fundamental flaw.**  
-  Algorithm 1 indeed operates directly on prediction changes, but the paper positions DROP/PSim as model-level conformity checks “before using fidelity metrics” (abstract, line 37–43, Sec. 3.1, 120–123), not as replacements for saliency-based metrics. The lack of integration with saliency methods is already captured in the major weakness on missing metric experiments; framing this as an inconsistency in the method itself is unnecessary duplication.
+- **"DROP ≈ 0.5 because models are near adversarial examples"** (harsh critic's mechanistic speculation): This is a "nice to have" explanation the paper doesn't provide, not a flaw in the paper per se. The paper does not claim to identify the adversarial geometry as a mechanism, so demanding it crosses into scope creep. Removed as an overclaimed weakness.
+
+- **"The paper should compare more architectures for adversarial models"**: The paper explicitly acknowledges this limitation ("Due to the unavailability of adversarially trained models for Inception V3 and Xception architectures, we had to limit our experiments to ResNet50") and refrains from overclaiming. Removed as a scope issue.
+
+- **Formatting/notation artifacts** (G1.5 vs G15 inconsistency beyond the trivial note above, equation label swaps in Algorithm 1 beyond pseudocode correction noted): parser-level; tracked only as trivial.
+
+---
 
 ## Novel Insights
 
-The most substantive insight is that the paper’s empirical methodology is strong and broadly executed, but its conceptual framing overshoots: DROP and PSim provide useful, model-centric diagnostics of how sensitive prediction probabilities and PIR are to perturbation choices, yet the current text treats violations of their idealized conditions as if they directly invalidate existing fidelity metrics. A more compelling contribution would explicitly limit the scope to characterizing model–perturbation behavior and then, in future work, overlay standard fidelity metrics on top of this diagnostic layer.
+The most useful genuine insight is that PSim, computed using Rank Biased Overlap across all pairs of perturbation types, reveals a clear clustering structure: perturbations within the same family (Gaussian Blur variants, inpainting variants) produce far more consistent pixel importance rankings than perturbations across families. This is not merely a replication of Tomsett et al.'s finding — it quantifies the *structure* of perturbation-type inconsistency at the pairwise level. Even if the DROP measure has conceptual limitations, the PSim heatmaps in Figure 4–5 constitute a practical guide for perturbation selection: practitioners can identify which perturbation pairs are internally consistent and should prefer within-family comparisons. The adversarial training result (Table 2) is also mildly surprising and worth preserving: robustness training, which might be expected to stabilize sensitivity to local perturbations, does not improve PIR consistency.
+
+---
 
 ## Suggestions
 
-- Reframe the paper’s core claim: present DROP/PSim primarily as tools to characterize model sensitivity and PIR stability across perturbations, and soften the language about existing metrics being “inconsistent and unreliable”; emphasize instead that metric outcomes are perturbation-dependent and that conformity scores can help interpret or design those perturbations.
-- Add a focused experiment where you (i) select a small set of standard saliency methods, (ii) compute a common perturbation-based metric (e.g., AOPC or AD/IC/W) under different perturbation types, and (iii) show how metric rankings change and how this correlates with DROP/PSim. This would directly test the asserted connection between low conformity and metric instability.
-- Provide more nuanced discussion of P1/P2: explicitly acknowledge that they are stronger than what classical metrics strictly require, argue why high conformity is desirable (if you believe it is), and clarify that moderate deviations do not automatically render metrics unusable.
-- When recommending Gaussian blur, either (a) present it clearly as a hypothesis based on internal stability (“blur appears more stable under our diagnostics; validating whether this improves metric faithfulness is future work”) or (b) add external validation (e.g., correlation with mask-based ground truth) to support the recommendation.
-- Clean up minor notation inconsistencies in Algorithm 1 and cross-references between equations and narrative to improve clarity for readers who may try to re-implement DROP/PSim.
+1. Replace the DROP analysis on random pixels with one on saliency-ranked top-k pixels, and explicitly address whether existing metrics (AOPC in particular) actually require the P1 assumption as stated.
+2. Include at least one experiment connecting PSim scores to observed fidelity metric disagreement across saliency methods — this is the missing link that would substantiate the "preconditional check" recommendation.
+3. Clarify Algorithm 1 line 251–256 so the pseudocode correctly reflects the implementation.
+4. Disentangle the distributional proximity confound from the Gaussian Blur consistency finding.
+5. Reframe the abstract: the paper demonstrates that P2 (PSim) is robustly violated and that perturbation family matters, rather than claiming to explain the "origins" of inconsistency (which requires mechanistic insight not present in the paper).
 
-### Overall Evaluation (Originality, Importance, Support, Soundness, Clarity, Value)
-
-- **Originality:** Moderately original. DROP/PSim are simple but new operationalizations of commonly-discussed issues (perturbation sensitivity, PIR variance).
-- **Importance of question:** Medium. Understanding how perturbation choices affect explanation evaluation is important in XAI, though this paper does not yet close the loop to metric behavior.
-- **Support for claims:** Mixed. Claims about model–perturbation variability are well supported; claims that existing fidelity metrics are “inconsistent and unreliable” are not.
-- **Experimental soundness:** Strong for what is measured (probabilities, PIR, conformity scores), but missing the crucial layer of actual metrics/explanations.
-- **Clarity:** Generally clear in methods and experiments; less precise in positioning relative to existing metrics and in justifying P1/P2 as necessary assumptions.
-- **Value to community:** With a reframed, more modest claim, this would be a solid diagnostic study and potentially a useful reference; as written, the overclaiming weakens its suitability for acceptance.
+---
 
 ## Score and Decision
 
-### Calibration Anchors
+**Calibration anchors consulted:**
 
-- **High-scoring anchors (>7):**
-  - `/home/wg25r/review_agent/human_reviews/PBjCTeDL6o.md` (avg 8.0, Accept Oral): Strong, technically deep method plus extensive experiments directly evaluating faithfulness metrics (e.g., MuFidelity) and robustness. Compared to this, the current paper is less ambitious methodologically and especially weaker in connecting diagnostics to evaluation outcomes.
-  - `/home/wg25r/review_agent/human_reviews/GjfIZan5jN.md` (avg 7.33, Accept Spotlight): Proposes a new interpretability metric (IIS) with thorough experiments and clear applications. This is similar in “metric” flavor but better grounded in how the metric relates to useful properties and applications.
+| Path | Avg Human Score | Comparison |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/PBjCTeDL6o.md` | 8.0 (Accept-Oral) | Proposes UNI for adaptive attribution baselines — genuinely novel method with validated connection to saliency quality; much stronger contribution than present paper |
+| `/home/wg25r/review_agent/human_reviews/GjfIZan5jN.md` | 7.33 (Accept-Spotlight) | IIS for representation interpretability — strong theoretical+empirical contribution, direct connection to core claim |
+| `/home/wg25r/review_agent/human_reviews/mKGXdsq7fD.md` | 4.33 (Withdrawn) | Pixel-level saliency evaluation protocol — limited novelty, replicates existing findings, similar to present paper |
+| `/home/wg25r/review_agent/human_reviews/L7jtdGhWzT.md` | 4.67 (Reject) | FEI attribution using perturbation metrics — novel method but insufficient evaluation |
+| `/home/wg25r/review_agent/human_reviews/wJVZkUOUjh.md` | 2.0 (Reject) | EXAGREE for explanation disagreement — conceptual confusions, formalization errors; worse than present paper but in same ballpark of XAI evaluation |
 
-- **Medium-scoring anchors (4–6):**
-  - `/home/wg25r/review_agent/human_reviews/L7jtdGhWzT.md` (avg 4.67, Reject): Critiques existing perturbation-based faithfulness metrics and proposes a method (FEI) with some quantitative improvements but limited baselines and clarity. This has conceptual and experimental gaps similar in severity to the overclaim vs. evidence gap here.
+**Assessment:**
 
-- **Low-scoring anchors (<3):**
-  - `/home/wg25r/review_agent/human_reviews/wJVZkUOUjh.md` (avg 2.0, Reject): Addresses explanation disagreement (EXAGREE) with substantial conceptual confusion and misaligned problem framing. Compared to this, the current paper is substantially clearer and more coherent; its main issue is overclaiming, not fundamental misunderstanding.
+The paper sits closest to the 4.0–4.5 range of its medium anchors (mKGXdsq7fD, L7jtdGhWzT), sharing their pattern of limited novelty over prior work and incomplete validation of the core claim. The DROP measure's near-triviality for random pixels and the complete absence of any saliency method in a paper framed around saliency evaluation are genuine structural issues — not fixable in a rebuttal — that put the paper below the acceptance threshold. The PSim contribution and empirical scale provide real value, but insufficient to overcome the disconnection between the proposed measures and the stated evaluation goal. The paper does not rise to the 7+ tier of strong anchors, which feature novel, validated contributions with clear connections between method and claim.
 
-Relative to these anchors, the present paper is clearly stronger than the low band (EXAGREE) in clarity and methodological execution, but weaker than the high band (UNI, IIS) in aligning claims with evidence and in closing the loop from diagnostics to practically used metrics. Its overall profile is closest to the medium band (faithfulness-guided FEI), perhaps slightly stronger empirically but with a more problematic overstatement of its main conclusion.
+**Evaluation axes:**
+- *Originality*: Low–Moderate. PSim with RBO is a concrete measure; DROP is conceptually flawed. Empirical scale is the primary differentiator from Tomsett et al.
+- *Importance of research question*: Moderate. Perturbation-based fidelity inconsistency is a genuine and underappreciated problem.
+- *Claims supported by evidence*: Poor. The central "preconditional check" claim is unvalidated; DROP ≈ 0.5 is near-trivially expected.
+- *Soundness of experiments*: Moderate for PSim; Weak for DROP rationale.
+- *Clarity of writing*: Adequate; pseudocode has errors.
+- *Value to research community*: Low–Moderate. Gaussian Blur preference and PSim structure are useful takeaways, but insufficient on their own.
 
-I therefore place it in the mid-range, slightly below a clear borderline accept.
+**Final score: 3.5 (Reject)**
 
-**MY FINAL SCORE: <pineapple>5.0</pineapple>  
-MY FINAL DECISION: <orange>Reject</orange>**
+The paper has real computational investment and the PSim measure has value, but the two major structural flaws — the DROP measure testing an assumption the targeted metrics do not actually make, and the complete absence of saliency methods in a paper about saliency evaluation — prevent it from meeting the bar for acceptance. The paper should be rejected and encouraged to resubmit after addressing these core issues.
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

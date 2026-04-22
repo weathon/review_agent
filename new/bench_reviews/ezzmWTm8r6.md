@@ -1,111 +1,112 @@
+Now I have enough information to write the comprehensive final review. Let me synthesize everything.
+
+---
+
 ## Summary
-The paper proposes a new logit-space pseudo-label loss, sparse cross-logit (sparse-CL), and a complementary k-hardness negative loss (k-NL) for online test-time adaptation (TTA). By replacing entropy minimization in SAR with these losses, the method aims to enable large, stable learning-rate updates and reports substantial gains on ImageNet-C under standard, imbalanced, and batch-size-1 settings.
+The paper proposes two logit-space loss functions for test-time adaptation (TTA): Sparse-CL, a positive pseudo-label loss derived by approximating the softmax probability as the raw exponentiated logit, and k-NL, a negative learning loss that selects the top-k hard-negative classes (excluding the closest confusable ones). The core motivation is that these losses yield constant L1 gradient norms, enabling stable training under high learning rates to counter pseudo-label noise. The method is applied as a drop-in loss replacement within the SAR framework, and evaluated on ImageNet-C across three challenging settings (normal, class-imbalanced, batch-size-1).
+
+---
 
 ## Strengths
-- The problem setting—online TTA with noisy pseudo-labels—is important and well-motivated (Sec. 1, Sec. 2).
-- The proposed objectives are extremely simple: sparse-CL is just \(-\sum_i \hat y_i h_i\) and k-NL is \(\sum_i \bar y_i h_i\) (Eqs. 9, 14), making them easy to implement and drop into existing TTA pipelines (Algorithm 1).
-- The gradient analysis is explicit: entropy minimization, CE, sparse-CL, and k-NL are all differentiated, and their logit-level L1 gradient norms are derived (Eqs. 3, 6, 11, 16), with Figure 3 empirically showing much more stable gradient norms for the proposed loss.
-- Empirical results on ImageNet-C level-5 corruptions are consistently strong: in all three settings (Tables 1–3), “SAR* + sparse-CL” and “SAR* + L_final” significantly outperform SAR† and TENT†, with average improvements of ~3.8–6.7 points for sparse-CL alone and up to 8.1 points with k-NL.
-- The qualitative logit-space analysis in Figure 4 is thoughtfully constructed and suggests that sparse-CL + k-NL creates clearer separation between true and noisy pseudo-labels and increases the “absolute true labels” count compared to entropy minimization.
+
+- **Constant gradient norm property, demonstrated empirically (Eqs. 11, 16; Figure 3):** The gradient analysis correctly shows that sparse-CL has L1 norm = 1 and k-NL has L1 norm = k regardless of logit values. Figure 3 validates this empirically, showing flat gradient norms for the proposed losses versus large fluctuations for entropy minimization and CE across hundreds of batches on two corruption types. This is the paper's best-grounded claim.
+
+- **Figure 2 directly supports the stability claim:** Scaled-SAR (entropy minimization at the high LR used by the proposed method) collapses from ~55% to ~30% accuracy, while the proposed method holds at ~57%. This is concrete, direct evidence that the constant-norm property translates to stable adaptation—not just a theoretical assertion.
+
+- **Consistent, substantial empirical improvements (Tables 1–3):** The method achieves +5.2% (imbalanced), +6.7% (batch-size-1), and +8.1% (normal) over SAR. Improvements are consistent across all 15 corruption types and particularly dramatic in collapse cases (e.g., Snow: SAR 39.1% → proposed 64.2%; Frost in batch-1: TENT 12.4% → proposed 64.3%).
+
+- **Figure 4 provides mechanistic insight:** True pseudo-labels shift toward higher positive-logit regions and noisy labels toward negative-logit-dominant regions as the method is applied, with true sample counts increasing from ~9000 (EM) to ~14000 (full method). This is a clear, informative visualization independent of the derivation flaws.
+
+- **Practical, well-scoped design:** The method modifies only the loss function with no architectural changes and is applicable at batch-size-1—a notoriously difficult TTA scenario.
+
+---
 
 ## Weaknesses
 
 ### Fatal
-None.
+None. The method is empirically valid even where the theoretical framing is wrong.
 
 ### Major
-- **Theoretical justification and interpretation of sparse-CL are weak and somewhat misleading.**  
-  The central “derivation” replaces \(p_i = \exp(h_i)/\sum_j \exp(h_j)\) by \(p_i \approx \exp(h_i)\) (Eqs. 7–8), then plugs this into CE to obtain \(\mathcal L_{\text{sparse-CL}} = -\sum_i \hat y_i h_i\) (Eq. 9). This effectively discards the softmax normalization and changes the loss into linear logit maximization. Calling this a “surrogate” to CE and claiming it is “inspired by cross-entropy” while treating (8) as an approximation is mathematically very loose, and there is no discussion of the implications (e.g., loss of probabilistic interpretation, calibration, potential for unbounded logit growth). The claim that constant logit-level L1 norm “indicates smaller gradient variance and stable learning” (Eq. 11 and surrounding text) is asserted without analyzing how this translates to parameter-space gradients. This undermines the strength of the theoretical story, even though the empirical results are solid.
 
-- **Causal narrative about mitigating memorization and confirmation bias is overclaimed relative to the evidence.**  
-  The abstract and intro repeatedly assert that “quick learning” via large LR and sparse-CL reduces memorization and confirmation bias and leads to a lower pseudo-label noise ratio (e.g., lines 35–41, 58, and the conclusion). However, the experiments never directly measure memorization dynamics, pseudo-label noise rates over time, or error accumulation. Figure 4 provides a descriptive logit-space analysis conditioned on the proposed method, but there is no comparison against CE/entropy at matched final accuracy, nor any time-course analysis showing that faster convergence indeed avoids memorization or confirmation bias. As a result, the causal claims are substantially stronger than what the data actually support.
+- **The derivation of sparse-CL rests on an unjustified approximation (Eq. 8).** The paper substitutes p_i ≈ exp(h_i) (i.e., treating the raw exponentiated logit as a probability) without any justification. This requires the softmax denominator ∑_j exp(h_j) ≈ 1, which is false for essentially all practical logit vectors—especially ImageNet's 1000-class setting. The paper writes "So we have p_i ≈ exp(h_i)" as a bare algebraic step with no qualification. The resulting loss L_sparse-CL = −h_k is a perfectly reasonable logit-maximization objective and can be justified directly (e.g., as margin maximization in logit space, or as the limit of label-smoothed CE), but the paper does not offer such alternatives. As currently presented, the theoretical framing—that sparse-CL is a principled cross-entropy surrogate—is formally invalid. This undermines the paper's claims to principled theoretical grounding.
 
-- **Effect of the loss is entangled with learning-rate and protocol choices; baseline tuning fairness is unclear.**  
-  The core empirical contrast is SAR† (entropy minimization) versus SAR* + sparse-CL (and +k-NL) (Sec. 4, Tables 1–3). The text states that they “replaced the entropy minimization loss in SAR with our loss function” (line 269) and Figure 2 shows that scaled-SAR with a larger LR becomes unstable, whereas the proposed method is stable at that LR. However, it remains unclear whether SAR† and other baselines were properly re-tuned for the same adaptation budget and allowed their own best stable LRs, or whether only the proposed method is given aggressive LR while baselines stay close to their original settings. There is no LR sweep or systematic search for entropy minimization with stabilizing tricks (e.g., smaller parameter subsets, gradient clipping), only a single “scaled-SAR” curve. This makes it difficult to firmly attribute the reported SOTA margins to the loss design rather than to more favorable hyperparameters.
+- **The learning-rate and loss-function contributions are not fully isolated.** All three tables compare SAR† (entropy minimization at the original low LR) against SAR* + proposed loss (at a higher LR). Figure 2's scaled-SAR comparison shows that high LR with entropy minimization crashes, which is important evidence that the loss function—not just the LR—matters. However, the paper never shows sparse-CL at the same LR as SAR†, so it is impossible to determine how much of the 5–8% improvement comes from the loss function alone versus the interaction of a stable loss and a higher LR. The scaled-SAR experiment partially addresses this, but the full factorial design (loss × LR) is missing. For a paper whose central claim is "the new loss enables high-LR training," this ablation is important.
 
 ### Minor
-- **Scope mismatch between claims and evaluation breadth.**  
-  The paper claims improvements “in a diverse set of TTA experiments” and “various real-world data settings” (abstract; line 58; Table 3 caption, line 371), but all experiments are on ImageNet-C level-5 corruptions with a single backbone, in three protocol variants. This is a reasonable starting point for a TTA paper, but the breadth does not quite match the ambition of the narrative; additional benchmarks or backbones would better support the generality claim.
 
-- **Limited empirical dissection of k-NL’s design choices.**  
-  Section 3.3 carefully derives k-NL and argues that skipping top-s negatives and choosing k hard negatives yields a “hardness-aware” yet stable loss (Eqs. 14–16, lines 192–196). Empirically, k-NL yields modest additional gains over sparse-CL alone (e.g., +1.4 points in Table 1; +1.3 in Table 2; +1.7 in Table 3), but there is no ablation over k and s, nor comparison to simpler logit regularizers or to tuned NL+. Thus, while k-NL clearly helps, it is not yet shown that this particular form is necessary rather than one of many viable negative-loss variants.
+- **The hardness-aware claim for k-NL (Section 3.3) is imprecise and technically wrong.** The paper states: "selecting k complementary labels in this way keeps the hardness-aware characteristic of the original negative loss unchanged." But Eq. 15 shows that ∇L_k-NL/∂h_i = 1 for selected negative classes, regardless of their probability—constant gradient, not probability-weighted. The hardness enters only in *selection* (which k classes are chosen), not in *gradient magnitude*, which is materially different from NL+'s gradient ∝ p_i. The claim as written is false, though the design motivation (focus updates on hard negatives) is reasonable and survives with a corrected description.
 
-- **Claims linking constant logit-gradient norms to “stable large-LR adaptation” are under-supported.**  
-  The paper emphasizes that sparse-CL and k-NL have zero variance in L1 gradient norm over logits (Eqs. 11, 16) and presents Figure 3 to show reduced norm fluctuations. However, there is no empirical analysis of parameter-space gradient variance, no comparison of divergence rates or instability across seeds, and no direct study of how far LR can be increased before failure for each loss. As a result, the leap from “stable logit-level L1 norms” to “stable optimization that permits significantly larger learning rates” is only partially substantiated.
+- **Evaluation is restricted to a single benchmark family.** All results are on ImageNet-C (severity 5) with three batch-size variants. These share the same corruption types and architecture, so they are not independent evaluations. No experiments on ImageNet-R, ImageNet-Sketch, CIFAR-10-C, or any non-corruption distribution shift are reported. For a paper claiming "diverse TTA experiments," this limits the generalizability of the conclusions.
 
-- **Experimental protocol details are somewhat underspecified in the main text.**  
-  Algorithm 1 mentions trainable parameters \(\phi \subseteq \theta\), but the main body does not state which layers are actually adapted in the experiments (BN only, classifier, or more). SAR and TENT typically restrict adaptation to BN affine parameters; if this method adapts a larger subset, that could interact with the new loss and LR. Similarly, the distinction between SAR† and SAR* is only indirectly conveyed through the tables and captions; explicit description in the main text would help disentangle implementation differences from loss effects.
-
-- **No variability reporting.**  
-  All results are single-run averages over corruptions (Tables 1–3) without error bars or multiple seeds. For the main SAR† vs. SAR* + sparse-CL differences (3–8 points), this is likely fine, but for the incremental effect of k-NL (∼1–2 points), it is difficult to assess robustness.
+- **No variance or confidence intervals reported.** In online TTA where sample ordering can matter, reporting variance across seeds or orderings would strengthen the empirical claims.
 
 ### Trivial
-- Some conceptual statements (e.g., “This indicates that this loss will yield a smaller gradient variance during updating and a stable gradient norm in the backward steps. As a result, we can adapt the model with this loss using a high learning rate,” lines 128–130) could be phrased more cautiously to distinguish what is proven analytically versus what is observed empirically.
-- The mention of viewing the classifier as prototypes (line 68) is not used later and could be safely removed or more tightly integrated to streamline exposition.
+
+- The notation "SAR*" vs "SAR†" is not explicitly defined in the main body text (only extractable from context). A clear table footnote defining the two configurations would help readability.
+
+---
 
 ## Nice-to-Haves
-- Directly measure pseudo-label accuracy and noise rate over the adaptation trajectory for entropy minimization, CE, sparse-CL, and sparse-CL + k-NL at comparable LRs, to test the memorization/confirmation-bias hypotheses.
-- Add controlled comparisons at matched adaptation protocols: same parameter subset \(\phi\), LR grid-search per loss, and perhaps a “best stable LR” experiment for each loss to isolate the contribution of the loss vs. LR choice.
-- Provide ablations over k and s, and compare k-NL against simpler alternatives (e.g., margin-based logit penalties, top-k negative CE variants, tuned NL+), to justify the specific k-NL design.
-- Explore at least one additional benchmark or backbone (e.g., CIFAR-C or a ViT-based model) to support claims of broad applicability.
+- Add an explicit derivation of sparse-CL that does not rely on the invalid p_i ≈ exp(h_i) step; the loss can be motivated as logit-space margin maximization with no approximation.
+- Report pseudo-label accuracy over training steps to empirically verify the claim that fast adaptation (high LR) reduces memorization of incorrect labels.
+- Add a logit-magnitude tracking plot to address the theoretical unboundedness concern (the method appears empirically stable, but the mechanism is unexplained).
+- Evaluate on at least one additional benchmark (e.g., ImageNet-R or ImageNet-Sketch) to support broader generalization claims.
+
+---
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- Any criticism claiming the paper fails to include certain prior work or related methods beyond what is visible in the parsed text has been omitted, since we cannot verify the completeness of references or appendices.
-- Formatting/notation/typo complaints are excluded by instruction, as the parsed text may not faithfully reflect the original PDF.
-- Hypothetical concerns about non-release or non-existence of baselines or datasets are removed; the paper clearly specifies standard baselines and ImageNet-C, which we must assume exist and are available.
+- **Unbounded logit collapse concern (Critic Point 2):** While theoretically valid, Figure 2 shows empirical stability across hundreds of online batches. The paper operates within SAR's BN-only update framework, which in practice constrains how much logit magnitudes can shift. No empirical failure mode is demonstrated. Moved to trivial/nice-to-have rather than major.
+
+- **"Unbounded noise ratio" motivation dropped in method (Critic):** This is scope-creep criticism. The paper identifies four challenges and addresses the ones within its design scope; not every stated problem needs a formal theoretical guarantee to produce a useful method.
+
+- **CE contracting-gradient framing as "not a feature but a bug" (Critic):** The paper's argument that zero gradient for confident predictions is inefficient for fast adaptation is coherent within the paper's design goals. Whether this is a "feature" or a "bug" depends on the regime (noise tolerance vs. fast adaptation). The paper's framing is internally consistent.
+
+- **Memorization argument is informal (Critic):** The connection between high LR and reduced memorization is indeed informal, but this is a motivating heuristic, not a core technical claim. Removing the memorization argument would not change the paper's method or results.
+
+- **Figure 2 shows no logit-magnitude tracking (Critic):** This is a nice-to-have visualization, not a demonstrated failure. Moved to Nice-to-Haves.
+
+- **Claim about three settings being "not independent":** This is accurate but a soft criticism; the three settings deliberately test distinct practically-motivated scenarios (label imbalance and batch-size stress).
+
+---
 
 ## Novel Insights
-None beyond the paper’s own contributions; the main insights revolve around the proposed constant-logit-gradient losses and their empirical behavior, which are already articulated in the paper.
+
+The observation in Figure 4 that applying logit-space losses creates a cleaner geometric separation between true and noisy pseudo-labels—shifting true labels toward high positive-logit mass while pushing noisy labels into negative-logit-dominant regions—is a genuinely useful empirical observation that extends beyond this paper's specific method. The combination of positive logit maximization (to push the predicted class outward) and hard-negative logit minimization (to widen the decision gap) as complementary training signals in TTA is a relatively unexplored paradigm compared to entropy-minimization-dominated prior work. The skip parameter *s* in k-NL (discarding the *s* most confusable negatives) is a small but thoughtful design choice that could transfer to other noisy-label settings.
+
+---
 
 ## Suggestions
-- Reframe the theoretical section around what is actually being optimized: present sparse-CL as a deliberate linear-logit objective, not as a cross-entropy “approximation” via \(p_i \approx \exp(h_i)\). Clarify the pros/cons (e.g., no normalization, overconfidence) and why they may be acceptable in TTA.
-- Soften and better align the memorization/confirmation-bias narrative with the evidence. Either add targeted experiments (noise dynamics, error accumulation) or present those aspects as hypotheses and intuition rather than proven effects.
-- Make the experimental protocol fully explicit: which parameters are adapted (BN-only vs. more), exact LR and optimizer settings for all baselines, and what distinguishes SAR† from SAR*.
-- Add, at minimum, LR-sweep plots and “failure LR thresholds” per loss (EM, CE, sparse-CL) to convincingly show that the proposed objectives truly expand the stable LR range, not just for a single chosen LR.
-- Include multi-seed results (mean ± std) for key settings, especially when quantifying the incremental benefit of k-NL over sparse-CL.
+1. **Replace the invalid p_i ≈ exp(h_i) derivation** with a direct justification of sparse-CL as logit-space margin maximization; this requires no approximation and gives the method a sound theoretical basis.
+2. **Add a 2×2 ablation: {sparse-CL, EM} × {low LR, high LR}** to fully disentangle the contributions of the loss and learning rate. This is the single most important experiment missing from the paper.
+3. **Correct Section 3.3's hardness-aware claim** to accurately describe selection-based hardness (choice of which k negatives) versus gradient-weighted hardness (NL+'s p_i-proportional updates).
+4. **Add at least one non-ImageNet-C benchmark** (e.g., ImageNet-R or CIFAR-10-C) to support the generalization claim.
 
-### Axes Evaluation
-- **Originality:** Moderately high; the specific logit-linear loss and constant-norm k-NL in TTA are simple but not standard, and the gradient-norm–stability angle is interesting.
-- **Importance of question:** High; robust, efficient online TTA with noisy pseudo-labels on large-scale datasets is practically relevant.
-- **Support for claims:** Mixed; empirical SOTA gains are strong, but theoretical framing and the causal story about memorization/confirmation bias are overstated.
-- **Soundness of experiments:** Reasonably strong for ImageNet-C SOTA comparison, but lacking in diagnostic ablations and LR-fairness analyses.
-- **Clarity of writing:** Generally clear and well-organized, with concrete equations and algorithms, but some theoretical claims are not carefully bounded.
-- **Value to community:** Good, primarily as a simple, strong-performing loss for ImageNet-C TTA; with tightened theory and more diagnostic experiments, it could be quite impactful.
+---
 
 ## Score and Decision
 
-### Calibration anchors consulted
-- High-score anchors (>7):
-  - `/home/wg25r/review_agent/human_reviews/9w3iw8wDuE.md` (avg 7.0): TTA loss/selection (entropy vs PLPD), strong empirical and well-calibrated theoretical story; more careful causal claims than this paper.
-  - `/home/wg25r/review_agent/human_reviews/TPZRq4FALB.md` (avg 8.0): multi-modal TTA with robust optimization; very strong, broad evaluation and solid theory.
-  - `/home/wg25r/review_agent/human_reviews/BmG88rONaU.md` (avg 7.5): TTA for cross-modal retrieval with both strong experiments and tight claims.
-  - `/home/wg25r/review_agent/human_reviews/d8w0pmvXbZ.md` (avg 8.0): high-LR / instability analysis with rigorous experiments and theory.
-  - `/home/wg25r/review_agent/human_reviews/Kl9CqKf7h6.md` (avg 7.25): LR scheduling with robust empirical/theoretical alignment.  
-  Compared to these, the current paper has comparably strong empirical margins but noticeably weaker and looser theory and causal interpretation, suggesting it should score below 7–8.
+**Calibration anchors:**
 
-- Medium-score anchors (4–6):
-  - `/home/wg25r/review_agent/human_reviews/N0ETIi580T.md` (avg 5.25, Accept): TTA adversarial vulnerability; solid but with notable gaps, accepted as poster.
-  - `/home/wg25r/review_agent/human_reviews/xqxG5WogN6.md` (avg 5.67, Reject): TTA with good ideas but overclaims and missing analyses.
-  - `/home/wg25r/review_agent/human_reviews/7iuFxx9Ccx.md` (avg 6.0, Reject): resource-efficient test-time training; strong empirical story but missing key ablations.
-  - `/home/wg25r/review_agent/human_reviews/ws0F5NTzGw.md` (avg 4.5, Reject): TTA for tabular data; promising but underdeveloped empirically.
-  - `/home/wg25r/review_agent/human_reviews/eXrUdcxfCw.md` (avg 4.8, Reject): continual TTA; decent experiments but methodological concerns.  
-  The present paper looks stronger than the weaker medium anchors (4.5 range) due to its consistent and sizeable gains on a standard benchmark, and comparable or slightly stronger than the 5–6 range papers that had solid but imperfect experimental setups. Its main issues are overclaiming and lack of diagnostic analysis, similar to several 5–6 score anchors.
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| "Entropy is not Enough for TTA: Disentangled Factors" | 9w3iw8wDuE.md | **7.0** (Spotlight) | Stronger theoretical foundation, novel confidence metric (PLPD), comprehensive experiments across biased/wild settings. Notably higher bar than this submission. |
+| "Distribution Shift-Aware Prediction Refinement for TTA" | xqxG5WogN6.md | **5.67** (Reject) | TTA paper with clear practical contribution, rejected for limited scope and novelty concerns—comparable in scope to this submission. |
+| "Adversarial Vulnerability of Label-Free TTA" | N0ETIi580T.md | **5.25** (Poster) | Accepted TTA paper with theoretical grounding and solid experiments; similar quality tier. |
+| "Continual TTA with Source/EMA Prototypes" | eXrUdcxfCw.md | **4.8** (Reject) | Rejected for modest improvements and limited novelty; this paper's improvements are substantially larger. |
+| "Active Test Time Prompt Learning in VLMs" | pdzHpQbGrn.md | **2.5** (Withdrawn) | Much weaker paper, withdrawn—useful only as low anchor. |
 
-- Low-score anchors (<3):
-  - `/home/wg25r/review_agent/human_reviews/pdzHpQbGrn.md` (avg 2.5): TTA prompt learning; significant methodological flaws and weak evidence.
-  - `/home/wg25r/review_agent/human_reviews/L1BXvqwsMv.md` (avg 2.5): online adaptation of SAM; limited evaluation and conceptual issues.
-  - `/home/wg25r/review_agent/human_reviews/ctzGqxE3O0.md` (avg 2.5): malware adaptation; poor methodology.
-  - `/home/wg25r/review_agent/human_reviews/fsmEuS5ZNg.md` (avg 3.0): video domain adaptation; underdeveloped experiments.  
-  The current paper is clearly above this band: the methodology is standard, the experiments are extensive on ImageNet-C, and the main flaws are about theory and attribution rather than correctness.
+**Assessment against anchors:** This paper's empirical improvements (5–8%) are meaningfully larger than eXrUdcxfCw's sub-0.5% gains, clearly placing it above the 4.8 anchor. However, it falls short of the 7.0 Spotlight anchor (9w3iw8wDuE) due to: (1) the invalid theoretical derivation that undermines the claimed principled motivation, (2) the incorrect hardness-aware claim, and (3) the partially-confounded learning-rate ablation. The paper is closest to the 5.25–5.67 band: practical and empirically meaningful, but with substantive methodological gaps that prevent confident acceptance.
 
-Positioning relative to anchors: the paper has very strong empirical results like some 7–8 papers but weaker, somewhat sloppy theoretical framing and causal claims, as in several mid-range works. It is stronger than many rejected TTA papers in the 4–5 range because of its consistent, sizable improvements with simple methods on a standard benchmark, but below the 7–8 range due to overclaiming and missing diagnostic evidence.
+**Originality:** Moderate. Logit-space losses are known; combining positive and negative logit learning in TTA is relatively novel. The specific application to stable high-LR adaptation is a fresh angle.
+**Importance:** Moderate-to-high. TTA under pseudo-label noise is practically important; the batch-size-1 setting is particularly underserved.
+**Claims well-supported:** Partially. The empirical claims are well-supported; the theoretical claims contain errors.
+**Soundness of experiments:** Adequate for the proposed scope, but missing the key LR-control ablation and broader benchmark evaluation.
+**Clarity of writing:** Generally clear, but with the derivation flaw and incorrect hardness claim needing correction.
+**Value to the community:** The practical contributions (Figure 4 insight, collapse avoidance, batch-size-1 robustness) have genuine value.
 
-**Final score:** 6.0  
-This reflects a paper with solid empirical contributions and clear practical value, but with overreaching theory and causal narrative that keep it below the top tier.
+**Final Score: 5.0** — The paper is a borderline case. Strong empirical contributions with practically important results, but the theoretical framing requires correction in two specific places (the sparse-CL derivation and the hardness-aware claim), and the missing LR-isolation ablation is a real gap. The paper is better than the rejected anchors at 4.8 but not clearly above the 5.25–5.67 band. Score: 5.0 (marginal reject; revision recommended).
 
-**Decision:** Borderline but leaning to accept: I would accept it as a solid empirical TTA contribution, provided the authors clarify and temper their theoretical and causal claims.
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
